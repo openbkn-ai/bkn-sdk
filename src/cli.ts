@@ -9,6 +9,7 @@ import { authCommand } from "./commands/auth.js";
 import { bknCommand } from "./commands/bkn.js";
 import { callCommand } from "./commands/call.js";
 import { configCommand } from "./commands/config.js";
+import { resourceCommand } from "./commands/resource.js";
 import { stubCommands } from "./commands/stubs.js";
 import { vegaCommand } from "./commands/vega.js";
 import { installGroupedHelp } from "./help/grouped-help.js";
@@ -35,6 +36,7 @@ program.addCommand(callCommand());
 program.addCommand(configCommand());
 program.addCommand(vegaCommand());
 program.addCommand(bknCommand());
+program.addCommand(resourceCommand());
 program.addCommand(adminCommand());
 
 // Placeholders for the rest of the tree (filled in incrementally).

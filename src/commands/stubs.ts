@@ -71,14 +71,7 @@ export function stubCommands(): Command[] {
       "debug",
     ]),
 
-    // AI DATA PLATFORM (bkn + vega are real elsewhere)
-    stub("resource", "Resources — list, find, get, query, delete", "AI DATA PLATFORM", [
-      "list",
-      "find",
-      "get",
-      "query",
-      "delete",
-    ]),
+    // AI DATA PLATFORM (bkn + resource + vega are real elsewhere)
     stub("dataflow", "Dataflow document workflows", "AI DATA PLATFORM", [
       "list",
       "run",

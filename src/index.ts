@@ -14,6 +14,7 @@ export { HttpError, InputError } from "./utils/errors.js";
 
 // Resource namespaces (advanced: use with a resolved RequestContext).
 export { kn } from "./resources/knowledge-networks.js";
+export { resources } from "./resources/resources.js";
 export { vega } from "./resources/vega.js";
 
 // Auth is store-backed (pre-token), so it is a standalone namespace.
