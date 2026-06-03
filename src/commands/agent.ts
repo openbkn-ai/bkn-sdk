@@ -150,8 +150,37 @@ export function agentCommand(): Command {
       printJson(await clientFrom(cmd).agents.history(agentKey, conversationId), outputOptions(cmd));
     });
 
-  // chat / trace / skill need the streaming + conversation-write contracts.
-  for (const name of ["chat", "trace", "skill"]) {
+  cmd
+    .command("chat <agent-id>")
+    .description("Chat with an agent (SSE streaming with --stream)")
+    .requiredOption("-m, --message <text>", "user message")
+    .option("--version <v>", "agent version", "v0")
+    .option("--conversation-id <id>", "continue an existing conversation")
+    .option("--stream", "stream the reply to stdout as it arrives")
+    .action(async (agentId: string, opts, cmd: Command) => {
+      const client = clientFrom(cmd);
+      if (opts.stream) {
+        const res = await client.agents.chat(agentId, opts.message, {
+          version: opts.version,
+          conversationId: opts.conversationId,
+          stream: true,
+          onDelta: (t) => process.stdout.write(t),
+        });
+        process.stdout.write("\n");
+        if (res.conversationId) console.error(`conversation_id: ${res.conversationId}`);
+        return;
+      }
+      printJson(
+        await client.agents.chat(agentId, opts.message, {
+          version: opts.version,
+          conversationId: opts.conversationId,
+        }),
+        outputOptions(cmd),
+      );
+    });
+
+  // agent trace / skill need the conversation-trace + agent-skill contracts.
+  for (const name of ["trace", "skill"]) {
     cmd
       .command(name)
       .description(`${name} (pending)`)

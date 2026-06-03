@@ -1,3 +1,4 @@
+import { type SendChatOptions, fetchAgentInfo, sendChat } from "../api/agent-chat.js";
 /** Agent resource surface (read side + published listing). */
 import {
   type ListAgentsOptions,
@@ -37,5 +38,14 @@ export function agents(ctx: RequestContext) {
       listConversations(ctx, agentKey, opts),
     history: (agentKey: string, conversationId: string) =>
       listMessages(ctx, agentKey, conversationId),
+    /** Send a chat turn to an agent (resolves agent id/key/version first). */
+    chat: async (
+      agentId: string,
+      query: string,
+      opts: SendChatOptions & { version?: string } = {},
+    ) => {
+      const info = await fetchAgentInfo(ctx, agentId, opts.version ?? "v0");
+      return sendChat(ctx, info, query, opts);
+    },
   };
 }
