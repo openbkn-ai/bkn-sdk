@@ -473,13 +473,29 @@ export function bknCommand(): Command {
       printJson(await clientFrom(cmd).kn.jobDelete(knId, ids), outputOptions(cmd));
     });
 
+  bkn
+    .command("push <directory>")
+    .description("Pack a BKN directory into a tar and import it as a knowledge network")
+    .option("--branch <name>", "target branch", "main")
+    .action(async (dir: string, opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.push(dir, { branch: opts.branch }), outputOptions(cmd));
+    });
+  bkn
+    .command("pull <kn-id> [directory]")
+    .description("Download a knowledge network as a BKN tar and extract it locally")
+    .option("--branch <name>", "source branch", "main")
+    .action(async (knId: string, dir: string | undefined, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.pull(knId, dir ?? knId, { branch: opts.branch }),
+        outputOptions(cmd),
+      );
+    });
+
   // Remaining subcommands kept in the tree as stubs (filled in incrementally).
   for (const name of [
     "create-from-catalog",
     "create-from-csv",
     "validate",
-    "push",
-    "pull",
     "resources",
     "relation-type-paths",
   ]) {

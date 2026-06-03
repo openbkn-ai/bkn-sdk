@@ -1,3 +1,5 @@
+import { mkdirSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   addConceptGroupMembers,
   createActionSchedule,
@@ -5,6 +7,7 @@ import {
   deleteActionSchedules,
   deleteConceptGroup,
   deleteJobs,
+  downloadBkn,
   getActionSchedule,
   getConceptGroup,
   getJob,
@@ -16,6 +19,7 @@ import {
   setActionScheduleStatus,
   updateActionSchedule,
   updateConceptGroup,
+  uploadBkn,
 } from "../api/bkn-backend.js";
 /** Knowledge-network resource surface (the exported SDK API). */
 import {
@@ -59,6 +63,7 @@ import {
   validateMetric,
 } from "../api/knowledge-networks.js";
 import type { RequestContext } from "../types.js";
+import { extractTarToDirectory, packDirectoryToTar } from "../utils/tar.js";
 
 export function kn(ctx: RequestContext) {
   return {
@@ -132,5 +137,15 @@ export function kn(ctx: RequestContext) {
     job: (knId: string, jobId: string) => getJob(ctx, knId, jobId),
     jobTasks: (knId: string, jobId: string) => getJobTasks(ctx, knId, jobId),
     jobDelete: (knId: string, ids: string) => deleteJobs(ctx, knId, ids),
+    /** Pack a local BKN directory and upload it as a knowledge network. */
+    push: (dir: string, opts?: { branch?: string }) =>
+      uploadBkn(ctx, packDirectoryToTar(dir), opts),
+    /** Download a knowledge network and extract it into a local directory. */
+    pull: async (knId: string, dir: string, opts?: { branch?: string }) => {
+      const tar = await downloadBkn(ctx, knId, opts);
+      mkdirSync(resolve(dir), { recursive: true });
+      extractTarToDirectory(tar, dir);
+      return { knId, dir: resolve(dir), bytes: tar.length };
+    },
   };
 }
