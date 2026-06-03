@@ -66,7 +66,7 @@ export function bknCommand(): Command {
 
   // Schema groups with a real `list` (read side); other actions stubbed.
   const schemaGroups: Array<[string, "objectTypes" | "relationTypes" | "actionTypes", string[]]> = [
-    ["object-type", "objectTypes", ["get", "create", "update", "delete", "query", "properties"]],
+    ["object-type", "objectTypes", ["get", "create", "update", "delete"]],
     ["relation-type", "relationTypes", ["get", "create", "update", "delete"]],
     ["action-type", "actionTypes", ["get", "query", "inputs", "execute"]],
   ];
@@ -88,6 +88,26 @@ export function bknCommand(): Command {
         .action(notImplemented(`${name} ${s}`));
     }
   }
+
+  // Real object-type instance query + properties (the rest are stubs above).
+  const objectType = bkn.commands.find((c) => c.name() === "object-type");
+  objectType
+    ?.command("query <kn-id> <ot-id>")
+    .description("Query instances of an object type (--body / --body-file JSON)")
+    .option("--body <json>", "query JSON")
+    .option("--body-file <path>", "read query JSON from a file")
+    .action(async (knId: string, otId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.objectTypeQuery(knId, otId, readBody(opts)),
+        outputOptions(cmd),
+      );
+    });
+  objectType
+    ?.command("properties <kn-id> <ot-id>")
+    .description("Get an object type's calculated properties")
+    .action(async (knId: string, otId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.objectTypeProperties(knId, otId), outputOptions(cmd));
+    });
 
   bkn
     .command("create <name>")

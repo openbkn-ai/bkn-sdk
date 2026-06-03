@@ -134,6 +134,32 @@ export function cancelActionLog(
   );
 }
 
+/** Query instances of an object type (ontology-query). Body is a JSON query. */
+export function queryObjectTypeInstances(
+  ctx: RequestContext,
+  knId: string,
+  otId: string,
+  body: unknown,
+): Promise<unknown> {
+  return request(
+    ctx,
+    `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/object-types/${encodeURIComponent(otId)}`,
+    { method: "POST", body },
+  );
+}
+
+/** Get an object type's (calculated) properties (ontology-query). */
+export function getObjectTypeProperties(
+  ctx: RequestContext,
+  knId: string,
+  otId: string,
+): Promise<unknown> {
+  return request(
+    ctx,
+    `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/object-types/${encodeURIComponent(otId)}/properties`,
+  );
+}
+
 export function getActionExecution(
   ctx: RequestContext,
   knId: string,
