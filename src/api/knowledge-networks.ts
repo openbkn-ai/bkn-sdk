@@ -134,6 +134,39 @@ export function cancelActionLog(
   );
 }
 
+export function getActionExecution(
+  ctx: RequestContext,
+  knId: string,
+  executionId: string,
+): Promise<unknown> {
+  return request(
+    ctx,
+    `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-executions/${encodeURIComponent(executionId)}`,
+  );
+}
+
+/** Query a metric's data (ontology-query). Body is a JSON query passthrough. */
+export function queryMetricData(
+  ctx: RequestContext,
+  knId: string,
+  metricId: string,
+  body: unknown,
+): Promise<unknown> {
+  return request(
+    ctx,
+    `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/metrics/${encodeURIComponent(metricId)}/data`,
+    { method: "POST", body },
+  );
+}
+
+/** Dry-run a metric definition (ontology-query). */
+export function dryRunMetric(ctx: RequestContext, knId: string, body: unknown): Promise<unknown> {
+  return request(ctx, `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/metrics/dry-run`, {
+    method: "POST",
+    body,
+  });
+}
+
 export interface ListSchemaOptions {
   branch?: string;
   /** -1 = all (backend default). */

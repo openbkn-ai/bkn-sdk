@@ -9,6 +9,8 @@ import {
   cancelActionLog,
   createKnowledgeNetwork,
   deleteKnowledgeNetwork,
+  dryRunMetric,
+  getActionExecution,
   getActionLog,
   getKnowledgeNetwork,
   listActionLogs,
@@ -16,6 +18,7 @@ import {
   listKnowledgeNetworks,
   listObjectTypes,
   listRelationTypes,
+  queryMetricData,
   querySubgraph,
   semanticSearch,
   updateKnowledgeNetwork,
@@ -35,6 +38,11 @@ export function kn(ctx: RequestContext) {
     actionLogs: (knId: string, opts?: ActionLogListOptions) => listActionLogs(ctx, knId, opts),
     actionLog: (knId: string, logId: string) => getActionLog(ctx, knId, logId),
     cancelActionLog: (knId: string, logId: string) => cancelActionLog(ctx, knId, logId),
+    actionExecution: (knId: string, executionId: string) =>
+      getActionExecution(ctx, knId, executionId),
+    metricQuery: (knId: string, metricId: string, body: unknown) =>
+      queryMetricData(ctx, knId, metricId, body),
+    metricDryRun: (knId: string, body: unknown) => dryRunMetric(ctx, knId, body),
     objectTypes: (knId: string, opts?: ListSchemaOptions) => listObjectTypes(ctx, knId, opts),
     relationTypes: (knId: string, opts?: ListSchemaOptions) => listRelationTypes(ctx, knId, opts),
     actionTypes: (knId: string, opts?: ListSchemaOptions) => listActionTypes(ctx, knId, opts),

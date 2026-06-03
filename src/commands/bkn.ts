@@ -153,6 +153,41 @@ export function bknCommand(): Command {
       printJson(await clientFrom(cmd).kn.cancelActionLog(knId, logId), outputOptions(cmd));
     });
 
+  bkn
+    .command("action-execution <kn-id> <execution-id>")
+    .description("Get action execution status")
+    .action(async (knId: string, execId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.actionExecution(knId, execId), outputOptions(cmd));
+    });
+
+  const metric = bkn.command("metric").description("Metrics — query / dry-run");
+  metric
+    .command("query <kn-id> <metric-id>")
+    .description("Query a metric's data (--body / --body-file JSON)")
+    .option("--body <json>", "query JSON")
+    .option("--body-file <path>", "read query JSON from a file")
+    .action(async (knId: string, metricId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.metricQuery(knId, metricId, readBody(opts)),
+        outputOptions(cmd),
+      );
+    });
+  metric
+    .command("dry-run <kn-id>")
+    .description("Dry-run a metric definition (--body / --body-file JSON)")
+    .option("--body <json>", "metric definition JSON")
+    .option("--body-file <path>", "read metric definition JSON from a file")
+    .action(async (knId: string, opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.metricDryRun(knId, readBody(opts)), outputOptions(cmd));
+    });
+  for (const s of ["list", "get", "create", "search", "validate", "update", "delete"]) {
+    metric
+      .command(s)
+      .description(`${s} (pending)`)
+      .allowUnknownOption()
+      .action(notImplemented(`metric ${s}`));
+  }
+
   // Remaining subcommands kept in the tree as stubs (filled in incrementally).
   for (const name of [
     "create-from-catalog",
@@ -165,8 +200,6 @@ export function bknCommand(): Command {
     "resources",
     "relation-type-paths",
     "concept-group",
-    "metric",
-    "action-execution",
     "action-schedule",
     "job",
   ]) {
