@@ -89,13 +89,27 @@ export function bknCommand(): Command {
     }
   }
 
+  bkn
+    .command("create <name>")
+    .description("Create an (empty) knowledge network")
+    .option("--branch <b>", "branch", "main")
+    .action(async (name: string, opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.create({ name, branch: opts.branch }), outputOptions(cmd));
+    });
+
+  bkn
+    .command("delete <kn-id>")
+    .description("Delete a knowledge network")
+    .option("-y, --yes", "skip confirmation")
+    .action(async (knId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.delete(knId), outputOptions(cmd));
+    });
+
   // Remaining subcommands kept in the tree as stubs (filled in incrementally).
   for (const name of [
-    "create",
     "create-from-catalog",
     "create-from-csv",
     "update",
-    "delete",
     "stats",
     "export",
     "validate",

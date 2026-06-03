@@ -66,6 +66,27 @@ describe("getKnowledgeNetwork", () => {
   });
 });
 
+describe("create + delete", () => {
+  it("create POSTs name + branch + base_branch", async () => {
+    const { createKnowledgeNetwork } = await import("../../src/api/knowledge-networks.js");
+    const f = mockFetch();
+    await createKnowledgeNetwork(ctx, { name: "demo" });
+    const call = firstCall(f);
+    expect(call[1].method).toBe("POST");
+    expect(JSON.parse(call[1].body as string)).toEqual({
+      name: "demo",
+      branch: "main",
+      base_branch: "",
+    });
+  });
+  it("delete DELETEs by id", async () => {
+    const { deleteKnowledgeNetwork } = await import("../../src/api/knowledge-networks.js");
+    const f = mockFetch();
+    await deleteKnowledgeNetwork(ctx, "kn-9");
+    expect(firstCall(f)[1].method).toBe("DELETE");
+  });
+});
+
 describe("schema lists (ontology-manager)", () => {
   it("object-types: branch + limit defaults", async () => {
     const f = mockFetch();

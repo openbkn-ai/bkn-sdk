@@ -1,9 +1,12 @@
 /** Knowledge-network resource surface (the exported SDK API). */
 import {
+  type CreateKnOptions,
   type GetKnOptions,
   type ListKnOptions,
   type ListSchemaOptions,
   type SemanticSearchOptions,
+  createKnowledgeNetwork,
+  deleteKnowledgeNetwork,
   getKnowledgeNetwork,
   listActionTypes,
   listKnowledgeNetworks,
@@ -19,6 +22,8 @@ export function kn(ctx: RequestContext) {
     get: (knId: string, opts?: GetKnOptions) => getKnowledgeNetwork(ctx, knId, opts),
     search: (knId: string, query: string, opts?: SemanticSearchOptions) =>
       semanticSearch(ctx, knId, query, opts),
+    create: (opts: CreateKnOptions) => createKnowledgeNetwork(ctx, opts),
+    delete: (knId: string) => deleteKnowledgeNetwork(ctx, knId),
     objectTypes: (knId: string, opts?: ListSchemaOptions) => listObjectTypes(ctx, knId, opts),
     relationTypes: (knId: string, opts?: ListSchemaOptions) => listRelationTypes(ctx, knId, opts),
     actionTypes: (knId: string, opts?: ListSchemaOptions) => listActionTypes(ctx, knId, opts),

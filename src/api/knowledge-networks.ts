@@ -54,6 +54,26 @@ export function getKnowledgeNetwork(
   });
 }
 
+export interface CreateKnOptions {
+  name: string;
+  branch?: string;
+  baseBranch?: string;
+}
+
+export function createKnowledgeNetwork(
+  ctx: RequestContext,
+  opts: CreateKnOptions,
+): Promise<unknown> {
+  return request(ctx, ONTOLOGY_BASE, {
+    method: "POST",
+    body: { name: opts.name, branch: opts.branch ?? "main", base_branch: opts.baseBranch ?? "" },
+  });
+}
+
+export function deleteKnowledgeNetwork(ctx: RequestContext, knId: string): Promise<unknown> {
+  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}`, { method: "DELETE" });
+}
+
 export interface ListSchemaOptions {
   branch?: string;
   /** -1 = all (backend default). */
