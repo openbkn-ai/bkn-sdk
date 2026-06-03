@@ -1,13 +1,14 @@
 /**
  * `openbkn admin …` — the kweaver-admin operator CLI, nested as a subcommand.
- * Mapping is 1:1: `kweaver-admin <x>` → `openbkn admin <x>`. List reads are
- * real (validated only with mocked fetch — operator endpoints need an admin
- * env); mutations remain stubs.
+ * Mapping is 1:1: `kweaver-admin <x>` → `openbkn admin <x>`. org/user/role
+ * reads + writes (create/update/delete/reset-password) and org tree are real
+ * and live-verified; operator `auth` reuses the top-level `openbkn auth`.
  */
 import { Command } from "commander";
 import { activePlatform, setActivePlatform } from "../config/store.js";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
+import { renderOrgTree } from "../utils/org-tree.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, outputOptions, readBody } from "./_shared.js";
 
@@ -129,7 +130,16 @@ export function adminCommand(): Command {
     .action(async (deptId: string, _opts, cmd: Command) => {
       printJson(await clientFrom(cmd).admin.orgDelete(deptId), outputOptions(cmd));
     });
-  stubs(org, "org", ["tree"]);
+  org
+    .command("tree")
+    .description("Print the department hierarchy")
+    .option("--role <r>", "role qualifier", "super_admin")
+    .action(async (opts, cmd: Command) => {
+      const tree = await clientFrom(cmd).admin.orgTree(opts.role);
+      const out = outputOptions(cmd);
+      if (out.json) printJson(tree, out);
+      else console.log(renderOrgTree(tree));
+    });
 
   const user = admin.command("user").description("User management");
   user

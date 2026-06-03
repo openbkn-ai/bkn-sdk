@@ -85,6 +85,34 @@ export function listDepartments(
   });
 }
 
+export interface DeptEntry {
+  id: string;
+  name?: string;
+  parent_deps?: Array<{ id: string; name?: string }>;
+}
+
+/** Fetch every department by paging the console search route (for tree building). */
+export async function listAllDepartments(
+  ctx: RequestContext,
+  role = "super_admin",
+  pageSize = 100,
+): Promise<DeptEntry[]> {
+  const out: DeptEntry[] = [];
+  let offset = 0;
+  for (;;) {
+    const data = (await listDepartments(ctx, { role, offset, limit: pageSize })) as {
+      total_count?: number;
+      entries?: DeptEntry[];
+    };
+    const entries = data.entries ?? [];
+    out.push(...entries);
+    if (entries.length < pageSize) break;
+    if (data.total_count !== undefined && out.length >= data.total_count) break;
+    offset += pageSize;
+  }
+  return out;
+}
+
 /** Users via the console search route (REST `/users` 404s on every deploy). */
 export function listUsers(ctx: RequestContext, opts: AdminListOptions = {}): Promise<unknown> {
   return request(ctx, `${UM}/console/search-users/${USER_FIELDS}`, {

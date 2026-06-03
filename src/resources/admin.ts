@@ -1,4 +1,3 @@
-/** Admin (operator) resource surface. */
 import {
   type AdminListOptions,
   type AuditListOptions,
@@ -17,6 +16,7 @@ import {
   getRole,
   getUser,
   getUserRoles,
+  listAllDepartments,
   listAuditLogs,
   listDepartments,
   listRoleMembers,
@@ -28,6 +28,8 @@ import {
   updateUser,
 } from "../api/admin.js";
 import type { RequestContext } from "../types.js";
+/** Admin (operator) resource surface. */
+import { buildOrgTree } from "../utils/org-tree.js";
 
 export function admin(ctx: RequestContext) {
   return {
@@ -35,6 +37,7 @@ export function admin(ctx: RequestContext) {
     orgGet: (deptId: string) => getDepartment(ctx, deptId),
     orgMembers: (deptId: string, opts?: { role?: string; offset?: number; limit?: number }) =>
       getDepartmentMembers(ctx, deptId, opts),
+    orgTree: async (role?: string) => buildOrgTree(await listAllDepartments(ctx, role)),
     orgCreate: (input: CreateOrgInput) => createDepartment(ctx, input),
     orgUpdate: (deptId: string, input: UpdateOrgInput) => updateDepartment(ctx, deptId, input),
     orgDelete: (deptId: string) => deleteDepartment(ctx, deptId),
