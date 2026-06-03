@@ -298,12 +298,49 @@ export function bknCommand(): Command {
     .action(async (knId: string, cgId: string, _o, cmd: Command) => {
       printJson(await clientFrom(cmd).kn.conceptGroup(knId, cgId), outputOptions(cmd));
     });
-  for (const s of ["create", "update", "delete", "add-members", "remove-members"]) {
-    cg.command(s)
-      .description(`${s} (pending)`)
-      .allowUnknownOption()
-      .action(notImplemented(`concept-group ${s}`));
-  }
+  cg.command("create <kn-id>")
+    .description("Create a concept group (--body / --body-file)")
+    .option("--body <json>", "body JSON")
+    .option("--body-file <path>", "read body JSON from a file")
+    .action(async (knId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.conceptGroupCreate(knId, readBody(opts)),
+        outputOptions(cmd),
+      );
+    });
+  cg.command("update <kn-id> <cg-id>")
+    .description("Update a concept group (--body / --body-file)")
+    .option("--body <json>", "body JSON")
+    .option("--body-file <path>", "read body JSON from a file")
+    .action(async (knId: string, cgId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.conceptGroupUpdate(knId, cgId, readBody(opts)),
+        outputOptions(cmd),
+      );
+    });
+  cg.command("delete <kn-id> <cg-id>")
+    .description("Delete a concept group")
+    .action(async (knId: string, cgId: string, _o, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.conceptGroupDelete(knId, cgId), outputOptions(cmd));
+    });
+  cg.command("add-members <kn-id> <cg-id>")
+    .description("Add object types to a concept group (--body / --body-file)")
+    .option("--body <json>", "body JSON")
+    .option("--body-file <path>", "read body JSON from a file")
+    .action(async (knId: string, cgId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.conceptGroupAddMembers(knId, cgId, readBody(opts)),
+        outputOptions(cmd),
+      );
+    });
+  cg.command("remove-members <kn-id> <cg-id> <ot-ids>")
+    .description("Remove object types (comma-joined ids) from a concept group")
+    .action(async (knId: string, cgId: string, otIds: string, _o, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.conceptGroupRemoveMembers(knId, cgId, otIds),
+        outputOptions(cmd),
+      );
+    });
 
   const sched = bkn.command("action-schedule").description("Action schedules — list/get");
   sched
@@ -318,13 +355,45 @@ export function bknCommand(): Command {
     .action(async (knId: string, sId: string, _o, cmd: Command) => {
       printJson(await clientFrom(cmd).kn.actionSchedule(knId, sId), outputOptions(cmd));
     });
-  for (const s of ["create", "update", "set-status", "delete"]) {
-    sched
-      .command(s)
-      .description(`${s} (pending)`)
-      .allowUnknownOption()
-      .action(notImplemented(`action-schedule ${s}`));
-  }
+  sched
+    .command("create <kn-id>")
+    .description("Create an action schedule (--body / --body-file)")
+    .option("--body <json>", "body JSON")
+    .option("--body-file <path>", "read body JSON from a file")
+    .action(async (knId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.actionScheduleCreate(knId, readBody(opts)),
+        outputOptions(cmd),
+      );
+    });
+  sched
+    .command("update <kn-id> <schedule-id>")
+    .description("Update an action schedule (--body / --body-file)")
+    .option("--body <json>", "body JSON")
+    .option("--body-file <path>", "read body JSON from a file")
+    .action(async (knId: string, sId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.actionScheduleUpdate(knId, sId, readBody(opts)),
+        outputOptions(cmd),
+      );
+    });
+  sched
+    .command("set-status <kn-id> <schedule-id>")
+    .description("Set an action schedule's status (--body / --body-file)")
+    .option("--body <json>", "body JSON")
+    .option("--body-file <path>", "read body JSON from a file")
+    .action(async (knId: string, sId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.actionScheduleSetStatus(knId, sId, readBody(opts)),
+        outputOptions(cmd),
+      );
+    });
+  sched
+    .command("delete <kn-id> <schedule-ids>")
+    .description("Delete action schedule(s) (comma-joined ids)")
+    .action(async (knId: string, ids: string, _o, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.actionScheduleDelete(knId, ids), outputOptions(cmd));
+    });
 
   const job = bkn.command("job").description("Build jobs — list/get/tasks");
   job
@@ -346,10 +415,11 @@ export function bknCommand(): Command {
       printJson(await clientFrom(cmd).kn.jobTasks(knId, jobId), outputOptions(cmd));
     });
   job
-    .command("delete")
-    .description("delete (pending)")
-    .allowUnknownOption()
-    .action(notImplemented("job delete"));
+    .command("delete <kn-id> <job-ids>")
+    .description("Delete job(s) (comma-joined ids)")
+    .action(async (knId: string, ids: string, _o, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.jobDelete(knId, ids), outputOptions(cmd));
+    });
 
   // Remaining subcommands kept in the tree as stubs (filled in incrementally).
   for (const name of [

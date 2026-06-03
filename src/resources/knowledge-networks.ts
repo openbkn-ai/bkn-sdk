@@ -1,4 +1,10 @@
 import {
+  addConceptGroupMembers,
+  createActionSchedule,
+  createConceptGroup,
+  deleteActionSchedules,
+  deleteConceptGroup,
+  deleteJobs,
   getActionSchedule,
   getConceptGroup,
   getJob,
@@ -6,6 +12,10 @@ import {
   listActionSchedules,
   listConceptGroups,
   listJobs,
+  removeConceptGroupMembers,
+  setActionScheduleStatus,
+  updateActionSchedule,
+  updateConceptGroup,
 } from "../api/bkn-backend.js";
 /** Knowledge-network resource surface (the exported SDK API). */
 import {
@@ -85,10 +95,25 @@ export function kn(ctx: RequestContext) {
       executeActionType(ctx, knId, atId, body),
     conceptGroups: (knId: string) => listConceptGroups(ctx, knId),
     conceptGroup: (knId: string, cgId: string) => getConceptGroup(ctx, knId, cgId),
+    conceptGroupCreate: (knId: string, body: unknown) => createConceptGroup(ctx, knId, body),
+    conceptGroupUpdate: (knId: string, cgId: string, body: unknown) =>
+      updateConceptGroup(ctx, knId, cgId, body),
+    conceptGroupDelete: (knId: string, cgId: string) => deleteConceptGroup(ctx, knId, cgId),
+    conceptGroupAddMembers: (knId: string, cgId: string, body: unknown) =>
+      addConceptGroupMembers(ctx, knId, cgId, body),
+    conceptGroupRemoveMembers: (knId: string, cgId: string, otIds: string) =>
+      removeConceptGroupMembers(ctx, knId, cgId, otIds),
     actionSchedules: (knId: string) => listActionSchedules(ctx, knId),
     actionSchedule: (knId: string, scheduleId: string) => getActionSchedule(ctx, knId, scheduleId),
+    actionScheduleCreate: (knId: string, body: unknown) => createActionSchedule(ctx, knId, body),
+    actionScheduleUpdate: (knId: string, scheduleId: string, body: unknown) =>
+      updateActionSchedule(ctx, knId, scheduleId, body),
+    actionScheduleSetStatus: (knId: string, scheduleId: string, body: unknown) =>
+      setActionScheduleStatus(ctx, knId, scheduleId, body),
+    actionScheduleDelete: (knId: string, ids: string) => deleteActionSchedules(ctx, knId, ids),
     jobs: (knId: string) => listJobs(ctx, knId),
     job: (knId: string, jobId: string) => getJob(ctx, knId, jobId),
     jobTasks: (knId: string, jobId: string) => getJobTasks(ctx, knId, jobId),
+    jobDelete: (knId: string, ids: string) => deleteJobs(ctx, knId, ids),
   };
 }
