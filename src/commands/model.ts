@@ -3,25 +3,42 @@ import { Command } from "commander";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { printJson } from "../utils/output.js";
-import { clientFrom, csv, outputOptions } from "./_shared.js";
+import { clientFrom, csv, outputOptions, readBody } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 
-function notImplemented(path: string): () => never {
-  return () => {
-    throw new Error(`\`openbkn model ${path}\` is not implemented yet.`);
-  };
-}
-
-/** Add stub management subcommands (add/edit/delete/test) under a model kind. */
-function addManagementStubs(parent: Command, kind: string): void {
-  for (const name of ["add", "edit", "delete", "test"]) {
-    parent
-      .command(name)
-      .description(`${name} (pending)`)
-      .allowUnknownOption()
-      .action(notImplemented(`${kind} ${name}`));
-  }
+/** Management subcommands (add/edit/delete/test) wired to the model resource. */
+function addManagementCommands(parent: Command, kind: "llm" | "small"): void {
+  parent
+    .command("add")
+    .description("Register a model (definition JSON via --body / --body-file)")
+    .option("--body <json>", "model definition JSON")
+    .option("--body-file <path>", "read model definition JSON from a file")
+    .action(async (opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).models[kind].add(readBody(opts)), outputOptions(cmd));
+    });
+  parent
+    .command("edit")
+    .description("Update a model definition (JSON via --body / --body-file)")
+    .option("--body <json>", "model definition JSON")
+    .option("--body-file <path>", "read model definition JSON from a file")
+    .action(async (opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).models[kind].edit(readBody(opts)), outputOptions(cmd));
+    });
+  parent
+    .command("delete <model-ids>")
+    .description("Delete model(s) (comma-joined ids)")
+    .action(async (ids: string, _o, cmd: Command) => {
+      printJson(await clientFrom(cmd).models[kind].delete(csv(ids) ?? []), outputOptions(cmd));
+    });
+  parent
+    .command("test")
+    .description("Test a model's connectivity / inference (JSON via --body / --body-file)")
+    .option("--body <json>", "test request JSON")
+    .option("--body-file <path>", "read test request JSON from a file")
+    .action(async (opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).models[kind].test(readBody(opts)), outputOptions(cmd));
+    });
 }
 
 export function modelCommand(): Command {
@@ -66,7 +83,7 @@ export function modelCommand(): Command {
       }
       printJson(await clientFrom(cmd).models.llm.chat(id, messages), outputOptions(cmd));
     });
-  addManagementStubs(llm, "llm");
+  addManagementCommands(llm, "llm");
 
   const small = model.command("small").description("Small models (embedding / reranker)");
   small
@@ -114,7 +131,7 @@ export function modelCommand(): Command {
         outputOptions(cmd),
       );
     });
-  addManagementStubs(small, "small");
+  addManagementCommands(small, "small");
 
   return group(model, "MODELS & SKILLS");
 }

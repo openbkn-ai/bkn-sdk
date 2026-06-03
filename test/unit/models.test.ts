@@ -71,21 +71,20 @@ describe("model invocation (mf-model-api)", () => {
       "",
     ].join("\n\n");
     const f = vi.fn(
-      async () =>
+      async (_url: string | URL, _init?: RequestInit) =>
         new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } }),
     );
     vi.stubGlobal("fetch", f);
 
     const deltas: string[] = [];
-    const full = await chatCompletionsStream(
-      ctx,
-      "qwen",
-      [{ role: "user", content: "hi" }],
-      (t) => deltas.push(t),
+    const full = await chatCompletionsStream(ctx, "qwen", [{ role: "user", content: "hi" }], (t) =>
+      deltas.push(t),
     );
     expect(deltas).toEqual(["知识", "图谱"]);
     expect(full).toBe("知识图谱");
-    const body = JSON.parse((f.mock.calls[0]?.[1] as RequestInit).body as string);
+    const init = f.mock.calls[0]?.[1];
+    if (!init) throw new Error("fetch not called");
+    const body = JSON.parse(init.body as string);
     expect(body.stream).toBe(true);
   });
 });
