@@ -63,7 +63,24 @@ export function adminCommand(): Command {
         outputOptions(cmd),
       );
     });
-  stubs(org, "org", ["tree", "get", "create", "update", "delete", "members"]);
+  org
+    .command("get <dept>")
+    .description("Get one department")
+    .action(async (deptId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).admin.orgGet(deptId), outputOptions(cmd));
+    });
+  org
+    .command("members <dept>")
+    .description("List members of a department")
+    .option("--role <r>", "role qualifier", "super_admin")
+    .option("--limit <n>", "page size", int, 100)
+    .action(async (deptId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).admin.orgMembers(deptId, { role: opts.role, limit: opts.limit }),
+        outputOptions(cmd),
+      );
+    });
+  stubs(org, "org", ["tree", "create", "update", "delete"]);
 
   const user = admin.command("user").description("User management");
   user
@@ -100,7 +117,19 @@ export function adminCommand(): Command {
         outputOptions(cmd),
       );
     });
-  stubs(user, "user", ["get", "create", "update", "delete", "roles", "reset-password"]);
+  user
+    .command("get <user>")
+    .description("Get one user")
+    .action(async (userId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).admin.userGet(userId), outputOptions(cmd));
+    });
+  user
+    .command("roles <user>")
+    .description("List roles granted to a user")
+    .action(async (userId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).admin.userRoles(userId), outputOptions(cmd));
+    });
+  stubs(user, "user", ["create", "update", "delete", "reset-password"]);
 
   const role = admin.command("role").description("Role management");
   role

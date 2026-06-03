@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { listDepartments, listRoles, listUsers } from "../../src/api/admin.js";
+import {
+  getDepartment,
+  getDepartmentMembers,
+  getUser,
+  getUserRoles,
+  listDepartments,
+  listRoles,
+  listUsers,
+} from "../../src/api/admin.js";
 import type { RequestContext } from "../../src/types.js";
 
 const ctx: RequestContext = {
@@ -44,5 +52,35 @@ describe("admin operator reads", () => {
     const u = url(f);
     expect(u.pathname).toBe("/api/authorization/v1/roles");
     expect(u.searchParams.get("keyword")).toBe("admin");
+  });
+  it("user get → ISFWeb thrift Usrm_GetUserInfo with [id] body", async () => {
+    const f = mockFetch();
+    await getUser(ctx, "u1");
+    const a = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls[0];
+    if (!a) throw new Error("fetch not called");
+    expect(new URL(a[0]).pathname).toBe("/isfweb/api/ShareMgnt/Usrm_GetUserInfo");
+    expect(a[1].method).toBe("POST");
+    expect(JSON.parse(a[1].body as string)).toEqual(["u1"]);
+  });
+  it("org get → thrift Usrm_GetOrgDepartmentById", async () => {
+    const f = mockFetch();
+    await getDepartment(ctx, "d1");
+    const u = url(f);
+    expect(u.pathname).toBe("/isfweb/api/ShareMgnt/Usrm_GetOrgDepartmentById");
+  });
+  it("org members → department-members public route, fields=users", async () => {
+    const f = mockFetch();
+    await getDepartmentMembers(ctx, "d1", { limit: 5 });
+    const u = url(f);
+    expect(u.pathname).toBe("/api/user-management/v1/department-members/d1/users");
+    expect(u.searchParams.get("limit")).toBe("5");
+  });
+  it("user roles → authorization accessor_roles", async () => {
+    const f = mockFetch();
+    await getUserRoles(ctx, "u1");
+    const u = url(f);
+    expect(u.pathname).toBe("/api/authorization/v1/accessor_roles");
+    expect(u.searchParams.get("accessor_id")).toBe("u1");
+    expect(u.searchParams.get("accessor_type")).toBe("user");
   });
 });

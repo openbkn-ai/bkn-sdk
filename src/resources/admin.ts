@@ -4,7 +4,11 @@ import {
   type AuditListOptions,
   type ListRolesOptions,
   type MemberType,
+  getDepartment,
+  getDepartmentMembers,
   getRole,
+  getUser,
+  getUserRoles,
   listAuditLogs,
   listDepartments,
   listRoleMembers,
@@ -17,7 +21,12 @@ import type { RequestContext } from "../types.js";
 export function admin(ctx: RequestContext) {
   return {
     orgList: (opts?: AdminListOptions) => listDepartments(ctx, opts),
+    orgGet: (deptId: string) => getDepartment(ctx, deptId),
+    orgMembers: (deptId: string, opts?: { role?: string; offset?: number; limit?: number }) =>
+      getDepartmentMembers(ctx, deptId, opts),
     userList: (opts?: AdminListOptions) => listUsers(ctx, opts),
+    userGet: (userId: string) => getUser(ctx, userId),
+    userRoles: (userId: string) => getUserRoles(ctx, userId),
     roleList: (opts?: ListRolesOptions) => listRoles(ctx, opts),
     roleGet: (roleId: string) => getRole(ctx, roleId),
     roleMembers: (roleId: string, opts?: { keyword?: string; limit?: number }) =>
