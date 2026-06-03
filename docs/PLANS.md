@@ -6,7 +6,7 @@ Product-level roadmap. Task-level execution plans live in [exec-plans/active/](e
 
 - **Phase 1 — Harness (done).** Scaffold AGENTS.md, ARCHITECTURE.md, structured `docs/`.
 - **Phase 2 — Core scaffolding (done).** `package.json` (`@openbkn/bkn-sdk`, dual lib+bin), `tsup`, `tsconfig`, `biome`, `vitest`, base layers (`config/`, `api/{http,headers}`, `utils/{output,errors}`), `createClient`, grouped-help formatter, full grouped command tree (real: `config`, `vega` BuildTask; rest stubbed). `lint`/`test`/`build` green; `openbkn --help` runnable.
-- **Phase 3 — User-side domains.** Replace stubs with real handlers (reimplement, don't copy): knowledge-networks, decision-agents (+chat), datasources, dataflows, vega (rest), trace-ai, skills/toolboxes, model invocation. Drive the live equivalence count (158/196) to full.
+- **Phase 3 — Domains (largely done).** Real handlers across every domain: bkn (KN CRUD + full schema: object/relation/action-type, metric, concept-group, action-log/schedule, job), resource, dataflow, vega (catalog/resource/connector/build), context (MCP), agent (CRUD + sessions), model (llm/small + invocation), skill, toolbox/tool, trace (get/search), admin (org/user/role/audit/model/config). Live equivalence 158→215/252. Remaining: trace diagnose engine, bkn push/pull/validate + create-from-catalog (local tar/orchestration), admin user/org CRUD detail, explore.
 - **Phase 4 — Operator-side domains.** Port-slim from `kweaver-admin`: identity-access (org/user/role/oauth/audit), model-factory management.
 - **Phase 5 — Unify CLI.** Single `openbkn` command tree across both audiences; consistent `--json` and limits.
 - **Phase 6 — Publish.** First `@openbkn/bkn-sdk` release to npm; README (en + zh), docs site.
