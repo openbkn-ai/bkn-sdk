@@ -1,0 +1,48 @@
+Skill registry and market — register, market, content, lifecycle
+
+USAGE
+  kweaver skill <subcommand> [flags]
+
+REGISTRY
+  list        List skills (filter by --name / --status / --source /
+              --create-user)
+  get         Get a skill by id
+  register    Register a skill (--content-file <SKILL.md|dir> | --zip-file
+              <path>)
+  set-status  Change status: unpublish | published | offline
+  delete      Delete a skill
+
+MARKET
+  market      Browse the skill market
+  market-get  Get a market skill by id
+  download    Download a skill package archive
+  install     Install a skill locally
+
+CONTENT
+  content               Read SKILL.md content
+  read-file             Read a file inside a skill (progressive)
+  management-content    Read SKILL.md via management endpoint
+  management-read-file  Read file inside skill via management endpoint
+  management-download   Download via management endpoint
+
+LIFECYCLE
+  update-metadata  Update metadata (name / description / category / source)
+  update-package   Update package content or zip
+  history          Show version history
+  republish        Republish a specific historical version
+  publish-history  Publish a historical version
+
+FLAGS
+  -bd, --biz-domain <s>  Business domain (default: bd_public)
+  --pretty / --compact   JSON output style (default: pretty)
+
+INHERITED FLAGS
+  --base-url, --token, --user, --help
+
+EXAMPLES
+  $ kweaver skill list --name kweaver
+  $ kweaver skill register --zip-file ./demo-skill.zip --source upload_zip
+  $ kweaver skill install skill-123 ./skills/demo-skill --force
+
+LEARN MORE
+  Use `kweaver skill <subcommand> --help` for flag details

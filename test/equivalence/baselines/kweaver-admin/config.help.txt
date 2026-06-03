@@ -1,0 +1,14 @@
+Usage: kweaver-admin config [options] [command]
+
+Inspect or update the global CLI config at ~/.kweaver-admin/config.json
+(currently only baseUrl). Per-platform tokens live separately under
+~/.kweaver-admin/platforms/<host>/token.json and are managed by `auth
+login/logout`.
+
+Options:
+  -h, --help         display help for command
+
+Commands:
+  show               Show current config (~/.kweaver-admin/config.json)
+  set <key> [value]  Set config value (only baseUrl supported for now)
+  help [command]     display help for command

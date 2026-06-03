@@ -1,0 +1,27 @@
+Usage: kweaver-admin user create [options]
+
+Create a platform user (via ISFWeb ShareMgnt.Usrm_AddUser thrift call). Initial
+password is the platform default '123456' — user must change it on first login.
+To set a custom password immediately, use `kweaver-admin user reset-password -u
+<login> -p ...`.
+
+Options:
+  --login <loginName>    Login name (unique). Used for sign-in; corresponds to
+                         ShareMgnt.loginName
+  --display-name <name>  Human-readable display name shown in UI (defaults to
+                         --login)
+  --department <id...>   Department id(s) this user belongs to. Repeat the flag
+                         or use commas. (default: ["-1"], the root department)
+  --csf-level <n>        Confidentiality level (密级). Valid values are
+                         deployment-specific and configured in UserManagement's
+                         csf_level_enum. (default: omitted; ShareMgnt
+                         chooses/initializes a default. Set env
+                         KWEAVER_ADMIN_CSF_LEVEL to force a value globally.)
+  --priority <n>         Display priority; lower values sort first in user
+                         lists. (default: 999)
+  --email <email>        Email address (optional)
+  --tel <number>         Telephone number (optional)
+  --code <code>          Employee code / staff id (optional)
+  --position <pos>       Position / job title (optional)
+  --remark <text>        Free-form remark (optional)
+  -h, --help             display help for command

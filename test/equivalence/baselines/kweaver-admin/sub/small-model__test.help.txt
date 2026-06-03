@@ -1,0 +1,9 @@
+Usage: kweaver-admin small-model test [options] <modelId>
+
+Test small model
+
+Arguments:
+  modelId     Model id
+
+Options:
+  -h, --help  display help for command

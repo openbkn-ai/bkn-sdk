@@ -1,0 +1,38 @@
+Tools inside a toolbox — upload OpenAPI specs, enable/disable, execute
+
+USAGE
+  kweaver tool <subcommand> --toolbox <box-id> [flags]
+
+AVAILABLE COMMANDS
+  upload   Upload an OpenAPI spec file as a tool
+  list     List tools in a toolbox
+  enable   Enable one or more tools
+  disable  Disable one or more tools
+  execute  Invoke a published+enabled tool
+  debug    Invoke a tool (works on draft/disabled too)
+
+FLAGS
+  Execute / debug
+    --body '<json>'      Request body
+    --body-file <path>   Request body from file
+    --header '<json>'    Headers map (Authorization auto-injected if omitted;
+                         pass {} to send none)
+    --query '<json>'     Query params map
+    --path '<json>'      Path params for OpenAPI placeholders, e.g. {"id":"..."}
+    --timeout <seconds>  Per-call timeout (backend default applies when omitted)
+
+  Common
+    -bd, --biz-domain <s>  Business domain (default: bd_public)
+    --pretty               Pretty-print JSON (default)
+    --compact              Single-line JSON (pipeline-friendly)
+
+INHERITED FLAGS
+  --base-url, --token, --user, --help
+
+EXAMPLES
+  $ kweaver tool upload --toolbox <box-id> spec.yaml
+  $ kweaver tool list --toolbox <box-id>
+  $ kweaver tool execute --toolbox <box-id> <tool-id> --body '{"key":"value"}'
+
+LEARN MORE
+  Use `kweaver tool <subcommand> --help` for flag details

@@ -1,0 +1,22 @@
+Usage: kweaver-admin user update [options] <id>
+
+Update mutable user fields. Uses REST PATCH when available; falls back to ISFWeb
+ShareMgnt.Usrm_EditUser thrift call (same payload as the console).
+
+Arguments:
+  id                     User id
+
+Options:
+  --display-name <name>  Display name
+  --code <code>          Employee code / staff id
+  --position <pos>       Position / job title
+  --remark <text>        Free-form remark
+  --email <email>        Email address
+  --tel <number>         Telephone number
+  --manager <id>         Manager (responsible person) user id; '' to clear
+  --idcard <number>      ID card number; '' to clear
+  --priority <n>         Display priority (lower sorts first)
+  --csf-level <n>        Confidentiality level (deployment-specific)
+  --csf-level2 <n>       Secondary confidentiality level
+  --expire-time <n>      Account expire time (epoch seconds; -1 for never)
+  -h, --help             display help for command

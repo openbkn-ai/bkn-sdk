@@ -1,0 +1,10 @@
+Usage: kweaver-admin llm list [options]
+
+List LLM models
+
+Options:
+  --page <n>         Page number (default: "1")
+  --size <n>         Page size (default: "20")
+  --series <series>  Filter by model series
+  --name <name>      Filter by model name
+  -h, --help         display help for command

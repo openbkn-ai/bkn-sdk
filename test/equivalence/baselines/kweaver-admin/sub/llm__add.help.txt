@@ -1,0 +1,12 @@
+Usage: kweaver-admin llm add [options]
+
+Add LLM model
+
+Options:
+  --name <name>        Model name
+  --series <series>    Model series
+  --api-model <model>  API model
+  --api-base <url>     API base URL
+  --api-key <key>      API key
+  --icon <url>         Icon URL
+  -h, --help           display help for command

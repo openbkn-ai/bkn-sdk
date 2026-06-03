@@ -1,0 +1,15 @@
+Usage: kweaver-admin small-model [options] [command]
+
+Small model management
+
+Options:
+  -h, --help                display help for command
+
+Commands:
+  list [options]            List small models
+  get <modelId>             Get small model details
+  add [options]             Add small model
+  edit [options] <modelId>  Edit small model
+  delete <modelId...>       Delete small model(s)
+  test <modelId>            Test small model
+  help [command]            display help for command

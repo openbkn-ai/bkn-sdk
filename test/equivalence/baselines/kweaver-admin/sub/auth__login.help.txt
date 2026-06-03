@@ -1,0 +1,30 @@
+Usage: kweaver-admin auth login [options] [url]
+
+Log in to a platform. Modes: (1) browser OAuth2 with local callback (default);
+(2) --no-browser paste the redirect URL/code on a headless server; (3) -u/-p
+HTTP /oauth2/signin password login (RSA-encrypted); (4) --token attach an
+existing access token (CI). Tokens are saved per platform under
+~/.kweaver-admin/platforms/<host>/token.json.
+
+Arguments:
+  url                              Platform URL (e.g.
+                                   https://kweaver.example.com)
+
+Options:
+  --token <token>                  Provide token directly (CI / headless)
+  --client-id <id>                 Use an existing OAuth2 client_id instead of
+                                   dynamic registration
+  --client-secret <secret>         OAuth2 client secret (omit for public/PKCE
+                                   clients)
+  --port <n>                       Local callback port (default 9010)
+  -u, --username <name>            Username for HTTP /oauth2/signin password
+                                   login
+  -p, --password <password>        Password for HTTP /oauth2/signin password
+                                   login
+  --signin-public-key-file <path>  Override RSA public key (PEM) for
+                                   /oauth2/signin password encryption
+  --product <name>                 OAuth product query (default 'adp', some
+                                   deployments use 'dip')
+  --no-browser                     Do not open a browser; paste authorization
+                                   code from stdin (headless servers)
+  -h, --help                       display help for command

@@ -1,0 +1,42 @@
+Usage: kweaver-admin [options] [command]
+
+KWeaver administrator CLI
+
+Options:
+  -V, --version     output the version number
+  --json            Output JSON where supported
+  -k, --insecure    Skip TLS certificate verification (dev only); saved per
+                    platform on auth login (kweaver-sdk style)
+  --base-url <url>  Override API base URL for this invocation
+  -h, --help        display help for command
+
+Commands:
+  auth              Authentication: login (browser/headless/password), session
+                    inspection (whoami, list, status, token), logout, and EACP
+                    password change.
+  org               Departments and org structure (UserManagement service)
+  user              User management
+  role              Role management against the Authorization service
+                    (/api/authorization/v1). Workflow: `role list` to find a
+                    role's UUID, then `role members <roleId>` to inspect, or
+                    `role add-member <roleId> --member <type>:<id>` to grant.
+                    For the common single-user case, `kweaver-admin user
+                    assign-role` is a shorter alias.
+  llm               Large language model management
+  small-model       Small model management
+  audit             Audit log queries (login events). Use --page/--size for
+                    paging and --user/--start/--end to filter; combine with
+                    global --json for raw output.
+  config            Inspect or update the global CLI config at
+                    ~/.kweaver-admin/config.json (currently only baseUrl).
+                    Per-platform tokens live separately under
+                    ~/.kweaver-admin/platforms/<host>/token.json and are managed
+                    by `auth login/logout`.
+  call              Curl-style API passthrough with auto-injected admin token
+                    headers (see `kweaver-admin call --help`)
+  help [command]    display help for command
+
+Examples:
+  kweaver-admin call /api/authorization/v1/roles -X GET
+  kweaver-admin call --help
+

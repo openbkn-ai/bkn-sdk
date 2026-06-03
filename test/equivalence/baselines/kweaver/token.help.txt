@@ -1,0 +1,11 @@
+Print the current access token (auto-refresh first if needed)
+
+USAGE
+  kweaver token
+
+INHERITED FLAGS
+  --base-url, --token, --user, --help
+
+EXAMPLES
+  $ kweaver token
+  $ kweaver --user alice token

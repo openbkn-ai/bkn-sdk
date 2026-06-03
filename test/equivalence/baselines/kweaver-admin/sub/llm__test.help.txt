@@ -1,0 +1,9 @@
+Usage: kweaver-admin llm test [options] <modelId>
+
+Test LLM model
+
+Arguments:
+  modelId     Model id
+
+Options:
+  -h, --help  display help for command

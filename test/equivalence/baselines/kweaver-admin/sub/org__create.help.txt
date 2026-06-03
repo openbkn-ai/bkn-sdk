@@ -1,0 +1,15 @@
+Usage: kweaver-admin org create [options]
+
+Create a department via ISFWeb ShareMgnt.Usrm_AddDepartment thrift
+(UserManagement REST has no POST route).
+
+Options:
+  --name <name>       New department name
+  --parent <id>       Parent department id (defaults to root '-1')
+  --manager <userId>  Responsible person user id
+  --code <code>       Department code
+  --remark <text>     Free-form remark
+  --email <email>     Contact email
+  --status <n>        Status (1 = enabled, 0 = disabled; default 1)
+  --oss-id <id>       OSS bucket id
+  -h, --help          display help for command

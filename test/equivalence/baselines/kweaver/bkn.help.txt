@@ -1,0 +1,61 @@
+Knowledge network — build, validate, push/pull, schema, instances, actions, metrics
+
+USAGE
+  kweaver bkn <subcommand> [args] [flags]
+
+LIFECYCLE
+  list                 List knowledge networks
+  get                  Get KN detail (use --stats or --export)
+  create               Create a KN (empty or from --body-file)
+  create-from-catalog  Create KN from a vega catalog (--name --tables --build)
+  create-from-ds       [deprecated] Alias for `create-from-catalog`; kept for
+                       back-compat
+  create-from-csv      Import CSVs then create KN (--files glob --name --build)
+  update               Update a KN
+  delete               Delete a KN
+  build                Trigger full build (--wait / --timeout)
+  stats                Get statistics (alias for `get --stats`)
+  export               Export KN (alias for `get --export`)
+
+LOCAL DIRECTORY
+  validate  Validate local BKN directory (no upload)
+  push      Upload BKN directory as tar
+  pull      Download BKN tar and extract
+
+SCHEMA
+  object-type          list / get / create / update / delete / query /
+                       properties
+  relation-type        list / get / create / update / delete
+  relation-type-paths  Query relation-type paths between object types
+  action-type          list / get / create / update / delete / query / inputs /
+                       execute
+  concept-group        list / get / create / update / delete / add-members /
+                       remove-members
+  metric               list / get / create / search / validate / update / delete
+                       / query / dry-run
+
+INSTANCES / SEARCH
+  search    Semantic search within a KN
+  subgraph  Query subgraph (JSON body)
+
+EXECUTION / JOBS
+  action-execution  get — execution status
+  action-log        list / get / cancel
+  action-schedule   list / get / create / update / set-status / delete
+  job               list / get / tasks / delete
+
+MISC
+  resources  List available resources
+
+INHERITED FLAGS
+  --base-url, --token, --user, -bd, --help
+
+EXAMPLES
+  $ kweaver bkn list
+  $ kweaver bkn build <kn-id> --wait
+  $ kweaver bkn push ./my-network --branch main
+  $ kweaver bkn search <kn-id> 'customer churn'
+
+LEARN MORE
+  Use `kweaver bkn <subcommand> --help` for action-level options
+  Use `kweaver help all` for full per-action signatures

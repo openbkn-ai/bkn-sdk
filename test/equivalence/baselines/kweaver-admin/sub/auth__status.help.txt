@@ -1,0 +1,6 @@
+Usage: kweaver-admin auth status [options]
+
+Show base URL and whether a token is configured
+
+Options:
+  -h, --help  display help for command

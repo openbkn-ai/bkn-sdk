@@ -1,0 +1,18 @@
+Usage: kweaver-admin org members [options] <id>
+
+List users assigned to that department
+
+Arguments:
+  id                  Department id
+
+Options:
+  --role <role>       Which UserManagement role to call as (e.g. super_admin,
+                      org_manager). Must be allowed for your login. Default: env
+                      KWEAVER_UM_ROLE, else super_admin. (default:
+                      "super_admin")
+  --fields <segment>  Path token after department id: users (default),
+                      departments, or users,departments — see ISF
+                      department-members API
+  --offset <n>        Skip this many users (pagination) (default: 0)
+  --limit <n>         Max users in this page (default: 100)
+  -h, --help          display help for command
