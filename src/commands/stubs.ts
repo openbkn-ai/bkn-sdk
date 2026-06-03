@@ -33,24 +33,7 @@ export function stubCommands(): Command[] {
   return [
     // AUTHENTICATION & CONFIG: auth, config, call, vega are real elsewhere.
 
-    // DECISION AGENT (agent is real elsewhere)
-    stub("toolbox", "Agent toolbox lifecycle", "DECISION AGENT", [
-      "create",
-      "list",
-      "publish",
-      "unpublish",
-      "delete",
-      "export",
-      "import",
-    ]),
-    stub("tool", "Tools inside a toolbox", "DECISION AGENT", [
-      "upload",
-      "list",
-      "enable",
-      "disable",
-      "execute",
-      "debug",
-    ]),
+    // DECISION AGENT: agent + toolbox + tool are real elsewhere.
 
     // AI DATA PLATFORM: bkn + resource + dataflow + context + vega are real elsewhere.
 
