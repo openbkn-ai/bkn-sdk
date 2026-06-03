@@ -27,7 +27,7 @@ describe("toolbox endpoints (tool-box)", () => {
     const f = mockFetch();
     await listToolboxes(ctx, { keyword: "analytics", limit: 10 });
     const u = url(f);
-    expect(u.pathname).toBe("/api/agent-operator-integration/v1/tool-box");
+    expect(u.pathname).toBe("/api/agent-operator-integration/v1/tool-box/list");
     expect(u.searchParams.get("keyword")).toBe("analytics");
     expect(u.searchParams.get("limit")).toBe("10");
   });

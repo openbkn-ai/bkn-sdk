@@ -17,7 +17,7 @@ export function listToolboxes(
   ctx: RequestContext,
   opts: ListToolboxesOptions = {},
 ): Promise<unknown> {
-  return request(ctx, PATH, {
+  return request(ctx, `${PATH}/list`, {
     query: { keyword: opts.keyword || undefined, limit: opts.limit, offset: opts.offset ?? 0 },
   });
 }
