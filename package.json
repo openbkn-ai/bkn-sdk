@@ -14,7 +14,7 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": ["dist", "README.md", "README.zh.md", "LICENSE"],
   "publishConfig": { "access": "public" },
   "repository": { "type": "git", "url": "git+https://github.com/openbkn-ai/bkn-sdk.git" },
   "keywords": ["bkn", "openbkn", "knowledge-network", "cli", "sdk", "typescript"],
