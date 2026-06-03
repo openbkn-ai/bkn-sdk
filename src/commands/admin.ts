@@ -1,10 +1,16 @@
 /**
  * `openbkn admin …` — the kweaver-admin operator CLI, nested as a subcommand.
- * Mapping is 1:1: `kweaver-admin <x>` → `openbkn admin <x>`. Subcommands are
- * stubs until implemented (operator endpoints need a deployed env to test).
+ * Mapping is 1:1: `kweaver-admin <x>` → `openbkn admin <x>`. List reads are
+ * real (validated only with mocked fetch — operator endpoints need an admin
+ * env); mutations remain stubs.
  */
 import { Command } from "commander";
 import { group } from "../help/grouped-help.js";
+import { DEFAULT_LIST_LIMIT } from "../types.js";
+import { printJson } from "../utils/output.js";
+import { clientFrom, outputOptions } from "./_shared.js";
+
+const int = (v: string) => Number.parseInt(v, 10);
 
 function notImplemented(path: string): () => never {
   return () => {
@@ -12,28 +18,70 @@ function notImplemented(path: string): () => never {
   };
 }
 
-function sub(parent: Command, name: string, subs: string[]): void {
-  const cmd = parent.command(name).description(`${name} (pending)`);
-  for (const s of subs) {
+/** Attach stub leaves to a command. */
+function stubs(cmd: Command, groupName: string, names: string[]): void {
+  for (const s of names) {
     cmd
       .command(s)
       .description(`${s} (pending)`)
       .allowUnknownOption()
-      .action(notImplemented(`${name} ${s}`));
+      .action(notImplemented(`${groupName} ${s}`));
   }
-  if (subs.length === 0) cmd.action(notImplemented(name));
 }
 
-/** The admin subtree, mirroring the kweaver-admin command set exactly. */
 export function adminCommand(): Command {
   const admin = new Command("admin").description(
     "Operator CLI (kweaver-admin): org, user, role, models, audit",
   );
 
-  sub(admin, "auth", ["login", "logout", "status", "whoami", "list", "change-password", "token"]);
-  sub(admin, "org", ["list", "tree", "get", "create", "update", "delete", "members"]);
-  sub(admin, "user", [
+  // auth (operator login) — stubbed; reuse top-level `openbkn auth` for now.
+  stubs(admin.command("auth").description("Operator authentication"), "auth", [
+    "login",
+    "logout",
+    "status",
+    "whoami",
     "list",
+    "change-password",
+    "token",
+  ]);
+
+  const org = admin.command("org").description("Departments and org structure");
+  org
+    .command("list")
+    .description("List departments")
+    .option("--role <r>", "role qualifier", "super_admin")
+    .option("--name <s>", "filter by name")
+    .option("--limit <n>", "page size", int, 100)
+    .action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).admin.orgList({
+          role: opts.role,
+          name: opts.name,
+          limit: opts.limit,
+        }),
+        outputOptions(cmd),
+      );
+    });
+  stubs(org, "org", ["tree", "get", "create", "update", "delete", "members"]);
+
+  const user = admin.command("user").description("User management");
+  user
+    .command("list")
+    .description("List users")
+    .option("--org <id>", "filter by department id")
+    .option("--keyword <s>", "filter by name")
+    .option("--limit <n>", "page size", int, 100)
+    .action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).admin.userList({
+          orgId: opts.org,
+          name: opts.keyword,
+          limit: opts.limit,
+        }),
+        outputOptions(cmd),
+      );
+    });
+  stubs(user, "user", [
     "get",
     "create",
     "update",
@@ -43,12 +91,56 @@ export function adminCommand(): Command {
     "revoke-role",
     "reset-password",
   ]);
-  sub(admin, "role", ["list", "get", "members", "add-member", "remove-member"]);
-  sub(admin, "llm", ["list", "get", "add", "edit", "delete", "test"]);
-  sub(admin, "small-model", ["list", "get", "add", "edit", "delete", "test"]);
-  sub(admin, "audit", ["list"]);
-  sub(admin, "config", ["show", "set"]);
-  sub(admin, "call", []);
+
+  const role = admin.command("role").description("Role management");
+  role
+    .command("list")
+    .description("List roles")
+    .option("--keyword <s>", "filter by keyword")
+    .option("--limit <n>", "page size", int, 100)
+    .action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).admin.roleList({ keyword: opts.keyword, limit: opts.limit }),
+        outputOptions(cmd),
+      );
+    });
+  role
+    .command("get <role>")
+    .description("Get a role by id")
+    .action(async (roleId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).admin.roleGet(roleId), outputOptions(cmd));
+    });
+  stubs(role, "role", ["members", "add-member", "remove-member"]);
+
+  // Models management reuses the (validated) mf-model-manager client.
+  for (const kind of ["llm", "small-model"] as const) {
+    const m = admin.command(kind).description(`${kind} management`);
+    const ns = kind === "llm" ? "llm" : "small";
+    m.command("list")
+      .description(`List ${kind} models`)
+      .option("--name <s>", "filter by name")
+      .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
+      .action(async (opts, cmd: Command) => {
+        printJson(
+          await clientFrom(cmd).models[ns].list({ name: opts.name, limit: opts.limit }),
+          outputOptions(cmd),
+        );
+      });
+    m.command("get <modelId>")
+      .description(`Get a ${kind} model`)
+      .action(async (id: string, _opts, cmd: Command) => {
+        printJson(await clientFrom(cmd).models[ns].get(id), outputOptions(cmd));
+      });
+    stubs(m, kind, ["add", "edit", "delete", "test"]);
+  }
+
+  stubs(admin.command("audit").description("Audit log queries"), "audit", ["list"]);
+  stubs(admin.command("config").description("Admin config"), "config", ["show", "set"]);
+  admin
+    .command("call")
+    .description("Admin API passthrough (pending)")
+    .allowUnknownOption()
+    .action(notImplemented("call"));
 
   return group(admin, "OPERATOR");
 }

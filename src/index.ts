@@ -13,6 +13,7 @@ export {
 export { HttpError, InputError } from "./utils/errors.js";
 
 // Resource namespaces (advanced: use with a resolved RequestContext).
+export { admin } from "./resources/admin.js";
 export { agents } from "./resources/agents.js";
 export { context } from "./resources/context-loader.js";
 export { dataflows } from "./resources/dataflows.js";
