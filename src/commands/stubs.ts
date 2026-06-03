@@ -52,22 +52,7 @@ export function stubCommands(): Command[] {
       "debug",
     ]),
 
-    // AI DATA PLATFORM (bkn + resource + dataflow + vega are real elsewhere)
-    stub("context", "Context loader — schema discovery, instance query", "AI DATA PLATFORM", [
-      "search-schema",
-      "query-object-instance",
-      "query-instance-subgraph",
-      "get-logic-properties",
-      "get-action-info",
-      "find-skills",
-      "tools",
-      "resources",
-      "resource",
-      "templates",
-      "prompts",
-      "prompt",
-      "tool-call",
-    ]),
+    // AI DATA PLATFORM: bkn + resource + dataflow + context + vega are real elsewhere.
 
     // TRACE AI
     stub("trace", "Diagnose conversations / build eval-sets / schema validate", "TRACE AI", [

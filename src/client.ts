@@ -1,6 +1,7 @@
 import { type RawCallOptions, type RawCallResult, rawCall } from "./api/call.js";
 import { resolveContext } from "./config/resolve.js";
 import { agents } from "./resources/agents.js";
+import { context } from "./resources/context-loader.js";
 import { dataflows } from "./resources/dataflows.js";
 import { kn } from "./resources/knowledge-networks.js";
 import { models } from "./resources/models.js";
@@ -23,6 +24,7 @@ export interface BknClient {
   readonly resource: ReturnType<typeof resources>;
   readonly dataflows: ReturnType<typeof dataflows>;
   readonly agents: ReturnType<typeof agents>;
+  readonly context: ReturnType<typeof context>;
   readonly models: ReturnType<typeof models>;
   readonly vega: ReturnType<typeof vega>;
   /** Raw API passthrough (the `call` escape hatch). */
@@ -37,6 +39,7 @@ export function createClient(opts: ClientOptions = {}): BknClient {
     resource: resources(ctx),
     dataflows: dataflows(ctx),
     agents: agents(ctx),
+    context: context(ctx),
     models: models(ctx),
     vega: vega(ctx),
     call: (path, callOpts) => rawCall(ctx, path, callOpts),
