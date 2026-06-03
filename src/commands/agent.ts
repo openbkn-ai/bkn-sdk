@@ -131,8 +131,27 @@ export function agentCommand(): Command {
       printJson(await clientFrom(cmd).agents.unpublish(id), outputOptions(cmd));
     });
 
-  // chat / sessions / history / trace / skill need the conversation contracts.
-  for (const name of ["chat", "sessions", "history", "trace", "skill"]) {
+  cmd
+    .command("sessions <agent>")
+    .description("List conversations for an agent (by agent key)")
+    .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
+    .option("--page <n>", "page", int, 1)
+    .action(async (agentKey: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).agents.sessions(agentKey, { size: opts.limit, page: opts.page }),
+        outputOptions(cmd),
+      );
+    });
+
+  cmd
+    .command("history <agent> <conversation-id>")
+    .description("Show message history for a conversation")
+    .action(async (agentKey: string, conversationId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).agents.history(agentKey, conversationId), outputOptions(cmd));
+    });
+
+  // chat / trace / skill need the streaming + conversation-write contracts.
+  for (const name of ["chat", "trace", "skill"]) {
     cmd
       .command(name)
       .description(`${name} (pending)`)

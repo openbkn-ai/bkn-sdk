@@ -90,3 +90,28 @@ export function publishAgent(ctx: RequestContext, agentId: string): Promise<unkn
 export function unpublishAgent(ctx: RequestContext, agentId: string): Promise<unknown> {
   return request(ctx, `${BASE}/agent/${encodeURIComponent(agentId)}/unpublish`, { method: "PUT" });
 }
+
+const APP = "/api/agent-factory/v1/app";
+
+/** List conversations (sessions) for an agent. `agentKey` is the agent's key. */
+export function listConversations(
+  ctx: RequestContext,
+  agentKey: string,
+  opts: { page?: number; size?: number } = {},
+): Promise<unknown> {
+  return request(ctx, `${APP}/${encodeURIComponent(agentKey)}/conversation`, {
+    query: { page: opts.page ?? 1, size: opts.size ?? 30 },
+  });
+}
+
+/** Message history for one conversation. */
+export function listMessages(
+  ctx: RequestContext,
+  agentKey: string,
+  conversationId: string,
+): Promise<unknown> {
+  return request(
+    ctx,
+    `${APP}/${encodeURIComponent(agentKey)}/conversation/${encodeURIComponent(conversationId)}`,
+  );
+}

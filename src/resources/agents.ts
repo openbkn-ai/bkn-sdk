@@ -10,6 +10,8 @@ import {
   listAgentCategories,
   listAgentTemplates,
   listAgents,
+  listConversations,
+  listMessages,
   listPersonalAgents,
   publishAgent,
   unpublishAgent,
@@ -31,5 +33,9 @@ export function agents(ctx: RequestContext) {
     delete: (agentId: string) => deleteAgent(ctx, agentId),
     publish: (agentId: string) => publishAgent(ctx, agentId),
     unpublish: (agentId: string) => unpublishAgent(ctx, agentId),
+    sessions: (agentKey: string, opts?: { page?: number; size?: number }) =>
+      listConversations(ctx, agentKey, opts),
+    history: (agentKey: string, conversationId: string) =>
+      listMessages(ctx, agentKey, conversationId),
   };
 }
