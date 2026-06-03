@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { printJson } from "../utils/output.js";
-import { clientFrom, outputOptions } from "./_shared.js";
+import { clientFrom, outputOptions, readBody } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 
@@ -98,6 +98,15 @@ export function bknCommand(): Command {
     });
 
   bkn
+    .command("update <kn-id>")
+    .description("Update a knowledge network (--body / --body-file)")
+    .option("--body <json>", "update body JSON")
+    .option("--body-file <path>", "read update body JSON from a file")
+    .action(async (knId: string, opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.update(knId, readBody(opts)), outputOptions(cmd));
+    });
+
+  bkn
     .command("delete <kn-id>")
     .description("Delete a knowledge network")
     .option("-y, --yes", "skip confirmation")
@@ -105,17 +114,24 @@ export function bknCommand(): Command {
       printJson(await clientFrom(cmd).kn.delete(knId), outputOptions(cmd));
     });
 
+  bkn
+    .command("subgraph <kn-id>")
+    .description("Query a subgraph (--body / --body-file JSON)")
+    .option("--body <json>", "subgraph query JSON")
+    .option("--body-file <path>", "read subgraph query JSON from a file")
+    .action(async (knId: string, opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.subgraph(knId, readBody(opts)), outputOptions(cmd));
+    });
+
   // Remaining subcommands kept in the tree as stubs (filled in incrementally).
   for (const name of [
     "create-from-catalog",
     "create-from-csv",
-    "update",
     "stats",
     "export",
     "validate",
     "push",
     "pull",
-    "subgraph",
     "resources",
     "relation-type-paths",
     "concept-group",

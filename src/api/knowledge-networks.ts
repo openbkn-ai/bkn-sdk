@@ -7,6 +7,7 @@ import type { RequestContext } from "../types.js";
 import { request } from "./http.js";
 
 const ONTOLOGY_BASE = "/api/ontology-manager/v1/knowledge-networks";
+const ONTOLOGY_QUERY_BASE = "/api/ontology-query/v1/knowledge-networks";
 const RETRIEVAL_BASE = "/api/agent-retrieval/v1/kn";
 
 export interface ListKnOptions {
@@ -72,6 +73,22 @@ export function createKnowledgeNetwork(
 
 export function deleteKnowledgeNetwork(ctx: RequestContext, knId: string): Promise<unknown> {
   return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}`, { method: "DELETE" });
+}
+
+export function updateKnowledgeNetwork(
+  ctx: RequestContext,
+  knId: string,
+  body: unknown,
+): Promise<unknown> {
+  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}`, { method: "PUT", body });
+}
+
+/** Query a subgraph (ontology-query). Body is a JSON query passthrough. */
+export function querySubgraph(ctx: RequestContext, knId: string, body: unknown): Promise<unknown> {
+  return request(ctx, `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/subgraph`, {
+    method: "POST",
+    body,
+  });
 }
 
 export interface ListSchemaOptions {
