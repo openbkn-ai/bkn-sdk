@@ -33,26 +33,7 @@ export function stubCommands(): Command[] {
   return [
     // AUTHENTICATION & CONFIG: auth, config, call, vega are real elsewhere.
 
-    // DECISION AGENT
-    stub("agent", "Agent CRUD, chat, sessions, publish", "DECISION AGENT", [
-      "list",
-      "personal-list",
-      "category-list",
-      "template-list",
-      "template-get",
-      "get",
-      "get-by-key",
-      "create",
-      "update",
-      "delete",
-      "publish",
-      "unpublish",
-      "chat",
-      "sessions",
-      "history",
-      "trace",
-      "skill",
-    ]),
+    // DECISION AGENT (agent is real elsewhere)
     stub("toolbox", "Agent toolbox lifecycle", "DECISION AGENT", [
       "create",
       "list",

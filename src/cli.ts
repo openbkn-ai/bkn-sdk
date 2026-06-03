@@ -5,6 +5,7 @@
  */
 import { Command } from "commander";
 import { adminCommand } from "./commands/admin.js";
+import { agentCommand } from "./commands/agent.js";
 import { authCommand } from "./commands/auth.js";
 import { bknCommand } from "./commands/bkn.js";
 import { callCommand } from "./commands/call.js";
@@ -39,6 +40,7 @@ program.addCommand(vegaCommand());
 program.addCommand(bknCommand());
 program.addCommand(resourceCommand());
 program.addCommand(dataflowCommand());
+program.addCommand(agentCommand());
 program.addCommand(adminCommand());
 
 // Placeholders for the rest of the tree (filled in incrementally).
