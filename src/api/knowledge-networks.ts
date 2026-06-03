@@ -54,6 +54,46 @@ export function getKnowledgeNetwork(
   });
 }
 
+export interface ListSchemaOptions {
+  branch?: string;
+  /** -1 = all (backend default). */
+  limit?: number;
+}
+
+function schemaListQuery(opts: ListSchemaOptions) {
+  return { branch: opts.branch ?? "main", limit: String(opts.limit ?? -1) };
+}
+
+export function listObjectTypes(
+  ctx: RequestContext,
+  knId: string,
+  opts: ListSchemaOptions = {},
+): Promise<unknown> {
+  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/object-types`, {
+    query: schemaListQuery(opts),
+  });
+}
+
+export function listRelationTypes(
+  ctx: RequestContext,
+  knId: string,
+  opts: ListSchemaOptions = {},
+): Promise<unknown> {
+  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/relation-types`, {
+    query: schemaListQuery(opts),
+  });
+}
+
+export function listActionTypes(
+  ctx: RequestContext,
+  knId: string,
+  opts: ListSchemaOptions = {},
+): Promise<unknown> {
+  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/action-types`, {
+    query: schemaListQuery(opts),
+  });
+}
+
 export interface SemanticSearchOptions {
   mode?: string;
   maxConcepts?: number;

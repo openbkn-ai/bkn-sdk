@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getKnowledgeNetwork,
   listKnowledgeNetworks,
+  listObjectTypes,
+  listRelationTypes,
   semanticSearch,
 } from "../../src/api/knowledge-networks.js";
 import type { RequestContext } from "../../src/types.js";
@@ -61,6 +63,24 @@ describe("getKnowledgeNetwork", () => {
     expect(url.pathname).toBe("/api/ontology-manager/v1/knowledge-networks/kn%201");
     expect(url.searchParams.get("mode")).toBe("export");
     expect(url.searchParams.get("include_statistics")).toBe("true");
+  });
+});
+
+describe("schema lists (ontology-manager)", () => {
+  it("object-types: branch + limit defaults", async () => {
+    const f = mockFetch();
+    await listObjectTypes(ctx, "kn-1");
+    const u = new URL(firstCall(f)[0]);
+    expect(u.pathname).toBe("/api/ontology-manager/v1/knowledge-networks/kn-1/object-types");
+    expect(u.searchParams.get("branch")).toBe("main");
+    expect(u.searchParams.get("limit")).toBe("-1");
+  });
+  it("relation-types path", async () => {
+    const f = mockFetch();
+    await listRelationTypes(ctx, "kn-1");
+    expect(new URL(firstCall(f)[0]).pathname).toBe(
+      "/api/ontology-manager/v1/knowledge-networks/kn-1/relation-types",
+    );
   });
 });
 

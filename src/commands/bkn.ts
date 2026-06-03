@@ -64,6 +64,31 @@ export function bknCommand(): Command {
       printJson(data, outputOptions(cmd));
     });
 
+  // Schema groups with a real `list` (read side); other actions stubbed.
+  const schemaGroups: Array<[string, "objectTypes" | "relationTypes" | "actionTypes", string[]]> = [
+    ["object-type", "objectTypes", ["get", "create", "update", "delete", "query", "properties"]],
+    ["relation-type", "relationTypes", ["get", "create", "update", "delete"]],
+    ["action-type", "actionTypes", ["get", "query", "inputs", "execute"]],
+  ];
+  for (const [name, method, stubs] of schemaGroups) {
+    const g = bkn.command(name).description(`${name} list/get/...`);
+    g.command("list <kn-id>")
+      .description(`List ${name}s`)
+      .option("--branch <b>", "branch", "main")
+      .action(async (knId: string, opts, cmd: Command) => {
+        printJson(
+          await clientFrom(cmd).kn[method](knId, { branch: opts.branch }),
+          outputOptions(cmd),
+        );
+      });
+    for (const s of stubs) {
+      g.command(s)
+        .description(`${s} (pending)`)
+        .allowUnknownOption()
+        .action(notImplemented(`${name} ${s}`));
+    }
+  }
+
   // Remaining subcommands kept in the tree as stubs (filled in incrementally).
   for (const name of [
     "create",
@@ -78,10 +103,7 @@ export function bknCommand(): Command {
     "pull",
     "subgraph",
     "resources",
-    "object-type",
-    "relation-type",
     "relation-type-paths",
-    "action-type",
     "concept-group",
     "metric",
     "action-execution",
