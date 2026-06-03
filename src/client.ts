@@ -9,6 +9,7 @@ import { models } from "./resources/models.js";
 import { resources } from "./resources/resources.js";
 import { skills } from "./resources/skills.js";
 import { toolboxes } from "./resources/toolboxes.js";
+import { trace } from "./resources/trace.js";
 import { vega } from "./resources/vega.js";
 /**
  * createClient — the primary entry for SDK consumers.
@@ -31,6 +32,7 @@ export interface BknClient {
   readonly models: ReturnType<typeof models>;
   readonly skills: ReturnType<typeof skills>;
   readonly toolboxes: ReturnType<typeof toolboxes>;
+  readonly trace: ReturnType<typeof trace>;
   readonly admin: ReturnType<typeof admin>;
   readonly vega: ReturnType<typeof vega>;
   /** Raw API passthrough (the `call` escape hatch). */
@@ -49,6 +51,7 @@ export function createClient(opts: ClientOptions = {}): BknClient {
     models: models(ctx),
     skills: skills(ctx),
     toolboxes: toolboxes(ctx),
+    trace: trace(ctx),
     admin: admin(ctx),
     vega: vega(ctx),
     call: (path, callOpts) => rawCall(ctx, path, callOpts),

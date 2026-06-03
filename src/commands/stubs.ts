@@ -36,14 +36,6 @@ export function stubCommands(): Command[] {
     // DECISION AGENT: agent + toolbox + tool are real elsewhere.
 
     // AI DATA PLATFORM: bkn + resource + dataflow + context + vega are real elsewhere.
-
-    // TRACE AI
-    stub("trace", "Diagnose conversations / build eval-sets / schema validate", "TRACE AI", [
-      "diagnose",
-      "eval-set",
-      "schema",
-    ]),
-
     // MODELS & SKILLS: model + skill are real elsewhere.
 
     // OPERATOR: kweaver-admin lives under the `admin` subcommand (see admin.ts).

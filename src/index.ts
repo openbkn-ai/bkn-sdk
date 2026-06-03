@@ -22,6 +22,7 @@ export { models } from "./resources/models.js";
 export { resources } from "./resources/resources.js";
 export { skills } from "./resources/skills.js";
 export { toolboxes } from "./resources/toolboxes.js";
+export { trace } from "./resources/trace.js";
 export { vega } from "./resources/vega.js";
 
 // Auth is store-backed (pre-token), so it is a standalone namespace.
