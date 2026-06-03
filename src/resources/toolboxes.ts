@@ -2,8 +2,11 @@
 import {
   type CreateToolboxOptions,
   type ListToolboxesOptions,
+  type ToolInvokeEnvelope,
   createToolbox,
+  debugTool,
   deleteToolbox,
+  executeTool,
   listToolboxes,
   listTools,
   setToolStatuses,
@@ -25,5 +28,9 @@ export function toolboxes(ctx: RequestContext) {
         boxId,
         toolIds.map((toolId) => ({ toolId, status })),
       ),
+    execute: (boxId: string, toolId: string, e?: ToolInvokeEnvelope) =>
+      executeTool(ctx, boxId, toolId, e),
+    debug: (boxId: string, toolId: string, e?: ToolInvokeEnvelope) =>
+      debugTool(ctx, boxId, toolId, e),
   };
 }

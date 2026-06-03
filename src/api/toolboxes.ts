@@ -63,6 +63,54 @@ export function setToolboxStatus(
   });
 }
 
+export interface ToolInvokeEnvelope {
+  header?: Record<string, unknown>;
+  query?: Record<string, unknown>;
+  path?: Record<string, unknown>;
+  body?: unknown;
+  timeout?: number;
+}
+
+function envelope(e: ToolInvokeEnvelope): Record<string, unknown> {
+  return {
+    ...(e.timeout !== undefined ? { timeout: e.timeout } : {}),
+    header: e.header ?? {},
+    query: e.query ?? {},
+    path: e.path ?? {},
+    body: e.body ?? {},
+  };
+}
+
+/** Execute a published+enabled tool through the toolbox proxy. */
+export function executeTool(
+  ctx: RequestContext,
+  boxId: string,
+  toolId: string,
+  e: ToolInvokeEnvelope = {},
+): Promise<unknown> {
+  return request(ctx, `${PATH}/${encodeURIComponent(boxId)}/proxy/${encodeURIComponent(toolId)}`, {
+    method: "POST",
+    body: envelope(e),
+  });
+}
+
+/** Debug a tool (works on draft/disabled tools too). */
+export function debugTool(
+  ctx: RequestContext,
+  boxId: string,
+  toolId: string,
+  e: ToolInvokeEnvelope = {},
+): Promise<unknown> {
+  return request(
+    ctx,
+    `${PATH}/${encodeURIComponent(boxId)}/tool/${encodeURIComponent(toolId)}/debug`,
+    {
+      method: "POST",
+      body: envelope(e),
+    },
+  );
+}
+
 /** Enable/disable tools inside a toolbox. */
 export function setToolStatuses(
   ctx: RequestContext,
