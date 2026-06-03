@@ -26,3 +26,51 @@ export function listToolboxes(
 export function listTools(ctx: RequestContext, boxId: string): Promise<unknown> {
   return request(ctx, `${PATH}/${encodeURIComponent(boxId)}/tools/list`);
 }
+
+export interface CreateToolboxOptions {
+  name: string;
+  serviceUrl: string;
+  description?: string;
+  source?: string;
+}
+
+export function createToolbox(ctx: RequestContext, opts: CreateToolboxOptions): Promise<unknown> {
+  return request(ctx, PATH, {
+    method: "POST",
+    body: {
+      metadata_type: "openapi",
+      box_name: opts.name,
+      box_desc: opts.description ?? "",
+      box_svc_url: opts.serviceUrl,
+      source: opts.source ?? "custom",
+    },
+  });
+}
+
+export function deleteToolbox(ctx: RequestContext, boxId: string): Promise<unknown> {
+  return request(ctx, `${PATH}/${encodeURIComponent(boxId)}`, { method: "DELETE" });
+}
+
+/** Publish (status=published) or unpublish (status=draft) a toolbox. */
+export function setToolboxStatus(
+  ctx: RequestContext,
+  boxId: string,
+  status: "published" | "draft",
+): Promise<unknown> {
+  return request(ctx, `${PATH}/${encodeURIComponent(boxId)}/status`, {
+    method: "POST",
+    body: { status },
+  });
+}
+
+/** Enable/disable tools inside a toolbox. */
+export function setToolStatuses(
+  ctx: RequestContext,
+  boxId: string,
+  updates: Array<{ toolId: string; status: "enabled" | "disabled" }>,
+): Promise<unknown> {
+  return request(ctx, `${PATH}/${encodeURIComponent(boxId)}/tools/status`, {
+    method: "POST",
+    body: updates.map((u) => ({ tool_id: u.toolId, status: u.status })),
+  });
+}

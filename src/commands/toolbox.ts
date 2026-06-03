@@ -33,7 +33,47 @@ export function toolboxCommand(): Command {
       );
     });
 
-  for (const name of ["create", "publish", "unpublish", "delete", "export", "import"]) {
+  cmd
+    .command("create")
+    .description("Create a toolbox")
+    .requiredOption("--name <name>", "toolbox name")
+    .requiredOption("--service-url <url>", "tool service URL")
+    .option("--description <d>", "description")
+    .action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).toolboxes.create({
+          name: opts.name,
+          serviceUrl: opts.serviceUrl,
+          description: opts.description,
+        }),
+        outputOptions(cmd),
+      );
+    });
+
+  cmd
+    .command("publish <box-id>")
+    .description("Publish a toolbox")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).toolboxes.publish(id), outputOptions(cmd));
+    });
+
+  cmd
+    .command("unpublish <box-id>")
+    .description("Unpublish a toolbox (status=draft)")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).toolboxes.unpublish(id), outputOptions(cmd));
+    });
+
+  cmd
+    .command("delete <box-id>")
+    .description("Delete a toolbox")
+    .option("-y, --yes", "skip confirmation")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).toolboxes.delete(id), outputOptions(cmd));
+    });
+
+  // export/import are .adp file ops — multipart/file contracts deferred.
+  for (const name of ["export", "import"]) {
     cmd
       .command(name)
       .description(`${name} (pending)`)
@@ -55,7 +95,30 @@ export function toolCommand(): Command {
       printJson(await clientFrom(cmd).toolboxes.tools(opts.toolbox), outputOptions(cmd));
     });
 
-  for (const name of ["upload", "enable", "disable", "execute", "debug"]) {
+  cmd
+    .command("enable <tool-ids...>")
+    .description("Enable one or more tools")
+    .requiredOption("--toolbox <box-id>", "toolbox id")
+    .action(async (toolIds: string[], opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).toolboxes.setToolStatus(opts.toolbox, toolIds, "enabled"),
+        outputOptions(cmd),
+      );
+    });
+
+  cmd
+    .command("disable <tool-ids...>")
+    .description("Disable one or more tools")
+    .requiredOption("--toolbox <box-id>", "toolbox id")
+    .action(async (toolIds: string[], opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).toolboxes.setToolStatus(opts.toolbox, toolIds, "disabled"),
+        outputOptions(cmd),
+      );
+    });
+
+  // upload (multipart) + execute/debug (per-tool invoke contracts) deferred.
+  for (const name of ["upload", "execute", "debug"]) {
     cmd
       .command(name)
       .description(`${name} (pending)`)
