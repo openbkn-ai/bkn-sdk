@@ -8,7 +8,7 @@ import { Command } from "commander";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { printJson } from "../utils/output.js";
-import { clientFrom, outputOptions } from "./_shared.js";
+import { clientFrom, outputOptions, readBody } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 
@@ -173,7 +173,32 @@ export function adminCommand(): Command {
       .action(async (id: string, _opts, cmd: Command) => {
         printJson(await clientFrom(cmd).models[ns].get(id), outputOptions(cmd));
       });
-    stubs(m, kind, ["add", "edit", "delete", "test"]);
+    m.command("add")
+      .description(`Register a ${kind} model (--body / --body-file)`)
+      .option("--body <json>", "model config JSON")
+      .option("--body-file <path>", "read config JSON from a file")
+      .action(async (opts, cmd: Command) => {
+        printJson(await clientFrom(cmd).models[ns].add(readBody(opts)), outputOptions(cmd));
+      });
+    m.command("edit")
+      .description(`Edit a ${kind} model (--body / --body-file)`)
+      .option("--body <json>", "model config JSON")
+      .option("--body-file <path>", "read config JSON from a file")
+      .action(async (opts, cmd: Command) => {
+        printJson(await clientFrom(cmd).models[ns].edit(readBody(opts)), outputOptions(cmd));
+      });
+    m.command("delete <modelIds...>")
+      .description(`Delete ${kind} model(s)`)
+      .action(async (ids: string[], _opts, cmd: Command) => {
+        printJson(await clientFrom(cmd).models[ns].delete(ids), outputOptions(cmd));
+      });
+    m.command("test")
+      .description(`Test a ${kind} model (--body / --body-file)`)
+      .option("--body <json>", "model config JSON")
+      .option("--body-file <path>", "read config JSON from a file")
+      .action(async (opts, cmd: Command) => {
+        printJson(await clientFrom(cmd).models[ns].test(readBody(opts)), outputOptions(cmd));
+      });
   }
 
   admin

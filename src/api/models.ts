@@ -62,6 +62,30 @@ export function embeddings(ctx: RequestContext, model: string, input: string[]):
   return request(ctx, `${API}/small-model/embeddings`, { method: "POST", body: { model, input } });
 }
 
+// ---- management writes (mf-model-manager) ---------------------------------
+
+export type ModelKind = "llm" | "small-model";
+
+export function addModel(ctx: RequestContext, kind: ModelKind, body: unknown): Promise<unknown> {
+  return request(ctx, `${MANAGER}/${kind}/add`, { method: "POST", body });
+}
+export function editModel(ctx: RequestContext, kind: ModelKind, body: unknown): Promise<unknown> {
+  return request(ctx, `${MANAGER}/${kind}/edit`, { method: "POST", body });
+}
+export function deleteModels(
+  ctx: RequestContext,
+  kind: ModelKind,
+  modelIds: string[],
+): Promise<unknown> {
+  return request(ctx, `${MANAGER}/${kind}/delete`, {
+    method: "POST",
+    body: { model_ids: modelIds },
+  });
+}
+export function testModel(ctx: RequestContext, kind: ModelKind, body: unknown): Promise<unknown> {
+  return request(ctx, `${MANAGER}/${kind}/test`, { method: "POST", body });
+}
+
 export function rerank(
   ctx: RequestContext,
   model: string,
