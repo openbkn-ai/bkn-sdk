@@ -3,8 +3,13 @@ import {
   type SearchSchemaOptions,
   callTool,
   findSkills,
+  getPrompt,
+  listPrompts,
+  listResourceTemplates,
+  listResources,
   listTools,
   queryObjectInstance,
+  readResource,
   searchSchema,
 } from "../api/context-loader.js";
 import type { RequestContext } from "../types.js";
@@ -20,5 +25,11 @@ export function context(ctx: RequestContext) {
     tools: (knId: string) => listTools(ctx, knId),
     toolCall: (knId: string, name: string, args: Record<string, unknown>) =>
       callTool(ctx, knId, name, args),
+    resources: (knId: string) => listResources(ctx, knId),
+    resource: (knId: string, uri: string) => readResource(ctx, knId, uri),
+    templates: (knId: string) => listResourceTemplates(ctx, knId),
+    prompts: (knId: string) => listPrompts(ctx, knId),
+    prompt: (knId: string, name: string, args?: Record<string, unknown>) =>
+      getPrompt(ctx, knId, name, args),
   };
 }

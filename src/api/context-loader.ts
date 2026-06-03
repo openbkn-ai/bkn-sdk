@@ -185,3 +185,26 @@ export function findSkills(
 export function listTools(ctx: RequestContext, knId: string): Promise<unknown> {
   return callMethod(ctx, knId, "tools/list");
 }
+
+// ---- standard MCP resource / prompt methods --------------------------------
+
+export function listResources(ctx: RequestContext, knId: string): Promise<unknown> {
+  return callMethod(ctx, knId, "resources/list");
+}
+export function readResource(ctx: RequestContext, knId: string, uri: string): Promise<unknown> {
+  return callMethod(ctx, knId, "resources/read", { uri });
+}
+export function listResourceTemplates(ctx: RequestContext, knId: string): Promise<unknown> {
+  return callMethod(ctx, knId, "resources/templates/list");
+}
+export function listPrompts(ctx: RequestContext, knId: string): Promise<unknown> {
+  return callMethod(ctx, knId, "prompts/list");
+}
+export function getPrompt(
+  ctx: RequestContext,
+  knId: string,
+  name: string,
+  args: Record<string, unknown> = {},
+): Promise<unknown> {
+  return callMethod(ctx, knId, "prompts/get", { name, arguments: args });
+}

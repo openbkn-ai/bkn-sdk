@@ -77,17 +77,48 @@ export function contextCommand(): Command {
       printJson(await clientFrom(cmd).context.toolCall(knId, name, args), outputOptions(cmd));
     });
 
+  cmd
+    .command("resources <kn-id>")
+    .description("List MCP resources")
+    .action(async (knId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).context.resources(knId), outputOptions(cmd));
+    });
+  cmd
+    .command("resource <kn-id> <uri>")
+    .description("Read one MCP resource by uri")
+    .action(async (knId: string, uri: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).context.resource(knId, uri), outputOptions(cmd));
+    });
+  cmd
+    .command("templates <kn-id>")
+    .description("List MCP resource templates")
+    .action(async (knId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).context.templates(knId), outputOptions(cmd));
+    });
+  cmd
+    .command("prompts <kn-id>")
+    .description("List MCP prompts")
+    .action(async (knId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).context.prompts(knId), outputOptions(cmd));
+    });
+  cmd
+    .command("prompt <kn-id> <name>")
+    .description("Get one MCP prompt (--args JSON for prompt arguments)")
+    .option("--args <json>", "prompt arguments as JSON")
+    .action(async (knId: string, name: string, opts, cmd: Command) => {
+      let args: Record<string, unknown> | undefined;
+      if (opts.args) {
+        try {
+          args = JSON.parse(opts.args);
+        } catch {
+          throw new InputError("--args must be valid JSON");
+        }
+      }
+      printJson(await clientFrom(cmd).context.prompt(knId, name, args), outputOptions(cmd));
+    });
+
   // Remaining MCP/query subcommands kept as stubs.
-  for (const name of [
-    "query-instance-subgraph",
-    "get-logic-properties",
-    "get-action-info",
-    "resources",
-    "resource",
-    "templates",
-    "prompts",
-    "prompt",
-  ]) {
+  for (const name of ["query-instance-subgraph", "get-logic-properties", "get-action-info"]) {
     cmd
       .command(name)
       .description(`${name} (pending)`)
