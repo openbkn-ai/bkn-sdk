@@ -75,17 +75,35 @@ export function skillCommand(): Command {
       printJson(await clientFrom(cmd).skills.delete(id), outputOptions(cmd));
     });
 
-  // Package/content/lifecycle ops need multipart + body contracts (deferred).
+  cmd
+    .command("content <skill-id>")
+    .description("Read a skill's SKILL.md content index")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).skills.content(id), outputOptions(cmd));
+    });
+
+  cmd
+    .command("read-file <skill-id> <rel-path>")
+    .description("Read a file inside a skill (progressive)")
+    .action(async (id: string, relPath: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).skills.readFile(id, relPath), outputOptions(cmd));
+    });
+
+  cmd
+    .command("history <skill-id>")
+    .description("Show a skill's version history")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).skills.history(id), outputOptions(cmd));
+    });
+
+  // Package/lifecycle write ops need multipart + body contracts (deferred).
   for (const name of [
     "register",
     "set-status",
     "download",
     "install",
-    "content",
-    "read-file",
     "update-metadata",
     "update-package",
-    "history",
     "republish",
     "publish-history",
   ]) {

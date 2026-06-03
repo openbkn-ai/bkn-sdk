@@ -49,3 +49,25 @@ export function getSkillMarket(ctx: RequestContext, skillId: string): Promise<un
 export function deleteSkill(ctx: RequestContext, skillId: string): Promise<unknown> {
   return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}`, { method: "DELETE" });
 }
+
+/** Read a skill's SKILL.md content index. */
+export function getSkillContent(ctx: RequestContext, skillId: string): Promise<unknown> {
+  return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}/content`);
+}
+
+/** Read a file inside a skill (progressive). */
+export function readSkillFile(
+  ctx: RequestContext,
+  skillId: string,
+  relPath: string,
+): Promise<unknown> {
+  return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}/files/read`, {
+    method: "POST",
+    body: { rel_path: relPath },
+  });
+}
+
+/** Version history for a skill. */
+export function getSkillHistory(ctx: RequestContext, skillId: string): Promise<unknown> {
+  return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}/history`);
+}

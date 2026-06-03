@@ -3,9 +3,12 @@ import {
   type ListSkillsOptions,
   deleteSkill,
   getSkill,
+  getSkillContent,
+  getSkillHistory,
   getSkillMarket,
   listSkillMarket,
   listSkills,
+  readSkillFile,
 } from "../api/skills.js";
 import type { RequestContext } from "../types.js";
 
@@ -16,5 +19,8 @@ export function skills(ctx: RequestContext) {
     market: (opts?: ListSkillsOptions) => listSkillMarket(ctx, opts),
     marketGet: (skillId: string) => getSkillMarket(ctx, skillId),
     delete: (skillId: string) => deleteSkill(ctx, skillId),
+    content: (skillId: string) => getSkillContent(ctx, skillId),
+    readFile: (skillId: string, relPath: string) => readSkillFile(ctx, skillId, relPath),
+    history: (skillId: string) => getSkillHistory(ctx, skillId),
   };
 }
