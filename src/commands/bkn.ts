@@ -75,7 +75,7 @@ export function bknCommand(): Command {
   > = [
     ["object-type", "objectTypes", "objectType", []],
     ["relation-type", "relationTypes", "relationType", []],
-    ["action-type", "actionTypes", null, ["get", "inputs"]],
+    ["action-type", "actionTypes", null, ["get"]],
   ];
   for (const [name, listMethod, crud, stubLeaves] of schemaGroups) {
     const g = bkn.command(name).description(`${name} list/get/...`);
@@ -152,6 +152,12 @@ export function bknCommand(): Command {
         await clientFrom(cmd).kn.actionTypeExecute(knId, atId, readBody(opts)),
         outputOptions(cmd),
       );
+    });
+  actionType
+    ?.command("inputs <kn-id> <at-id>")
+    .description("Get an action type's input schema")
+    .action(async (knId: string, atId: string, _o, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.actionTypeInputs(knId, atId), outputOptions(cmd));
     });
 
   // stats/export are aliases of `get --stats` / `get --export`.

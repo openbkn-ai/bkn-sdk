@@ -188,6 +188,18 @@ export function executeActionType(
   );
 }
 
+/** Get an action type's input schema (ontology-query). */
+export function getActionTypeInputs(
+  ctx: RequestContext,
+  knId: string,
+  atId: string,
+): Promise<unknown> {
+  return request(
+    ctx,
+    `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-types/${encodeURIComponent(atId)}/inputs`,
+  );
+}
+
 export function getActionExecution(
   ctx: RequestContext,
   knId: string,

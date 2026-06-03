@@ -5,6 +5,7 @@
  * env); mutations remain stubs.
  */
 import { Command } from "commander";
+import { activePlatform, setActivePlatform } from "../config/store.js";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { printJson } from "../utils/output.js";
@@ -223,7 +224,23 @@ export function adminCommand(): Command {
         outputOptions(cmd),
       );
     });
-  stubs(admin.command("config").description("Admin config"), "config", ["show", "set"]);
+  const adminConfig = admin.command("config").description("Admin CLI config (active platform)");
+  adminConfig
+    .command("show")
+    .description("Show the active platform")
+    .action((_opts, cmd: Command) => {
+      printJson({ baseUrl: activePlatform() }, outputOptions(cmd));
+    });
+  adminConfig
+    .command("set <key> <value>")
+    .description("Set a config value (baseUrl)")
+    .action((key: string, value: string, _opts, cmd: Command) => {
+      if (key !== "baseUrl") {
+        throw new Error(`Unknown config key: ${key} (only baseUrl supported)`);
+      }
+      setActivePlatform(value.replace(/\/+$/, ""));
+      printJson({ ok: true, baseUrl: value }, outputOptions(cmd));
+    });
   admin
     .command("call")
     .description("Admin API passthrough (pending)")

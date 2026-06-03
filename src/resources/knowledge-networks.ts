@@ -36,6 +36,7 @@ import {
   executeActionType,
   getActionExecution,
   getActionLog,
+  getActionTypeInputs,
   getKnowledgeNetwork,
   getMetric,
   getObjectTypeProperties,
@@ -108,6 +109,7 @@ export function kn(ctx: RequestContext) {
       queryActionType(ctx, knId, atId, body),
     actionTypeExecute: (knId: string, atId: string, body: unknown) =>
       executeActionType(ctx, knId, atId, body),
+    actionTypeInputs: (knId: string, atId: string) => getActionTypeInputs(ctx, knId, atId),
     conceptGroups: (knId: string) => listConceptGroups(ctx, knId),
     conceptGroup: (knId: string, cgId: string) => getConceptGroup(ctx, knId, cgId),
     conceptGroupCreate: (knId: string, body: unknown) => createConceptGroup(ctx, knId, body),
