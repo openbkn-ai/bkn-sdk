@@ -5,6 +5,7 @@
 import type { RequestContext } from "../types.js";
 import { HttpError } from "../utils/errors.js";
 import { buildHeaders } from "./headers.js";
+import { applyTls } from "./tls.js";
 
 export interface RequestInitEx {
   method?: string;
@@ -29,6 +30,7 @@ export async function request<T = unknown>(
     if (v !== undefined) url.searchParams.set(k, String(v));
   }
 
+  applyTls(ctx);
   const hasBody = init.body !== undefined;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), init.timeoutMs ?? DEFAULT_TIMEOUT_MS);

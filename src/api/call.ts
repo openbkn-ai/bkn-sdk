@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 import type { RequestContext } from "../types.js";
 import { buildHeaders } from "./headers.js";
+import { applyTls } from "./tls.js";
 
 export interface RawCallOptions {
   method?: string;
@@ -53,6 +54,7 @@ export async function rawCall(
   path: string,
   opts: RawCallOptions = {},
 ): Promise<RawCallResult> {
+  applyTls(ctx);
   const url = resolveUrl(ctx, path);
   const extra: Record<string, string> = {};
   for (const h of opts.header ?? []) {
