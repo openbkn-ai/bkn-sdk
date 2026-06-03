@@ -1,47 +1,67 @@
-/** `openbkn config …` — local CLI config (base URL, business domain). */
+/** `openbkn config …` — active platform + per-platform business domain. */
 import { Command } from "commander";
-import { readConfig, writeConfig } from "../config/store.js";
+import {
+  activePlatform,
+  readPlatformConfig,
+  setActivePlatform,
+  writePlatformConfig,
+} from "../config/store.js";
 import { group } from "../help/grouped-help.js";
+import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { outputOptions } from "./_shared.js";
+
+function requireActive(): string {
+  const baseUrl = activePlatform();
+  if (!baseUrl) throw new InputError("No active platform. Run `openbkn auth login <url>` first.");
+  return baseUrl;
+}
 
 export function configCommand(): Command {
   const config = new Command("config").description("Per-platform CLI configuration");
 
   config
     .command("show")
-    .description("Show current config (base URL, business domain)")
+    .description("Show the active platform and business domain")
     .action((_opts, cmd: Command) => {
-      printJson(readConfig(), outputOptions(cmd));
+      const baseUrl = activePlatform();
+      printJson(
+        {
+          baseUrl,
+          businessDomain: baseUrl ? readPlatformConfig(baseUrl).businessDomain : undefined,
+        },
+        outputOptions(cmd),
+      );
     });
 
   config
     .command("set <key> <value>")
     .description("Set a config value (baseUrl | businessDomain)")
     .action((key: string, value: string, _opts, cmd: Command) => {
-      const next = readConfig();
-      if (key === "baseUrl") next.baseUrl = value;
-      else if (key === "businessDomain") next.businessDomain = value;
-      else throw new Error(`Unknown config key: ${key} (expected baseUrl | businessDomain)`);
-      writeConfig(next);
-      printJson(next, outputOptions(cmd));
+      if (key === "baseUrl") {
+        setActivePlatform(value.replace(/\/+$/, ""));
+      } else if (key === "businessDomain") {
+        writePlatformConfig(requireActive(), { businessDomain: value });
+      } else {
+        throw new InputError(`Unknown config key: ${key} (expected baseUrl | businessDomain)`);
+      }
+      printJson({ ok: true, key, value }, outputOptions(cmd));
     });
 
   config
     .command("set-bd <value>")
-    .description("Set the default business domain")
+    .description("Set the default business domain for the active platform")
     .action((value: string, _opts, cmd: Command) => {
-      const next = readConfig();
-      next.businessDomain = value;
-      writeConfig(next);
-      printJson(next, outputOptions(cmd));
+      const baseUrl = requireActive();
+      writePlatformConfig(baseUrl, { businessDomain: value });
+      printJson({ baseUrl, businessDomain: value }, outputOptions(cmd));
     });
 
   config
     .command("list-bd")
     .description("List business domains (requires login)")
     .action(() => {
-      throw new Error("Not yet implemented — requires backend business-domains API.");
+      throw new InputError("Not yet implemented — requires backend business-domains API.");
     });
 
   return group(config, "AUTHENTICATION & CONFIG");
