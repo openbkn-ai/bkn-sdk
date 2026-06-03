@@ -80,7 +80,56 @@ export function adminCommand(): Command {
         outputOptions(cmd),
       );
     });
-  stubs(org, "org", ["tree", "create", "update", "delete"]);
+  org
+    .command("create <name>")
+    .description("Create a department")
+    .option("--parent <id>", "parent department id", "-1")
+    .option("--code <s>", "department code")
+    .option("--remark <s>", "remark")
+    .option("--email <s>", "email")
+    .option("--manager <id>", "manager user id")
+    .action(async (name: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).admin.orgCreate({
+          name,
+          parentId: opts.parent,
+          code: opts.code,
+          remark: opts.remark,
+          email: opts.email,
+          managerID: opts.manager,
+        }),
+        outputOptions(cmd),
+      );
+    });
+  org
+    .command("update <dept>")
+    .description("Update a department (only provided fields change)")
+    .option("--name <s>", "new name")
+    .option("--code <s>", "department code")
+    .option("--remark <s>", "remark")
+    .option("--email <s>", "email")
+    .option("--manager <id>", "manager user id")
+    .option("--status <n>", "status (1=enabled)", int)
+    .action(async (deptId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).admin.orgUpdate(deptId, {
+          name: opts.name,
+          code: opts.code,
+          remark: opts.remark,
+          email: opts.email,
+          managerID: opts.manager,
+          status: opts.status,
+        }),
+        outputOptions(cmd),
+      );
+    });
+  org
+    .command("delete <dept>")
+    .description("Delete a department")
+    .action(async (deptId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).admin.orgDelete(deptId), outputOptions(cmd));
+    });
+  stubs(org, "org", ["tree"]);
 
   const user = admin.command("user").description("User management");
   user
@@ -129,7 +178,71 @@ export function adminCommand(): Command {
     .action(async (userId: string, _opts, cmd: Command) => {
       printJson(await clientFrom(cmd).admin.userRoles(userId), outputOptions(cmd));
     });
-  stubs(user, "user", ["create", "update", "delete", "reset-password"]);
+  user
+    .command("create <login-name>")
+    .description("Create a user (gets the platform default password)")
+    .option("--display-name <s>", "display name (defaults to login name)")
+    .option("--email <s>", "email")
+    .option("--org <id>", "department id", "-1")
+    .option("--code <s>", "user code")
+    .option("--position <s>", "position")
+    .option("--remark <s>", "remark")
+    .option("--tel <s>", "telephone")
+    .action(async (loginName: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).admin.userCreate({
+          loginName,
+          displayName: opts.displayName,
+          email: opts.email,
+          departmentIds: opts.org ? [opts.org] : undefined,
+          code: opts.code,
+          position: opts.position,
+          remark: opts.remark,
+          telNumber: opts.tel,
+        }),
+        outputOptions(cmd),
+      );
+    });
+  user
+    .command("update <user>")
+    .description("Update a user (only provided fields change)")
+    .option("--display-name <s>", "display name")
+    .option("--email <s>", "email")
+    .option("--code <s>", "user code")
+    .option("--position <s>", "position")
+    .option("--remark <s>", "remark")
+    .option("--tel <s>", "telephone")
+    .option("--manager <id>", "manager user id")
+    .action(async (userId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).admin.userUpdate(userId, {
+          displayName: opts.displayName,
+          email: opts.email,
+          code: opts.code,
+          position: opts.position,
+          remark: opts.remark,
+          telNumber: opts.tel,
+          managerID: opts.manager,
+        }),
+        outputOptions(cmd),
+      );
+    });
+  user
+    .command("delete <user>")
+    .description("Delete a user")
+    .action(async (userId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).admin.userDelete(userId), outputOptions(cmd));
+    });
+  user
+    .command("reset-password <user>")
+    .description("Reset a user's password (RSA-encrypted in transit)")
+    .requiredOption("--password <s>", "the new password")
+    .action(async (userId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).admin.userResetPassword(userId, opts.password),
+        outputOptions(cmd),
+      );
+    });
 
   const role = admin.command("role").description("Role management");
   role
