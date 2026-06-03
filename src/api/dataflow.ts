@@ -31,6 +31,19 @@ export interface LogsOptions {
   limit?: number;
 }
 
+/** Trigger a dataflow run from a remote file URL. */
+export function runDataflowRemote(
+  ctx: RequestContext,
+  dagId: string,
+  url: string,
+  name: string,
+): Promise<unknown> {
+  return request(ctx, `${BASE}/dataflow-doc/trigger/${encodeURIComponent(dagId)}`, {
+    method: "POST",
+    body: { source_from: "remote", url, name },
+  });
+}
+
 export function getDataflowLogs(
   ctx: RequestContext,
   dagId: string,

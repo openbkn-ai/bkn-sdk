@@ -49,8 +49,20 @@ export function dataflowCommand(): Command {
       );
     });
 
-  // Trigger + create flows need a verified request contract (deferred).
-  for (const name of ["run", "templates", "create-dataset", "create-bkn", "create"]) {
+  cmd
+    .command("run <dagId>")
+    .description("Trigger a dataflow run from a remote file URL")
+    .requiredOption("--url <url>", "remote file URL")
+    .requiredOption("--name <name>", "file name")
+    .action(async (dagId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).dataflows.run(dagId, opts.url, opts.name),
+        outputOptions(cmd),
+      );
+    });
+
+  // create flows + local-file trigger need verified multipart contracts (deferred).
+  for (const name of ["templates", "create-dataset", "create-bkn", "create"]) {
     cmd
       .command(name)
       .description(`${name} (pending)`)
