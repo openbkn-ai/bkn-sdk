@@ -4,6 +4,7 @@
  * Thin shell: parse argv → call a resource → print. No business logic here.
  */
 import { Command } from "commander";
+import { adminCommand } from "./commands/admin.js";
 import { authCommand } from "./commands/auth.js";
 import { callCommand } from "./commands/call.js";
 import { configCommand } from "./commands/config.js";
@@ -32,6 +33,7 @@ program.addCommand(authCommand());
 program.addCommand(callCommand());
 program.addCommand(configCommand());
 program.addCommand(vegaCommand());
+program.addCommand(adminCommand());
 
 // Placeholders for the rest of the tree (filled in incrementally).
 for (const cmd of stubCommands()) program.addCommand(cmd);

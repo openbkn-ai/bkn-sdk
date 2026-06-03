@@ -163,35 +163,7 @@ export function stubCommands(): Command[] {
       "publish-history",
     ]),
 
-    // OPERATOR (merged from kweaver-admin)
-    stub("org", "Departments and org structure", "OPERATOR", [
-      "list",
-      "tree",
-      "get",
-      "create",
-      "update",
-      "delete",
-      "members",
-    ]),
-    stub("user", "User management", "OPERATOR", [
-      "list",
-      "get",
-      "create",
-      "update",
-      "delete",
-      "roles",
-      "assign-role",
-      "revoke-role",
-      "reset-password",
-    ]),
-    stub("role", "Role management", "OPERATOR", [
-      "list",
-      "get",
-      "members",
-      "add-member",
-      "remove-member",
-    ]),
-    stub("audit", "Audit log queries", "OPERATOR", ["list"]),
+    // OPERATOR: kweaver-admin lives under the `admin` subcommand (see admin.ts).
 
     // FOUNDATION
     stub("explore", "Launch interactive web UI (under review for scope)", "FOUNDATION", []),

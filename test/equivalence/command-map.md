@@ -40,19 +40,24 @@ Because the binary (`openbkn`) differs from its `bkn` subcommand, there is no
 | `kweaver explore` | `openbkn explore` | keep (review) | Launches a local web UI; confirm it fits "backend-only" product scope before carrying over |
 | `kweaver help [all]` | `openbkn help [all]` | keep | Preserve `help all` full-signature dump (migration aid) |
 
-## `kweaver-admin` (operator side)
+## `kweaver-admin` (operator side) — nested under `openbkn admin`
+
+The whole kweaver-admin CLI is mounted **1:1** as the `admin` subcommand, so the
+mapping is mechanical: `kweaver-admin <x>` → `openbkn admin <x>`, names unchanged.
+This keeps admin self-contained and avoids clashing with the (fuller) kweaver-sdk
+top-level (`model`, `auth`, `config`, `call`).
 
 | Legacy | → `openbkn` | Status | Notes |
 | ------ | ------- | ------ | ----- |
-| `kweaver-admin auth …` (login, logout, status, whoami, list/ls, change-password, token) | `openbkn auth …` | merge | Same `auth` group as user side; superset of subcommands |
-| `kweaver-admin org …` (list, tree, get, create, update, delete, members) | `openbkn org …` | keep | |
-| `kweaver-admin user …` (list, get, create, update, delete, roles, assign-role, revoke-role, reset-password) | `openbkn user …` | keep | |
-| `kweaver-admin role …` (list, get, members, add-member, remove-member, …) | `openbkn role …` | keep | |
-| `kweaver-admin llm …` (list, get, add, edit, delete, test) | `openbkn model llm …` | merge | Unify under user-side `model llm`; management endpoints |
-| `kweaver-admin small-model …` (list, get, add, edit, delete, test) | `openbkn model small …` | merge | Unify under `model small` |
-| `kweaver-admin audit list` | `openbkn audit list` | keep | |
-| `kweaver-admin config show\|set` | `openbkn config …` | merge | Merge with user-side `config` |
-| `kweaver-admin call` | `openbkn call` | merge | Same unified `call` |
+| `kweaver-admin auth …` | `openbkn admin auth …` | keep | login/logout/status/whoami/list/change-password/token |
+| `kweaver-admin org …` | `openbkn admin org …` | keep | list/tree/get/create/update/delete/members |
+| `kweaver-admin user …` | `openbkn admin user …` | keep | + roles/assign-role/revoke-role/reset-password |
+| `kweaver-admin role …` | `openbkn admin role …` | keep | + members/add-member/remove-member |
+| `kweaver-admin llm …` | `openbkn admin llm …` | keep | admin-side model mgmt (distinct from top-level `model llm`) |
+| `kweaver-admin small-model …` | `openbkn admin small-model …` | keep | |
+| `kweaver-admin audit list` | `openbkn admin audit list` | keep | |
+| `kweaver-admin config …` | `openbkn admin config …` | keep | |
+| `kweaver-admin call` | `openbkn admin call` | keep | |
 
 ## Global flags — reconcile
 

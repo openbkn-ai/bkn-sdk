@@ -33,21 +33,17 @@ const BKN_BIN = process.env.BKN_BIN ?? join(here, "..", "..", "dist", "cli.js");
 const bknReady = existsSync(BKN_BIN) && process.env.BKN_EQUIV_LIVE === "1";
 
 /**
- * First-segment rename map: legacy top-level command → openbkn top-level command.
- * The binary is `openbkn`; subcommand names are kept identical to legacy, so the
- * knowledge-network command stays `bkn` (no rename) — only true mergers appear here.
+ * kweaver (sdk) top-level → openbkn top-level. The binary is `openbkn`;
+ * subcommand names are kept identical, so the knowledge-network command stays
+ * `bkn` (no rename). Only genuine folds appear here.
+ * kweaver-admin maps separately: `kweaver-admin <x>` → `openbkn admin <x>`.
  */
 const TOP_RENAME: Record<string, string> = {
-  token: "auth", // standalone `token` folded under `auth`
   "context-loader": "context",
-  llm: "model", // admin llm → openbkn model llm
-  "small-model": "model", // admin small-model → openbkn model small
 };
-/** Extra path rewrites applied after the first-segment rename. */
+/** Multi-segment rewrites applied to a kweaver path. */
 const PATH_REWRITE: Record<string, string[]> = {
-  token: ["auth", "token"],
-  llm: ["model", "llm"],
-  "small-model": ["model", "small"],
+  token: ["auth", "token"], // standalone `token` folded under `auth`
 };
 
 /** Legacy paths intentionally dropped (see command-map.md). */
@@ -176,9 +172,10 @@ describe.skipIf(!bknReady)("full-depth tree parity: kweaver → bkn", () => {
   }
 });
 
-describe.skipIf(!bknReady)("full-depth tree parity: kweaver-admin → bkn", () => {
+describe.skipIf(!bknReady)("full-depth tree parity: kweaver-admin → openbkn admin", () => {
   for (const legacy of adminPaths) {
-    const mapped = mapPath(legacy);
+    // kweaver-admin is nested 1:1 under `openbkn admin`.
+    const mapped = ["admin", ...legacy];
     it(`openbkn ${mapped.join(" ")} --help covers kweaver-admin ${legacy.join(" ")}`, () => {
       const res = runBknHelp(mapped);
       expect(res.ok, `openbkn ${mapped.join(" ")} --help failed`).toBe(true);
