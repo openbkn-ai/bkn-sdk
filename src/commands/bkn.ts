@@ -68,7 +68,7 @@ export function bknCommand(): Command {
   const schemaGroups: Array<[string, "objectTypes" | "relationTypes" | "actionTypes", string[]]> = [
     ["object-type", "objectTypes", ["get", "create", "update", "delete"]],
     ["relation-type", "relationTypes", ["get", "create", "update", "delete"]],
-    ["action-type", "actionTypes", ["get", "query", "inputs", "execute"]],
+    ["action-type", "actionTypes", ["get", "inputs"]],
   ];
   for (const [name, method, stubs] of schemaGroups) {
     const g = bkn.command(name).description(`${name} list/get/...`);
@@ -88,6 +88,45 @@ export function bknCommand(): Command {
         .action(notImplemented(`${name} ${s}`));
     }
   }
+
+  // Real action-type query + execute on the action-type group.
+  const actionType = bkn.commands.find((c) => c.name() === "action-type");
+  actionType
+    ?.command("query <kn-id> <at-id>")
+    .description("Query an action type (--body / --body-file JSON)")
+    .option("--body <json>", "query JSON")
+    .option("--body-file <path>", "read query JSON from a file")
+    .action(async (knId: string, atId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.actionTypeQuery(knId, atId, readBody(opts)),
+        outputOptions(cmd),
+      );
+    });
+  actionType
+    ?.command("execute <kn-id> <at-id>")
+    .description("Execute an action type (--body / --body-file envelope JSON)")
+    .option("--body <json>", "execution envelope JSON")
+    .option("--body-file <path>", "read envelope JSON from a file")
+    .action(async (knId: string, atId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.actionTypeExecute(knId, atId, readBody(opts)),
+        outputOptions(cmd),
+      );
+    });
+
+  // stats/export are aliases of `get --stats` / `get --export`.
+  bkn
+    .command("stats <kn-id>")
+    .description("Get knowledge-network statistics (alias for get --stats)")
+    .action(async (knId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.get(knId, { stats: true }), outputOptions(cmd));
+    });
+  bkn
+    .command("export <kn-id>")
+    .description("Export a knowledge network (alias for get --export)")
+    .action(async (knId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.get(knId, { exportMode: true }), outputOptions(cmd));
+    });
 
   // Real object-type instance query + properties (the rest are stubs above).
   const objectType = bkn.commands.find((c) => c.name() === "object-type");
@@ -212,8 +251,6 @@ export function bknCommand(): Command {
   for (const name of [
     "create-from-catalog",
     "create-from-csv",
-    "stats",
-    "export",
     "validate",
     "push",
     "pull",

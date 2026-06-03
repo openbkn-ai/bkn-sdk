@@ -160,6 +160,34 @@ export function getObjectTypeProperties(
   );
 }
 
+/** Query an action type (ontology-query). Body is a JSON query passthrough. */
+export function queryActionType(
+  ctx: RequestContext,
+  knId: string,
+  atId: string,
+  body: unknown,
+): Promise<unknown> {
+  return request(
+    ctx,
+    `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-types/${encodeURIComponent(atId)}/`,
+    { method: "POST", body },
+  );
+}
+
+/** Execute an action type (ontology-query). Body is the execution envelope. */
+export function executeActionType(
+  ctx: RequestContext,
+  knId: string,
+  atId: string,
+  body: unknown,
+): Promise<unknown> {
+  return request(
+    ctx,
+    `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-types/${encodeURIComponent(atId)}/execute`,
+    { method: "POST", body },
+  );
+}
+
 export function getActionExecution(
   ctx: RequestContext,
   knId: string,

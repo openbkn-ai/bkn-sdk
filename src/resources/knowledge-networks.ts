@@ -10,6 +10,7 @@ import {
   createKnowledgeNetwork,
   deleteKnowledgeNetwork,
   dryRunMetric,
+  executeActionType,
   getActionExecution,
   getActionLog,
   getKnowledgeNetwork,
@@ -19,6 +20,7 @@ import {
   listKnowledgeNetworks,
   listObjectTypes,
   listRelationTypes,
+  queryActionType,
   queryMetricData,
   queryObjectTypeInstances,
   querySubgraph,
@@ -51,5 +53,9 @@ export function kn(ctx: RequestContext) {
     objectTypeProperties: (knId: string, otId: string) => getObjectTypeProperties(ctx, knId, otId),
     relationTypes: (knId: string, opts?: ListSchemaOptions) => listRelationTypes(ctx, knId, opts),
     actionTypes: (knId: string, opts?: ListSchemaOptions) => listActionTypes(ctx, knId, opts),
+    actionTypeQuery: (knId: string, atId: string, body: unknown) =>
+      queryActionType(ctx, knId, atId, body),
+    actionTypeExecute: (knId: string, atId: string, body: unknown) =>
+      executeActionType(ctx, knId, atId, body),
   };
 }
