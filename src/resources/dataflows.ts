@@ -2,6 +2,7 @@
 import {
   type ListRunsOptions,
   type LogsOptions,
+  createDataflow,
   getDataflowLogs,
   listDataflowRuns,
   listDataflows,
@@ -16,5 +17,6 @@ export function dataflows(ctx: RequestContext) {
     logs: (dagId: string, instanceId: string, opts?: LogsOptions) =>
       getDataflowLogs(ctx, dagId, instanceId, opts),
     run: (dagId: string, url: string, name: string) => runDataflowRemote(ctx, dagId, url, name),
+    create: (body: unknown) => createDataflow(ctx, body),
   };
 }

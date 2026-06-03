@@ -7,9 +7,15 @@ import type { RequestContext } from "../types.js";
 import { request } from "./http.js";
 
 const BASE = "/api/automation/v2";
+const BASE_V1 = "/api/automation/v1";
 
 export function listDataflows(ctx: RequestContext): Promise<unknown> {
   return request(ctx, `${BASE}/dags`, { query: { type: "data-flow", page: 0, limit: -1 } });
+}
+
+/** Create a dataflow (DAG) from a full document body. Returns the new DAG id. */
+export function createDataflow(ctx: RequestContext, body: unknown): Promise<unknown> {
+  return request(ctx, `${BASE_V1}/data-flow/flow`, { method: "POST", body });
 }
 
 export interface ListRunsOptions {

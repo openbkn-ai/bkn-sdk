@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { printJson } from "../utils/output.js";
-import { clientFrom, outputOptions } from "./_shared.js";
+import { clientFrom, outputOptions, readBody } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 
@@ -61,8 +61,18 @@ export function dataflowCommand(): Command {
       );
     });
 
-  // create flows + local-file trigger need verified multipart contracts (deferred).
-  for (const name of ["templates", "create-dataset", "create-bkn", "create"]) {
+  cmd
+    .command("create")
+    .description("Create a dataflow (DAG) from a full document body (--body / --body-file)")
+    .option("--body <json>", "dataflow document JSON")
+    .option("--body-file <path>", "read the dataflow document JSON from a file")
+    .action(async (opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).dataflows.create(readBody(opts)), outputOptions(cmd));
+    });
+
+  // Template-driven helpers need the bundled template asset library (not yet
+  // ported); they are sugar over `create`. Deferred.
+  for (const name of ["templates", "create-dataset", "create-bkn"]) {
     cmd
       .command(name)
       .description(`${name} (pending)`)
