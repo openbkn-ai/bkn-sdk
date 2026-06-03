@@ -55,6 +55,41 @@ export function vegaCommand(): Command {
       printJson(await clientFrom(cmd).vega.connectorType(type), outputOptions(cmd));
     });
 
+  const resource = vega.command("resource").description("Vega-backend resources");
+  resource
+    .command("list")
+    .description("List resources")
+    .option("--datasource-id <id>", "filter by catalog/datasource id")
+    .option("--type <category>", "resource category")
+    .option("--limit <n>", "page size", (v) => Number.parseInt(v, 10), DEFAULT_LIST_LIMIT)
+    .action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).resource.list({
+          datasourceId: opts.datasourceId,
+          category: opts.type,
+          limit: opts.limit,
+        }),
+        outputOptions(cmd),
+      );
+    });
+  resource
+    .command("get <id>")
+    .description("Get a resource")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).resource.get(id), outputOptions(cmd));
+    });
+  resource
+    .command("query <id>")
+    .description("Fetch data rows from a resource")
+    .option("--limit <n>", "row limit", (v) => Number.parseInt(v, 10), 50)
+    .option("--offset <n>", "row offset", (v) => Number.parseInt(v, 10), 0)
+    .action(async (id: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).resource.query(id, { limit: opts.limit, offset: opts.offset }),
+        outputOptions(cmd),
+      );
+    });
+
   const dataset = vega.command("dataset").description("Dataset index build tasks");
   dataset
     .command("build <resource-id>")
