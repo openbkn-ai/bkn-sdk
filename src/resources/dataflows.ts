@@ -1,0 +1,18 @@
+/** Dataflow resource surface (read side). */
+import {
+  type ListRunsOptions,
+  type LogsOptions,
+  getDataflowLogs,
+  listDataflowRuns,
+  listDataflows,
+} from "../api/dataflow.js";
+import type { RequestContext } from "../types.js";
+
+export function dataflows(ctx: RequestContext) {
+  return {
+    list: () => listDataflows(ctx),
+    runs: (dagId: string, opts?: ListRunsOptions) => listDataflowRuns(ctx, dagId, opts),
+    logs: (dagId: string, instanceId: string, opts?: LogsOptions) =>
+      getDataflowLogs(ctx, dagId, instanceId, opts),
+  };
+}
