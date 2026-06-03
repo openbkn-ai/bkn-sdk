@@ -4,6 +4,7 @@
  * Thin shell: parse argv → call a resource → print. No business logic here.
  */
 import { Command } from "commander";
+import pkg from "../package.json" with { type: "json" };
 import { adminCommand } from "./commands/admin.js";
 import { agentCommand } from "./commands/agent.js";
 import { authCommand } from "./commands/auth.js";
@@ -26,13 +27,13 @@ const program = new Command();
 program
   .name("openbkn")
   .description("Operate the BKN platform from the CLI")
-  .version("0.1.0", "-V, --version", "output the version number")
+  .version(pkg.version, "-V, --version", "output the version number")
   .option("--base-url <url>", "platform base URL (env: BKN_BASE_URL)")
   .option("--token <value>", "access token (env: BKN_TOKEN)")
   .option("--user <id|name>", "use specific user credentials (env: BKN_USER)")
   .option("--json", "machine-readable JSON output")
   .option("--compact", "single-line JSON output")
-  .option("--biz-domain <s>", "business domain")
+  .option("--biz-domain <s>", "business domain (alias: -bd)")
   .option("-k, --insecure", "skip TLS verification (dev / self-signed only)")
   .showHelpAfterError();
 
@@ -58,8 +59,12 @@ for (const cmd of stubCommands()) program.addCommand(cmd);
 // Apply grouped help to the whole tree (after all commands are registered).
 installGroupedHelp(program);
 
+// Legacy `-bd` is a 2-char short flag commander can't declare; rewrite it to
+// the canonical `--biz-domain` before parsing (kweaver compatibility).
+const argv = process.argv.map((a) => (a === "-bd" ? "--biz-domain" : a));
+
 try {
-  await program.parseAsync(process.argv);
+  await program.parseAsync(argv);
 } catch (err) {
   console.error(formatError(err));
   process.exit(toExitCode(err));
