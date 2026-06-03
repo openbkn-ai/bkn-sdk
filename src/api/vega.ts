@@ -6,10 +6,8 @@ import { z } from "zod";
 import type { RequestContext } from "../types.js";
 import { request } from "./http.js";
 
-// NOTE: confirm the exact service base path against the live API (see
-// docs/references/bkn-platform-api-llms.txt). Centralized here so it is a
-// one-line change once verified.
-const VEGA_BASE = "/api/vega/v1";
+// Vega backend base path (matches kweaver-sdk `api/vega.ts`).
+const VEGA_BASE = "/api/vega-backend/v1";
 
 export const BuildMode = z.enum(["batch", "streaming"]);
 export type BuildMode = z.infer<typeof BuildMode>;
@@ -64,4 +62,35 @@ export async function listCatalogs(
   return request(ctx, `${VEGA_BASE}/catalogs`, {
     query: { limit: opts.limit, offset: opts.offset },
   });
+}
+
+export function getCatalog(ctx: RequestContext, id: string): Promise<unknown> {
+  return request(ctx, `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}`);
+}
+
+/** Resources under a catalog (optionally filtered by category). */
+export function listCatalogResources(
+  ctx: RequestContext,
+  id: string,
+  category?: string,
+): Promise<unknown> {
+  return request(ctx, `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}/resources`, {
+    query: { category: category || undefined },
+  });
+}
+
+/** Health-status for one or more catalog ids (comma-joined in the path). */
+export function catalogHealthStatus(ctx: RequestContext, ids: string[]): Promise<unknown> {
+  return request(
+    ctx,
+    `${VEGA_BASE}/catalogs/${ids.map(encodeURIComponent).join(",")}/health-status`,
+  );
+}
+
+export function listConnectorTypes(ctx: RequestContext): Promise<unknown> {
+  return request(ctx, `${VEGA_BASE}/connector-types`, { query: { sort: "name", order: "asc" } });
+}
+
+export function getConnectorType(ctx: RequestContext, type: string): Promise<unknown> {
+  return request(ctx, `${VEGA_BASE}/connector-types/${encodeURIComponent(type)}`);
 }

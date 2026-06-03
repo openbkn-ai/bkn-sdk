@@ -2,9 +2,14 @@ import {
   type BuildTask,
   type CreateBuildTaskRequest,
   type ListCatalogsOptions,
+  catalogHealthStatus,
   createBuildTask,
   getBuildTask,
+  getCatalog,
+  getConnectorType,
+  listCatalogResources,
   listCatalogs,
+  listConnectorTypes,
 } from "../api/vega.js";
 /**
  * Vega resource surface — the exported SDK API for Catalog + index builds.
@@ -17,6 +22,11 @@ const TERMINAL_STATES = new Set(["completed", "success", "failed"]);
 export function vega(ctx: RequestContext) {
   return {
     catalogs: (opts?: ListCatalogsOptions) => listCatalogs(ctx, opts),
+    getCatalog: (id: string) => getCatalog(ctx, id),
+    catalogResources: (id: string, category?: string) => listCatalogResources(ctx, id, category),
+    catalogHealth: (ids: string[]) => catalogHealthStatus(ctx, ids),
+    connectorTypes: () => listConnectorTypes(ctx),
+    connectorType: (type: string) => getConnectorType(ctx, type),
 
     /** Build a resource's index. With `wait`, polls until terminal. */
     build: async (

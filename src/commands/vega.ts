@@ -21,6 +21,39 @@ export function vegaCommand(): Command {
       const data = await clientFrom(cmd).vega.catalogs({ limit: o.limit, offset: o.offset });
       printJson(data, outputOptions(cmd));
     });
+  catalog
+    .command("get <id>")
+    .description("Get a catalog by id")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.getCatalog(id), outputOptions(cmd));
+    });
+  catalog
+    .command("resources <id>")
+    .description("List resources under a catalog")
+    .option("--category <c>", "filter by category (e.g. table)")
+    .action(async (id: string, opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.catalogResources(id, opts.category), outputOptions(cmd));
+    });
+  catalog
+    .command("health <ids...>")
+    .description("Health-status for one or more catalogs")
+    .action(async (ids: string[], _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.catalogHealth(ids), outputOptions(cmd));
+    });
+
+  const connector = vega.command("connector-type").description("Connector types");
+  connector
+    .command("list")
+    .description("List connector types")
+    .action(async (_opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.connectorTypes(), outputOptions(cmd));
+    });
+  connector
+    .command("get <type>")
+    .description("Get a connector type")
+    .action(async (type: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.connectorType(type), outputOptions(cmd));
+    });
 
   const dataset = vega.command("dataset").description("Dataset index build tasks");
   dataset

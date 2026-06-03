@@ -23,6 +23,7 @@ Auth
 
 Index build — BuildTask (current/target model)
 -----------------------------------------------
+- Vega base path = /api/vega-backend/v1 (confirmed). Build tasks ≈ /api/vega-backend/v1/build-tasks (verify on VM).
 - Create: POST /build-tasks   body = CreateBuildTaskRequest
     resource_id      (required)  which resource
     mode             (required)  "streaming" | "batch"
