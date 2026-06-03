@@ -13,10 +13,10 @@ import { callCommand } from "./commands/call.js";
 import { configCommand } from "./commands/config.js";
 import { contextCommand } from "./commands/context.js";
 import { dataflowCommand } from "./commands/dataflow.js";
+import { exploreCommand } from "./commands/explore.js";
 import { modelCommand } from "./commands/model.js";
 import { resourceCommand } from "./commands/resource.js";
 import { skillCommand } from "./commands/skill.js";
-import { stubCommands } from "./commands/stubs.js";
 import { toolCommand, toolboxCommand } from "./commands/toolbox.js";
 import { traceCommand } from "./commands/trace.js";
 import { vegaCommand } from "./commands/vega.js";
@@ -54,9 +54,7 @@ program.addCommand(toolboxCommand());
 program.addCommand(toolCommand());
 program.addCommand(traceCommand());
 program.addCommand(adminCommand());
-
-// Placeholders for the rest of the tree (filled in incrementally).
-for (const cmd of stubCommands()) program.addCommand(cmd);
+program.addCommand(exploreCommand());
 
 // Apply grouped help to the whole tree (after all commands are registered).
 installGroupedHelp(program);
