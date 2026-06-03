@@ -16,9 +16,10 @@ export interface ListModelsOptions {
 }
 
 function listQuery(opts: ListModelsOptions) {
+  // mf-model-manager paginates with page + size (NOT limit) — verified live.
   return {
     page: String(opts.page ?? 1),
-    limit: String(opts.limit ?? 30),
+    size: String(opts.limit ?? 30),
     name: opts.name ?? "",
     model_type: opts.modelType ?? "",
   };

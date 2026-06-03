@@ -76,11 +76,7 @@ export function stubCommands(): Command[] {
       "schema",
     ]),
 
-    // MODELS & SKILLS
-    stub("model", "Model factory — LLM / small-model CRUD + chat", "MODELS & SKILLS", [
-      "llm",
-      "small",
-    ]),
+    // MODELS & SKILLS (model is real elsewhere)
     stub("skill", "Skill registry / market", "MODELS & SKILLS", [
       "list",
       "get",

@@ -16,6 +16,7 @@ export { HttpError, InputError } from "./utils/errors.js";
 export { agents } from "./resources/agents.js";
 export { dataflows } from "./resources/dataflows.js";
 export { kn } from "./resources/knowledge-networks.js";
+export { models } from "./resources/models.js";
 export { resources } from "./resources/resources.js";
 export { vega } from "./resources/vega.js";
 

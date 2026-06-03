@@ -11,6 +11,7 @@ import { bknCommand } from "./commands/bkn.js";
 import { callCommand } from "./commands/call.js";
 import { configCommand } from "./commands/config.js";
 import { dataflowCommand } from "./commands/dataflow.js";
+import { modelCommand } from "./commands/model.js";
 import { resourceCommand } from "./commands/resource.js";
 import { stubCommands } from "./commands/stubs.js";
 import { vegaCommand } from "./commands/vega.js";
@@ -41,6 +42,7 @@ program.addCommand(bknCommand());
 program.addCommand(resourceCommand());
 program.addCommand(dataflowCommand());
 program.addCommand(agentCommand());
+program.addCommand(modelCommand());
 program.addCommand(adminCommand());
 
 // Placeholders for the rest of the tree (filled in incrementally).
