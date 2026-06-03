@@ -1,11 +1,76 @@
+import type { RequestContext } from "../types.js";
 /**
  * Skill registry/market client (agent-operator-integration). Read + delete,
  * mirroring kweaver-sdk api/skills.ts. Passed through as parsed JSON.
  */
-import type { RequestContext } from "../types.js";
+import { HttpError } from "../utils/errors.js";
+import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
+import { applyTls } from "./tls.js";
 
 const BASE = "/api/agent-operator-integration/v1";
+
+/** Register a skill from a zip archive (multipart `file_type=zip`). */
+export async function registerSkillZip(
+  ctx: RequestContext,
+  bytes: Uint8Array,
+  opts: { filename?: string; source?: string; extendInfo?: unknown } = {},
+): Promise<unknown> {
+  applyTls(ctx);
+  const form = new FormData();
+  form.set("file_type", "zip");
+  form.set("file", new Blob([bytes]), opts.filename ?? "skill.zip");
+  if (opts.source) form.set("source", opts.source);
+  if (opts.extendInfo) form.set("extend_info", JSON.stringify(opts.extendInfo));
+  const res = await fetch(`${ctx.baseUrl}${BASE}/skills`, {
+    method: "POST",
+    headers: buildHeaders(ctx),
+    body: form,
+  });
+  const text = await res.text();
+  if (!res.ok) throw new HttpError(res.status, res.statusText, text);
+  return text ? JSON.parse(text) : undefined;
+}
+
+/** Update a skill's package from a zip archive (multipart PUT). */
+export async function updateSkillPackageZip(
+  ctx: RequestContext,
+  skillId: string,
+  bytes: Uint8Array,
+  filename = "skill.zip",
+): Promise<unknown> {
+  applyTls(ctx);
+  const form = new FormData();
+  form.set("file_type", "zip");
+  form.set("file", new Blob([bytes]), filename);
+  const res = await fetch(`${ctx.baseUrl}${BASE}/skills/${encodeURIComponent(skillId)}/package`, {
+    method: "PUT",
+    headers: buildHeaders(ctx),
+    body: form,
+  });
+  const text = await res.text();
+  if (!res.ok) throw new HttpError(res.status, res.statusText, text);
+  return text ? JSON.parse(text) : undefined;
+}
+
+/** Download a skill as a zip archive (raw bytes). */
+export async function downloadSkill(ctx: RequestContext, skillId: string): Promise<Uint8Array> {
+  applyTls(ctx);
+  const res = await fetch(`${ctx.baseUrl}${BASE}/skills/${encodeURIComponent(skillId)}/download`, {
+    headers: buildHeaders(ctx),
+  });
+  if (!res.ok) throw new HttpError(res.status, res.statusText, await res.text());
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+/** Update a skill's editable metadata (JSON PUT). */
+export function updateSkillMetadata(
+  ctx: RequestContext,
+  skillId: string,
+  body: unknown,
+): Promise<unknown> {
+  return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}`, { method: "PUT", body });
+}
 
 export interface ListSkillsOptions {
   page?: number;

@@ -4,8 +4,12 @@
   "description": "Unified TypeScript SDK + CLI for the BKN (Business Knowledge Network) platform.",
   "type": "module",
   "license": "Apache-2.0",
-  "engines": { "node": ">=22" },
-  "bin": { "openbkn": "./dist/cli.js" },
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "openbkn": "./dist/cli.js"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -15,8 +19,13 @@
     }
   },
   "files": ["dist", "README.md", "README.zh.md", "LICENSE"],
-  "publishConfig": { "access": "public" },
-  "repository": { "type": "git", "url": "git+https://github.com/openbkn-ai/bkn-sdk.git" },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openbkn-ai/bkn-sdk.git"
+  },
   "keywords": ["bkn", "openbkn", "knowledge-network", "cli", "sdk", "typescript"],
   "scripts": {
     "build": "tsup",
@@ -34,6 +43,7 @@
     "chalk": "^5.4.1",
     "cli-table3": "^0.6.5",
     "commander": "^13.1.0",
+    "jszip": "^3.10.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {

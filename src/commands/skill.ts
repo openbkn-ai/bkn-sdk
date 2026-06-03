@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { printJson } from "../utils/output.js";
-import { clientFrom, outputOptions } from "./_shared.js";
+import { clientFrom, outputOptions, readBody } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 
@@ -106,16 +106,50 @@ export function skillCommand(): Command {
       );
     });
 
-  // Package/lifecycle write ops need multipart + body contracts (deferred).
-  for (const name of [
-    "register",
-    "download",
-    "install",
-    "update-metadata",
-    "update-package",
-    "republish",
-    "publish-history",
-  ]) {
+  cmd
+    .command("register <directory>")
+    .description("Zip a local skill directory and register it")
+    .option("--source <s>", "source tag")
+    .option("--extend-info <json>", "extra metadata as JSON")
+    .action(async (dir: string, opts, cmd: Command) => {
+      const extendInfo = opts.extendInfo ? JSON.parse(opts.extendInfo) : undefined;
+      printJson(
+        await clientFrom(cmd).skills.register(dir, { source: opts.source, extendInfo }),
+        outputOptions(cmd),
+      );
+    });
+  cmd
+    .command("download <skill-id> [out-path]")
+    .description("Download a skill archive to a local .zip")
+    .action(async (skillId: string, outPath: string | undefined, _o, cmd: Command) => {
+      printJson(await clientFrom(cmd).skills.download(skillId, outPath), outputOptions(cmd));
+    });
+  cmd
+    .command("install <skill-id> [directory]")
+    .description("Download a skill archive and extract it locally")
+    .action(async (skillId: string, dir: string | undefined, _o, cmd: Command) => {
+      printJson(await clientFrom(cmd).skills.install(skillId, dir), outputOptions(cmd));
+    });
+  cmd
+    .command("update-metadata <skill-id>")
+    .description("Update a skill's metadata (--body / --body-file JSON)")
+    .option("--body <json>", "metadata JSON")
+    .option("--body-file <path>", "read metadata JSON from a file")
+    .action(async (skillId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).skills.updateMetadata(skillId, readBody(opts)),
+        outputOptions(cmd),
+      );
+    });
+  cmd
+    .command("update-package <skill-id> <directory>")
+    .description("Replace a skill's package from a local directory")
+    .action(async (skillId: string, dir: string, _o, cmd: Command) => {
+      printJson(await clientFrom(cmd).skills.updatePackage(skillId, dir), outputOptions(cmd));
+    });
+
+  // republish / publish-history: lifecycle endpoints not yet confirmed (deferred).
+  for (const name of ["republish", "publish-history"]) {
     cmd
       .command(name)
       .description(`${name} (pending)`)
