@@ -6,6 +6,7 @@ import { dataflows } from "./resources/dataflows.js";
 import { kn } from "./resources/knowledge-networks.js";
 import { models } from "./resources/models.js";
 import { resources } from "./resources/resources.js";
+import { skills } from "./resources/skills.js";
 import { vega } from "./resources/vega.js";
 /**
  * createClient — the primary entry for SDK consumers.
@@ -26,6 +27,7 @@ export interface BknClient {
   readonly agents: ReturnType<typeof agents>;
   readonly context: ReturnType<typeof context>;
   readonly models: ReturnType<typeof models>;
+  readonly skills: ReturnType<typeof skills>;
   readonly vega: ReturnType<typeof vega>;
   /** Raw API passthrough (the `call` escape hatch). */
   call(path: string, opts?: RawCallOptions): Promise<RawCallResult>;
@@ -41,6 +43,7 @@ export function createClient(opts: ClientOptions = {}): BknClient {
     agents: agents(ctx),
     context: context(ctx),
     models: models(ctx),
+    skills: skills(ctx),
     vega: vega(ctx),
     call: (path, callOpts) => rawCall(ctx, path, callOpts),
   };

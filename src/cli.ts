@@ -14,6 +14,7 @@ import { contextCommand } from "./commands/context.js";
 import { dataflowCommand } from "./commands/dataflow.js";
 import { modelCommand } from "./commands/model.js";
 import { resourceCommand } from "./commands/resource.js";
+import { skillCommand } from "./commands/skill.js";
 import { stubCommands } from "./commands/stubs.js";
 import { vegaCommand } from "./commands/vega.js";
 import { installGroupedHelp } from "./help/grouped-help.js";
@@ -45,6 +46,7 @@ program.addCommand(dataflowCommand());
 program.addCommand(contextCommand());
 program.addCommand(agentCommand());
 program.addCommand(modelCommand());
+program.addCommand(skillCommand());
 program.addCommand(adminCommand());
 
 // Placeholders for the rest of the tree (filled in incrementally).

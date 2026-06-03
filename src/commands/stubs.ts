@@ -61,25 +61,7 @@ export function stubCommands(): Command[] {
       "schema",
     ]),
 
-    // MODELS & SKILLS (model is real elsewhere)
-    stub("skill", "Skill registry / market", "MODELS & SKILLS", [
-      "list",
-      "get",
-      "register",
-      "set-status",
-      "delete",
-      "market",
-      "market-get",
-      "download",
-      "install",
-      "content",
-      "read-file",
-      "update-metadata",
-      "update-package",
-      "history",
-      "republish",
-      "publish-history",
-    ]),
+    // MODELS & SKILLS: model + skill are real elsewhere.
 
     // OPERATOR: kweaver-admin lives under the `admin` subcommand (see admin.ts).
 
