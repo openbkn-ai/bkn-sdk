@@ -4,6 +4,7 @@ import {
   type ListModelsOptions,
   addModel,
   chatCompletions,
+  chatCompletionsStream,
   deleteModels,
   editModel,
   embeddings,
@@ -22,6 +23,8 @@ export function models(ctx: RequestContext) {
       list: (opts?: ListModelsOptions) => listLlmModels(ctx, opts),
       get: (modelId: string) => getLlmModel(ctx, modelId),
       chat: (modelId: string, messages: ChatMessage[]) => chatCompletions(ctx, modelId, messages),
+      chatStream: (modelId: string, messages: ChatMessage[], onDelta: (t: string) => void) =>
+        chatCompletionsStream(ctx, modelId, messages, onDelta),
       add: (body: unknown) => addModel(ctx, "llm", body),
       edit: (body: unknown) => editModel(ctx, "llm", body),
       delete: (modelIds: string[]) => deleteModels(ctx, "llm", modelIds),

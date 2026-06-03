@@ -56,11 +56,15 @@ export function modelCommand(): Command {
     .command("chat <modelId>")
     .description("OpenAI-compatible chat completion")
     .requiredOption("-m, --message <text>", "user message")
+    .option("--stream", "stream the reply token-by-token to stdout")
     .action(async (id: string, opts, cmd: Command) => {
-      printJson(
-        await clientFrom(cmd).models.llm.chat(id, [{ role: "user", content: opts.message }]),
-        outputOptions(cmd),
-      );
+      const messages = [{ role: "user", content: opts.message }];
+      if (opts.stream) {
+        await clientFrom(cmd).models.llm.chatStream(id, messages, (t) => process.stdout.write(t));
+        process.stdout.write("\n");
+        return;
+      }
+      printJson(await clientFrom(cmd).models.llm.chat(id, messages), outputOptions(cmd));
     });
   addManagementStubs(llm, "llm");
 

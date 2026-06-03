@@ -1,9 +1,12 @@
+import type { RequestContext } from "../types.js";
 /**
  * Model-factory client: management reads (mf-model-manager) + runtime
  * invocation (mf-model-api), mirroring kweaver-sdk. Passed through as JSON.
  */
-import type { RequestContext } from "../types.js";
+import { HttpError } from "../utils/errors.js";
+import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
+import { applyTls } from "./tls.js";
 
 const MANAGER = "/api/mf-model-manager/v1";
 const API = "/api/mf-model-api/v1";
@@ -56,6 +59,70 @@ export function chatCompletions(
     method: "POST",
     body: { model, messages, stream: false },
   });
+}
+
+/** Pull `choices[0].delta.content` out of one OpenAI streaming chunk. */
+function deltaContent(chunk: Record<string, unknown>): string {
+  const choices = chunk.choices as Array<{ delta?: { content?: unknown } }> | undefined;
+  const c = choices?.[0]?.delta?.content;
+  return typeof c === "string" ? c : "";
+}
+
+/**
+ * Streaming chat completion (OpenAI-style SSE: `data: {...}` / `data: [DONE]`).
+ * Invokes `onDelta` with each text fragment as it arrives and resolves with the
+ * full concatenated text.
+ */
+export async function chatCompletionsStream(
+  ctx: RequestContext,
+  model: string,
+  messages: ChatMessage[],
+  onDelta: (text: string) => void,
+): Promise<string> {
+  applyTls(ctx);
+  const res = await fetch(`${ctx.baseUrl}${API}/chat/completions`, {
+    method: "POST",
+    headers: {
+      ...buildHeaders(ctx),
+      "content-type": "application/json",
+      accept: "text/event-stream",
+    },
+    body: JSON.stringify({ model, messages, stream: true }),
+  });
+  if (!res.ok) throw new HttpError(res.status, res.statusText, await res.text());
+
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("No response body for stream");
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let out = "";
+
+  const handle = (line: string): void => {
+    const trimmed = line.trimEnd();
+    if (!trimmed.startsWith("data:")) return;
+    const payload = trimmed.slice(5).trim();
+    if (payload === "[DONE]" || payload === "") return;
+    try {
+      const text = deltaContent(JSON.parse(payload) as Record<string, unknown>);
+      if (text) {
+        out += text;
+        onDelta(text);
+      }
+    } catch {
+      /* skip malformed keep-alive / partial lines */
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const ln of lines) handle(ln);
+  }
+  if (buffer.trim()) handle(buffer);
+  return out;
 }
 
 export function embeddings(ctx: RequestContext, model: string, input: string[]): Promise<unknown> {

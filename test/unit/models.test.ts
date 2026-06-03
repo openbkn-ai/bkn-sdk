@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   chatCompletions,
+  chatCompletionsStream,
   getLlmModel,
   listLlmModels,
   listSmallModels,
@@ -60,5 +61,31 @@ describe("model invocation (mf-model-api)", () => {
       messages: [{ role: "user", content: "hi" }],
       stream: false,
     });
+  });
+
+  it("chatStream parses SSE deltas, joins text, and asks for stream:true", async () => {
+    const sse = [
+      'data: {"choices":[{"delta":{"content":"知识"}}]}',
+      'data: {"choices":[{"delta":{"content":"图谱"}}]}',
+      "data: [DONE]",
+      "",
+    ].join("\n\n");
+    const f = vi.fn(
+      async () =>
+        new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } }),
+    );
+    vi.stubGlobal("fetch", f);
+
+    const deltas: string[] = [];
+    const full = await chatCompletionsStream(
+      ctx,
+      "qwen",
+      [{ role: "user", content: "hi" }],
+      (t) => deltas.push(t),
+    );
+    expect(deltas).toEqual(["知识", "图谱"]);
+    expect(full).toBe("知识图谱");
+    const body = JSON.parse((f.mock.calls[0]?.[1] as RequestInit).body as string);
+    expect(body.stream).toBe(true);
   });
 });
