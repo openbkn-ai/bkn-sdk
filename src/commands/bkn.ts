@@ -247,6 +247,70 @@ export function bknCommand(): Command {
       .action(notImplemented(`metric ${s}`));
   }
 
+  const cg = bkn.command("concept-group").description("Concept groups — list/get");
+  cg.command("list <kn-id>")
+    .description("List concept groups")
+    .action(async (knId: string, _o, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.conceptGroups(knId), outputOptions(cmd));
+    });
+  cg.command("get <kn-id> <cg-id>")
+    .description("Get a concept group")
+    .action(async (knId: string, cgId: string, _o, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.conceptGroup(knId, cgId), outputOptions(cmd));
+    });
+  for (const s of ["create", "update", "delete", "add-members", "remove-members"]) {
+    cg.command(s)
+      .description(`${s} (pending)`)
+      .allowUnknownOption()
+      .action(notImplemented(`concept-group ${s}`));
+  }
+
+  const sched = bkn.command("action-schedule").description("Action schedules — list/get");
+  sched
+    .command("list <kn-id>")
+    .description("List action schedules")
+    .action(async (knId: string, _o, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.actionSchedules(knId), outputOptions(cmd));
+    });
+  sched
+    .command("get <kn-id> <schedule-id>")
+    .description("Get an action schedule")
+    .action(async (knId: string, sId: string, _o, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.actionSchedule(knId, sId), outputOptions(cmd));
+    });
+  for (const s of ["create", "update", "set-status", "delete"]) {
+    sched
+      .command(s)
+      .description(`${s} (pending)`)
+      .allowUnknownOption()
+      .action(notImplemented(`action-schedule ${s}`));
+  }
+
+  const job = bkn.command("job").description("Build jobs — list/get/tasks");
+  job
+    .command("list <kn-id>")
+    .description("List jobs")
+    .action(async (knId: string, _o, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.jobs(knId), outputOptions(cmd));
+    });
+  job
+    .command("get <kn-id> <job-id>")
+    .description("Get a job")
+    .action(async (knId: string, jobId: string, _o, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.job(knId, jobId), outputOptions(cmd));
+    });
+  job
+    .command("tasks <kn-id> <job-id>")
+    .description("List a job's tasks")
+    .action(async (knId: string, jobId: string, _o, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.jobTasks(knId, jobId), outputOptions(cmd));
+    });
+  job
+    .command("delete")
+    .description("delete (pending)")
+    .allowUnknownOption()
+    .action(notImplemented("job delete"));
+
   // Remaining subcommands kept in the tree as stubs (filled in incrementally).
   for (const name of [
     "create-from-catalog",
@@ -256,9 +320,6 @@ export function bknCommand(): Command {
     "pull",
     "resources",
     "relation-type-paths",
-    "concept-group",
-    "action-schedule",
-    "job",
   ]) {
     bkn
       .command(name)

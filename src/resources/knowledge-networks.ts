@@ -1,3 +1,12 @@
+import {
+  getActionSchedule,
+  getConceptGroup,
+  getJob,
+  getJobTasks,
+  listActionSchedules,
+  listConceptGroups,
+  listJobs,
+} from "../api/bkn-backend.js";
 /** Knowledge-network resource surface (the exported SDK API). */
 import {
   type ActionLogListOptions,
@@ -57,5 +66,12 @@ export function kn(ctx: RequestContext) {
       queryActionType(ctx, knId, atId, body),
     actionTypeExecute: (knId: string, atId: string, body: unknown) =>
       executeActionType(ctx, knId, atId, body),
+    conceptGroups: (knId: string) => listConceptGroups(ctx, knId),
+    conceptGroup: (knId: string, cgId: string) => getConceptGroup(ctx, knId, cgId),
+    actionSchedules: (knId: string) => listActionSchedules(ctx, knId),
+    actionSchedule: (knId: string, scheduleId: string) => getActionSchedule(ctx, knId, scheduleId),
+    jobs: (knId: string) => listJobs(ctx, knId),
+    job: (knId: string, jobId: string) => getJob(ctx, knId, jobId),
+    jobTasks: (knId: string, jobId: string) => getJobTasks(ctx, knId, jobId),
   };
 }
