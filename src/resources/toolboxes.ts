@@ -11,6 +11,7 @@ import {
   listTools,
   setToolStatuses,
   setToolboxStatus,
+  uploadTool,
 } from "../api/toolboxes.js";
 import type { RequestContext } from "../types.js";
 
@@ -28,6 +29,8 @@ export function toolboxes(ctx: RequestContext) {
         boxId,
         toolIds.map((toolId) => ({ toolId, status })),
       ),
+    upload: (boxId: string, filePath: string, metadataType?: string) =>
+      uploadTool(ctx, boxId, filePath, metadataType),
     execute: (boxId: string, toolId: string, e?: ToolInvokeEnvelope) =>
       executeTool(ctx, boxId, toolId, e),
     debug: (boxId: string, toolId: string, e?: ToolInvokeEnvelope) =>

@@ -161,12 +161,17 @@ export function toolCommand(): Command {
     );
   });
 
-  // upload (multipart OpenAPI spec) deferred.
   cmd
-    .command("upload")
-    .description("upload (pending)")
-    .allowUnknownOption()
-    .action(notImplemented("tool", "upload"));
+    .command("upload <file>")
+    .description("Upload a tool definition file (OpenAPI spec) into a toolbox")
+    .requiredOption("--toolbox <id>", "target toolbox id")
+    .option("--metadata-type <t>", "metadata type", "openapi")
+    .action(async (file: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).toolboxes.upload(opts.toolbox, file, opts.metadataType),
+        outputOptions(cmd),
+      );
+    });
 
   return group(cmd, "DECISION AGENT");
 }

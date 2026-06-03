@@ -2,10 +2,40 @@
  * Toolbox + tool client (agent-operator-integration tool-box). Read side,
  * mirroring kweaver-sdk api/toolboxes.ts. Passed through as parsed JSON.
  */
+import { readFile } from "node:fs/promises";
+import { basename } from "node:path";
 import type { RequestContext } from "../types.js";
+import { HttpError } from "../utils/errors.js";
+import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
+import { applyTls } from "./tls.js";
 
 const PATH = "/api/agent-operator-integration/v1/tool-box";
+
+/**
+ * Upload a tool definition file (e.g. an OpenAPI spec) into a toolbox.
+ * `POST /tool-box/:id/tool` multipart: `metadata_type` + `data` (file).
+ */
+export async function uploadTool(
+  ctx: RequestContext,
+  boxId: string,
+  filePath: string,
+  metadataType = "openapi",
+): Promise<unknown> {
+  applyTls(ctx);
+  const buf = await readFile(filePath);
+  const form = new FormData();
+  form.append("metadata_type", metadataType);
+  form.append("data", new Blob([new Uint8Array(buf)]), basename(filePath));
+  const res = await fetch(`${ctx.baseUrl}${PATH}/${encodeURIComponent(boxId)}/tool`, {
+    method: "POST",
+    headers: buildHeaders(ctx),
+    body: form,
+  });
+  const text = await res.text();
+  if (!res.ok) throw new HttpError(res.status, res.statusText, text);
+  return text ? JSON.parse(text) : text;
+}
 
 export interface ListToolboxesOptions {
   keyword?: string;
