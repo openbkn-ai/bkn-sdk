@@ -71,3 +71,17 @@ export function readSkillFile(
 export function getSkillHistory(ctx: RequestContext, skillId: string): Promise<unknown> {
   return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}/history`);
 }
+
+export type SkillStatus = "unpublish" | "published" | "offline";
+
+/** Change a skill's status. */
+export function setSkillStatus(
+  ctx: RequestContext,
+  skillId: string,
+  status: SkillStatus,
+): Promise<unknown> {
+  return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}/status`, {
+    method: "PUT",
+    body: { status },
+  });
+}

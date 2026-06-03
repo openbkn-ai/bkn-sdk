@@ -176,7 +176,28 @@ export function adminCommand(): Command {
     stubs(m, kind, ["add", "edit", "delete", "test"]);
   }
 
-  stubs(admin.command("audit").description("Audit log queries"), "audit", ["list"]);
+  admin
+    .command("audit")
+    .description("Audit log queries")
+    .command("list")
+    .description("List login audit events")
+    .option("--user <name>", "filter by user")
+    .option("--start <time>", "start time")
+    .option("--end <time>", "end time")
+    .option("--page <n>", "page", int, 1)
+    .option("--size <n>", "page size", int, 30)
+    .action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).admin.auditList({
+          user: opts.user,
+          start: opts.start,
+          end: opts.end,
+          page: opts.page,
+          size: opts.size,
+        }),
+        outputOptions(cmd),
+      );
+    });
   stubs(admin.command("config").description("Admin config"), "config", ["show", "set"]);
   admin
     .command("call")

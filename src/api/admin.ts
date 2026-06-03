@@ -71,6 +71,30 @@ export function getRole(ctx: RequestContext, roleId: string): Promise<unknown> {
   return request(ctx, `${AUTHZ}/roles/${encodeURIComponent(roleId)}`);
 }
 
+const EACP = "/api/eacp/v1";
+
+export interface AuditListOptions {
+  page?: number;
+  size?: number;
+  user?: string;
+  start?: string;
+  end?: string;
+}
+
+/** Login audit events (EACP). */
+export function listAuditLogs(ctx: RequestContext, opts: AuditListOptions = {}): Promise<unknown> {
+  return request(ctx, `${EACP}/auth1/login-log`, {
+    method: "POST",
+    body: {
+      page_num: opts.page ?? 1,
+      page_size: opts.size ?? 30,
+      user_name: opts.user || undefined,
+      start_time: opts.start || undefined,
+      end_time: opts.end || undefined,
+    },
+  });
+}
+
 export type MemberType = "user" | "department" | "group" | "app";
 
 export function listRoleMembers(

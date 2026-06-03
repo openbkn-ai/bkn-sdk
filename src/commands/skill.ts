@@ -96,10 +96,19 @@ export function skillCommand(): Command {
       printJson(await clientFrom(cmd).skills.history(id), outputOptions(cmd));
     });
 
+  cmd
+    .command("set-status <skill-id> <status>")
+    .description("Change status: unpublish | published | offline")
+    .action(async (id: string, status: string, _opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).skills.setStatus(id, status as "unpublish" | "published" | "offline"),
+        outputOptions(cmd),
+      );
+    });
+
   // Package/lifecycle write ops need multipart + body contracts (deferred).
   for (const name of [
     "register",
-    "set-status",
     "download",
     "install",
     "update-metadata",

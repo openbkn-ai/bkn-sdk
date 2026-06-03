@@ -1,9 +1,11 @@
 /** Admin (operator) resource surface. */
 import {
   type AdminListOptions,
+  type AuditListOptions,
   type ListRolesOptions,
   type MemberType,
   getRole,
+  listAuditLogs,
   listDepartments,
   listRoleMembers,
   listRoles,
@@ -24,5 +26,6 @@ export function admin(ctx: RequestContext) {
       modifyRoleMembers(ctx, roleId, "POST", [{ id, type }]),
     removeRoleMember: (roleId: string, id: string, type: MemberType = "user") =>
       modifyRoleMembers(ctx, roleId, "DELETE", [{ id, type }]),
+    auditList: (opts?: AuditListOptions) => listAuditLogs(ctx, opts),
   };
 }

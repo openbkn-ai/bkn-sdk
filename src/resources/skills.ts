@@ -1,6 +1,7 @@
 /** Skill registry/market resource surface (read + delete). */
 import {
   type ListSkillsOptions,
+  type SkillStatus,
   deleteSkill,
   getSkill,
   getSkillContent,
@@ -9,6 +10,7 @@ import {
   listSkillMarket,
   listSkills,
   readSkillFile,
+  setSkillStatus,
 } from "../api/skills.js";
 import type { RequestContext } from "../types.js";
 
@@ -22,5 +24,6 @@ export function skills(ctx: RequestContext) {
     content: (skillId: string) => getSkillContent(ctx, skillId),
     readFile: (skillId: string, relPath: string) => readSkillFile(ctx, skillId, relPath),
     history: (skillId: string) => getSkillHistory(ctx, skillId),
+    setStatus: (skillId: string, status: SkillStatus) => setSkillStatus(ctx, skillId, status),
   };
 }
