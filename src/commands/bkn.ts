@@ -123,6 +123,36 @@ export function bknCommand(): Command {
       printJson(await clientFrom(cmd).kn.subgraph(knId, readBody(opts)), outputOptions(cmd));
     });
 
+  const actionLog = bkn.command("action-log").description("Action logs — list/get/cancel");
+  actionLog
+    .command("list <kn-id>")
+    .description("List action logs")
+    .option("--status <s>", "filter by status")
+    .option("--action-type-id <id>", "filter by action type")
+    .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
+    .action(async (knId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.actionLogs(knId, {
+          status: opts.status,
+          actionTypeId: opts.actionTypeId,
+          limit: opts.limit,
+        }),
+        outputOptions(cmd),
+      );
+    });
+  actionLog
+    .command("get <kn-id> <log-id>")
+    .description("Get an action log")
+    .action(async (knId: string, logId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.actionLog(knId, logId), outputOptions(cmd));
+    });
+  actionLog
+    .command("cancel <kn-id> <log-id>")
+    .description("Cancel a running action")
+    .action(async (knId: string, logId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.cancelActionLog(knId, logId), outputOptions(cmd));
+    });
+
   // Remaining subcommands kept in the tree as stubs (filled in incrementally).
   for (const name of [
     "create-from-catalog",
@@ -137,7 +167,6 @@ export function bknCommand(): Command {
     "concept-group",
     "metric",
     "action-execution",
-    "action-log",
     "action-schedule",
     "job",
   ]) {

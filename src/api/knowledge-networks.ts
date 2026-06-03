@@ -91,6 +91,49 @@ export function querySubgraph(ctx: RequestContext, knId: string, body: unknown):
   });
 }
 
+export interface ActionLogListOptions {
+  actionTypeId?: string;
+  status?: string;
+  triggerType?: string;
+  limit?: number;
+  needTotal?: boolean;
+}
+
+export function listActionLogs(
+  ctx: RequestContext,
+  knId: string,
+  opts: ActionLogListOptions = {},
+): Promise<unknown> {
+  return request(ctx, `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-logs`, {
+    query: {
+      action_type_id: opts.actionTypeId || undefined,
+      status: opts.status || undefined,
+      trigger_type: opts.triggerType || undefined,
+      limit: opts.limit ?? 30,
+      need_total: opts.needTotal ? "true" : undefined,
+    },
+  });
+}
+
+export function getActionLog(ctx: RequestContext, knId: string, logId: string): Promise<unknown> {
+  return request(
+    ctx,
+    `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-logs/${encodeURIComponent(logId)}`,
+  );
+}
+
+export function cancelActionLog(
+  ctx: RequestContext,
+  knId: string,
+  logId: string,
+): Promise<unknown> {
+  return request(
+    ctx,
+    `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-logs/${encodeURIComponent(logId)}/cancel`,
+    { method: "POST" },
+  );
+}
+
 export interface ListSchemaOptions {
   branch?: string;
   /** -1 = all (backend default). */
