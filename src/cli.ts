@@ -6,6 +6,7 @@
 import { Command } from "commander";
 import { adminCommand } from "./commands/admin.js";
 import { authCommand } from "./commands/auth.js";
+import { bknCommand } from "./commands/bkn.js";
 import { callCommand } from "./commands/call.js";
 import { configCommand } from "./commands/config.js";
 import { stubCommands } from "./commands/stubs.js";
@@ -33,6 +34,7 @@ program.addCommand(authCommand());
 program.addCommand(callCommand());
 program.addCommand(configCommand());
 program.addCommand(vegaCommand());
+program.addCommand(bknCommand());
 program.addCommand(adminCommand());
 
 // Placeholders for the rest of the tree (filled in incrementally).
