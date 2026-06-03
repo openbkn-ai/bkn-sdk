@@ -261,6 +261,62 @@ export function listActionTypes(
   });
 }
 
+/** Schema item kind in the ontology-manager path. */
+export type SchemaKind = "object-types" | "relation-types";
+
+export function getSchemaItem(
+  ctx: RequestContext,
+  knId: string,
+  kind: SchemaKind,
+  id: string,
+): Promise<unknown> {
+  return request(
+    ctx,
+    `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/${kind}/${encodeURIComponent(id)}`,
+  );
+}
+export function createSchemaItem(
+  ctx: RequestContext,
+  knId: string,
+  kind: SchemaKind,
+  body: unknown,
+): Promise<unknown> {
+  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/${kind}`, {
+    method: "POST",
+    body,
+  });
+}
+export function updateSchemaItem(
+  ctx: RequestContext,
+  knId: string,
+  kind: SchemaKind,
+  id: string,
+  body: unknown,
+): Promise<unknown> {
+  return request(
+    ctx,
+    `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/${kind}/${encodeURIComponent(id)}`,
+    {
+      method: "PUT",
+      body,
+    },
+  );
+}
+export function deleteSchemaItem(
+  ctx: RequestContext,
+  knId: string,
+  kind: SchemaKind,
+  id: string,
+): Promise<unknown> {
+  return request(
+    ctx,
+    `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/${kind}/${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+    },
+  );
+}
+
 export interface SemanticSearchOptions {
   mode?: string;
   maxConcepts?: number;

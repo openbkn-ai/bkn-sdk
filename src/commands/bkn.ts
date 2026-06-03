@@ -64,24 +64,64 @@ export function bknCommand(): Command {
       printJson(data, outputOptions(cmd));
     });
 
-  // Schema groups with a real `list` (read side); other actions stubbed.
-  const schemaGroups: Array<[string, "objectTypes" | "relationTypes" | "actionTypes", string[]]> = [
-    ["object-type", "objectTypes", ["get", "create", "update", "delete"]],
-    ["relation-type", "relationTypes", ["get", "create", "update", "delete"]],
-    ["action-type", "actionTypes", ["get", "inputs"]],
+  // Schema groups: real list; object-type/relation-type also get real CRUD.
+  const schemaGroups: Array<
+    [
+      string,
+      "objectTypes" | "relationTypes" | "actionTypes",
+      "objectType" | "relationType" | null,
+      string[],
+    ]
+  > = [
+    ["object-type", "objectTypes", "objectType", []],
+    ["relation-type", "relationTypes", "relationType", []],
+    ["action-type", "actionTypes", null, ["get", "inputs"]],
   ];
-  for (const [name, method, stubs] of schemaGroups) {
+  for (const [name, listMethod, crud, stubLeaves] of schemaGroups) {
     const g = bkn.command(name).description(`${name} list/get/...`);
     g.command("list <kn-id>")
       .description(`List ${name}s`)
       .option("--branch <b>", "branch", "main")
       .action(async (knId: string, opts, cmd: Command) => {
         printJson(
-          await clientFrom(cmd).kn[method](knId, { branch: opts.branch }),
+          await clientFrom(cmd).kn[listMethod](knId, { branch: opts.branch }),
           outputOptions(cmd),
         );
       });
-    for (const s of stubs) {
+    if (crud) {
+      g.command("get <kn-id> <id>")
+        .description(`Get ${name}`)
+        .action(async (knId: string, id: string, _o, cmd: Command) => {
+          printJson(await clientFrom(cmd).kn[`${crud}Get`](knId, id), outputOptions(cmd));
+        });
+      g.command("create <kn-id>")
+        .description(`Create ${name} (--body / --body-file)`)
+        .option("--body <json>", "body JSON")
+        .option("--body-file <path>", "read body JSON from a file")
+        .action(async (knId: string, opts, cmd: Command) => {
+          printJson(
+            await clientFrom(cmd).kn[`${crud}Create`](knId, readBody(opts)),
+            outputOptions(cmd),
+          );
+        });
+      g.command("update <kn-id> <id>")
+        .description(`Update ${name} (--body / --body-file)`)
+        .option("--body <json>", "body JSON")
+        .option("--body-file <path>", "read body JSON from a file")
+        .action(async (knId: string, id: string, opts, cmd: Command) => {
+          printJson(
+            await clientFrom(cmd).kn[`${crud}Update`](knId, id, readBody(opts)),
+            outputOptions(cmd),
+          );
+        });
+      g.command("delete <kn-id> <id>")
+        .description(`Delete ${name}`)
+        .option("-y, --yes", "skip confirmation")
+        .action(async (knId: string, id: string, _o, cmd: Command) => {
+          printJson(await clientFrom(cmd).kn[`${crud}Delete`](knId, id), outputOptions(cmd));
+        });
+    }
+    for (const s of stubLeaves) {
       g.command(s)
         .description(`${s} (pending)`)
         .allowUnknownOption()

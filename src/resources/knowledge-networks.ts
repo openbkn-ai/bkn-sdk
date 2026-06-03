@@ -17,13 +17,16 @@ import {
   type SemanticSearchOptions,
   cancelActionLog,
   createKnowledgeNetwork,
+  createSchemaItem,
   deleteKnowledgeNetwork,
+  deleteSchemaItem,
   dryRunMetric,
   executeActionType,
   getActionExecution,
   getActionLog,
   getKnowledgeNetwork,
   getObjectTypeProperties,
+  getSchemaItem,
   listActionLogs,
   listActionTypes,
   listKnowledgeNetworks,
@@ -35,6 +38,7 @@ import {
   querySubgraph,
   semanticSearch,
   updateKnowledgeNetwork,
+  updateSchemaItem,
 } from "../api/knowledge-networks.js";
 import type { RequestContext } from "../types.js";
 
@@ -60,7 +64,20 @@ export function kn(ctx: RequestContext) {
     objectTypeQuery: (knId: string, otId: string, body: unknown) =>
       queryObjectTypeInstances(ctx, knId, otId, body),
     objectTypeProperties: (knId: string, otId: string) => getObjectTypeProperties(ctx, knId, otId),
+    objectTypeGet: (knId: string, id: string) => getSchemaItem(ctx, knId, "object-types", id),
+    objectTypeCreate: (knId: string, body: unknown) =>
+      createSchemaItem(ctx, knId, "object-types", body),
+    objectTypeUpdate: (knId: string, id: string, body: unknown) =>
+      updateSchemaItem(ctx, knId, "object-types", id, body),
+    objectTypeDelete: (knId: string, id: string) => deleteSchemaItem(ctx, knId, "object-types", id),
     relationTypes: (knId: string, opts?: ListSchemaOptions) => listRelationTypes(ctx, knId, opts),
+    relationTypeGet: (knId: string, id: string) => getSchemaItem(ctx, knId, "relation-types", id),
+    relationTypeCreate: (knId: string, body: unknown) =>
+      createSchemaItem(ctx, knId, "relation-types", body),
+    relationTypeUpdate: (knId: string, id: string, body: unknown) =>
+      updateSchemaItem(ctx, knId, "relation-types", id, body),
+    relationTypeDelete: (knId: string, id: string) =>
+      deleteSchemaItem(ctx, knId, "relation-types", id),
     actionTypes: (knId: string, opts?: ListSchemaOptions) => listActionTypes(ctx, knId, opts),
     actionTypeQuery: (knId: string, atId: string, body: unknown) =>
       queryActionType(ctx, knId, atId, body),
