@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { printJson } from "../utils/output.js";
-import { clientFrom, outputOptions } from "./_shared.js";
+import { clientFrom, outputOptions, readBody } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 
@@ -91,20 +91,48 @@ export function agentCommand(): Command {
       printJson(await clientFrom(cmd).agents.getByKey(key), outputOptions(cmd));
     });
 
-  // Write ops + chat/sessions/history kept as stubs (conversation + mutation
-  // contracts handled in a later slice).
-  for (const name of [
-    "create",
-    "update",
-    "delete",
-    "publish",
-    "unpublish",
-    "chat",
-    "sessions",
-    "history",
-    "trace",
-    "skill",
-  ]) {
+  cmd
+    .command("create")
+    .description("Create an agent (--body-file <json> or --body '<json>')")
+    .option("--body <json>", "agent definition JSON")
+    .option("--body-file <path>", "read agent definition JSON from a file")
+    .action(async (opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).agents.create(readBody(opts)), outputOptions(cmd));
+    });
+
+  cmd
+    .command("update <id>")
+    .description("Update an agent (--body-file <json> or --body '<json>')")
+    .option("--body <json>", "agent definition JSON")
+    .option("--body-file <path>", "read agent definition JSON from a file")
+    .action(async (id: string, opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).agents.update(id, readBody(opts)), outputOptions(cmd));
+    });
+
+  cmd
+    .command("delete <id>")
+    .description("Delete an agent")
+    .option("-y, --yes", "skip confirmation")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).agents.delete(id), outputOptions(cmd));
+    });
+
+  cmd
+    .command("publish <id>")
+    .description("Publish an agent")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).agents.publish(id), outputOptions(cmd));
+    });
+
+  cmd
+    .command("unpublish <id>")
+    .description("Unpublish an agent")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).agents.unpublish(id), outputOptions(cmd));
+    });
+
+  // chat / sessions / history / trace / skill need the conversation contracts.
+  for (const name of ["chat", "sessions", "history", "trace", "skill"]) {
     cmd
       .command(name)
       .description(`${name} (pending)`)

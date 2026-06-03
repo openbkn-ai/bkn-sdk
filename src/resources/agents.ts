@@ -2,6 +2,8 @@
 import {
   type ListAgentsOptions,
   type PagingOptions,
+  createAgent,
+  deleteAgent,
   getAgent,
   getAgentByKey,
   getAgentTemplate,
@@ -9,6 +11,9 @@ import {
   listAgentTemplates,
   listAgents,
   listPersonalAgents,
+  publishAgent,
+  unpublishAgent,
+  updateAgent,
 } from "../api/agents.js";
 import type { RequestContext } from "../types.js";
 
@@ -21,5 +26,10 @@ export function agents(ctx: RequestContext) {
     templateList: (opts?: PagingOptions) => listAgentTemplates(ctx, opts),
     templateGet: (templateId: string) => getAgentTemplate(ctx, templateId),
     categoryList: () => listAgentCategories(ctx),
+    create: (body: unknown) => createAgent(ctx, body),
+    update: (agentId: string, body: unknown) => updateAgent(ctx, agentId, body),
+    delete: (agentId: string) => deleteAgent(ctx, agentId),
+    publish: (agentId: string) => publishAgent(ctx, agentId),
+    unpublish: (agentId: string) => unpublishAgent(ctx, agentId),
   };
 }

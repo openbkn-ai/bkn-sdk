@@ -1,6 +1,8 @@
 /** Helpers shared by command modules: client construction + output options. */
+import { readFileSync } from "node:fs";
 import type { Command } from "commander";
 import { type BknClient, createClient } from "../client.js";
+import { InputError } from "../utils/errors.js";
 import type { OutputOptions } from "../utils/output.js";
 
 /** Build a client from a command's merged (global + local) options. */
@@ -27,4 +29,15 @@ export function csv(value: string | undefined): string[] | undefined {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+/** Resolve a request body from `--body '<json>'` or `--body-file <path>`. */
+export function readBody(opts: { body?: string; bodyFile?: string }): unknown {
+  const raw = opts.bodyFile ? readFileSync(opts.bodyFile, "utf8") : opts.body;
+  if (!raw) throw new InputError("Provide --body '<json>' or --body-file <path>.");
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new InputError("Request body is not valid JSON.");
+  }
 }

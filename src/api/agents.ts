@@ -70,3 +70,23 @@ export function getAgentTemplate(ctx: RequestContext, templateId: string): Promi
 export function listAgentCategories(ctx: RequestContext): Promise<unknown> {
   return request(ctx, `${BASE}/category`);
 }
+
+export function createAgent(ctx: RequestContext, body: unknown): Promise<unknown> {
+  return request(ctx, `${BASE}/agent`, { method: "POST", body });
+}
+
+export function updateAgent(ctx: RequestContext, agentId: string, body: unknown): Promise<unknown> {
+  return request(ctx, `${BASE}/agent/${encodeURIComponent(agentId)}`, { method: "PUT", body });
+}
+
+export function deleteAgent(ctx: RequestContext, agentId: string): Promise<unknown> {
+  return request(ctx, `${BASE}/agent/${encodeURIComponent(agentId)}`, { method: "DELETE" });
+}
+
+export function publishAgent(ctx: RequestContext, agentId: string): Promise<unknown> {
+  return request(ctx, `${BASE}/agent/${encodeURIComponent(agentId)}/publish`, { method: "POST" });
+}
+
+export function unpublishAgent(ctx: RequestContext, agentId: string): Promise<unknown> {
+  return request(ctx, `${BASE}/agent/${encodeURIComponent(agentId)}/unpublish`, { method: "PUT" });
+}
