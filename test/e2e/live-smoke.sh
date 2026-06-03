@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+#
+# Live read-path smoke test for `openbkn` against a real platform.
+# Reuses an existing `kweaver` session for the token (refresh needs TLS bypass
+# on self-signed platforms, hence NODE_TLS_REJECT_UNAUTHORIZED=0).
+#
+#   BKN_BASE_URL=https://host  BKN_KN_ID=<kn>  test/e2e/live-smoke.sh
+#
+# Defaults target the dev VM. Not part of `npm test` (real backend).
+set -uo pipefail
+export NODE_TLS_REJECT_UNAUTHORIZED=0
+
+BASE="${BKN_BASE_URL:-https://10.211.55.4}"
+TOKEN="${BKN_TOKEN:-$(kweaver token 2>/dev/null)}"
+KN="${BKN_KN_ID:-}"
+CLI="node $(cd "$(dirname "$0")/../.." && pwd)/dist/cli.js"
+
+if [ -z "$TOKEN" ]; then
+  echo "No token. Run \`kweaver auth login\` (or set BKN_TOKEN)." >&2
+  exit 1
+fi
+
+o() { $CLI --base-url "$BASE" --token "$TOKEN" -k "$@" 2>&1 | grep -v -i warning; }
+pass=0; fail=0
+check() {
+  local label="$1"; shift
+  if o "$@" | grep -qE '"(entries|data|count|id|name|total|tools|concepts|object_types)"|^\[|\[\]'; then
+    echo "✅ $label"; pass=$((pass + 1))
+  else
+    echo "❌ $label"; fail=$((fail + 1))
+  fi
+}
+
+check "bkn list" bkn list
+check "resource list" resource list --limit 1
+check "vega catalog list" vega catalog list --limit 1
+check "vega resource list" vega resource list --limit 1
+check "agent list" agent list --limit 1
+check "model llm list" model llm list --limit 1
+check "model small list" model small list --limit 1
+check "skill list" skill list --limit 1
+check "toolbox list" toolbox list --limit 1
+check "dataflow list" dataflow list
+if [ -n "$KN" ]; then
+  check "bkn object-type list" bkn object-type list "$KN"
+  check "bkn action-log list" bkn action-log list "$KN"
+  check "context tools" context tools "$KN"
+fi
+
+echo "---"
+echo "passed=$pass failed=$fail"
+# Operator (admin) endpoints need an operator token; skipped here by design.
+[ "$fail" -eq 0 ]
