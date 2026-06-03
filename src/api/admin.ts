@@ -70,3 +70,35 @@ export function listRoles(ctx: RequestContext, opts: ListRolesOptions = {}): Pro
 export function getRole(ctx: RequestContext, roleId: string): Promise<unknown> {
   return request(ctx, `${AUTHZ}/roles/${encodeURIComponent(roleId)}`);
 }
+
+export type MemberType = "user" | "department" | "group" | "app";
+
+export function listRoleMembers(
+  ctx: RequestContext,
+  roleId: string,
+  opts: { offset?: number; limit?: number; keyword?: string } = {},
+): Promise<unknown> {
+  return request(ctx, `${AUTHZ}/role-members/${encodeURIComponent(roleId)}`, {
+    query: {
+      offset: opts.offset ?? 0,
+      limit: opts.limit ?? 100,
+      keyword: opts.keyword || undefined,
+    },
+  });
+}
+
+/**
+ * Add or remove role members. Both use POST; the verb is in the body
+ * (`{method:"POST"|"DELETE", members:[{id,type}]}`).
+ */
+export function modifyRoleMembers(
+  ctx: RequestContext,
+  roleId: string,
+  method: "POST" | "DELETE",
+  members: Array<{ id: string; type: MemberType }>,
+): Promise<unknown> {
+  return request(ctx, `${AUTHZ}/role-members/${encodeURIComponent(roleId)}`, {
+    method: "POST",
+    body: { method, members },
+  });
+}

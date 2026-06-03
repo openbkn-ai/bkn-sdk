@@ -81,16 +81,25 @@ export function adminCommand(): Command {
         outputOptions(cmd),
       );
     });
-  stubs(user, "user", [
-    "get",
-    "create",
-    "update",
-    "delete",
-    "roles",
-    "assign-role",
-    "revoke-role",
-    "reset-password",
-  ]);
+  user
+    .command("assign-role <user> <role>")
+    .description("Grant a role to a user")
+    .action(async (userId: string, roleId: string, _opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).admin.addRoleMember(roleId, userId, "user"),
+        outputOptions(cmd),
+      );
+    });
+  user
+    .command("revoke-role <user> <role>")
+    .description("Revoke a role from a user")
+    .action(async (userId: string, roleId: string, _opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).admin.removeRoleMember(roleId, userId, "user"),
+        outputOptions(cmd),
+      );
+    });
+  stubs(user, "user", ["get", "create", "update", "delete", "roles", "reset-password"]);
 
   const role = admin.command("role").description("Role management");
   role
@@ -110,7 +119,40 @@ export function adminCommand(): Command {
     .action(async (roleId: string, _opts, cmd: Command) => {
       printJson(await clientFrom(cmd).admin.roleGet(roleId), outputOptions(cmd));
     });
-  stubs(role, "role", ["members", "add-member", "remove-member"]);
+  role
+    .command("members <role>")
+    .description("List members of a role")
+    .option("--keyword <s>", "filter by keyword")
+    .option("--limit <n>", "page size", int, 100)
+    .action(async (roleId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).admin.roleMembers(roleId, {
+          keyword: opts.keyword,
+          limit: opts.limit,
+        }),
+        outputOptions(cmd),
+      );
+    });
+  role
+    .command("add-member <role> <id>")
+    .description("Add a member to a role (--type user|department|group|app)")
+    .option("--type <t>", "member type", "user")
+    .action(async (roleId: string, id: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).admin.addRoleMember(roleId, id, opts.type),
+        outputOptions(cmd),
+      );
+    });
+  role
+    .command("remove-member <role> <id>")
+    .description("Remove a member from a role (--type user|department|group|app)")
+    .option("--type <t>", "member type", "user")
+    .action(async (roleId: string, id: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).admin.removeRoleMember(roleId, id, opts.type),
+        outputOptions(cmd),
+      );
+    });
 
   // Models management reuses the (validated) mf-model-manager client.
   for (const kind of ["llm", "small-model"] as const) {
