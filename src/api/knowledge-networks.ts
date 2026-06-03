@@ -317,6 +317,69 @@ export function deleteSchemaItem(
   );
 }
 
+// Metric definitions live under ontology-manager (data/dry-run are query-side).
+export function listMetrics(
+  ctx: RequestContext,
+  knId: string,
+  opts: ListSchemaOptions = {},
+): Promise<unknown> {
+  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics`, {
+    query: { branch: opts.branch ?? "main", limit: String(opts.limit ?? -1) },
+  });
+}
+export function getMetric(ctx: RequestContext, knId: string, metricId: string): Promise<unknown> {
+  return request(
+    ctx,
+    `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/${encodeURIComponent(metricId)}`,
+  );
+}
+export function createMetric(ctx: RequestContext, knId: string, body: unknown): Promise<unknown> {
+  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics`, {
+    method: "POST",
+    body,
+  });
+}
+export function updateMetric(
+  ctx: RequestContext,
+  knId: string,
+  metricId: string,
+  body: unknown,
+): Promise<unknown> {
+  return request(
+    ctx,
+    `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/${encodeURIComponent(metricId)}`,
+    {
+      method: "PUT",
+      body,
+    },
+  );
+}
+export function deleteMetric(
+  ctx: RequestContext,
+  knId: string,
+  metricId: string,
+): Promise<unknown> {
+  return request(
+    ctx,
+    `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/${encodeURIComponent(metricId)}`,
+    {
+      method: "DELETE",
+    },
+  );
+}
+export function searchMetrics(ctx: RequestContext, knId: string, body: unknown): Promise<unknown> {
+  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/search`, {
+    method: "POST",
+    body,
+  });
+}
+export function validateMetric(ctx: RequestContext, knId: string, body: unknown): Promise<unknown> {
+  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/validate`, {
+    method: "POST",
+    body,
+  });
+}
+
 export interface SemanticSearchOptions {
   mode?: string;
   maxConcepts?: number;

@@ -279,13 +279,59 @@ export function bknCommand(): Command {
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(await clientFrom(cmd).kn.metricDryRun(knId, readBody(opts)), outputOptions(cmd));
     });
-  for (const s of ["list", "get", "create", "search", "validate", "update", "delete"]) {
-    metric
-      .command(s)
-      .description(`${s} (pending)`)
-      .allowUnknownOption()
-      .action(notImplemented(`metric ${s}`));
-  }
+  metric
+    .command("list <kn-id>")
+    .description("List metrics")
+    .action(async (knId: string, _o, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.metricList(knId), outputOptions(cmd));
+    });
+  metric
+    .command("get <kn-id> <metric-id>")
+    .description("Get a metric")
+    .action(async (knId: string, id: string, _o, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.metricGet(knId, id), outputOptions(cmd));
+    });
+  metric
+    .command("create <kn-id>")
+    .description("Create a metric (--body / --body-file)")
+    .option("--body <json>", "body JSON")
+    .option("--body-file <path>", "read body JSON from a file")
+    .action(async (knId: string, opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.metricCreate(knId, readBody(opts)), outputOptions(cmd));
+    });
+  metric
+    .command("update <kn-id> <metric-id>")
+    .description("Update a metric (--body / --body-file)")
+    .option("--body <json>", "body JSON")
+    .option("--body-file <path>", "read body JSON from a file")
+    .action(async (knId: string, id: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.metricUpdate(knId, id, readBody(opts)),
+        outputOptions(cmd),
+      );
+    });
+  metric
+    .command("delete <kn-id> <metric-id>")
+    .description("Delete a metric")
+    .action(async (knId: string, id: string, _o, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.metricDelete(knId, id), outputOptions(cmd));
+    });
+  metric
+    .command("search <kn-id>")
+    .description("Search metrics (--body / --body-file)")
+    .option("--body <json>", "body JSON")
+    .option("--body-file <path>", "read body JSON from a file")
+    .action(async (knId: string, opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.metricSearch(knId, readBody(opts)), outputOptions(cmd));
+    });
+  metric
+    .command("validate <kn-id>")
+    .description("Validate a metric definition (--body / --body-file)")
+    .option("--body <json>", "body JSON")
+    .option("--body-file <path>", "read body JSON from a file")
+    .action(async (knId: string, opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.metricValidate(knId, readBody(opts)), outputOptions(cmd));
+    });
 
   const cg = bkn.command("concept-group").description("Concept groups — list/get");
   cg.command("list <kn-id>")
