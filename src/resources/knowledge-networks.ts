@@ -15,6 +15,7 @@ import {
   listActionSchedules,
   listConceptGroups,
   listJobs,
+  relationTypePaths,
   removeConceptGroupMembers,
   setActionScheduleStatus,
   updateActionSchedule,
@@ -137,6 +138,7 @@ export function kn(ctx: RequestContext) {
     job: (knId: string, jobId: string) => getJob(ctx, knId, jobId),
     jobTasks: (knId: string, jobId: string) => getJobTasks(ctx, knId, jobId),
     jobDelete: (knId: string, ids: string) => deleteJobs(ctx, knId, ids),
+    relationTypePaths: (knId: string, body: unknown) => relationTypePaths(ctx, knId, body),
     /** Pack a local BKN directory and upload it as a knowledge network. */
     push: (dir: string, opts?: { branch?: string }) =>
       uploadBkn(ctx, packDirectoryToTar(dir), opts),

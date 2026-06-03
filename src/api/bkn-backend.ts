@@ -58,6 +58,15 @@ export async function downloadBkn(
   return Buffer.from(await res.arrayBuffer());
 }
 
+/** Query relation-type paths between object types (POST, caller-supplied body). */
+export function relationTypePaths(
+  ctx: RequestContext,
+  knId: string,
+  body: unknown,
+): Promise<unknown> {
+  return request(ctx, knPath(knId, "relation-type-paths"), { method: "POST", body });
+}
+
 export function listConceptGroups(ctx: RequestContext, knId: string): Promise<unknown> {
   return request(ctx, knPath(knId, "concept-groups"));
 }

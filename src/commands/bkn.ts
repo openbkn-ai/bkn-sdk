@@ -491,14 +491,20 @@ export function bknCommand(): Command {
       );
     });
 
+  bkn
+    .command("relation-type-paths <kn-id>")
+    .description("Query relation-type paths between object types (--body / --body-file JSON)")
+    .option("--body <json>", "request JSON")
+    .option("--body-file <path>", "read request JSON from a file")
+    .action(async (knId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.relationTypePaths(knId, readBody(opts)),
+        outputOptions(cmd),
+      );
+    });
+
   // Remaining subcommands kept in the tree as stubs (filled in incrementally).
-  for (const name of [
-    "create-from-catalog",
-    "create-from-csv",
-    "validate",
-    "resources",
-    "relation-type-paths",
-  ]) {
+  for (const name of ["create-from-catalog", "create-from-csv", "validate", "resources"]) {
     bkn
       .command(name)
       .description(`${name} (pending)`)
