@@ -186,6 +186,33 @@ export function listTools(ctx: RequestContext, knId: string): Promise<unknown> {
   return callMethod(ctx, knId, "tools/list");
 }
 
+/** Layer-2 subgraph query across relation-type paths (`query_instance_subgraph`). */
+export function queryInstanceSubgraph(
+  ctx: RequestContext,
+  knId: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  return callTool(ctx, knId, "query_instance_subgraph", args);
+}
+
+/** Layer-3 logic-property values for given instances (`get_logic_properties_values`). */
+export function getLogicProperties(
+  ctx: RequestContext,
+  knId: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  return callTool(ctx, knId, "get_logic_properties_values", args);
+}
+
+/** Layer-3 action info / dynamic tools for an instance (`get_action_info`). */
+export function getActionInfo(
+  ctx: RequestContext,
+  knId: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  return callTool(ctx, knId, "get_action_info", args);
+}
+
 // ---- standard MCP resource / prompt methods --------------------------------
 
 export function listResources(ctx: RequestContext, knId: string): Promise<unknown> {

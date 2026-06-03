@@ -503,8 +503,15 @@ export function bknCommand(): Command {
       );
     });
 
+  bkn
+    .command("resources")
+    .description("List BKN-backend resources")
+    .action(async (_opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.bknResources(), outputOptions(cmd));
+    });
+
   // Remaining subcommands kept in the tree as stubs (filled in incrementally).
-  for (const name of ["create-from-catalog", "create-from-csv", "validate", "resources"]) {
+  for (const name of ["create-from-catalog", "create-from-csv", "validate"]) {
     bkn
       .command(name)
       .description(`${name} (pending)`)

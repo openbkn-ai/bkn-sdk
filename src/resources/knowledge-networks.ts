@@ -13,6 +13,7 @@ import {
   getJob,
   getJobTasks,
   listActionSchedules,
+  listBknResources,
   listConceptGroups,
   listJobs,
   relationTypePaths,
@@ -139,6 +140,7 @@ export function kn(ctx: RequestContext) {
     jobTasks: (knId: string, jobId: string) => getJobTasks(ctx, knId, jobId),
     jobDelete: (knId: string, ids: string) => deleteJobs(ctx, knId, ids),
     relationTypePaths: (knId: string, body: unknown) => relationTypePaths(ctx, knId, body),
+    bknResources: () => listBknResources(ctx),
     /** Pack a local BKN directory and upload it as a knowledge network. */
     push: (dir: string, opts?: { branch?: string }) =>
       uploadBkn(ctx, packDirectoryToTar(dir), opts),

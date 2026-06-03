@@ -7,12 +7,6 @@ import { clientFrom, outputOptions } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 
-function notImplemented(path: string): () => never {
-  return () => {
-    throw new Error(`\`openbkn context ${path}\` is not implemented yet.`);
-  };
-}
-
 export function contextCommand(): Command {
   const cmd = new Command("context").description(
     "Context loader (MCP) — schema discovery, instance query, skill recall",
@@ -117,14 +111,43 @@ export function contextCommand(): Command {
       printJson(await clientFrom(cmd).context.prompt(knId, name, args), outputOptions(cmd));
     });
 
-  // Remaining MCP/query subcommands kept as stubs.
-  for (const name of ["query-instance-subgraph", "get-logic-properties", "get-action-info"]) {
-    cmd
-      .command(name)
-      .description(`${name} (pending)`)
-      .allowUnknownOption()
-      .action(notImplemented(name));
-  }
+  const jsonArgs = (raw: string): Record<string, unknown> => {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      throw new InputError("--args must be valid JSON");
+    }
+  };
+  cmd
+    .command("query-instance-subgraph <kn-id>")
+    .description("Layer-2: query an instance subgraph across relation-type paths")
+    .requiredOption("--args <json>", "tool arguments as JSON")
+    .action(async (knId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).context.queryInstanceSubgraph(knId, jsonArgs(opts.args)),
+        outputOptions(cmd),
+      );
+    });
+  cmd
+    .command("get-logic-properties <kn-id>")
+    .description("Layer-3: compute logic-property values for instances")
+    .requiredOption("--args <json>", "tool arguments as JSON")
+    .action(async (knId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).context.logicProperties(knId, jsonArgs(opts.args)),
+        outputOptions(cmd),
+      );
+    });
+  cmd
+    .command("get-action-info <kn-id>")
+    .description("Layer-3: fetch action info / dynamic tools for an instance")
+    .requiredOption("--args <json>", "tool arguments as JSON")
+    .action(async (knId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).context.actionInfo(knId, jsonArgs(opts.args)),
+        outputOptions(cmd),
+      );
+    });
 
   return group(cmd, "AI DATA PLATFORM");
 }

@@ -3,11 +3,14 @@ import {
   type SearchSchemaOptions,
   callTool,
   findSkills,
+  getActionInfo,
+  getLogicProperties,
   getPrompt,
   listPrompts,
   listResourceTemplates,
   listResources,
   listTools,
+  queryInstanceSubgraph,
   queryObjectInstance,
   readResource,
   searchSchema,
@@ -25,6 +28,11 @@ export function context(ctx: RequestContext) {
     tools: (knId: string) => listTools(ctx, knId),
     toolCall: (knId: string, name: string, args: Record<string, unknown>) =>
       callTool(ctx, knId, name, args),
+    queryInstanceSubgraph: (knId: string, args: Record<string, unknown>) =>
+      queryInstanceSubgraph(ctx, knId, args),
+    logicProperties: (knId: string, args: Record<string, unknown>) =>
+      getLogicProperties(ctx, knId, args),
+    actionInfo: (knId: string, args: Record<string, unknown>) => getActionInfo(ctx, knId, args),
     resources: (knId: string) => listResources(ctx, knId),
     resource: (knId: string, uri: string) => readResource(ctx, knId, uri),
     templates: (knId: string) => listResourceTemplates(ctx, knId),

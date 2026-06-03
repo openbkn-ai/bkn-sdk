@@ -58,6 +58,11 @@ export async function downloadBkn(
   return Buffer.from(await res.arrayBuffer());
 }
 
+/** List BKN-backend resources (global, not per-KN). */
+export function listBknResources(ctx: RequestContext): Promise<unknown> {
+  return request(ctx, "/api/bkn-backend/v1/resources");
+}
+
 /** Query relation-type paths between object types (POST, caller-supplied body). */
 export function relationTypePaths(
   ctx: RequestContext,
