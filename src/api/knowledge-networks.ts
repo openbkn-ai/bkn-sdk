@@ -61,6 +61,11 @@ export interface CreateKnOptions {
   baseBranch?: string;
 }
 
+/** Create a knowledge network from a fully-formed body (e.g. a rendered template). */
+export function createKnowledgeNetworkRaw(ctx: RequestContext, body: unknown): Promise<unknown> {
+  return request(ctx, ONTOLOGY_BASE, { method: "POST", body });
+}
+
 export function createKnowledgeNetwork(
   ctx: RequestContext,
   opts: CreateKnOptions,

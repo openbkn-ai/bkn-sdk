@@ -41,6 +41,11 @@ export interface CreateResourceOptions {
   fields?: Array<{ name: string; type: string }>;
 }
 
+/** Create a vega-backend resource from a fully-formed body (e.g. a rendered template). */
+export function createResourceRaw(ctx: RequestContext, body: unknown): Promise<unknown> {
+  return request(ctx, BASE, { method: "POST", body });
+}
+
 /** Create a vega-backend table resource bound to a catalog source. */
 export function createResource(ctx: RequestContext, opts: CreateResourceOptions): Promise<unknown> {
   const body: Record<string, unknown> = {

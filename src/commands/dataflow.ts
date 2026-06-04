@@ -7,12 +7,6 @@ import { clientFrom, outputOptions, readBody } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 
-function notImplemented(path: string): () => never {
-  return () => {
-    throw new Error(`\`openbkn dataflow ${path}\` is not implemented yet.`);
-  };
-}
-
 export function dataflowCommand(): Command {
   const cmd = new Command("dataflow").description("Dataflow document workflows — list, runs, logs");
 
@@ -70,15 +64,58 @@ export function dataflowCommand(): Command {
       printJson(await clientFrom(cmd).dataflows.create(readBody(opts)), outputOptions(cmd));
     });
 
-  // Template-driven helpers need the bundled template asset library (not yet
-  // ported); they are sugar over `create`. Deferred.
-  for (const name of ["templates", "create-dataset", "create-bkn"]) {
-    cmd
-      .command(name)
-      .description(`${name} (pending)`)
-      .allowUnknownOption()
-      .action(notImplemented(name));
-  }
+  const parseSet = (pairs: string[] | undefined): Record<string, unknown> => {
+    const out: Record<string, unknown> = {};
+    for (const item of pairs ?? []) {
+      const i = item.indexOf("=");
+      if (i > 0) out[item.slice(0, i)] = item.slice(i + 1);
+    }
+    return out;
+  };
+  cmd
+    .command("templates")
+    .description("List available dataset/bkn/dataflow templates")
+    .action(async (_opts, cmd: Command) => {
+      printJson(clientFrom(cmd).dataflows.templates(), outputOptions(cmd));
+    });
+  cmd
+    .command("create-dataset")
+    .description("Create a dataset from a template (--template <name> --set k=v ...)")
+    .requiredOption("--template <name>", "template name")
+    .option(
+      "--set <kv...>",
+      "set a template argument (key=value); repeatable",
+      (v, acc: string[]) => {
+        acc.push(v);
+        return acc;
+      },
+      [] as string[],
+    )
+    .action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).dataflows.createDataset(opts.template, parseSet(opts.set)),
+        outputOptions(cmd),
+      );
+    });
+  cmd
+    .command("create-bkn")
+    .description("Create a knowledge network from a template (--template <name> --set k=v ...)")
+    .requiredOption("--template <name>", "template name")
+    .option(
+      "--set <kv...>",
+      "set a template argument (key=value); repeatable",
+      (v, acc: string[]) => {
+        acc.push(v);
+        return acc;
+      },
+      [] as string[],
+    )
+    .action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).dataflows.createBkn(opts.template, parseSet(opts.set)),
+        outputOptions(cmd),
+      );
+    });
 
   return group(cmd, "AI DATA PLATFORM");
 }

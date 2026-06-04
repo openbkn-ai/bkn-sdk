@@ -1,0 +1,22 @@
+{
+  "name": "document-content",
+  "type": "dataset",
+  "description": "文档切片及向量数据集",
+  "arguments": [
+    { "name": "name", "required": true, "description": "数据集名称", "type": "string" },
+    {
+      "name": "catalog_id",
+      "required": false,
+      "default": "adp_bkn_catalog",
+      "description": "所属目录ID",
+      "type": "string"
+    },
+    {
+      "name": "source_identifier",
+      "required": false,
+      "default": "",
+      "description": "数据源标识符，为空时自动生成",
+      "type": "string"
+    }
+  ]
+}

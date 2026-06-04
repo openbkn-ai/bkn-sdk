@@ -1,0 +1,32 @@
+{
+  "catalog_id": "{{catalog_id}}",
+  "name": "{{name}}",
+  "category": "dataset",
+  "status": "active",
+  "description": "文档元信息数据集",
+  "source_identifier": "{{source_identifier}}",
+  "schema_definition": [
+    { "name": "id", "type": "keyword" },
+    { "name": "document_id", "type": "keyword" },
+    {
+      "name": "doc_name",
+      "type": "text",
+      "features": [
+        { "name": "doc_name_keyword", "feature_type": "keyword", "ref_property": "doc_name" },
+        {
+          "name": "doc_name_fulltext",
+          "feature_type": "fulltext",
+          "ref_property": "doc_name",
+          "config": { "analyzer": "standard" }
+        }
+      ]
+    },
+    { "name": "doc_md5", "type": "keyword" },
+    { "name": "pages", "type": "integer" },
+    { "name": "file_type", "type": "keyword" },
+    { "name": "creator_id", "type": "keyword" },
+    { "name": "created_at", "type": "text" },
+    { "name": "updated_at", "type": "text" },
+    { "name": "@timestamp", "type": "long" }
+  ]
+}

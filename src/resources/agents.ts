@@ -28,9 +28,10 @@ function skillMembers(agent: Record<string, unknown>): unknown[] {
 }
 /** Write the agent's skill-member array back into config.skills.skills. */
 function setSkillMembers(agent: Record<string, unknown>, members: unknown[]): void {
-  const config = (agent.config ?? (agent.config = {})) as Record<string, unknown>;
-  const skills = (config.skills ?? (config.skills = {})) as Record<string, unknown>;
-  skills.skills = members;
+  if (!agent.config || typeof agent.config !== "object") agent.config = {};
+  const config = agent.config as Record<string, unknown>;
+  if (!config.skills || typeof config.skills !== "object") config.skills = {};
+  (config.skills as Record<string, unknown>).skills = members;
 }
 
 export function agents(ctx: RequestContext) {
