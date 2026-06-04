@@ -3,16 +3,9 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { Command } from "commander";
 import { group } from "../help/grouped-help.js";
 import { renderReportMarkdown } from "../trace-ai/diagnose.js";
+import { validateSchemaFile } from "../trace-ai/schema-validate.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, outputOptions, readBody } from "./_shared.js";
-
-function notImplemented(path: string): () => never {
-  return () => {
-    throw new Error(
-      `\`openbkn trace ${path}\` is not implemented yet (rule engine + LLM-as-judge; see tech-debt).`,
-    );
-  };
-}
 
 export function traceCommand(): Command {
   const cmd = new Command("trace").description(
@@ -84,12 +77,16 @@ export function traceCommand(): Command {
       if (result.failed > 0) process.exitCode = 1;
     });
 
-  // schema validate (rule / eval-case YAML zod check) — still pending.
-  cmd
-    .command("schema")
-    .description("schema (pending)")
-    .allowUnknownOption()
-    .action(notImplemented("schema"));
+  const schema = cmd.command("schema").description("Validate eval-set / diagnosis-rule files");
+  schema
+    .command("validate <file>")
+    .description("Validate an eval-set or diagnosis-rule file (JSON/YAML) against its schema")
+    .option("--kind <k>", "force schema kind: eval-set | rule (default: auto-detect)")
+    .action(async (file: string, opts, cmd: Command) => {
+      const result = validateSchemaFile(file, opts.kind);
+      printJson(result, outputOptions(cmd));
+      if (!result.valid) process.exitCode = 1;
+    });
 
   return group(cmd, "TRACE AI");
 }

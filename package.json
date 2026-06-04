@@ -18,7 +18,12 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md", "README.zh.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
   "publishConfig": {
     "access": "public"
   },
@@ -26,7 +31,14 @@
     "type": "git",
     "url": "git+https://github.com/openbkn-ai/bkn-sdk.git"
   },
-  "keywords": ["bkn", "openbkn", "knowledge-network", "cli", "sdk", "typescript"],
+  "keywords": [
+    "bkn",
+    "openbkn",
+    "knowledge-network",
+    "cli",
+    "sdk",
+    "typescript"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -44,11 +56,13 @@
     "cli-table3": "^0.6.5",
     "commander": "^13.1.0",
     "csv-parse": "^6.2.1",
+    "js-yaml": "^4.2.0",
     "jszip": "^3.10.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.13.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.0",
