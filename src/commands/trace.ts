@@ -9,7 +9,7 @@ import { clientFrom, outputOptions, readBody } from "./_shared.js";
 
 export function traceCommand(): Command {
   const cmd = new Command("trace").description(
-    "Trace AI — fetch trace spans; diagnose/eval-set (rule engine) pending",
+    "Trace AI — fetch spans, diagnose (symbolic + LLM rubric), scan, eval-set, schema validate",
   );
 
   cmd
@@ -43,6 +43,21 @@ export function traceCommand(): Command {
       const out = outputOptions(cmd);
       if (out.json) printJson(report, out);
       else console.log(renderReportMarkdown(report));
+    });
+
+  cmd
+    .command("scan <conversation-ids>")
+    .description("Batch-diagnose several conversations (comma-joined) + aggregate findings")
+    .option("--llm", "hybrid mode (rubric + synthesizer) per trace via local `claude`")
+    .action(async (ids: string, opts, cmd: Command) => {
+      const list = ids
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      printJson(
+        await clientFrom(cmd).trace.scan(list, { llm: Boolean(opts.llm) }),
+        outputOptions(cmd),
+      );
     });
 
   const evalSet = cmd.command("eval-set").description("Build + run trace eval sets");
