@@ -42,8 +42,30 @@ export function formatError(err: unknown): string {
     const detail = err.body ? `: ${truncate(err.body, 500)}` : "";
     return `Request failed (HTTP ${err.status} ${err.statusText})${detail}`;
   }
-  if (err instanceof Error) return err.message;
+  if (err instanceof Error) {
+    // `fetch` throws a terse "fetch failed"; the real reason is on `.cause`.
+    const cause = (err as { cause?: unknown }).cause as
+      | { code?: string; message?: string }
+      | undefined;
+    if (cause?.code && isTlsCertError(cause.code)) {
+      return `TLS certificate rejected (${cause.code}). The platform is likely self-signed — retry with \`-k\`/\`--insecure\`.`;
+    }
+    if (err.message === "fetch failed" && cause?.message) {
+      return `Request failed: ${cause.message}${cause.code ? ` (${cause.code})` : ""}`;
+    }
+    return err.message;
+  }
   return String(err);
+}
+
+function isTlsCertError(code: string): boolean {
+  return (
+    code === "DEPTH_ZERO_SELF_SIGNED_CERT" ||
+    code === "SELF_SIGNED_CERT_IN_CHAIN" ||
+    code === "UNABLE_TO_VERIFY_LEAF_SIGNATURE" ||
+    code === "CERT_HAS_EXPIRED" ||
+    code.includes("CERT")
+  );
 }
 
 function truncate(s: string, n: number): string {

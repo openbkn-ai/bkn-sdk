@@ -92,12 +92,27 @@ Golden `--help` baselines and a full-depth parity test live in
 
 ## Agent skill
 
-An agent skill (`skills/openbkn/SKILL.md`) lets AI tools drive the CLI in
-natural language. Install it with the skills CLI:
+`skills/openbkn/` is an agent skill (for Claude Code / the [skills.sh](https://skills.sh)
+ecosystem) that lets an AI drive the `openbkn` CLI from natural language. It
+ships a `SKILL.md` (trigger intents, `allowed-tools: Bash(openbkn *)`, a
+command-group map, examples, and cautions) plus per-domain cheat sheets under
+`references/` (auth, bkn, agent, model, vega, resource, dataflow, context,
+skill, toolbox, trace, admin, call) and two how-tos (build-a-KN, troubleshooting).
+
+The skill is **not** part of the npm package — it's registered separately:
 
 ```bash
-npx skills add openbkn-ai/bkn-sdk@openbkn
+# Install the skill (globally), then ask in natural language:
+npx skills add openbkn-ai/bkn-sdk@openbkn -g -y
+
+#   "列出所有知识网络"  /  "list all knowledge networks"
+#   "从 Vega catalog vcat-1 建一个名为 customers 的知识网络并构建索引"
+#   "诊断会话 conv-123 的 trace，带 LLM 判定"
 ```
+
+The skill assumes the `openbkn` CLI is installed (`npm i -g @openbkn/bkn-sdk`)
+and you are logged in (`openbkn auth login`). It always defers to live
+`openbkn <group> <sub> --help` for exact flags.
 
 ## License
 
