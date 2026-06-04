@@ -12,8 +12,10 @@ import {
   getSkillMarket,
   listSkillMarket,
   listSkills,
+  publishSkillVersion,
   readSkillFile,
   registerSkillZip,
+  republishSkillVersion,
   setSkillStatus,
   updateSkillMetadata,
   updateSkillPackageZip,
@@ -33,6 +35,9 @@ export function skills(ctx: RequestContext) {
     history: (skillId: string) => getSkillHistory(ctx, skillId),
     setStatus: (skillId: string, status: SkillStatus) => setSkillStatus(ctx, skillId, status),
     updateMetadata: (skillId: string, body: unknown) => updateSkillMetadata(ctx, skillId, body),
+    republish: (skillId: string, version: string) => republishSkillVersion(ctx, skillId, version),
+    publishHistory: (skillId: string, version: string) =>
+      publishSkillVersion(ctx, skillId, version),
     /** Zip a local skill directory and register it. */
     register: async (dir: string, opts?: { source?: string; extendInfo?: unknown }) =>
       registerSkillZip(ctx, await zipDirectory(dir), {

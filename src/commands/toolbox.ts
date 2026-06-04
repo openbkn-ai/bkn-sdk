@@ -8,12 +8,6 @@ import { clientFrom, outputOptions } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 
-function notImplemented(kind: string, name: string): () => never {
-  return () => {
-    throw new Error(`\`openbkn ${kind} ${name}\` is not implemented yet.`);
-  };
-}
-
 export function toolboxCommand(): Command {
   const cmd = new Command("toolbox").description("Agent toolbox lifecycle");
 
@@ -73,14 +67,24 @@ export function toolboxCommand(): Command {
       printJson(await clientFrom(cmd).toolboxes.delete(id), outputOptions(cmd));
     });
 
-  // export/import are .adp file ops — multipart/file contracts deferred.
-  for (const name of ["export", "import"]) {
-    cmd
-      .command(name)
-      .description(`${name} (pending)`)
-      .allowUnknownOption()
-      .action(notImplemented("toolbox", name));
-  }
+  cmd
+    .command("export <box-id>")
+    .description("Export a toolbox config to a local .adp file")
+    .requiredOption("-o, --out <file>", "output .adp path")
+    .option("--type <t>", "impex type: toolbox | mcp | operator", "toolbox")
+    .action(async (boxId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).toolboxes.export(boxId, opts.out, opts.type),
+        outputOptions(cmd),
+      );
+    });
+  cmd
+    .command("import <file>")
+    .description("Import a toolbox config from a local .adp file")
+    .option("--type <t>", "impex type: toolbox | mcp | operator", "toolbox")
+    .action(async (file: string, opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).toolboxes.import(file, opts.type), outputOptions(cmd));
+    });
 
   return group(cmd, "DECISION AGENT");
 }

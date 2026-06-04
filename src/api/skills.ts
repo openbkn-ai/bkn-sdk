@@ -72,6 +72,30 @@ export function updateSkillMetadata(
   return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}`, { method: "PUT", body });
 }
 
+/** Republish a previous skill version (`POST /skills/:id/history/republish`). */
+export function republishSkillVersion(
+  ctx: RequestContext,
+  skillId: string,
+  version: string,
+): Promise<unknown> {
+  return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}/history/republish`, {
+    method: "POST",
+    body: { version },
+  });
+}
+
+/** Publish a historical skill version (`POST /skills/:id/history/publish`). */
+export function publishSkillVersion(
+  ctx: RequestContext,
+  skillId: string,
+  version: string,
+): Promise<unknown> {
+  return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}/history/publish`, {
+    method: "POST",
+    body: { version },
+  });
+}
+
 export interface ListSkillsOptions {
   page?: number;
   pageSize?: number;

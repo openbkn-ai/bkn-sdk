@@ -7,12 +7,6 @@ import { clientFrom, outputOptions, readBody } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 
-function notImplemented(path: string): () => never {
-  return () => {
-    throw new Error(`\`openbkn skill ${path}\` is not implemented yet.`);
-  };
-}
-
 export function skillCommand(): Command {
   const cmd = new Command("skill").description("Skill registry and market");
 
@@ -148,14 +142,23 @@ export function skillCommand(): Command {
       printJson(await clientFrom(cmd).skills.updatePackage(skillId, dir), outputOptions(cmd));
     });
 
-  // republish / publish-history: lifecycle endpoints not yet confirmed (deferred).
-  for (const name of ["republish", "publish-history"]) {
-    cmd
-      .command(name)
-      .description(`${name} (pending)`)
-      .allowUnknownOption()
-      .action(notImplemented(name));
-  }
+  cmd
+    .command("republish <skill-id>")
+    .description("Republish a previous skill version")
+    .requiredOption("--version <v>", "version to republish")
+    .action(async (skillId: string, opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).skills.republish(skillId, opts.version), outputOptions(cmd));
+    });
+  cmd
+    .command("publish-history <skill-id>")
+    .description("Publish a historical skill version")
+    .requiredOption("--version <v>", "version to publish")
+    .action(async (skillId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).skills.publishHistory(skillId, opts.version),
+        outputOptions(cmd),
+      );
+    });
 
   return group(cmd, "MODELS & SKILLS");
 }

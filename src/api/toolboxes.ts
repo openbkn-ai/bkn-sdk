@@ -12,6 +12,45 @@ import { applyTls } from "./tls.js";
 
 const PATH = "/api/agent-operator-integration/v1/tool-box";
 
+const IMPEX = "/api/agent-operator-integration/v1/impex";
+export type ImpexType = "toolbox" | "mcp" | "operator";
+
+/** Export a toolbox/mcp/operator config as raw `.adp` bytes (GET impex/export). */
+export async function exportConfig(
+  ctx: RequestContext,
+  id: string,
+  type: ImpexType = "toolbox",
+): Promise<Uint8Array> {
+  applyTls(ctx);
+  const res = await fetch(
+    `${ctx.baseUrl}${IMPEX}/export/${encodeURIComponent(type)}/${encodeURIComponent(id)}`,
+    { headers: buildHeaders(ctx) },
+  );
+  const buf = new Uint8Array(await res.arrayBuffer());
+  if (!res.ok) throw new HttpError(res.status, res.statusText, new TextDecoder().decode(buf));
+  return buf;
+}
+
+/** Import a previously exported `.adp` config file (POST impex/import, multipart `data`). */
+export async function importConfig(
+  ctx: RequestContext,
+  filePath: string,
+  type: ImpexType = "toolbox",
+): Promise<unknown> {
+  applyTls(ctx);
+  const buf = await readFile(filePath);
+  const form = new FormData();
+  form.append("data", new Blob([new Uint8Array(buf)]), basename(filePath));
+  const res = await fetch(`${ctx.baseUrl}${IMPEX}/import/${encodeURIComponent(type)}`, {
+    method: "POST",
+    headers: buildHeaders(ctx),
+    body: form,
+  });
+  const text = await res.text();
+  if (!res.ok) throw new HttpError(res.status, res.statusText, text);
+  return text ? JSON.parse(text) : text;
+}
+
 /**
  * Upload a tool definition file (e.g. an OpenAPI spec) into a toolbox.
  * `POST /tool-box/:id/tool` multipart: `metadata_type` + `data` (file).
