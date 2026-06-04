@@ -3,15 +3,9 @@ import { Command } from "commander";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { printJson } from "../utils/output.js";
-import { clientFrom, outputOptions, readBody } from "./_shared.js";
+import { clientFrom, csv, outputOptions, readBody } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
-
-function notImplemented(path: string): () => never {
-  return () => {
-    throw new Error(`\`openbkn agent ${path}\` is not implemented yet.`);
-  };
-}
 
 export function agentCommand(): Command {
   const cmd = new Command("agent").description("Agent CRUD, chat, sessions, publish");
@@ -179,14 +173,35 @@ export function agentCommand(): Command {
       );
     });
 
-  // agent trace / skill need the conversation-trace + agent-skill contracts.
-  for (const name of ["trace", "skill"]) {
-    cmd
-      .command(name)
-      .description(`${name} (pending)`)
-      .allowUnknownOption()
-      .action(notImplemented(name));
-  }
+  cmd
+    .command("trace <conversation-id>")
+    .description("Get trace spans for a conversation (agent-scoped alias of `trace get`)")
+    .action(async (conversationId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).trace.spans(conversationId), outputOptions(cmd));
+    });
+
+  const skill = cmd.command("skill").description("Manage skills attached to an agent");
+  skill
+    .command("list <agent-id>")
+    .description("List skill ids attached to an agent")
+    .action(async (agentId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).agents.skillList(agentId), outputOptions(cmd));
+    });
+  skill
+    .command("add <agent-id> <skill-ids>")
+    .description("Attach skill(s) to an agent (comma-joined ids)")
+    .action(async (agentId: string, ids: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).agents.skillAdd(agentId, csv(ids) ?? []), outputOptions(cmd));
+    });
+  skill
+    .command("remove <agent-id> <skill-ids>")
+    .description("Detach skill(s) from an agent (comma-joined ids)")
+    .action(async (agentId: string, ids: string, _opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).agents.skillRemove(agentId, csv(ids) ?? []),
+        outputOptions(cmd),
+      );
+    });
 
   return group(cmd, "DECISION AGENT");
 }

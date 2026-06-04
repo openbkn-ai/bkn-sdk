@@ -20,6 +20,19 @@ import {
 } from "../api/agents.js";
 import type { RequestContext } from "../types.js";
 
+/** Read the agent's skill-member array (config.skills.skills), or []. */
+function skillMembers(agent: Record<string, unknown>): unknown[] {
+  const config = (agent.config ?? {}) as Record<string, unknown>;
+  const skills = (config.skills ?? {}) as Record<string, unknown>;
+  return Array.isArray(skills.skills) ? skills.skills : [];
+}
+/** Write the agent's skill-member array back into config.skills.skills. */
+function setSkillMembers(agent: Record<string, unknown>, members: unknown[]): void {
+  const config = (agent.config ?? (agent.config = {})) as Record<string, unknown>;
+  const skills = (config.skills ?? (config.skills = {})) as Record<string, unknown>;
+  skills.skills = members;
+}
+
 export function agents(ctx: RequestContext) {
   return {
     list: (opts?: ListAgentsOptions) => listAgents(ctx, opts),
@@ -38,6 +51,31 @@ export function agents(ctx: RequestContext) {
       listConversations(ctx, agentKey, opts),
     history: (agentKey: string, conversationId: string) =>
       listMessages(ctx, agentKey, conversationId),
+    /** List skill ids attached to an agent (config.skills.skills). */
+    skillList: async (agentId: string): Promise<string[]> => {
+      const agent = (await getAgent(ctx, agentId)) as Record<string, unknown>;
+      const arr = skillMembers(agent);
+      return arr.map((m) => String((m as Record<string, unknown>).skill_id ?? "")).filter(Boolean);
+    },
+    /** Attach skill(s) to an agent (dedup), then persist. */
+    skillAdd: async (agentId: string, skillIds: string[]): Promise<unknown> => {
+      const agent = (await getAgent(ctx, agentId)) as Record<string, unknown>;
+      const arr = skillMembers(agent);
+      const have = new Set(arr.map((m) => String((m as Record<string, unknown>).skill_id ?? "")));
+      for (const id of skillIds) if (!have.has(id)) arr.push({ skill_id: id });
+      setSkillMembers(agent, arr);
+      return updateAgent(ctx, agentId, agent);
+    },
+    /** Detach skill(s) from an agent, then persist. */
+    skillRemove: async (agentId: string, skillIds: string[]): Promise<unknown> => {
+      const agent = (await getAgent(ctx, agentId)) as Record<string, unknown>;
+      const drop = new Set(skillIds);
+      const arr = skillMembers(agent).filter(
+        (m) => !drop.has(String((m as Record<string, unknown>).skill_id ?? "")),
+      );
+      setSkillMembers(agent, arr);
+      return updateAgent(ctx, agentId, agent);
+    },
     /** Send a chat turn to an agent (resolves agent id/key/version first). */
     chat: async (
       agentId: string,
