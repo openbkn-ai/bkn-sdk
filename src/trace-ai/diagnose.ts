@@ -46,20 +46,32 @@ export interface Rule {
 
 export interface Finding {
   ruleId: string;
+  judgmentKind: "symbolic" | "rubric";
   severity: "low" | "medium" | "high";
   symptom: string;
   evidence: { spans: string[]; excerpt: string };
   suggestedFix: { target: string; change: string };
+  confidence?: "low" | "medium" | "high";
 }
 
 export interface DiagnoseReport {
   traceId: string;
   conversationId: string;
   diagnosedAt: string | null;
-  mode: "symbolic-only";
+  mode: "symbolic-only" | "hybrid";
   rulesApplied: string[];
   findingCount: number;
   findings: Finding[];
+}
+
+/** A rubric (LLM-judged) rule, gated on a symbolic rule having fired. */
+export interface RubricRule {
+  id: string;
+  severity: "low" | "medium" | "high";
+  symptom: string;
+  gatesOn: string;
+  judgeQuestion: string;
+  suggestedFix: { target: string; changeTemplate: string };
 }
 
 // ── trace shaping ────────────────────────────────────────────────────────────
@@ -324,6 +336,7 @@ export function runRules(tree: TraceTree, rules: Rule[] = BUILTIN_RULES): Findin
     for (const hit of rule.predicate(tree, rule.params)) {
       findings.push({
         ruleId: rule.id,
+        judgmentKind: "symbolic",
         severity: rule.severity,
         symptom: rule.symptom,
         evidence: { spans: hit.evidenceSpans, excerpt: hit.excerpt },
@@ -335,6 +348,108 @@ export function runRules(tree: TraceTree, rules: Rule[] = BUILTIN_RULES): Findin
     }
   }
   return findings;
+}
+
+// ── rubric (LLM-judge) pillar ─────────────────────────────────────────────────
+
+export const BUILTIN_RUBRIC_RULES: RubricRule[] = [
+  {
+    id: "tool_retry_intent_mismatch",
+    severity: "high",
+    symptom: "repeated_tool_call_without_state_change",
+    gatesOn: "tool_loop_no_state_change",
+    judgeQuestion:
+      "Given the user's intent and the tool retry pattern in this trace, classify why " +
+      "the agent kept calling the same tool: a legitimate retry (expecting changed state), " +
+      "a stale-results handling failure (results were identical and the agent didn't notice), " +
+      "prompt confusion (misinterpreted its own instructions), or other.",
+    suggestedFix: {
+      target: "decision_agent.prompt",
+      changeTemplate:
+        "agent retried because of '{{category}}'; address that intent (staleness detection, broaden query, or escalate)",
+    },
+  },
+];
+
+function userIntent(tree: TraceTree): string {
+  for (const s of tree.spans) {
+    const v = s.attributes["gen_ai.user.message"];
+    if (typeof v === "string" && v) return v;
+  }
+  const firstLlm = byStart(tree.byKind.get("llm") ?? [])[0];
+  return firstLlm ? strAttr(firstLlm, "gen_ai.prompt") || strAttr(firstLlm, "llm.prompt") : "";
+}
+
+function spanSequence(tree: TraceTree): Array<Record<string, unknown>> {
+  return byStart(tree.spans)
+    .filter((s) => s.kind === "tool" || s.kind === "llm")
+    .map((s) => ({
+      span_id: s.spanId,
+      kind: s.kind,
+      name: s.name,
+      status: s.status,
+      tool: strAttr(s, "gen_ai.tool.name") || undefined,
+      args: s.attributes["gen_ai.tool.args"],
+    }));
+}
+
+function buildRubricPrompt(rule: RubricRule, tree: TraceTree): string {
+  return [
+    "You are a trace-diagnosis judge. Answer the question about the agent trace below.",
+    "",
+    `QUESTION: ${rule.judgeQuestion}`,
+    "",
+    `USER INTENT: ${userIntent(tree) || "(unknown)"}`,
+    "",
+    "SPAN SEQUENCE (tool + llm steps, chronological):",
+    JSON.stringify(spanSequence(tree), null, 2),
+    "",
+    "Respond with ONLY a JSON object (no prose, no code fence) of exactly this shape:",
+    '{"category": "legitimate_retry|stale_results|prompt_confusion|other", "reasoning": "<one or two sentences>", "severity": "low|medium|high", "confidence": "low|medium|high", "first_violating_step_id": "<span_id>", "evidence_span_ids": ["<span_id>", ...]}',
+  ].join("\n");
+}
+
+/**
+ * Run rubric (LLM-judged) rules whose symbolic gate fired. Each is judged by
+ * the local `claude` CLI. A judge error skips that rule (recorded), never
+ * aborts the diagnosis.
+ */
+export async function runRubric(
+  tree: TraceTree,
+  symbolicFindings: Finding[],
+  judge: (prompt: string) => Promise<Record<string, unknown>>,
+  rules: RubricRule[] = BUILTIN_RUBRIC_RULES,
+): Promise<Finding[]> {
+  const fired = new Set(symbolicFindings.map((f) => f.ruleId));
+  const out: Finding[] = [];
+  for (const rule of rules) {
+    if (!fired.has(rule.gatesOn)) continue;
+    let judged: Record<string, unknown>;
+    try {
+      judged = await judge(buildRubricPrompt(rule, tree));
+    } catch {
+      continue; // skip-on-failure; symbolic findings still stand
+    }
+    const category = typeof judged.category === "string" ? judged.category : "other";
+    const sev = judged.severity;
+    const conf = judged.confidence;
+    const spans = Array.isArray(judged.evidence_span_ids)
+      ? judged.evidence_span_ids.filter((s): s is string => typeof s === "string")
+      : [];
+    out.push({
+      ruleId: rule.id,
+      judgmentKind: "rubric",
+      severity: sev === "low" || sev === "medium" || sev === "high" ? sev : rule.severity,
+      symptom: rule.symptom,
+      evidence: { spans, excerpt: typeof judged.reasoning === "string" ? judged.reasoning : "" },
+      suggestedFix: {
+        target: rule.suggestedFix.target,
+        change: applyTemplate(rule.suggestedFix.changeTemplate, { category }),
+      },
+      ...(conf === "low" || conf === "medium" || conf === "high" ? { confidence: conf } : {}),
+    });
+  }
+  return out;
 }
 
 /** Render a diagnose report as human-readable markdown. */
@@ -350,7 +465,8 @@ export function renderReportMarkdown(r: DiagnoseReport): string {
   }
   const order = { high: 0, medium: 1, low: 2 } as const;
   for (const f of r.findings.slice().sort((a, b) => order[a.severity] - order[b.severity])) {
-    lines.push(`## [${f.severity.toUpperCase()}] ${f.ruleId}`, "");
+    const conf = f.confidence ? `, confidence ${f.confidence}` : "";
+    lines.push(`## [${f.severity.toUpperCase()}] ${f.ruleId} (${f.judgmentKind}${conf})`, "");
     lines.push(`- **symptom**: ${f.symptom}`);
     lines.push(`- **evidence**: ${f.evidence.excerpt}`);
     lines.push(`- **spans**: ${f.evidence.spans.map((s) => `\`${s}\``).join(", ") || "—"}`);

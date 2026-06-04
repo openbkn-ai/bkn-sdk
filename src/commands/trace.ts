@@ -40,9 +40,12 @@ export function traceCommand(): Command {
 
   cmd
     .command("diagnose <conversation-id>")
-    .description("Diagnose a conversation's trace against the builtin symbolic rules")
-    .action(async (conversationId: string, _opts, cmd: Command) => {
-      const report = await clientFrom(cmd).trace.diagnose(conversationId);
+    .description("Diagnose a conversation's trace (symbolic rules; --llm adds rubric judging)")
+    .option("--llm", "also run LLM-judged rubric rules via the local `claude` CLI")
+    .action(async (conversationId: string, opts, cmd: Command) => {
+      const report = await clientFrom(cmd).trace.diagnose(conversationId, {
+        llm: Boolean(opts.llm),
+      });
       const out = outputOptions(cmd);
       if (out.json) printJson(report, out);
       else console.log(renderReportMarkdown(report));
