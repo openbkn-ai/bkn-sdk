@@ -4,7 +4,7 @@ Running list. Pay down in small PRs. Add a row when you knowingly defer somethin
 
 | Item | Area | Notes | Priority |
 | ---- | ---- | ----- | -------- |
-| Trace LLM-judge pillar | trace | `trace get`/`search` + **`diagnose` (symbolic, rules-only)** DONE — 5 builtin predicates, 8 unit tests, wiring live-verified. Remaining: the LLM-as-judge half — rubric rules + synthesizer (the ~3240-line `exp` agent-provider layer), plus `eval-set` (build/test) and `scan`. Each is its own slice (ref kweaver-sdk src/trace-ai). | High |
+| Trace eval-set / scan | trace | `trace diagnose` DONE — **both pillars**: symbolic (5 predicates) + **rubric LLM-judge** via local `claude` (`--llm` → hybrid; live-verified). Remaining: `eval-set` (build is deterministic; test's `semantic_match` reuses claude-judge), cross-trace `scan`, and the multi-finding synthesizer (LLM summary). Each its own slice (ref kweaver-sdk src/trace-ai). `schema validate` (rule/eval-case YAML zod check) also still stubbed. | Medium |
 | dataflow templates | dataflow | `dataflow create` (JSON doc) done & live-verified; `create-dataset`/`create-bkn` are now also covered by `bkn create-from-csv`/`create-from-catalog`. `templates`/`create-dataset`/`create-bkn` (the template-library sugar) need the bundled template assets (kweaver-sdk `src/templates/{dataset,bkn,dataflow}`) — a content port. Stubbed. | Low |
 | Output formatting | utils | Commands print raw backend JSON; add human table formatting for non-`--json` output (cli-table3 is already a dep). | Low |
 | minor unconfirmed leaves | misc | `skill republish`/`publish-history`, `agent trace`/`skill` stubbed — backend contracts not yet confirmed. | Low |
