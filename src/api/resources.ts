@@ -33,6 +33,26 @@ export function getResource(ctx: RequestContext, id: string): Promise<unknown> {
   return request(ctx, `${BASE}/${encodeURIComponent(id)}`);
 }
 
+export interface CreateResourceOptions {
+  name: string;
+  catalogId: string;
+  /** Source table/identifier in the catalog. */
+  sourceIdentifier: string;
+  fields?: Array<{ name: string; type: string }>;
+}
+
+/** Create a vega-backend table resource bound to a catalog source. */
+export function createResource(ctx: RequestContext, opts: CreateResourceOptions): Promise<unknown> {
+  const body: Record<string, unknown> = {
+    name: opts.name,
+    catalog_id: opts.catalogId,
+    category: "table",
+    source_identifier: opts.sourceIdentifier,
+  };
+  if (opts.fields && opts.fields.length > 0) body.schema_definition = opts.fields;
+  return request(ctx, BASE, { method: "POST", body });
+}
+
 export function deleteResource(ctx: RequestContext, id: string): Promise<unknown> {
   return request(ctx, `${BASE}/${encodeURIComponent(id)}`, { method: "DELETE" });
 }

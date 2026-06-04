@@ -253,6 +253,20 @@ export function listObjectTypes(
   });
 }
 
+/** Batch-create object types in one all-or-nothing transaction (`{entries:[…]}`). */
+export function createObjectTypes(
+  ctx: RequestContext,
+  knId: string,
+  entries: unknown[],
+  branch = "main",
+): Promise<unknown> {
+  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/object-types`, {
+    method: "POST",
+    query: { branch },
+    body: { entries },
+  });
+}
+
 export function listRelationTypes(
   ctx: RequestContext,
   knId: string,

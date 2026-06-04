@@ -3,7 +3,8 @@ import { Command } from "commander";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { printJson } from "../utils/output.js";
-import { clientFrom, outputOptions, readBody } from "./_shared.js";
+import { parsePkMap } from "../utils/pk-detection.js";
+import { clientFrom, csv, outputOptions, readBody } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 
@@ -510,8 +511,31 @@ export function bknCommand(): Command {
       printJson(await clientFrom(cmd).kn.bknResources(), outputOptions(cmd));
     });
 
+  bkn
+    .command("create-from-catalog <catalog-id>")
+    .description("Build a knowledge network from a Vega catalog's tables")
+    .requiredOption("--name <name>", "knowledge network name")
+    .option("--tables <list>", "comma-separated table names (default: all)")
+    .option("--pk-map <map>", "explicit primary keys: '<table>:<col>[,<table>:<col>...]'")
+    .option("--build", "submit a Vega build task per resource after creation")
+    .option("--no-rollback", "keep a partially-created KN on failure")
+    .action(async (catalogId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.createFromCatalog({
+          catalogId,
+          name: opts.name,
+          tables: csv(opts.tables),
+          pkMap: opts.pkMap ? parsePkMap(opts.pkMap) : undefined,
+          build: Boolean(opts.build),
+          noRollback: opts.rollback === false,
+          onProgress: (m) => console.error(m),
+        }),
+        outputOptions(cmd),
+      );
+    });
+
   // Remaining subcommands kept in the tree as stubs (filled in incrementally).
-  for (const name of ["create-from-catalog", "create-from-csv", "validate"]) {
+  for (const name of ["create-from-csv", "validate"]) {
     bkn
       .command(name)
       .description(`${name} (pending)`)

@@ -68,6 +68,15 @@ export function getCatalog(ctx: RequestContext, id: string): Promise<unknown> {
   return request(ctx, `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}`);
 }
 
+/** Trigger a catalog metadata scan (discover). `wait=true` blocks until done. */
+export function discoverCatalog(ctx: RequestContext, id: string, wait = true): Promise<unknown> {
+  return request(ctx, `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}/discover`, {
+    method: "POST",
+    query: { wait },
+    timeoutMs: 120_000,
+  });
+}
+
 /** Resources under a catalog (optionally filtered by category). */
 export function listCatalogResources(
   ctx: RequestContext,
