@@ -92,11 +92,11 @@ Golden `--help` baselines and a full-depth parity test live in
 
 ## Agent skill
 
-An agent skill (`skills/openbkn-core/SKILL.md`) lets AI tools drive the CLI in
+An agent skill (`skills/openbkn/SKILL.md`) lets AI tools drive the CLI in
 natural language. Install it with the skills CLI:
 
 ```bash
-npx skills add openbkn-ai/bkn-sdk@openbkn-core
+npx skills add openbkn-ai/bkn-sdk@openbkn
 ```
 
 ## License

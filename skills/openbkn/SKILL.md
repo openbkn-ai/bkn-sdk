@@ -1,5 +1,5 @@
 ---
-name: openbkn-core
+name: openbkn
 description: >-
   操作 BKN（Business Knowledge Network）平台的统一 CLI `openbkn` —— 知识网络
   构建/查询（Schema：对象/关系/行动类型、指标、概念组；实例与语义搜索；
@@ -81,20 +81,45 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user-id>
 | `call`（别名 `curl`） | 通用 API 透传 | `call <url> [-X POST] [-d '<json>']` |
 | `explore` | 本地只读服务（bkn + vega JSON） | `explore [--port <n>]` |
 
-**按需深入**：需要某命令的完整参数时运行 `openbkn <group> <sub> --help`。
+**按需深入**：需要某命令的完整参数时运行 `openbkn <group> <sub> --help`，或读对应的速查参考。
+
+## 详细参考（references/）
+
+| 主题 | 文件 |
+|------|------|
+| 认证 / 会话 / 多用户 | [auth.md](references/auth.md) |
+| 知识网络 + Schema + 查询 + 建网 | [bkn.md](references/bkn.md) |
+| Agent CRUD / 对话 / 挂载技能 | [agent.md](references/agent.md) |
+| 模型工厂 | [model.md](references/model.md) |
+| Vega Catalog + 索引构建 | [vega.md](references/vega.md) |
+| vega-backend 资源 | [resource.md](references/resource.md) |
+| Dataflow + 模板 | [dataflow.md](references/dataflow.md) |
+| Context Loader（MCP） | [context.md](references/context.md) |
+| Skill 注册 / 生命周期 | [skill.md](references/skill.md) |
+| Toolbox / Tool | [toolbox.md](references/toolbox.md) |
+| Trace-AI（diagnose / eval-set） | [trace.md](references/trace.md) |
+| 运营（org/user/role/audit） | [admin.md](references/admin.md) |
+| 通用 API 透传 | [call.md](references/call.md) |
+
+## 操作指南
+
+| 场景 | 参考 |
+|------|------|
+| 从 Catalog / CSV 端到端建知识网络 | [build-kn.md](references/build-kn.md) |
+| 排障速查（401 / 空列表 / 403 / EACP / trace 索引） | [troubleshooting.md](references/troubleshooting.md) |
 
 ## 调用示例
 
 ```text
-/openbkn-core 列出所有知识网络
-/openbkn-core 搜索知识网络 xxx 中关于"供应链"的内容
-/openbkn-core 从 Vega catalog vcat-1 建一个名为 customers 的知识网络并构建索引
-/openbkn-core 把本地 ./my-bkn 目录校验后 push 上去
-/openbkn-core 有哪些 Agent；跟 Agent xxx 流式对话问"今天库存情况"
-/openbkn-core 诊断会话 conv-123 的 trace，带 LLM 判定
-/openbkn-core 在 skill market 里找名字含 kweaver 的 skill 并安装到 ./out
-/openbkn-core 把 ./openapi.json 上传到 toolbox 1234567890
-/openbkn-core 列出组织结构；给用户 u-1 重置密码
+/openbkn 列出所有知识网络
+/openbkn 搜索知识网络 xxx 中关于"供应链"的内容
+/openbkn 从 Vega catalog vcat-1 建一个名为 customers 的知识网络并构建索引
+/openbkn 把本地 ./my-bkn 目录校验后 push 上去
+/openbkn 有哪些 Agent；跟 Agent xxx 流式对话问"今天库存情况"
+/openbkn 诊断会话 conv-123 的 trace，带 LLM 判定
+/openbkn 在 skill market 里找名字含 kweaver 的 skill 并安装到 ./out
+/openbkn 把 ./openapi.json 上传到 toolbox 1234567890
+/openbkn 列出组织结构；给用户 u-1 重置密码
 ```
 
 ## 注意事项
