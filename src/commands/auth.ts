@@ -1,4 +1,5 @@
 /** `openbkn auth …` — login / session / token (store-backed). */
+import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import { changePassword } from "../api/admin.js";
 import { browserLogin, passwordLogin } from "../auth/oauth.js";
@@ -8,28 +9,46 @@ import * as auth from "../resources/auth.js";
 import { printJson } from "../utils/output.js";
 import { outputOptions } from "./_shared.js";
 
-export function authCommand(): Command {
-  const cmd = new Command("auth").description("Login, session, and token management");
-
+/** Register the auth leaves onto a parent (shared by top-level `auth` + `admin auth`). */
+export function registerAuthLeaves(cmd: Command): void {
   cmd
     .command("login <url>")
     .description("Log in to a platform (attach a token, or browser/password OAuth)")
     .option("-u, --username <name>", "username for password signin")
     .option("-p, --password <pwd>", "password for password signin")
+    .option("--token <token>", "provide a token directly (CI / headless)")
     .option("--client-id <id>", "use a fixed OAuth2 client id (skip dynamic registration)")
+    .option("--client-secret <secret>", "OAuth2 client secret (omit for public/PKCE)")
+    .option("--port <n>", "local callback port", (v) => Number.parseInt(v, 10))
+    .option(
+      "--signin-public-key-file <path>",
+      "override the RSA public key (PEM) for password signin",
+    )
+    .option("--product <name>", "OAuth product query (default 'adp')")
     .option("--no-browser", "headless: print the authorize URL instead of opening a browser")
     .action(async (url: string, opts, cmd: Command) => {
-      // --token and --insecure are global flags; read them via merged globals.
       const g = cmd.optsWithGlobals();
       if (g.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-      if (g.token) {
-        const r = auth.attachToken(url, g.token, { insecure: g.insecure });
+      const token = opts.token ?? g.token;
+      if (token) {
+        const r = auth.attachToken(url, token, { insecure: g.insecure });
         printJson({ loggedIn: true, ...r }, outputOptions(cmd));
         return;
       }
+      const signinKey = opts.signinPublicKeyFile
+        ? readFileSync(opts.signinPublicKeyFile, "utf8")
+        : undefined;
       const tokens = opts.username
-        ? await passwordLogin(url, opts.username, opts.password ?? "", { clientId: opts.clientId })
-        : await browserLogin(url, { clientId: opts.clientId, noBrowser: opts.browser === false });
+        ? await passwordLogin(url, opts.username, opts.password ?? "", {
+            clientId: opts.clientId,
+            port: opts.port,
+            signinPublicKeyPem: signinKey,
+          })
+        : await browserLogin(url, {
+            clientId: opts.clientId,
+            port: opts.port,
+            noBrowser: opts.browser === false,
+          });
       const r = auth.attachToken(url, tokens.accessToken, {
         refreshToken: tokens.refreshToken,
         idToken: tokens.idToken,
@@ -51,9 +70,12 @@ export function authCommand(): Command {
     });
 
   cmd
-    .command("whoami")
+    .command("whoami [url]")
     .description("Show current user identity (from the token)")
-    .action((_opts, cmd: Command) => printJson(auth.whoami(), outputOptions(cmd)));
+    .option("--no-lookup", "skip the backend identity fallback (eacp/user/get)")
+    .action((_url: string | undefined, _opts, cmd: Command) =>
+      printJson(auth.whoami(), outputOptions(cmd)),
+    );
 
   cmd
     .command("list")
@@ -103,12 +125,13 @@ export function authCommand(): Command {
     });
 
   cmd
-    .command("change-password")
+    .command("change-password [url]")
     .description("Change your account password (EACP, RSA-encrypted in transit)")
     .requiredOption("-a, --account <name>", "account / login name")
-    .requiredOption("--old <pwd>", "current password")
-    .requiredOption("--new <pwd>", "new password")
-    .action(async (opts, cmd: Command) => {
+    .requiredOption("--old-password <pwd>", "current password")
+    .requiredOption("--new-password <pwd>", "new password")
+    .option("--public-key-file <path>", "override the RSA public key (PEM) for password encryption")
+    .action(async (_url: string | undefined, opts, cmd: Command) => {
       const g = cmd.optsWithGlobals();
       const ctx = resolveContext({
         baseUrl: g.baseUrl,
@@ -117,8 +140,15 @@ export function authCommand(): Command {
         businessDomain: g.bizDomain,
         insecure: g.insecure,
       });
-      printJson(await changePassword(ctx, opts.account, opts.old, opts.new), outputOptions(cmd));
+      printJson(
+        await changePassword(ctx, opts.account, opts.oldPassword, opts.newPassword),
+        outputOptions(cmd),
+      );
     });
+}
 
+export function authCommand(): Command {
+  const cmd = new Command("auth").description("Login, session, and token management");
+  registerAuthLeaves(cmd);
   return group(cmd, "AUTHENTICATION & CONFIG");
 }

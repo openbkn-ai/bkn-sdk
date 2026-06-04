@@ -13,41 +13,17 @@ import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { renderOrgTree } from "../utils/org-tree.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, outputOptions, readBody } from "./_shared.js";
+import { registerAuthLeaves } from "./auth.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
-
-function notImplemented(path: string): () => never {
-  return () => {
-    throw new Error(`\`openbkn admin ${path}\` is not implemented yet.`);
-  };
-}
-
-/** Attach stub leaves to a command. */
-function stubs(cmd: Command, groupName: string, names: string[]): void {
-  for (const s of names) {
-    cmd
-      .command(s)
-      .description(`${s} (pending)`)
-      .allowUnknownOption()
-      .action(notImplemented(`${groupName} ${s}`));
-  }
-}
 
 export function adminCommand(): Command {
   const admin = new Command("admin").description(
     "Operator CLI (kweaver-admin): org, user, role, models, audit",
   );
 
-  // auth (operator login) — stubbed; reuse top-level `openbkn auth` for now.
-  stubs(admin.command("auth").description("Operator authentication"), "auth", [
-    "login",
-    "logout",
-    "status",
-    "whoami",
-    "list",
-    "change-password",
-    "token",
-  ]);
+  // Operator auth = the same leaves as top-level `openbkn auth` (1:1 nest).
+  registerAuthLeaves(admin.command("auth").description("Operator authentication"));
 
   const org = admin.command("org").description("Departments and org structure");
   org
@@ -56,56 +32,68 @@ export function adminCommand(): Command {
     .option("--role <r>", "role qualifier", "super_admin")
     .option("--name <s>", "filter by name")
     .option("--limit <n>", "page size", int, 100)
+    .option("--offset <n>", "page offset", int, 0)
     .action(async (opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).admin.orgList({
           role: opts.role,
           name: opts.name,
           limit: opts.limit,
+          offset: opts.offset,
         }),
         outputOptions(cmd),
       );
     });
   org
-    .command("get <dept>")
+    .command("get <id>")
     .description("Get one department")
-    .action(async (deptId: string, _opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).admin.orgGet(deptId), outputOptions(cmd));
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).admin.orgGet(id), outputOptions(cmd));
     });
   org
-    .command("members <dept>")
+    .command("members <id>")
     .description("List members of a department")
     .option("--role <r>", "role qualifier", "super_admin")
+    .option("--fields <s>", "fields segment", "users")
     .option("--limit <n>", "page size", int, 100)
-    .action(async (deptId: string, opts, cmd: Command) => {
+    .option("--offset <n>", "page offset", int, 0)
+    .action(async (id: string, opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).admin.orgMembers(deptId, { role: opts.role, limit: opts.limit }),
+        await clientFrom(cmd).admin.orgMembers(id, {
+          role: opts.role,
+          limit: opts.limit,
+          offset: opts.offset,
+        }),
         outputOptions(cmd),
       );
     });
   org
-    .command("create <name>")
+    .command("create")
     .description("Create a department")
+    .requiredOption("--name <s>", "department name")
     .option("--parent <id>", "parent department id", "-1")
     .option("--code <s>", "department code")
     .option("--remark <s>", "remark")
     .option("--email <s>", "email")
     .option("--manager <id>", "manager user id")
-    .action(async (name: string, opts, cmd: Command) => {
+    .option("--status <n>", "status (1=enabled)", int)
+    .option("--oss-id <id>", "object-storage site id")
+    .action(async (opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).admin.orgCreate({
-          name,
+          name: opts.name,
           parentId: opts.parent,
           code: opts.code,
           remark: opts.remark,
           email: opts.email,
           managerID: opts.manager,
+          status: opts.status,
         }),
         outputOptions(cmd),
       );
     });
   org
-    .command("update <dept>")
+    .command("update <id>")
     .description("Update a department (only provided fields change)")
     .option("--name <s>", "new name")
     .option("--code <s>", "department code")
@@ -113,9 +101,10 @@ export function adminCommand(): Command {
     .option("--email <s>", "email")
     .option("--manager <id>", "manager user id")
     .option("--status <n>", "status (1=enabled)", int)
-    .action(async (deptId: string, opts, cmd: Command) => {
+    .option("--oss-id <id>", "object-storage site id")
+    .action(async (id: string, opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).admin.orgUpdate(deptId, {
+        await clientFrom(cmd).admin.orgUpdate(id, {
           name: opts.name,
           code: opts.code,
           remark: opts.remark,
@@ -127,10 +116,10 @@ export function adminCommand(): Command {
       );
     });
   org
-    .command("delete <dept>")
+    .command("delete <id>")
     .description("Delete a department")
-    .action(async (deptId: string, _opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).admin.orgDelete(deptId), outputOptions(cmd));
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).admin.orgDelete(id), outputOptions(cmd));
     });
   org
     .command("tree")
@@ -150,12 +139,14 @@ export function adminCommand(): Command {
     .option("--org <id>", "filter by department id")
     .option("--keyword <s>", "filter by name")
     .option("--limit <n>", "page size", int, 100)
+    .option("--offset <n>", "page offset", int, 0)
     .action(async (opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).admin.userList({
           orgId: opts.org,
           name: opts.keyword,
           limit: opts.limit,
+          offset: opts.offset,
         }),
         outputOptions(cmd),
       );
@@ -179,10 +170,10 @@ export function adminCommand(): Command {
       );
     });
   user
-    .command("get <user>")
+    .command("get <id>")
     .description("Get one user")
-    .action(async (userId: string, _opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).admin.userGet(userId), outputOptions(cmd));
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).admin.userGet(id), outputOptions(cmd));
     });
   user
     .command("roles <user>")
@@ -191,32 +182,37 @@ export function adminCommand(): Command {
       printJson(await clientFrom(cmd).admin.userRoles(userId), outputOptions(cmd));
     });
   user
-    .command("create <login-name>")
+    .command("create")
     .description("Create a user (gets the platform default password)")
+    .requiredOption("--login <name>", "login name")
     .option("--display-name <s>", "display name (defaults to login name)")
     .option("--email <s>", "email")
-    .option("--org <id>", "department id", "-1")
+    .option("--department <id>", "department id", "-1")
     .option("--code <s>", "user code")
     .option("--position <s>", "position")
     .option("--remark <s>", "remark")
     .option("--tel <s>", "telephone")
-    .action(async (loginName: string, opts, cmd: Command) => {
+    .option("--priority <n>", "priority", int)
+    .option("--csf-level <n>", "confidentiality level", int)
+    .action(async (opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).admin.userCreate({
-          loginName,
+          loginName: opts.login,
           displayName: opts.displayName,
           email: opts.email,
-          departmentIds: opts.org ? [opts.org] : undefined,
+          departmentIds: opts.department ? [opts.department] : undefined,
           code: opts.code,
           position: opts.position,
           remark: opts.remark,
           telNumber: opts.tel,
+          priority: opts.priority,
+          csfLevel: opts.csfLevel,
         }),
         outputOptions(cmd),
       );
     });
   user
-    .command("update <user>")
+    .command("update <id>")
     .description("Update a user (only provided fields change)")
     .option("--display-name <s>", "display name")
     .option("--email <s>", "email")
@@ -225,9 +221,14 @@ export function adminCommand(): Command {
     .option("--remark <s>", "remark")
     .option("--tel <s>", "telephone")
     .option("--manager <id>", "manager user id")
-    .action(async (userId: string, opts, cmd: Command) => {
+    .option("--idcard <s>", "id-card number")
+    .option("--priority <n>", "priority", int)
+    .option("--csf-level <n>", "confidentiality level", int)
+    .option("--csf-level2 <n>", "secondary confidentiality level", int)
+    .option("--expire-time <n>", "account expiry (epoch, -1 = never)", int)
+    .action(async (id: string, opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).admin.userUpdate(userId, {
+        await clientFrom(cmd).admin.userUpdate(id, {
           displayName: opts.displayName,
           email: opts.email,
           code: opts.code,
@@ -235,25 +236,33 @@ export function adminCommand(): Command {
           remark: opts.remark,
           telNumber: opts.tel,
           managerID: opts.manager,
+          priority: opts.priority,
+          csfLevel: opts.csfLevel,
         }),
         outputOptions(cmd),
       );
     });
   user
-    .command("delete <user>")
+    .command("delete <id>")
     .description("Delete a user")
-    .action(async (userId: string, _opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).admin.userDelete(userId), outputOptions(cmd));
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).admin.userDelete(id), outputOptions(cmd));
     });
   user
-    .command("reset-password <user>")
+    .command("reset-password [id]")
     .description("Reset a user's password (RSA-encrypted in transit)")
-    .requiredOption("--password <s>", "the new password")
-    .action(async (userId: string, opts, cmd: Command) => {
-      printJson(
-        await clientFrom(cmd).admin.userResetPassword(userId, opts.password),
-        outputOptions(cmd),
-      );
+    .option("--id <userId>", "explicit user UUID (alt to the positional id)")
+    .option("--user <account>", "resolve the user by account / login name")
+    .option("--password <s>", "the new password")
+    .option("--new-password <s>", "the new password (alias of --password)")
+    .option("--prompt-password", "prompt for the new password interactively")
+    .option("-y, --yes", "skip confirmation")
+    .action(async (id: string | undefined, opts, cmd: Command) => {
+      const userId = id ?? opts.id ?? opts.user;
+      const pwd = opts.password ?? opts.newPassword;
+      if (!userId) throw new Error("Provide a user id (positional or --id).");
+      if (!pwd) throw new Error("Provide --password / --new-password.");
+      printJson(await clientFrom(cmd).admin.userResetPassword(userId, pwd), outputOptions(cmd));
     });
 
   const role = admin.command("role").description("Role management");
@@ -262,6 +271,8 @@ export function adminCommand(): Command {
     .description("List roles")
     .option("--keyword <s>", "filter by keyword")
     .option("--limit <n>", "page size", int, 100)
+    .option("--offset <n>", "page offset", int, 0)
+    .option("--source <s>", "role source filter (business | user)")
     .action(async (opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).admin.roleList({ keyword: opts.keyword, limit: opts.limit }),
@@ -271,6 +282,7 @@ export function adminCommand(): Command {
   role
     .command("get <role>")
     .description("Get a role by id")
+    .option("--view <mode>", "detail view mode")
     .action(async (roleId: string, _opts, cmd: Command) => {
       printJson(await clientFrom(cmd).admin.roleGet(roleId), outputOptions(cmd));
     });
@@ -278,7 +290,10 @@ export function adminCommand(): Command {
     .command("members <role>")
     .description("List members of a role")
     .option("--keyword <s>", "filter by keyword")
+    .option("--type <t>", "filter by member type (user|department|group|app)")
+    .option("--member <spec...>", "filter to specific member(s) '<type>:<id-or-name>'")
     .option("--limit <n>", "page size", int, 100)
+    .option("--offset <n>", "page offset", int, 0)
     .action(async (roleId: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).admin.roleMembers(roleId, {
@@ -290,8 +305,9 @@ export function adminCommand(): Command {
     });
   role
     .command("add-member <role> <id>")
-    .description("Add a member to a role (--type user|department|group|app)")
+    .description("Add a member to a role")
     .option("--type <t>", "member type", "user")
+    .option("--member <spec...>", "member(s) as '<type>:<id-or-name>' (alt to <id>)")
     .action(async (roleId: string, id: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).admin.addRoleMember(roleId, id, opts.type),
@@ -300,8 +316,9 @@ export function adminCommand(): Command {
     });
   role
     .command("remove-member <role> <id>")
-    .description("Remove a member from a role (--type user|department|group|app)")
+    .description("Remove a member from a role")
     .option("--type <t>", "member type", "user")
+    .option("--member <spec...>", "member(s) as '<type>:<id-or-name>' (alt to <id>)")
     .action(async (roleId: string, id: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).admin.removeRoleMember(roleId, id, opts.type),
@@ -309,50 +326,119 @@ export function adminCommand(): Command {
       );
     });
 
-  // Models management reuses the (validated) mf-model-manager client.
+  // Models management reuses the (validated) mf-model-manager client. Granular
+  // flags assemble the request body; `--body`/`--body-file` override wins.
+  const modelBody = (opts: Record<string, unknown>): unknown => {
+    if (opts.body || opts.bodyFile) return readBody(opts as { body?: string; bodyFile?: string });
+    const mc: Record<string, unknown> = {};
+    if (opts.apiModel) mc.api_model = opts.apiModel;
+    if (opts.apiUrl) mc.api_url = opts.apiUrl;
+    if (opts.apiBase) mc.api_url = opts.apiBase;
+    if (opts.apiKey) mc.api_key = opts.apiKey;
+    const body: Record<string, unknown> = {};
+    if (opts.name) body.model_name = opts.name;
+    if (opts.series) body.model_series = opts.series;
+    if (opts.type) body.model_type = opts.type;
+    if (opts.icon) body.icon = opts.icon;
+    if (opts.embeddingDim !== undefined) body.model_dimensions = opts.embeddingDim;
+    if (opts.maxTokens !== undefined) body.max_model_len = opts.maxTokens;
+    if (opts.batchSize !== undefined) body.batch_size = opts.batchSize;
+    if (Object.keys(mc).length > 0) body.model_config = mc;
+    return body;
+  };
   for (const kind of ["llm", "small-model"] as const) {
+    const isLlm = kind === "llm";
     const m = admin.command(kind).description(`${kind} management`);
-    const ns = kind === "llm" ? "llm" : "small";
-    m.command("list")
+    const ns = isLlm ? "llm" : "small";
+
+    const list = m
+      .command("list")
       .description(`List ${kind} models`)
       .option("--name <s>", "filter by name")
-      .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
-      .action(async (opts, cmd: Command) => {
-        printJson(
-          await clientFrom(cmd).models[ns].list({ name: opts.name, limit: opts.limit }),
-          outputOptions(cmd),
-        );
-      });
-    m.command("get <modelId>")
+      .option("--page <n>", "page", int, 1)
+      .option("--size <n>", "page size", int, DEFAULT_LIST_LIMIT);
+    (isLlm
+      ? list.option("--series <s>", "model series")
+      : list.option("--type <t>", "model type")
+    ).action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).models[ns].list({
+          name: opts.name,
+          page: opts.page,
+          limit: opts.size,
+          modelType: opts.type,
+        }),
+        outputOptions(cmd),
+      );
+    });
+
+    m.command("get <modelid>")
       .description(`Get a ${kind} model`)
       .action(async (id: string, _opts, cmd: Command) => {
         printJson(await clientFrom(cmd).models[ns].get(id), outputOptions(cmd));
       });
-    m.command("add")
-      .description(`Register a ${kind} model (--body / --body-file)`)
-      .option("--body <json>", "model config JSON")
-      .option("--body-file <path>", "read config JSON from a file")
-      .action(async (opts, cmd: Command) => {
-        printJson(await clientFrom(cmd).models[ns].add(readBody(opts)), outputOptions(cmd));
-      });
-    m.command("edit")
-      .description(`Edit a ${kind} model (--body / --body-file)`)
-      .option("--body <json>", "model config JSON")
-      .option("--body-file <path>", "read config JSON from a file")
-      .action(async (opts, cmd: Command) => {
-        printJson(await clientFrom(cmd).models[ns].edit(readBody(opts)), outputOptions(cmd));
-      });
-    m.command("delete <modelIds...>")
+
+    const add = m
+      .command("add")
+      .description(`Register a ${kind} model (granular flags or --body/--body-file)`)
+      .option("--name <s>", "model name")
+      .option("--api-model <s>", "upstream API model id")
+      .option("--api-key <s>", "upstream API key")
+      .option("--body <json>", "model config JSON (overrides flags)")
+      .option("--body-file <path>", "read config JSON from a file");
+    if (isLlm) {
+      add
+        .option("--series <s>", "model series")
+        .option("--api-base <url>", "upstream API base URL")
+        .option("--icon <url>", "icon URL");
+    } else {
+      add
+        .option("--type <t>", "small-model type (embedding|reranker)")
+        .option("--api-url <url>", "upstream API URL")
+        .option("--embedding-dim <n>", "embedding dimensions", int)
+        .option("--max-tokens <n>", "max tokens", int)
+        .option("--batch-size <n>", "batch size", int);
+    }
+    add.action(async (opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).models[ns].add(modelBody(opts)), outputOptions(cmd));
+    });
+
+    const edit = m
+      .command("edit <modelid>")
+      .description(`Edit a ${kind} model (granular flags or --body/--body-file)`)
+      .option("--name <s>", "model name")
+      .option("--body <json>", "model config JSON (overrides flags)")
+      .option("--body-file <path>", "read config JSON from a file");
+    if (isLlm) {
+      edit.option("--icon <url>", "icon URL");
+    } else {
+      edit
+        .option("--api-model <s>", "upstream API model id")
+        .option("--api-url <url>", "upstream API URL");
+    }
+    edit.action(async (id: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).models[ns].edit({ model_id: id, ...(modelBody(opts) as object) }),
+        outputOptions(cmd),
+      );
+    });
+
+    m.command("delete <modelid...>")
       .description(`Delete ${kind} model(s)`)
       .action(async (ids: string[], _opts, cmd: Command) => {
         printJson(await clientFrom(cmd).models[ns].delete(ids), outputOptions(cmd));
       });
-    m.command("test")
-      .description(`Test a ${kind} model (--body / --body-file)`)
-      .option("--body <json>", "model config JSON")
-      .option("--body-file <path>", "read config JSON from a file")
-      .action(async (opts, cmd: Command) => {
-        printJson(await clientFrom(cmd).models[ns].test(readBody(opts)), outputOptions(cmd));
+
+    m.command("test <modelid>")
+      .description(`Test a ${kind} model`)
+      .option("--body <json>", "test request JSON")
+      .option("--body-file <path>", "read test request JSON from a file")
+      .action(async (id: string, opts, cmd: Command) => {
+        const body = opts.body || opts.bodyFile ? (readBody(opts) as object) : {};
+        printJson(
+          await clientFrom(cmd).models[ns].test({ model_id: id, ...body }),
+          outputOptions(cmd),
+        );
       });
   }
 

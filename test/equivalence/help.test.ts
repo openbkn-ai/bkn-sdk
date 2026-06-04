@@ -76,13 +76,35 @@ function normalize(text: string): string {
   );
 }
 
+/**
+ * Capability tokens for equivalence: the `--flags` a command accepts plus the
+ * positional argument names from its `Usage:` line (`<arg>` / `[arg]`). Both
+ * legacy and `openbkn` are commander, so this is symmetric and free of the
+ * wrapped-description prose noise a "first indented word" heuristic picks up.
+ */
 function capabilityTokens(text: string): Set<string> {
   const out = new Set<string>();
   const n = normalize(text);
   for (const m of n.matchAll(/--[a-z][a-z0-9-]+/g)) out.add(m[0]);
-  for (const line of n.split("\n")) {
-    const m = line.match(/^\s{2,}([a-z][a-z0-9-]{1,})\b/);
-    if (m?.[1]) out.add(m[1]);
+  // Find the usage line in both formats: legacy commander (`usage: <cli> …`) and
+  // openbkn's grouped help (`usage` header on its own line, invocation next).
+  const lines = n.split("\n");
+  let usage = "";
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] as string;
+    if (/usage:/i.test(line)) {
+      usage = line;
+      break;
+    }
+    if (/^\s*usage\s*$/i.test(line)) {
+      usage = lines[i + 1] ?? "";
+      break;
+    }
+  }
+  // `<cli>` is normalize()'s placeholder for the binary name — not a real arg.
+  const skip = new Set(["options", "command", "cli"]);
+  for (const m of usage.matchAll(/[<[]([a-z][a-z0-9-]*)(?:\.\.\.)?[>\]]/g)) {
+    if (m[1] && !skip.has(m[1])) out.add(m[1]);
   }
   return out;
 }
