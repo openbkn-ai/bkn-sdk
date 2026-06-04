@@ -442,6 +442,26 @@ export function listAuditLogs(ctx: RequestContext, opts: AuditListOptions = {}):
   });
 }
 
+/**
+ * Self-service password change via EACP (`POST /api/eacp/v1/auth1/modifypassword`).
+ * Both passwords are RSA-PKCS1 encrypted + base64 (same key as reset-password).
+ */
+export function changePassword(
+  ctx: RequestContext,
+  account: string,
+  oldPassword: string,
+  newPassword: string,
+): Promise<unknown> {
+  return request(ctx, `${EACP}/auth1/modifypassword`, {
+    method: "POST",
+    body: {
+      account,
+      oldpwd: encryptModifyPwd(oldPassword),
+      newpwd: encryptModifyPwd(newPassword),
+    },
+  });
+}
+
 export type MemberType = "user" | "department" | "group" | "app";
 
 export function listRoleMembers(

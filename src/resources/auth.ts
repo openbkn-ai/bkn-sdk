@@ -1,10 +1,11 @@
 /**
  * Auth resource — credential store + identity (multi-user, store-backed).
- * Interactive browser/password OAuth is staged (no deployed env yet) and lives
- * in `auth/oauth.ts`.
+ * Interactive browser/password OAuth lives in `auth/oauth.ts` and is persisted
+ * here via `attachToken`.
  */
 import { type JwtClaims, decodeJwt, isExpired } from "../auth/jwt.js";
 import {
+  type PlatformUser,
   type TokenConfig,
   activePlatform,
   activeUserId,
@@ -12,6 +13,7 @@ import {
   listPlatforms as listStored,
   readToken,
   setActivePlatform,
+  setActiveUser,
   userIdFromToken,
   writeToken,
 } from "../config/store.js";
@@ -86,8 +88,15 @@ export function currentToken(): string {
 }
 
 export function whoami(): JwtClaims {
-  const claims = decodeJwt(currentToken());
-  if (!claims) throw new InputError("Active token is not a decodable JWT.");
+  const baseUrl = activePlatform();
+  const token = baseUrl ? readToken(baseUrl) : undefined;
+  // The access token may be Ory-opaque; the id_token carries the JWT identity.
+  const claims = decodeJwt(token?.idToken ?? "") ?? decodeJwt(token?.accessToken ?? "");
+  if (!claims) {
+    throw new InputError(
+      "No decodable identity (token is opaque and no id_token saved). Use `auth status`.",
+    );
+  }
   return claims;
 }
 
@@ -127,6 +136,42 @@ export function logout(): boolean {
 
 export function deletePlatform(baseUrl: string, userId?: string): boolean {
   return deleteToken(normalize(baseUrl), userId);
+}
+
+/** Switch the active user for a platform (token must already be saved). */
+export function switchUser(baseUrl: string, userId: string): { baseUrl: string; userId: string } {
+  const url = normalize(baseUrl);
+  if (!readToken(url, userId)) {
+    throw new InputError(`No saved token for user '${userId}' on ${url}.`);
+  }
+  setActiveUser(url, userId);
+  setActivePlatform(url);
+  return { baseUrl: url, userId };
+}
+
+/** List saved user profiles for one platform. */
+export function usersOf(baseUrl: string): PlatformUser[] {
+  const url = normalize(baseUrl);
+  return listStored().find((p) => p.baseUrl === url)?.users ?? [];
+}
+
+/** Export the active session's tokens (for seeding a headless host). */
+export function exportCreds(): {
+  baseUrl: string;
+  accessToken: string;
+  refreshToken?: string;
+  idToken?: string;
+} {
+  const baseUrl = activePlatform();
+  if (!baseUrl) throw new InputError("No active platform. Run `openbkn auth login` first.");
+  const token = readToken(baseUrl);
+  if (!token) throw new InputError(`No saved token for ${baseUrl}.`);
+  return {
+    baseUrl,
+    accessToken: token.accessToken,
+    refreshToken: token.refreshToken,
+    idToken: token.idToken,
+  };
 }
 
 export { userIdFromToken };

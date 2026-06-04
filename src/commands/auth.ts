@@ -1,6 +1,8 @@
 /** `openbkn auth …` — login / session / token (store-backed). */
 import { Command } from "commander";
+import { changePassword } from "../api/admin.js";
 import { browserLogin, passwordLogin } from "../auth/oauth.js";
+import { resolveContext } from "../config/resolve.js";
 import { group } from "../help/grouped-help.js";
 import * as auth from "../resources/auth.js";
 import { printJson } from "../utils/output.js";
@@ -14,17 +16,26 @@ export function authCommand(): Command {
     .description("Log in to a platform (attach a token, or browser/password OAuth)")
     .option("-u, --username <name>", "username for password signin")
     .option("-p, --password <pwd>", "password for password signin")
-    .option("--no-browser", "headless: do not open a browser")
-    .action((url: string, opts, cmd: Command) => {
+    .option("--client-id <id>", "use a fixed OAuth2 client id (skip dynamic registration)")
+    .option("--no-browser", "headless: print the authorize URL instead of opening a browser")
+    .action(async (url: string, opts, cmd: Command) => {
       // --token and --insecure are global flags; read them via merged globals.
       const g = cmd.optsWithGlobals();
+      if (g.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
       if (g.token) {
         const r = auth.attachToken(url, g.token, { insecure: g.insecure });
         printJson({ loggedIn: true, ...r }, outputOptions(cmd));
         return;
       }
-      if (opts.username) passwordLogin(url, opts.username, opts.password ?? "");
-      browserLogin(url);
+      const tokens = opts.username
+        ? await passwordLogin(url, opts.username, opts.password ?? "", { clientId: opts.clientId })
+        : await browserLogin(url, { clientId: opts.clientId, noBrowser: opts.browser === false });
+      const r = auth.attachToken(url, tokens.accessToken, {
+        refreshToken: tokens.refreshToken,
+        idToken: tokens.idToken,
+        insecure: g.insecure,
+      });
+      printJson({ loggedIn: true, ...r }, outputOptions(cmd));
     });
 
   cmd
@@ -70,21 +81,44 @@ export function authCommand(): Command {
       printJson({ deleted: auth.deletePlatform(url) }, outputOptions(cmd)),
     );
 
-  // Staged: need backend/OAuth contracts before these are real (see oauth.ts).
-  for (const [name, desc] of [
-    ["switch", "Switch the active user for a platform"],
-    ["users", "List user profiles for a platform"],
-    ["change-password", "Change account password"],
-    ["export", "Export credentials for a headless host"],
-  ] as const) {
-    cmd
-      .command(name)
-      .description(`${desc} (pending)`)
-      .allowUnknownOption()
-      .action(() => {
-        throw new Error(`\`openbkn auth ${name}\` is not implemented yet.`);
+  cmd
+    .command("switch <url> <user-id>")
+    .description("Switch the active user for a platform")
+    .action((url: string, userId: string, _opts, cmd: Command) => {
+      printJson(auth.switchUser(url, userId), outputOptions(cmd));
+    });
+
+  cmd
+    .command("users <url>")
+    .description("List saved user profiles for a platform")
+    .action((url: string, _opts, cmd: Command) => {
+      printJson(auth.usersOf(url), outputOptions(cmd));
+    });
+
+  cmd
+    .command("export")
+    .description("Export the active session's tokens (for a headless host)")
+    .action((_opts, cmd: Command) => {
+      printJson(auth.exportCreds(), outputOptions(cmd));
+    });
+
+  cmd
+    .command("change-password")
+    .description("Change your account password (EACP, RSA-encrypted in transit)")
+    .requiredOption("-a, --account <name>", "account / login name")
+    .requiredOption("--old <pwd>", "current password")
+    .requiredOption("--new <pwd>", "new password")
+    .action(async (opts, cmd: Command) => {
+      const g = cmd.optsWithGlobals();
+      const ctx = resolveContext({
+        baseUrl: g.baseUrl,
+        token: g.token,
+        user: g.user,
+        businessDomain: g.bizDomain,
+        insecure: g.insecure,
       });
-  }
+      printJson(await changePassword(ctx, opts.account, opts.old, opts.new), outputOptions(cmd));
+    });
 
   return group(cmd, "AUTHENTICATION & CONFIG");
 }
