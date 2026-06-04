@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
+import { validateBknDirectory } from "../utils/bkn-validate.js";
 import { printJson } from "../utils/output.js";
 import { parsePkMap } from "../utils/pk-detection.js";
 import { clientFrom, csv, outputOptions, readBody } from "./_shared.js";
@@ -534,8 +535,17 @@ export function bknCommand(): Command {
       );
     });
 
+  bkn
+    .command("validate <directory>")
+    .description("Validate a local BKN directory's structure (offline)")
+    .action(async (dir: string, _opts, cmd: Command) => {
+      const result = validateBknDirectory(dir);
+      printJson(result, outputOptions(cmd));
+      if (!result.valid) process.exitCode = 1;
+    });
+
   // Remaining subcommands kept in the tree as stubs (filled in incrementally).
-  for (const name of ["create-from-csv", "validate"]) {
+  for (const name of ["create-from-csv"]) {
     bkn
       .command(name)
       .description(`${name} (pending)`)
