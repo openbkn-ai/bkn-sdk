@@ -1,4 +1,5 @@
-/** `openbkn trace …` — trace data (search/get) + symbolic diagnose. */
+/** `openbkn trace …` — trace data (search/get) + diagnose + eval-set. */
+import { readFileSync, writeFileSync } from "node:fs";
 import { Command } from "commander";
 import { group } from "../help/grouped-help.js";
 import { renderReportMarkdown } from "../trace-ai/diagnose.js";
@@ -51,15 +52,44 @@ export function traceCommand(): Command {
       else console.log(renderReportMarkdown(report));
     });
 
-  // eval-set / schema are the LLM-as-judge pillar (eval-set builder/runner +
-  // rubric judging via a local agent provider) — a separate large slice.
-  for (const name of ["eval-set", "schema"]) {
-    cmd
-      .command(name)
-      .description(`${name} (pending)`)
-      .allowUnknownOption()
-      .action(notImplemented(name));
-  }
+  const evalSet = cmd.command("eval-set").description("Build + run trace eval sets");
+  evalSet
+    .command("build <queries-file>")
+    .description("Build eval cases from a queries JSON file")
+    .option("--out <file>", "write the cases JSON here (default: stdout)")
+    .action(async (queriesFile: string, opts, cmd: Command) => {
+      const raw = JSON.parse(readFileSync(queriesFile, "utf8"));
+      const cases = clientFrom(cmd).trace.evalSetBuild(raw);
+      if (opts.out) {
+        writeFileSync(opts.out, JSON.stringify({ cases }, null, 2));
+        printJson({ out: opts.out, cases: cases.length }, outputOptions(cmd));
+      } else {
+        printJson({ cases }, outputOptions(cmd));
+      }
+    });
+  evalSet
+    .command("test <cases-file>")
+    .description("Run an eval set against an agent (--llm enables semantic_match)")
+    .requiredOption("--agent <id>", "agent id to run the queries against")
+    .option("--version <v>", "agent version", "v0")
+    .option("--llm", "enable semantic_match assertions via the local `claude` CLI")
+    .action(async (casesFile: string, opts, cmd: Command) => {
+      const raw = JSON.parse(readFileSync(casesFile, "utf8"));
+      const cases = clientFrom(cmd).trace.evalSetBuild(raw);
+      const result = await clientFrom(cmd).trace.evalSetTest(opts.agent, cases, {
+        version: opts.version,
+        llm: Boolean(opts.llm),
+      });
+      printJson(result, outputOptions(cmd));
+      if (result.failed > 0) process.exitCode = 1;
+    });
+
+  // schema validate (rule / eval-case YAML zod check) — still pending.
+  cmd
+    .command("schema")
+    .description("schema (pending)")
+    .allowUnknownOption()
+    .action(notImplemented("schema"));
 
   return group(cmd, "TRACE AI");
 }
