@@ -27,7 +27,8 @@ describe("bkn validate", () => {
       "network.bkn": "---\ntype: knowledge_network\nid: kn1\nname: KN One\n---\n",
       "object_types/a.bkn": ot("a", "Alpha"),
       "object_types/b.bkn": ot("b", "Beta"),
-      "relation_types/r.bkn": `---\ntype: relation_type\nid: r\nname: R\n---\n\n### Endpoint\n\n| Source | Target | Type |\n|--|--|--|\n| a | b | direct |\n`,
+      "relation_types/r.bkn":
+        "---\ntype: relation_type\nid: r\nname: R\n---\n\n### Endpoint\n\n| Source | Target | Type |\n|--|--|--|\n| a | b | direct |\n",
     });
     const r = validateBknDirectory(dir);
     expect(r.valid).toBe(true);
@@ -58,7 +59,8 @@ describe("bkn validate", () => {
     const dir = bkn({
       "network.bkn": "---\ntype: knowledge_network\nid: k\nname: K\n---\n",
       "object_types/a.bkn": ot("a", "A"),
-      "relation_types/r.bkn": `---\ntype: relation_type\nid: r\nname: R\n---\n\n### Endpoint\n\n| Source | Target | Type |\n|--|--|--|\n| a | ghost | direct |\n`,
+      "relation_types/r.bkn":
+        "---\ntype: relation_type\nid: r\nname: R\n---\n\n### Endpoint\n\n| Source | Target | Type |\n|--|--|--|\n| a | ghost | direct |\n",
     });
     const r = validateBknDirectory(dir);
     expect(r.valid).toBe(true); // unknown endpoint is a warning, not an error

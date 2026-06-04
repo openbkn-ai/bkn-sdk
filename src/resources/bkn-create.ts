@@ -1,3 +1,4 @@
+import { executeDataflow } from "../api/dataflow.js";
 /**
  * `bkn create-from-catalog` orchestration. Build a knowledge network from a
  * Vega catalog's tables:
@@ -23,8 +24,16 @@ import {
   listResources,
   queryResource,
 } from "../api/resources.js";
-import { createBuildTask, discoverCatalog } from "../api/vega.js";
+import { createBuildTask, discoverCatalog, getCatalog } from "../api/vega.js";
 import type { RequestContext } from "../types.js";
+import {
+  buildFieldMappings,
+  buildImportDag,
+  buildTableName,
+  parseCsvFile,
+  resolveFiles,
+  splitBatches,
+} from "../utils/csv-import.js";
 import {
   type TableColumn,
   type TableInfo,
@@ -40,6 +49,8 @@ export interface CreateFromCatalogOptions {
   pkMap?: Record<string, string>;
   build?: boolean;
   noRollback?: boolean;
+  /** Pre-fetched row samples per table (e.g. from a CSV import) for PK detection. */
+  sampleRows?: Record<string, Array<Record<string, string | null>>>;
   onProgress?: (msg: string) => void;
 }
 
@@ -148,9 +159,10 @@ export async function createFromCatalog(
           `Columns: ${t.columns.map((c) => c.name).join(", ")}`,
       );
     }
-    let res = resolvePrimaryKey(t, undefined, override);
+    // Prefer caller-supplied samples (CSV import) for cardinality detection.
+    let res = resolvePrimaryKey(t, opts.sampleRows?.[t.name], override);
     if (res.pk === null && res.source === "sample") {
-      // Fall back to a live row sample for cardinality detection.
+      // Fall back to a live row sample.
       const summary = summaries.find((s) => (s as { name?: string }).name === t.name) as
         | { id?: string }
         | undefined;
@@ -260,4 +272,126 @@ export async function createFromCatalog(
       }
     }
   }
+}
+
+export interface ImportCsvResult {
+  tables: string[];
+  failed: string[];
+  sampleRows: Record<string, Array<Record<string, string | null>>>;
+}
+
+/**
+ * Import CSV files into a Vega catalog as tables. Each file becomes a table
+ * (first batch creates it, later batches append) via a one-shot dataflow DAG.
+ * Returns the imported table names and a per-table row sample (≤100 rows) for
+ * downstream PK detection.
+ */
+export async function importCsvToCatalog(
+  ctx: RequestContext,
+  opts: {
+    catalogId: string;
+    files: string;
+    tablePrefix?: string;
+    batchSize?: number;
+    onProgress?: (msg: string) => void;
+  },
+): Promise<ImportCsvResult> {
+  const log = opts.onProgress ?? (() => {});
+  const batchSize = opts.batchSize ?? 500;
+  const paths = await resolveFiles(opts.files);
+
+  // The database-write step needs the catalog's connector type.
+  const catalog = (await getCatalog(ctx, opts.catalogId)) as {
+    connector_type?: string;
+    type?: string;
+  };
+  const datasourceType = catalog.connector_type ?? catalog.type ?? "";
+
+  const tables: string[] = [];
+  const failed: string[] = [];
+  const sampleRows: Record<string, Array<Record<string, string | null>>> = {};
+
+  for (const path of paths) {
+    const tableName = buildTableName(path, opts.tablePrefix ?? "");
+    const { headers, rows } = await parseCsvFile(path);
+    if (headers.length === 0 || rows.length === 0) {
+      log(`Skipping ${tableName} (no headers/rows).`);
+      failed.push(tableName);
+      continue;
+    }
+    const fieldMappings = buildFieldMappings(headers);
+    const batches = splitBatches(rows, batchSize);
+    try {
+      for (let i = 0; i < batches.length; i += 1) {
+        log(`[${tableName}] batch ${i + 1}/${batches.length} (${batches[i]?.length} rows)...`);
+        await executeDataflow(
+          ctx,
+          buildImportDag({
+            catalogId: opts.catalogId,
+            datasourceType,
+            tableName,
+            tableExist: i > 0,
+            data: batches[i] as Array<Record<string, string | null>>,
+            fieldMappings,
+          }),
+        );
+      }
+      tables.push(tableName);
+      sampleRows[tableName] = rows.slice(0, 100);
+    } catch (e) {
+      log(`[${tableName}] import failed: ${e instanceof Error ? e.message : String(e)}`);
+      failed.push(tableName);
+    }
+  }
+  // Best-effort: refresh catalog metadata so the new tables are visible.
+  await discoverCatalog(ctx, opts.catalogId, true).catch(() => {});
+  return { tables, failed, sampleRows };
+}
+
+export interface CreateFromCsvOptions {
+  catalogId: string;
+  name: string;
+  files: string;
+  tablePrefix?: string;
+  batchSize?: number;
+  tables?: string[];
+  pkMap?: Record<string, string>;
+  build?: boolean;
+  noRollback?: boolean;
+  onProgress?: (msg: string) => void;
+}
+
+/** Import CSVs into a catalog, then build a KN from the imported tables. */
+export async function createFromCsv(
+  ctx: RequestContext,
+  opts: CreateFromCsvOptions,
+): Promise<unknown> {
+  const log = opts.onProgress ?? (() => {});
+  log("Phase 1: importing CSVs...");
+  const imported = await importCsvToCatalog(ctx, {
+    catalogId: opts.catalogId,
+    files: opts.files,
+    tablePrefix: opts.tablePrefix,
+    batchSize: opts.batchSize,
+    onProgress: log,
+  });
+  if (imported.tables.length === 0) {
+    throw new Error(`No tables imported (failed: ${imported.failed.join(", ") || "none"}).`);
+  }
+  log(`Phase 2: building KN from ${imported.tables.length} table(s)...`);
+  const result = await createFromCatalog(ctx, {
+    catalogId: opts.catalogId,
+    name: opts.name,
+    tables: opts.tables && opts.tables.length > 0 ? opts.tables : imported.tables,
+    pkMap: opts.pkMap,
+    build: opts.build,
+    noRollback: opts.noRollback,
+    sampleRows: imported.sampleRows,
+    onProgress: log,
+  });
+  return {
+    imported_tables: imported.tables,
+    failed_imports: imported.failed,
+    ...(result as object),
+  };
 }

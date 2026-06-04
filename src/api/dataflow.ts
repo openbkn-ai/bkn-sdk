@@ -18,6 +18,55 @@ export function createDataflow(ctx: RequestContext, body: unknown): Promise<unkn
   return request(ctx, `${BASE_V1}/data-flow/flow`, { method: "POST", body });
 }
 
+/** Trigger a run of an existing dataflow DAG. */
+export function runDataflow(ctx: RequestContext, dagId: string): Promise<unknown> {
+  return request(ctx, `${BASE_V1}/run-instance/${encodeURIComponent(dagId)}`, {
+    method: "POST",
+    body: {},
+  });
+}
+
+/** Delete a dataflow DAG. */
+export function deleteDataflow(ctx: RequestContext, dagId: string): Promise<unknown> {
+  return request(ctx, `${BASE_V1}/data-flow/flow/${encodeURIComponent(dagId)}`, {
+    method: "DELETE",
+  });
+}
+
+/**
+ * Run a one-shot dataflow document to completion: create → run → poll the
+ * latest result until success/failure → delete the DAG (always). Throws on a
+ * failed run or timeout.
+ */
+export async function executeDataflow(
+  ctx: RequestContext,
+  body: unknown,
+  opts: { intervalMs?: number; timeoutMs?: number } = {},
+): Promise<unknown> {
+  const created = (await createDataflow(ctx, body)) as { id?: string };
+  const dagId = String(created.id ?? "");
+  if (!dagId) throw new Error("createDataflow returned no DAG id");
+  try {
+    await runDataflow(ctx, dagId);
+    const interval = opts.intervalMs ?? 2000;
+    const deadline = opts.timeoutMs ?? 300_000;
+    let waited = 0;
+    for (;;) {
+      const res = (await request(ctx, `${BASE_V1}/dag/${encodeURIComponent(dagId)}/results`)) as {
+        results?: Array<{ status?: string }>;
+      };
+      const status = res.results?.[0]?.status;
+      if (status === "success" || status === "completed") return { dagId, status };
+      if (status === "failed" || status === "error") throw new Error(`Dataflow run ${status}`);
+      if (waited >= deadline) throw new Error(`Dataflow run timed out after ${deadline}ms`);
+      await new Promise((r) => setTimeout(r, interval));
+      waited += interval;
+    }
+  } finally {
+    await deleteDataflow(ctx, dagId).catch(() => {});
+  }
+}
+
 export interface ListRunsOptions {
   since?: string;
 }

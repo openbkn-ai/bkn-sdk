@@ -544,14 +544,34 @@ export function bknCommand(): Command {
       if (!result.valid) process.exitCode = 1;
     });
 
-  // Remaining subcommands kept in the tree as stubs (filled in incrementally).
-  for (const name of ["create-from-csv"]) {
-    bkn
-      .command(name)
-      .description(`${name} (pending)`)
-      .allowUnknownOption()
-      .action(notImplemented(name));
-  }
+  bkn
+    .command("create-from-csv <catalog-id>")
+    .description("Import CSV files into a Vega catalog, then build a KN from them")
+    .requiredOption("--files <glob>", "CSV paths (comma-separated or glob)")
+    .requiredOption("--name <name>", "knowledge network name")
+    .option("--table-prefix <s>", "prefix for derived table names", "")
+    .option("--batch-size <n>", "rows per insert batch", int, 500)
+    .option("--tables <list>", "subset of imported tables to include in the KN")
+    .option("--pk-map <map>", "explicit primary keys: '<table>:<col>[,...]'")
+    .option("--build", "submit a Vega build task per resource after creation")
+    .option("--no-rollback", "keep a partially-created KN on failure")
+    .action(async (catalogId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.createFromCsv({
+          catalogId,
+          name: opts.name,
+          files: opts.files,
+          tablePrefix: opts.tablePrefix,
+          batchSize: opts.batchSize,
+          tables: csv(opts.tables),
+          pkMap: opts.pkMap ? parsePkMap(opts.pkMap) : undefined,
+          build: Boolean(opts.build),
+          noRollback: opts.rollback === false,
+          onProgress: (m) => console.error(m),
+        }),
+        outputOptions(cmd),
+      );
+    });
 
   return group(bkn, "AI DATA PLATFORM");
 }

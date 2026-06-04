@@ -66,7 +66,12 @@ import {
 } from "../api/knowledge-networks.js";
 import type { RequestContext } from "../types.js";
 import { extractTarToDirectory, packDirectoryToTar } from "../utils/tar.js";
-import { type CreateFromCatalogOptions, createFromCatalog } from "./bkn-create.js";
+import {
+  type CreateFromCatalogOptions,
+  type CreateFromCsvOptions,
+  createFromCatalog,
+  createFromCsv,
+} from "./bkn-create.js";
 
 export function kn(ctx: RequestContext) {
   return {
@@ -143,6 +148,7 @@ export function kn(ctx: RequestContext) {
     relationTypePaths: (knId: string, body: unknown) => relationTypePaths(ctx, knId, body),
     bknResources: () => listBknResources(ctx),
     createFromCatalog: (opts: CreateFromCatalogOptions) => createFromCatalog(ctx, opts),
+    createFromCsv: (opts: CreateFromCsvOptions) => createFromCsv(ctx, opts),
     /** Pack a local BKN directory and upload it as a knowledge network. */
     push: (dir: string, opts?: { branch?: string }) =>
       uploadBkn(ctx, packDirectoryToTar(dir), opts),
