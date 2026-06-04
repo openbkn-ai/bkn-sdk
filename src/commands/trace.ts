@@ -1,7 +1,7 @@
-/** `openbkn trace …` — trace data (search/get). Diagnose/eval-set pending. */
+/** `openbkn trace …` — trace data (search/get) + symbolic diagnose. */
 import { Command } from "commander";
 import { group } from "../help/grouped-help.js";
-import { InputError } from "../utils/errors.js";
+import { renderReportMarkdown } from "../trace-ai/diagnose.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, outputOptions, readBody } from "./_shared.js";
 
@@ -38,9 +38,19 @@ export function traceCommand(): Command {
       printJson(await clientFrom(cmd).trace.search(readBody(opts)), outputOptions(cmd));
     });
 
-  // Diagnose / eval-set / schema are the LLM rule-engine feature (large,
-  // depends on the local `claude` CLI) — tracked as a separate slice.
-  for (const name of ["diagnose", "eval-set", "schema"]) {
+  cmd
+    .command("diagnose <conversation-id>")
+    .description("Diagnose a conversation's trace against the builtin symbolic rules")
+    .action(async (conversationId: string, _opts, cmd: Command) => {
+      const report = await clientFrom(cmd).trace.diagnose(conversationId);
+      const out = outputOptions(cmd);
+      if (out.json) printJson(report, out);
+      else console.log(renderReportMarkdown(report));
+    });
+
+  // eval-set / schema are the LLM-as-judge pillar (eval-set builder/runner +
+  // rubric judging via a local agent provider) — a separate large slice.
+  for (const name of ["eval-set", "schema"]) {
     cmd
       .command(name)
       .description(`${name} (pending)`)
