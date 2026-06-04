@@ -9,12 +9,6 @@ import { clientFrom, csv, outputOptions, readBody } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 
-function notImplemented(path: string): () => never {
-  return () => {
-    throw new Error(`\`openbkn bkn ${path}\` is not implemented yet.`);
-  };
-}
-
 export function bknCommand(): Command {
   const bkn = new Command("bkn").description("Knowledge networks — list, query, schema, instances");
 
@@ -68,18 +62,13 @@ export function bknCommand(): Command {
 
   // Schema groups: real list; object-type/relation-type also get real CRUD.
   const schemaGroups: Array<
-    [
-      string,
-      "objectTypes" | "relationTypes" | "actionTypes",
-      "objectType" | "relationType" | null,
-      string[],
-    ]
+    [string, "objectTypes" | "relationTypes" | "actionTypes", "objectType" | "relationType" | null]
   > = [
-    ["object-type", "objectTypes", "objectType", []],
-    ["relation-type", "relationTypes", "relationType", []],
-    ["action-type", "actionTypes", null, []],
+    ["object-type", "objectTypes", "objectType"],
+    ["relation-type", "relationTypes", "relationType"],
+    ["action-type", "actionTypes", null],
   ];
-  for (const [name, listMethod, crud, stubLeaves] of schemaGroups) {
+  for (const [name, listMethod, crud] of schemaGroups) {
     const g = bkn.command(name).description(`${name} list/get/...`);
     g.command("list <kn-id>")
       .description(`List ${name}s`)
@@ -122,12 +111,6 @@ export function bknCommand(): Command {
         .action(async (knId: string, id: string, _o, cmd: Command) => {
           printJson(await clientFrom(cmd).kn[`${crud}Delete`](knId, id), outputOptions(cmd));
         });
-    }
-    for (const s of stubLeaves) {
-      g.command(s)
-        .description(`${s} (pending)`)
-        .allowUnknownOption()
-        .action(notImplemented(`${name} ${s}`));
     }
   }
 
