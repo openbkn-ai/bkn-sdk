@@ -5,6 +5,8 @@
  * and live-verified; operator `auth` reuses the top-level `openbkn auth`.
  */
 import { Command } from "commander";
+import { rawCall } from "../api/call.js";
+import { resolveContext } from "../config/resolve.js";
 import { activePlatform, setActivePlatform } from "../config/store.js";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
@@ -394,10 +396,40 @@ export function adminCommand(): Command {
       printJson({ ok: true, baseUrl: value }, outputOptions(cmd));
     });
   admin
-    .command("call")
-    .description("Admin API passthrough (pending)")
-    .allowUnknownOption()
-    .action(notImplemented("call"));
+    .command("call <url>")
+    .description("Operator API passthrough (curl-style; auto-injected auth)")
+    .option("-X, --request <method>", "HTTP method")
+    .option(
+      "-H, --header <header>",
+      'extra header "Name: value" (repeatable)',
+      (v, a: string[]) => {
+        a.push(v);
+        return a;
+      },
+      [] as string[],
+    )
+    .option("-d, --data <body>", "request body (JSON content-type if unset)")
+    .action(async (url: string, opts, cmd: Command) => {
+      const g = cmd.optsWithGlobals();
+      const res = await rawCall(
+        resolveContext({
+          baseUrl: g.baseUrl,
+          token: g.token,
+          user: g.user,
+          businessDomain: g.bizDomain,
+          insecure: g.insecure,
+        }),
+        url,
+        { method: opts.request, header: opts.header, data: opts.data, businessDomain: g.bizDomain },
+      );
+      const out = outputOptions(cmd);
+      try {
+        printJson(JSON.parse(res.body), out);
+      } catch {
+        process.stdout.write(res.body.endsWith("\n") ? res.body : `${res.body}\n`);
+      }
+      if (res.status >= 400) process.exitCode = 1;
+    });
 
   return group(admin, "OPERATOR");
 }

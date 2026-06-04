@@ -293,7 +293,7 @@ export function listActionTypes(
 }
 
 /** Schema item kind in the ontology-manager path. */
-export type SchemaKind = "object-types" | "relation-types";
+export type SchemaKind = "object-types" | "relation-types" | "action-types";
 
 export function getSchemaItem(
   ctx: RequestContext,

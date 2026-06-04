@@ -123,6 +123,7 @@ export function kn(ctx: RequestContext) {
     actionTypeExecute: (knId: string, atId: string, body: unknown) =>
       executeActionType(ctx, knId, atId, body),
     actionTypeInputs: (knId: string, atId: string) => getActionTypeInputs(ctx, knId, atId),
+    actionTypeGet: (knId: string, id: string) => getSchemaItem(ctx, knId, "action-types", id),
     conceptGroups: (knId: string) => listConceptGroups(ctx, knId),
     conceptGroup: (knId: string, cgId: string) => getConceptGroup(ctx, knId, cgId),
     conceptGroupCreate: (knId: string, body: unknown) => createConceptGroup(ctx, knId, body),
