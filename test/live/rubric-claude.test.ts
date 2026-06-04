@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { RawSpan } from "../../src/api/trace.js";
 import { claudeAvailable, judgeJson } from "../../src/trace-ai/claude-judge.js";
-import { assembleTraceTree, runRubric, runRules } from "../../src/trace-ai/diagnose.js";
+import {
+  assembleTraceTree,
+  runRubric,
+  runRules,
+  synthesizeFindings,
+} from "../../src/trace-ai/diagnose.js";
 
 // Live: hits the local `claude` CLI. Gated — only runs with BKN_JUDGE_LIVE=1.
 const live = process.env.BKN_JUDGE_LIVE === "1";
@@ -30,5 +35,11 @@ const live = process.env.BKN_JUDGE_LIVE === "1";
     expect(rubric[0]?.judgmentKind).toBe("rubric");
     expect(rubric[0]?.evidence.excerpt.length).toBeGreaterThan(0);
     console.log("rubric finding:", JSON.stringify(rubric[0], null, 2));
-  }, 130_000);
+
+    const summary = await synthesizeFindings([...sym, ...rubric], (p) =>
+      judgeJson(p, { timeoutMs: 120_000 }),
+    );
+    expect(summary.headline.length).toBeGreaterThan(0);
+    console.log("summary:", JSON.stringify(summary, null, 2));
+  }, 180_000);
 });

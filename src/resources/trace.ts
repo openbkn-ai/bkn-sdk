@@ -5,9 +5,11 @@ import { claudeAvailable, judgeJson } from "../trace-ai/claude-judge.js";
 import {
   BUILTIN_RULES,
   type DiagnoseReport,
+  type Summary,
   assembleTraceTree,
   runRubric,
   runRules,
+  synthesizeFindings,
 } from "../trace-ai/diagnose.js";
 import {
   type EvalCase,
@@ -64,11 +66,12 @@ export function trace(ctx: RequestContext) {
       const tree = assembleTraceTree(primaryTraceId, spansForPrimary);
       const findings = runRules(tree);
       let mode: DiagnoseReport["mode"] = "symbolic-only";
+      let summary: Summary | undefined;
       if (opts.llm && claudeAvailable()) {
-        const rubric = await runRubric(tree, findings, (prompt) =>
-          judgeJson(prompt, { timeoutMs: opts.judgeTimeoutMs }),
-        );
+        const judge = (prompt: string) => judgeJson(prompt, { timeoutMs: opts.judgeTimeoutMs });
+        const rubric = await runRubric(tree, findings, judge);
         findings.push(...rubric);
+        summary = await synthesizeFindings(findings, judge);
         mode = "hybrid";
       }
       return {
@@ -78,6 +81,7 @@ export function trace(ctx: RequestContext) {
         mode,
         rulesApplied: BUILTIN_RULES.map((r) => r.id),
         findingCount: findings.length,
+        ...(summary ? { summary } : {}),
         findings,
       };
     },

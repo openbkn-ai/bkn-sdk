@@ -1,9 +1,8 @@
 /**
- * Trace diagnose — symbolic (rules-only) engine. Fetches a conversation's
- * spans, shapes them into a trace tree, runs deterministic predicates over it,
- * and renders findings. This is the `--no-llm` slice of the kweaver-sdk
- * diagnose pillar: no LLM rubric / synthesizer, no eval-set, no scan — those
- * remain a separate slice (see docs/exec-plans/tech-debt-tracker.md).
+ * Trace diagnose engine. Fetches a conversation's spans, shapes them into a
+ * trace tree, runs deterministic symbolic predicates, and (in hybrid mode) adds
+ * gated LLM-judged rubric findings + an LLM synthesized summary. Cross-trace
+ * `scan` is the remaining piece (see docs/exec-plans/tech-debt-tracker.md).
  */
 import type { RawSpan } from "../api/trace.js";
 
@@ -54,6 +53,12 @@ export interface Finding {
   confidence?: "low" | "medium" | "high";
 }
 
+export interface Summary {
+  headline: string;
+  primaryRootCause: string | null;
+  targetForFix: string | null;
+}
+
 export interface DiagnoseReport {
   traceId: string;
   conversationId: string;
@@ -61,6 +66,7 @@ export interface DiagnoseReport {
   mode: "symbolic-only" | "hybrid";
   rulesApplied: string[];
   findingCount: number;
+  summary?: Summary;
   findings: Finding[];
 }
 
@@ -452,6 +458,56 @@ export async function runRubric(
   return out;
 }
 
+/**
+ * Synthesize the findings into a one-line headline + primary root cause via the
+ * LLM judge. Returns a template fallback when there are no findings or the judge
+ * fails, so a report always has a Summary.
+ */
+export async function synthesizeFindings(
+  findings: Finding[],
+  judge: (prompt: string) => Promise<Record<string, unknown>>,
+): Promise<Summary> {
+  if (findings.length === 0) {
+    return {
+      headline: "No issues found by the diagnosis rules.",
+      primaryRootCause: null,
+      targetForFix: null,
+    };
+  }
+  const prompt = [
+    "You are a trace-diagnosis synthesizer. Given these findings, write a concise summary.",
+    "FINDINGS:",
+    JSON.stringify(
+      findings.map((f) => ({
+        rule: f.ruleId,
+        severity: f.severity,
+        symptom: f.symptom,
+        evidence: f.evidence.excerpt,
+        fix: f.suggestedFix,
+      })),
+      null,
+      2,
+    ),
+    "",
+    'Respond with ONLY JSON: {"headline":"<one sentence>","primary_root_cause":"<one sentence or null>","target_for_fix":"<component or null>"}',
+  ].join("\n");
+  try {
+    const out = await judge(prompt);
+    return {
+      headline: typeof out.headline === "string" ? out.headline : fallbackHeadline(findings),
+      primaryRootCause: typeof out.primary_root_cause === "string" ? out.primary_root_cause : null,
+      targetForFix: typeof out.target_for_fix === "string" ? out.target_for_fix : null,
+    };
+  } catch {
+    return { headline: fallbackHeadline(findings), primaryRootCause: null, targetForFix: null };
+  }
+}
+
+function fallbackHeadline(findings: Finding[]): string {
+  const high = findings.filter((f) => f.severity === "high").length;
+  return `${findings.length} finding(s)${high > 0 ? `, ${high} high-severity` : ""}.`;
+}
+
 /** Render a diagnose report as human-readable markdown. */
 export function renderReportMarkdown(r: DiagnoseReport): string {
   const lines = [`# Trace Diagnose — \`${r.traceId}\``, ""];
@@ -459,8 +515,15 @@ export function renderReportMarkdown(r: DiagnoseReport): string {
     `> conversation \`${r.conversationId}\` · mode ${r.mode} · ${r.findingCount} finding(s)`,
     "",
   );
+  if (r.summary) {
+    lines.push(`**${r.summary.headline}**`, "");
+    if (r.summary.primaryRootCause) {
+      const tgt = r.summary.targetForFix ? ` (fix target: \`${r.summary.targetForFix}\`)` : "";
+      lines.push(`Primary root cause: ${r.summary.primaryRootCause}${tgt}`, "");
+    }
+  }
   if (r.findings.length === 0) {
-    lines.push("No issues found by the symbolic rules.");
+    if (!r.summary) lines.push("No issues found by the symbolic rules.");
     return lines.join("\n");
   }
   const order = { high: 0, medium: 1, low: 2 } as const;
