@@ -36,11 +36,12 @@ describe("vega uses the vega-backend base path", () => {
     expect(new URL(firstCall(f)[0]).pathname).toBe("/api/vega-backend/v1/catalogs/c-1");
   });
 
-  it("catalogResources with category", async () => {
+  it("catalogResources lists via /resources?catalog_id (no /catalogs/:id/resources route)", async () => {
     const f = mockFetch();
     await listCatalogResources(ctx, "c-1", "table");
     const u = new URL(firstCall(f)[0]);
-    expect(u.pathname).toBe("/api/vega-backend/v1/catalogs/c-1/resources");
+    expect(u.pathname).toBe("/api/vega-backend/v1/resources");
+    expect(u.searchParams.get("catalog_id")).toBe("c-1");
     expect(u.searchParams.get("category")).toBe("table");
   });
 
