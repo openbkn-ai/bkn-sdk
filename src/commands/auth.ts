@@ -2,7 +2,7 @@
 import { createInterface } from "node:readline";
 import { Command } from "commander";
 import { changePassword } from "../api/admin.js";
-import { deviceLogin, openBrowser, passwordLogin } from "../auth/oauth.js";
+import { credentialDeviceLogin, deviceLogin, openBrowser } from "../auth/oauth.js";
 import { resolveContext } from "../config/resolve.js";
 import { group } from "../help/grouped-help.js";
 import * as auth from "../resources/auth.js";
@@ -43,6 +43,11 @@ export function registerAuthLeaves(cmd: Command): void {
     )
     .option("--device", "headless device-code login (RFC 8628) — no callback server, no password")
     .option("--audience <aud>", "device-code token audience", "bkn-safe")
+    // Legacy ISF sign-in flags — accepted for compatibility, ignored by the
+    // bkn-safe device-code flow.
+    .option("--no-browser", "(legacy) print the URL instead of opening a browser")
+    .option("--product <name>", "(legacy) ISF OAuth product query")
+    .option("--signin-public-key-file <path>", "(legacy) RSA public key for ISF /oauth2/signin")
     .action(async (url: string, opts, cmd: Command) => {
       const g = cmd.optsWithGlobals();
       if (g.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -52,28 +57,30 @@ export function registerAuthLeaves(cmd: Command): void {
         printJson({ loggedIn: true, ...r }, outputOptions(cmd));
         return;
       }
-      // --device → device-code (RFC 8628); otherwise username/password (default).
-      // Credentials come from -u/-p; anything missing is prompted interactively.
-      let tokens: Awaited<ReturnType<typeof passwordLogin>>;
-      if (opts.device) {
+      // All flows ride the device_code grant (the only seeded user client):
+      //  --device      → print the URL/code; approve on any machine (headless).
+      //  -u/-p         → CLI drives login/consent with the credentials (CI).
+      //  default       → open the browser; user signs in + approves there.
+      let tokens: Awaited<ReturnType<typeof deviceLogin>>;
+      if (opts.username || opts.password) {
+        const username = opts.username ?? (await promptLine("用户名: "));
+        const password = opts.password ?? (await promptLine("密码: ", true));
+        tokens = await credentialDeviceLogin(url, username, password, {
+          clientId: opts.clientId,
+          audience: opts.audience,
+        });
+      } else {
+        // open the browser unless headless (--device) or --no-browser.
+        const openInBrowser = !opts.device && opts.browser !== false;
         tokens = await deviceLogin(url, {
           clientId: opts.clientId,
           audience: opts.audience,
           onPrompt: ({ userCode, verificationUri, verificationUriComplete }) => {
-            process.stderr.write(`\n打开浏览器登录: ${verificationUri}\n验证码: ${userCode}\n`);
-            if (verificationUriComplete) {
-              process.stderr.write(`或直接打开(已带码): ${verificationUriComplete}\n`);
-              openBrowser(verificationUriComplete);
-            }
+            const target = verificationUriComplete ?? verificationUri;
+            process.stderr.write(`\n打开下面的链接登录并授权:\n  ${target}\n验证码: ${userCode}\n`);
+            if (openInBrowser) openBrowser(target);
             process.stderr.write("等待授权…\n");
           },
-        });
-      } else {
-        const username = opts.username ?? (await promptLine("用户名: "));
-        const password = opts.password ?? (await promptLine("密码: ", true));
-        tokens = await passwordLogin(url, username, password, {
-          clientId: opts.clientId,
-          port: opts.port,
         });
       }
       const r = auth.attachToken(url, tokens.accessToken, {
