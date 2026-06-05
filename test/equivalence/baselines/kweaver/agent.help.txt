@@ -1,0 +1,39 @@
+Agent CRUD, chat, sessions, history, publish/unpublish
+
+USAGE
+  kweaver agent <subcommand> [flags]
+
+DISCOVERY
+  list           List published agents
+  personal-list  List personal-space agents
+  category-list  List agent categories
+  template-list  List published agent templates
+  template-get   Get published agent template details
+
+CRUD
+  get         Get agent details
+  get-by-key  Get agent by key
+  create      Create a new agent
+  update      Update an existing agent
+  delete      Delete an agent
+  publish     Publish an agent
+  unpublish   Unpublish an agent
+
+RUNTIME
+  chat      Interactive chat (or single message with -m)
+  sessions  List conversations for an agent
+  history   Show message history for a conversation
+  trace     Get trace data for a conversation (--view
+            tree|perf|evidence|reasoning|all)
+  skill     Manage skills attached to an agent (add / remove / list)
+
+INHERITED FLAGS
+  --base-url, --token, --user, --help
+
+EXAMPLES
+  $ kweaver agent list --limit 20
+  $ kweaver agent chat <agent_id> -m "hello"
+  $ kweaver agent trace <conversation_id> --view all
+
+LEARN MORE
+  Use `kweaver agent <subcommand> --help` for flag details

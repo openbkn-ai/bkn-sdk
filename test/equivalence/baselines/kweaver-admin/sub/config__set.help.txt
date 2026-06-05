@@ -1,0 +1,10 @@
+Usage: kweaver-admin config set [options] <key> [value]
+
+Set config value (only baseUrl supported for now)
+
+Arguments:
+  key         baseUrl
+  value       Value
+
+Options:
+  -h, --help  display help for command

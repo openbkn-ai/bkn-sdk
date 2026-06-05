@@ -1,0 +1,19 @@
+BKN SPECIFICATION — REFERENCE CONTEXT (paste zone)
+==================================================
+
+Purpose: raw context for agents working on BKN format handling. Append vendor/spec
+excerpts here; keep it append-only. Do not duplicate into product-specs.
+
+Authoritative source
+--------------------
+- BKN specification (upstream). Paste the current SPECIFICATION.md excerpts below.
+- Foundation project: https://github.com/openbkn-ai/bkn-foundry
+
+Known structure (fill / verify against the spec)
+------------------------------------------------
+- Root file: network.bkn
+- Subdirs: object_types/, relation_types/, action_types/, concept_groups/
+- Optional CHECKSUM file inside the BKN dir (sibling of network.bkn); does not affect load.
+- Packaging: macOS tar must set COPYFILE_DISABLE=1 to avoid ._* metadata files.
+
+[ paste spec excerpts below this line ]

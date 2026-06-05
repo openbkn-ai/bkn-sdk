@@ -1,0 +1,15 @@
+Usage: kweaver-admin role remove-member [options] <role>
+
+Revoke a role from one or more members in a single call. DELETE
+/api/authorization/v1/role-members/<roleId>. For the single-user case use
+`kweaver-admin user revoke-role <user> <role>`.
+
+Arguments:
+  role                Role UUID or exact role name.
+
+Options:
+  --member <spec...>  Members to revoke in '<type>:<id-or-name>' form (same
+                      syntax as `role add-member`). user:<account> is
+                      auto-resolved; other types require UUIDs. Example:
+                      --member user:admin department:22222222-...
+  -h, --help          display help for command

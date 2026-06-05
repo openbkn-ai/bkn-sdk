@@ -1,0 +1,17 @@
+Usage: kweaver-admin org update [options] <id>
+
+Update a department via ISFWeb ShareMgnt.Usrm_EditDepartment thrift
+(UserManagement REST has no PATCH route).
+
+Arguments:
+  id                  Department id
+
+Options:
+  --name <name>       New display name
+  --manager <userId>  New responsible person user id; '' to clear
+  --code <code>       New department code
+  --remark <text>     New remark
+  --email <email>     New contact email
+  --status <n>        Status (1 = enabled, 0 = disabled)
+  --oss-id <id>       OSS bucket id
+  -h, --help          display help for command

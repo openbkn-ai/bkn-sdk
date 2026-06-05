@@ -1,0 +1,44 @@
+Usage: kweaver-admin auth [options] [command]
+
+Authentication: login (browser/headless/password), session inspection (whoami,
+list, status, token), logout, and EACP password change.
+
+Options:
+  -h, --help                       display help for command
+
+Commands:
+  login [options] [url]            Log in to a platform. Modes: (1) browser
+                                   OAuth2 with local callback (default); (2)
+                                   --no-browser paste the redirect URL/code on a
+                                   headless server; (3) -u/-p HTTP
+                                   /oauth2/signin password login
+                                   (RSA-encrypted); (4) --token attach an
+                                   existing access token (CI). Tokens are saved
+                                   per platform under
+                                   ~/.kweaver-admin/platforms/<host>/token.json.
+  logout                           Remove stored token for current platform
+  status                           Show base URL and whether a token is
+                                   configured
+  whoami [options] [url]           Show current user identity. Username
+                                   resolution: id_token -> access_token ->
+                                   persisted token.username -> GET
+                                   /api/eacp/v1/user/get -> GET
+                                   /api/user-management/v1/users/<sub>/account?role=.
+                                   Successful backend lookups are persisted back
+                                   to token.json.
+  list|ls                          List every platform with a saved session
+                                   under ~/.kweaver-admin/platforms. User label
+                                   resolves: id_token claim -> persisted
+                                   token.username -> uid:<sub UUID> ->
+                                   (unknown).
+  change-password [options] [url]  Change EACP account password via
+                                   /api/eacp/v1/auth1/modifypassword. No admin
+                                   token required; honors the platform's
+                                   tlsInsecure flag. Locally saved access_token
+                                   keeps working after the change; only
+                                   refresh_token may be revoked depending on
+                                   backend policy. Forgot-password / vcode flow
+                                   is not supported by this CLI — use the web
+                                   console for password recovery.
+  token                            Print current token (stdout; keep secret)
+  help [command]                   display help for command

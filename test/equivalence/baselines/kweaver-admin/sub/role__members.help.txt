@@ -1,0 +1,16 @@
+Usage: kweaver-admin role members [options] <role>
+
+List the users / departments / groups / apps that hold a role. GET
+/api/authorization/v1/role-members/<roleId>. Returned IDs can be passed to `role
+remove-member --member <type>:<id>`.
+
+Arguments:
+  role              Role UUID or exact role name (e.g. '数据管理员').
+
+Options:
+  --type <type...>  Filter by member type (user|department|group|app;
+                    repeatable)
+  --keyword <text>  Substring search on member name
+  --offset <n>      Pagination offset (default 0)
+  --limit <n>       Page size (default 100, max 1000)
+  -h, --help        display help for command

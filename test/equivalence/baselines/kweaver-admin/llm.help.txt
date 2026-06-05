@@ -1,0 +1,15 @@
+Usage: kweaver-admin llm [options] [command]
+
+Large language model management
+
+Options:
+  -h, --help                display help for command
+
+Commands:
+  list [options]            List LLM models
+  get <modelId>             Get LLM model details
+  add [options]             Add LLM model
+  edit [options] <modelId>  Edit LLM model
+  delete <modelId...>       Delete LLM model(s)
+  test <modelId>            Test LLM model
+  help [command]            display help for command

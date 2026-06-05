@@ -1,0 +1,9 @@
+Usage: kweaver-admin llm get [options] <modelId>
+
+Get LLM model details
+
+Arguments:
+  modelId     Model id
+
+Options:
+  -h, --help  display help for command

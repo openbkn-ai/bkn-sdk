@@ -1,0 +1,9 @@
+Usage: kweaver-admin user delete [options] <id>
+
+Delete user
+
+Arguments:
+  id          User id
+
+Options:
+  -h, --help  display help for command

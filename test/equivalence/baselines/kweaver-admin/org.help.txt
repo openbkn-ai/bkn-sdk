@@ -1,0 +1,25 @@
+Usage: kweaver-admin org [options] [command]
+
+Departments and org structure (UserManagement service)
+
+Options:
+  -h, --help              display help for command
+
+Commands:
+  list [options]          List departments in pages (name filter optional)
+  tree [options]          Print department hierarchy as a text tree
+  get <id>                Show full JSON for one department
+  create [options]        Create a department via ISFWeb
+                          ShareMgnt.Usrm_AddDepartment thrift (UserManagement
+                          REST has no POST route).
+  update [options] <id>   Update a department via ISFWeb
+                          ShareMgnt.Usrm_EditDepartment thrift (UserManagement
+                          REST has no PATCH route).
+  delete <id>             Remove a department (management API)
+  members [options] <id>  List users assigned to that department
+  help [command]          display help for command
+
+Notes:
+  • --role  Required on most subcommands: use a role your account is allowed (e.g. org_manager or normal_user if you are not admin).
+  • APIs   list/tree use search. get/members read data. create/update/delete call extra "management" routes — many clusters disable them; HTTP 4xx often means "feature off on this server", not a broken CLI.
+

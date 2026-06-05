@@ -1,0 +1,12 @@
+# toolbox / tool — agent toolboxes + tools
+
+| Command | Notes |
+|---------|-------|
+| `toolbox list [--keyword] [--limit]` | List toolboxes. |
+| `toolbox create --name <n> --service-url <url> [--description] [--source]` | Create. |
+| `toolbox publish <id>` / `unpublish <id>` / `delete <id>` | Lifecycle. |
+| `toolbox export <id> -o box.adp [--type toolbox|mcp|operator]` | Export config (impex, raw bytes). |
+| `toolbox import <file> [--type …]` | Import an exported `.adp` (multipart). |
+| `tool upload <openapi-file> --toolbox <id> [--metadata-type openapi]` | Upload a tool spec. |
+| `tool list --toolbox <id>` / `tool set-status …` | List / enable-disable. |
+| `tool execute|debug <tool-id> --toolbox <id> [--header/--query/--path/--body JSON]` | Invoke (debug bypasses the enabled gate). |

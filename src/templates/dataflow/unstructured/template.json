@@ -1,0 +1,63 @@
+{
+  "title": "{{title}}",
+  "steps": [
+    {
+      "id": "0",
+      "title": "",
+      "operator": "@trigger/dataflow-doc"
+    },
+    {
+      "id": "1",
+      "title": "",
+      "operator": "@content/file_parse",
+      "parameters": {
+        "docid": "{{__0.id}}",
+        "model": "embedding",
+        "slice_vector": "slice_vector",
+        "source_type": "docid",
+        "version": "{{__0.rev}}"
+      }
+    },
+    {
+      "id": "1001",
+      "title": "写入向量",
+      "operator": "@dataset/write-docs",
+      "parameters": {
+        "dataset_id": "{{content_dataset_id}}",
+        "documents": "{{__1.chunks}}"
+      }
+    },
+    {
+      "id": "1002",
+      "title": "写入元素",
+      "operator": "@dataset/write-docs",
+      "parameters": {
+        "dataset_id": "{{element_dataset_id}}",
+        "documents": "{{__1.content_list}}"
+      }
+    },
+    {
+      "id": "1003",
+      "title": "写入文件元信息",
+      "operator": "@dataset/write-docs",
+      "parameters": {
+        "dataset_id": "{{document_dataset_id}}",
+        "documents": [
+          {
+            "document_id": "{{__0.id}}",
+            "doc_name": "{{__0.name}}"
+          }
+        ]
+      }
+    }
+  ],
+  "trigger_config": {
+    "operator": "@trigger/manual",
+    "dataSource": {
+      "operator": "",
+      "parameters": {
+        "accessorid": "00000000-0000-0000-0000-000000000000"
+      }
+    }
+  }
+}

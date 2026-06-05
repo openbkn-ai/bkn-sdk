@@ -1,0 +1,78 @@
+kweaver trace — trace diagnosis commands
+
+Subcommands:
+  trace diagnose <conversation_id>            Diagnose the trace produced by a conversation; emit YAML report
+                                              (the id is the conversation_id returned by 'agent chat' /
+                                              'agent sessions'; spans are fetched from agent-observability)
+    --out <file>                              Write report to file (default: stdout)
+    --rules <dir>                             Override <cwd>/diagnosis-rules/
+    --no-builtin                              Disable the 5+1 builtin baseline rules
+    --no-llm                                  Disable LLM-judged rubric rules and the agent synthesizer.
+                                              Rubric findings are skipped (recorded in rules_skipped);
+                                              the within-trace summary falls back to template mode.
+    --no-artifacts                            Disable per-stage artifact persistence (default: artifacts ARE
+                                              written next to <out> as <stem>.artifacts/)
+    --format <yaml|markdown|both>             Output format. yaml is the machine-readable source of truth;
+                                              markdown is the human-readable view (paste into tickets / PRs).
+                                              When --out is a file path, both = write <stem>.yaml AND
+                                              <stem>.md side by side (default for --out).
+                                              When piping to stdout (no --out), default is yaml; pass
+                                              --format=markdown to emit markdown instead.
+    --lang <en|zh>                            Output locale for agent-judged natural-language fields:
+                                              rubric reasoning, synthesizer headline / fix_priority reason.
+                                              Default: en. JSON keys, enum values, and span IDs always
+                                              remain English regardless of --lang — only prose is localized.
+
+  trace diagnose --traces=<list> --out=<dir>  Batch mode: diagnose N traces for the same agent
+    --traces=conv1,conv2,...                  Comma-separated conversation_ids
+    --traces=@/path/to/ids.txt               Or @file with one id per line (# comments and blanks ignored)
+    --out=<dir>                              Required; fail-fast if missing
+    --no-artifacts                            Disable artifact persistence
+    --max-parallel <n>                        Concurrency limit (default 4; Sonnet rate-limit friendly)
+    --rules <dir>                             Override <cwd>/diagnosis-rules/
+    --no-builtin                              Disable the 5+1 builtin baseline rules
+    --format <yaml|markdown|both>             Default 'both'
+    --lang <en|zh>                            Default 'en'
+
+  trace diagnose rules validate <rule.yaml>   Validate a rule yaml file (exit 0 ok, 6 fail)
+
+  trace eval-set build [--diagnosis=<dir> | --queries=<file>] --out=<dir>
+                                              Build a git-trackable eval-set yaml directory from
+                                              either M4 diagnosis reports or a simplified
+                                              queries+golden-truth input file.
+    --diagnosis=<dir>                         Lift suggested_eval_case from M4 report findings
+                                              (mutually exclusive with --queries=)
+    --queries=<file>                          Lift from simplified trace-eval-set-input/v1 yaml
+                                              (mutually exclusive with --diagnosis=)
+    --out=<dir>                               Required output directory; index.yaml + cases.yaml
+    --on-conflict=fail|skip|overwrite         query_id conflict strategy (default: fail; exit 6 on conflict)
+    --redaction-rules=<path>                  Override <repo>/redaction-rules/ source for PII redaction
+    --eval-set-id=<id>                        Override default eval_set_id (basename of --out)
+
+  trace eval-set test <eval-set-dir> --candidate=<agent_id>[@<version>] --out=<dir>
+                                              Run each case in the eval-set against a candidate agent
+                                              and write a trace-test-report/v1 yaml to --out/report.yaml.
+    --candidate=<id>[@<version>]              Agent ID to test; optional @version suffix (default: published)
+    --out=<dir>                               Required output directory; report.yaml is written here
+    --max-parallel=<n>                        Concurrency limit (default 4)
+    --lang=en|zh                              Language for semantic_match reasoning text (default en)
+
+  trace schema validate <file> [--kind=<kind>]
+                                              Validate a yaml file against its M5/M4 zod schema
+                                              (eval-set / eval-set-index / eval-set-input / test-report).
+                                              --kind auto-inferred from file path; pass explicitly
+                                              if inference fails (exit 2 = kind required).
+
+Auth flags (any subcommand): --token, --base-url, --business-domain (-bd).
+
+Batch mode constraints:
+  - All --traces conv_ids must resolve to the same agent_id; mismatch → exit 2
+  - --no-llm not supported in batch mode → exit 2 (use single-trace for offline)
+  - Per-trace yaml on disk is the resume ground truth; rerunning a scan with
+    the same --out reuses existing per-trace reports (atomic .partial → rename)
+
+Rubric rules and the agent synthesizer use the local 'claude' CLI by default
+(installed via Claude Code). If 'claude' isn't on PATH, rubric rules are
+skipped with reason='provider-not-available:claude-code' and the synthesizer
+falls back to deterministic template mode — the rest of the report is still
+produced.

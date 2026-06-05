@@ -1,0 +1,32 @@
+{
+  "name": "document",
+  "type": "bkn",
+  "description": "文档知识网络",
+  "arguments": [
+    { "name": "name", "required": true, "description": "BKN 名称", "type": "string" },
+    {
+      "name": "embedding_model_id",
+      "required": true,
+      "description": "向量化模型 ID",
+      "type": "string"
+    },
+    {
+      "name": "content_dataset_id",
+      "required": true,
+      "description": "内容数据集 ID",
+      "type": "string"
+    },
+    {
+      "name": "document_dataset_id",
+      "required": true,
+      "description": "文档数据集 ID",
+      "type": "string"
+    },
+    {
+      "name": "element_dataset_id",
+      "required": true,
+      "description": "元素数据集 ID",
+      "type": "string"
+    }
+  ]
+}

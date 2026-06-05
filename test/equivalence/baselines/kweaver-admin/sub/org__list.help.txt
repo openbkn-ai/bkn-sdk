@@ -1,0 +1,12 @@
+Usage: kweaver-admin org list [options]
+
+List departments in pages (name filter optional)
+
+Options:
+  --role <role>     Which UserManagement role to call as (e.g. super_admin,
+                    org_manager). Must be allowed for your login. Default: env
+                    KWEAVER_UM_ROLE, else super_admin. (default: "super_admin")
+  --offset <n>      Skip this many rows (pagination) (default: 0)
+  --limit <n>       Max rows in this page (default: 100)
+  --name <keyword>  Only names containing this text
+  -h, --help        display help for command

@@ -1,0 +1,14 @@
+Usage: kweaver-admin small-model add [options]
+
+Add small model
+
+Options:
+  --name <name>        Model name
+  --type <type>        Type: embedding|reranker
+  --api-url <url>      API URL
+  --api-model <model>  API model
+  --api-key <key>      API key
+  --batch-size <n>     Batch size (default: "2048")
+  --max-tokens <n>     Max tokens (default: "512")
+  --embedding-dim <n>  Embedding dimension (default: "768")
+  -h, --help           display help for command

@@ -1,0 +1,8 @@
+Usage: kweaver-admin auth list|ls [options]
+
+List every platform with a saved session under ~/.kweaver-admin/platforms. User
+label resolves: id_token claim -> persisted token.username -> uid:<sub UUID> ->
+(unknown).
+
+Options:
+  -h, --help  display help for command

@@ -1,0 +1,6 @@
+Usage: kweaver-admin auth token [options]
+
+Print current token (stdout; keep secret)
+
+Options:
+  -h, --help  display help for command

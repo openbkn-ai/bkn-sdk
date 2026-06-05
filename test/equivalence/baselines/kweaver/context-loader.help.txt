@@ -1,0 +1,55 @@
+MCP / HTTP context-loader — schema discovery, instance query, action info, skill recall
+
+USAGE
+  kweaver context-loader <subcommand> [flags]
+  kweaver context-loader help <subcommand>
+
+RECOMMENDED FLOW
+  1. search-schema        Discover schema concepts
+  2. query-*              Query instances using discovered schema IDs
+  3. get-* / find-skills  Enrich instances or inspect actions
+  —  tool-call            Raw MCP debugging or unsupported tools only
+
+SCHEMA DISCOVERY
+  search-schema     Search object/relation/action/metric schemas
+  kn-search         [deprecated] Use search-schema
+  kn-schema-search  [deprecated] Use search-schema
+
+INSTANCE QUERY
+  query-object-instance    Query object instances
+  query-instance-subgraph  Query instance subgraphs
+
+INSTANCE ENRICHMENT / ACTION
+  get-logic-properties  Get calculated logic-property values
+  get-action-info       Get action metadata and executable info
+  find-skills           Recall skills for an object type
+
+ADVANCED MCP
+  tools      List MCP tools
+  resources  List MCP resources
+  resource   Read an MCP resource by URI
+  templates  List MCP resource templates
+  prompts    List MCP prompts
+  prompt     Get an MCP prompt by name
+  tool-call  Call any MCP tool directly
+
+DEPRECATED
+  config  Manage legacy saved KN selection (set/use/list/remove/show)
+
+FLAGS
+  -k, --kn-id <id>  KN selector for runtime subcommands
+  --pretty          Pretty-print JSON output
+  --compact         Compact JSON output
+
+INHERITED FLAGS
+  --base-url, --token, --user, --help
+
+EXAMPLES
+  $ kweaver context-loader search-schema <id> 'customer churn'
+  $ kweaver context-loader query-object-instance <id> --object-type-id <ot> --limit 10
+  $ kweaver context-loader find-skills <id> <ot-id>
+
+LEARN MORE
+  Alias: `kweaver context ...`
+  Use `kweaver context-loader <subcommand> --help` for arguments, JSON shapes, examples
+  Most runtime subcommands require a KN — first positional or --kn-id / -k

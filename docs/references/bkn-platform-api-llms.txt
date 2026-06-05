@@ -1,0 +1,42 @@
+BKN PLATFORM API — REFERENCE CONTEXT (paste zone)
+=================================================
+
+Purpose: raw backend API context for the SDK's api/ layer. Append endpoint shapes,
+auth flows, and response examples here. Append-only; link from product-specs.
+
+Backend services (from legacy kweaver-sdk / kweaver-admin — verify against live API)
+------------------------------------------------------------------------------------
+- knowledge networks / BKN engine
+- decision agents + chat / conversations
+- dataflows (v1 / v2)
+- datasources
+- model-factory: mf-model-manager (CRUD), mf-model-api (chat / small-model)
+- skills, toolboxes (execution factory)
+- vega (catalog / observability)
+- trace-ai (trace, scan, diagnose, eval-set)
+- identity: OAuth2 / Hydra, user-management, org/role, audit, eacp
+
+Auth
+----
+- env: BKN_BASE_URL, BKN_TOKEN ; store: ~/.bkn/
+- OAuth2 login flow (Hydra-style). Operator vs user token distinction.
+
+Index build — BuildTask (current/target model)
+-----------------------------------------------
+- Vega base path = /api/vega-backend/v1 (confirmed). Build tasks ≈ /api/vega-backend/v1/build-tasks (verify on VM).
+- Create: POST /build-tasks   body = CreateBuildTaskRequest
+    resource_id      (required)  which resource
+    mode             (required)  "streaming" | "batch"
+    embedding_fields (optional)  fields to vectorize
+    build_key_fields (optional)  batch: time field; streaming: unique row id
+    embedding_model  (optional)  default if omitted
+    model_dimensions (optional)  vector dimensions
+- Status/progress: GET /build-tasks/{id}  → state + SyncedCount / VectorizedCount
+- Config persists on the BuildTask entity (not on catalog/resource).
+- Resource property.feature_type ∈ {keyword, fulltext, vector} declares searchability (schema layer).
+- Resource.index_name is filled back by the build task after the index is built.
+- REPLACES the removed KN-level build (old: POST /api/ontology-manager/v1/knowledge-networks/{id}/jobs {job_type:"full"}).
+- NOTE: an older path POST {vega}/resources/{id}/build existed in legacy kweaver-sdk; the
+  authoritative target is POST /build-tasks. Verify exact base path against live API.
+
+[ paste endpoint details / sample payloads below this line ]

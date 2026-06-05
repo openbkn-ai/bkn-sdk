@@ -1,0 +1,29 @@
+Agent toolbox lifecycle — create, list, publish, delete, export/import
+
+USAGE
+  kweaver toolbox <subcommand> [flags]
+
+AVAILABLE COMMANDS
+  create     Create a new toolbox
+  list       List toolboxes
+  publish    Publish a toolbox (status=published)
+  unpublish  Unpublish (status=draft)
+  delete     Delete a toolbox
+  export     Export toolbox config (.adp JSON)
+  import     Import a previously exported config
+
+FLAGS
+  -bd, --biz-domain <s>  Business domain (default: bd_public)
+  --pretty               Pretty-print JSON (default)
+  --compact              Single-line JSON (pipeline-friendly)
+
+INHERITED FLAGS
+  --base-url, --token, --user, --help
+
+EXAMPLES
+  $ kweaver toolbox create --name MyBox --service-url https://svc.example.com
+  $ kweaver toolbox list --keyword analytics
+  $ kweaver toolbox export <box-id> -o box.adp
+
+LEARN MORE
+  Use `kweaver toolbox <subcommand> --help` for flag details
