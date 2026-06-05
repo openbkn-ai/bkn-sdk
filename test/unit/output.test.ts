@@ -33,17 +33,36 @@ describe("printJson output mode", () => {
     expect(out).toContain('[{"id":"1"');
   });
 
-  it("human mode renders an array of objects as a table", () => {
+  it("human mode renders an array of objects as aligned columns (no borders)", () => {
     const out = capture(() => printJson(rows));
-    expect(out).toContain("┌");
+    expect(out).not.toContain("┌");
     expect(out).toContain("id");
     expect(out).toContain("alpha");
+    // header line then one line per row
+    expect(out.trim().split("\n")).toHaveLength(3);
   });
 
-  it("unwraps an `entries` envelope into a table", () => {
+  it("unwraps an `entries` envelope into columns", () => {
     const out = capture(() => printJson({ entries: rows, total: 2 }));
-    expect(out).toContain("┌");
+    expect(out).not.toContain("┌");
     expect(out).toContain("beta");
+  });
+
+  it("drops columns that are empty across all rows", () => {
+    const out = capture(() =>
+      printJson([
+        { id: "1", note: "" },
+        { id: "2", note: "" },
+      ]),
+    );
+    expect(out).not.toContain("note");
+    expect(out).toContain("id");
+  });
+
+  it("comma-joins scalar array cells (e.g. tags)", () => {
+    const out = capture(() => printJson([{ id: "1", tags: ["a", "b"] }]));
+    expect(out).toContain("a,b");
+    expect(out).not.toContain("[");
   });
 
   it("falls back to pretty JSON for a single object", () => {

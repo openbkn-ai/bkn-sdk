@@ -1,6 +1,4 @@
-/** Output helpers: clean JSON for scripts, aligned tables for humans. */
-import Table from "cli-table3";
-
+/** Output helpers: clean JSON for scripts, aligned plain columns for humans. */
 export interface OutputOptions {
   /** Emit machine-readable JSON instead of a table. */
   json?: boolean;
@@ -21,7 +19,9 @@ export function printJson(value: unknown, opts: OutputOptions = {}): void {
   }
   const rows = toRows(value);
   if (rows) {
-    const columns = columnsOf(rows);
+    // Drop columns that are empty across every row — keeps wide list payloads
+    // readable instead of printing a sea of blank columns.
+    const columns = columnsOf(rows).filter((c) => rows.some((r) => stringifyCell(r[c]) !== ""));
     if (columns.length > 0) {
       printTable(rows, columns);
       return;
@@ -57,7 +57,11 @@ function columnsOf(rows: Array<Record<string, unknown>>): string[] {
   return seen;
 }
 
-/** Print rows as an aligned table, or as JSON when `--json`/`--compact` is set. */
+/**
+ * Print rows as space-aligned columns (no borders), or as JSON when
+ * `--json`/`--compact` is set. Header row + left-aligned columns separated by
+ * two spaces — readable without drawing an ASCII grid.
+ */
 export function printTable(
   rows: Array<Record<string, unknown>>,
   columns: string[],
@@ -67,17 +71,43 @@ export function printTable(
     printJson(rows, opts);
     return;
   }
-  const table = new Table({ head: columns });
-  for (const row of rows) {
-    table.push(columns.map((c) => stringifyCell(row[c])));
-  }
-  process.stdout.write(`${table.toString()}\n`);
+  const cells = rows.map((row) => columns.map((c) => stringifyCell(row[c])));
+  const widths = columns.map((col, i) =>
+    Math.max(displayWidth(col), ...cells.map((r) => displayWidth(r[i] ?? ""))),
+  );
+  const fmt = (parts: string[]) =>
+    parts
+      .map((p, i) => (i === parts.length - 1 ? p : pad(p, widths[i] ?? 0)))
+      .join("  ")
+      .trimEnd();
+  const lines = [fmt(columns), ...cells.map(fmt)];
+  process.stdout.write(`${lines.join("\n")}\n`);
 }
 
 const CELL_MAX = 48;
 
+/** Visual width counting East-Asian wide chars as 2 columns. */
+function displayWidth(s: string): number {
+  let w = 0;
+  for (const ch of s) w += /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/.test(ch) ? 2 : 1;
+  return w;
+}
+
+/** Right-pad to a visual width (wide-char aware). */
+function pad(s: string, width: number): string {
+  const gap = width - displayWidth(s);
+  return gap > 0 ? s + " ".repeat(gap) : s;
+}
+
 function stringifyCell(v: unknown): string {
   if (v === null || v === undefined) return "";
-  const s = (typeof v === "object" ? JSON.stringify(v) : String(v)).replace(/\s+/g, " ").trim();
+  // Arrays of scalars read better comma-joined than as JSON (e.g. tags).
+  const raw =
+    Array.isArray(v) && v.every((x) => x === null || typeof x !== "object")
+      ? v.join(",")
+      : typeof v === "object"
+        ? JSON.stringify(v)
+        : String(v);
+  const s = raw.replace(/\s+/g, " ").trim();
   return s.length > CELL_MAX ? `${s.slice(0, CELL_MAX - 1)}…` : s;
 }

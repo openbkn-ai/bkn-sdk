@@ -41,7 +41,6 @@
   "dependencies": {
     "@clack/prompts": "^0.9.1",
     "chalk": "^5.4.1",
-    "cli-table3": "^0.6.5",
     "commander": "^13.1.0",
     "csv-parse": "^6.2.1",
     "js-yaml": "^4.2.0",
