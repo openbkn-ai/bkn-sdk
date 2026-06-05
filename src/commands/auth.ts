@@ -6,6 +6,7 @@ import { credentialDeviceLogin, deviceLogin, openBrowser } from "../auth/oauth.j
 import { resolveContext } from "../config/resolve.js";
 import { group } from "../help/grouped-help.js";
 import * as auth from "../resources/auth.js";
+import { HttpError, InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { outputOptions } from "./_shared.js";
 
@@ -183,10 +184,22 @@ export function registerAuthLeaves(cmd: Command): void {
         const confirm = await promptLine("再次输入新密码: ", true);
         if (newPassword !== confirm) throw new Error("两次输入的新密码不一致。");
       }
-      printJson(
-        await changePasswordSafe(ctx, account, oldPassword, newPassword),
-        outputOptions(cmd),
-      );
+      try {
+        printJson(
+          await changePasswordSafe(ctx, account, oldPassword, newPassword),
+          outputOptions(cmd),
+        );
+      } catch (e) {
+        // 401 here means bad account/old password, not a missing session;
+        // 400 means the new password equals the old one.
+        if (e instanceof HttpError && e.status === 401) {
+          throw new InputError("账号或当前密码错误。");
+        }
+        if (e instanceof HttpError && e.status === 400) {
+          throw new InputError("新密码不能与旧密码相同。");
+        }
+        throw e;
+      }
     });
 }
 
