@@ -1,7 +1,7 @@
 /** `openbkn auth …` — login / session / token (store-backed). */
 import { createInterface } from "node:readline";
 import { Command } from "commander";
-import { changePassword } from "../api/admin.js";
+import { changePasswordSafe } from "../api/admin.js";
 import { credentialDeviceLogin, deviceLogin, openBrowser } from "../auth/oauth.js";
 import { resolveContext } from "../config/resolve.js";
 import { group } from "../help/grouped-help.js";
@@ -160,22 +160,31 @@ export function registerAuthLeaves(cmd: Command): void {
 
   cmd
     .command("change-password [url]")
-    .description("Change your account password (EACP, RSA-encrypted in transit)")
-    .requiredOption("-a, --account <name>", "account / login name")
-    .requiredOption("--old-password <pwd>", "current password")
-    .requiredOption("--new-password <pwd>", "new password")
-    .option("--public-key-file <path>", "override the RSA public key (PEM) for password encryption")
-    .action(async (_url: string | undefined, opts, cmd: Command) => {
+    .description("Change your account password (bkn-safe self-service; no browser)")
+    .option("-a, --account <name>", "account / login name (the login column, e.g. admin)")
+    .option("--old-password <pwd>", "current password")
+    .option("--new-password <pwd>", "new password")
+    .option("--public-key-file <path>", "(legacy) RSA public key for ISF password encryption")
+    .action(async (url: string | undefined, opts, cmd: Command) => {
       const g = cmd.optsWithGlobals();
+      if (g.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
       const ctx = resolveContext({
-        baseUrl: g.baseUrl,
+        baseUrl: url ?? g.baseUrl,
         token: g.token,
         user: g.user,
         businessDomain: g.bizDomain,
         insecure: g.insecure,
       });
+      const account = opts.account ?? (await promptLine("账号: "));
+      const oldPassword = opts.oldPassword ?? (await promptLine("当前密码: ", true));
+      let newPassword = opts.newPassword;
+      if (!newPassword) {
+        newPassword = await promptLine("新密码: ", true);
+        const confirm = await promptLine("再次输入新密码: ", true);
+        if (newPassword !== confirm) throw new Error("两次输入的新密码不一致。");
+      }
       printJson(
-        await changePassword(ctx, opts.account, opts.oldPassword, opts.newPassword),
+        await changePasswordSafe(ctx, account, oldPassword, newPassword),
         outputOptions(cmd),
       );
     });

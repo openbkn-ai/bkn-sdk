@@ -462,6 +462,24 @@ export function changePassword(
   });
 }
 
+/**
+ * Self-service password change on bkn-safe (`POST /api/safe/v1/auth/change-password`).
+ * Plaintext over TLS, no token (it's a pre-login credential change). 204 on
+ * success; 401 wrong account/old password; 400 new == old.
+ */
+export async function changePasswordSafe(
+  ctx: RequestContext,
+  account: string,
+  oldPassword: string,
+  newPassword: string,
+): Promise<{ ok: true }> {
+  await request(ctx, "/api/safe/v1/auth/change-password", {
+    method: "POST",
+    body: { account, old_password: oldPassword, new_password: newPassword },
+  });
+  return { ok: true };
+}
+
 export type MemberType = "user" | "department" | "group" | "app";
 
 export function listRoleMembers(
