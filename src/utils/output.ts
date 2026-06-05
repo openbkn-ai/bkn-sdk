@@ -19,11 +19,14 @@ export function printJson(value: unknown, opts: OutputOptions = {}): void {
   }
   const rows = toRows(value);
   if (rows) {
-    // Drop columns that are empty across every row — keeps wide list payloads
-    // readable instead of printing a sea of blank columns.
-    const columns = columnsOf(rows).filter((c) => rows.some((r) => stringifyCell(r[c]) !== ""));
+    const columns = selectColumns(rows);
     if (columns.length > 0) {
+      const all = columnsOf(rows);
       printTable(rows, columns);
+      const hidden = all.length - columns.length;
+      if (hidden > 0) {
+        process.stdout.write(`… ${hidden} more column(s); use --json for the full record\n`);
+      }
       return;
     }
   }
@@ -55,6 +58,25 @@ function columnsOf(rows: Array<Record<string, unknown>>): string[] {
     for (const k of Object.keys(row)) if (!seen.includes(k)) seen.push(k);
   }
   return seen;
+}
+
+/** Max columns shown in the human view before truncating (use --json for all). */
+const MAX_COLS = 8;
+
+/**
+ * Pick the columns worth showing a human: drop columns empty across all rows,
+ * drop nested-object columns (creator/updater/… — noise as truncated JSON), and
+ * cap the count. The full record is always one `--json` away.
+ */
+function selectColumns(rows: Array<Record<string, unknown>>): string[] {
+  const isObj = (v: unknown) => v !== null && typeof v === "object" && !Array.isArray(v);
+  const kept = columnsOf(rows).filter((c) => {
+    const vals = rows.map((r) => r[c]);
+    if (!vals.some((v) => stringifyCell(v) !== "")) return false; // all empty
+    if (vals.every((v) => v === null || v === undefined || isObj(v))) return false; // nested objects
+    return true;
+  });
+  return kept.slice(0, MAX_COLS);
 }
 
 /**
