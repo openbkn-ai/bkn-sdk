@@ -133,8 +133,10 @@ export function listCatalogResources(
   id: string,
   category?: string,
 ): Promise<unknown> {
-  return request(ctx, `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}/resources`, {
-    query: { category: category || undefined },
+  // The backend has no `/catalogs/:id/resources` route — resources are listed
+  // via `/resources?catalog_id=…` (same endpoint as `resource list`).
+  return request(ctx, `${VEGA_BASE}/resources`, {
+    query: { catalog_id: id, category: category || undefined },
   });
 }
 

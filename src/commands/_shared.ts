@@ -19,7 +19,7 @@ export function clientFrom(cmd: Command): BknClient {
 
 export function outputOptions(cmd: Command): OutputOptions {
   const o = cmd.optsWithGlobals();
-  return { json: Boolean(o.json), compact: Boolean(o.compact) };
+  return { json: Boolean(o.json), compact: Boolean(o.compact), full: Boolean(o.full) };
 }
 
 /** Parse a comma-separated flag value into a trimmed string list. */

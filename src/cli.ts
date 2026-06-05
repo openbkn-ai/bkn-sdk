@@ -34,6 +34,7 @@ program
   .option("--user <id|name>", "use specific user credentials (env: BKN_USER)")
   .option("--json", "machine-readable JSON output")
   .option("--compact", "single-line JSON output")
+  .option("--full", "human view: show all columns (default trims to the key ones)")
   .option("--biz-domain <s>", "business domain (alias: -bd)")
   .option("-k, --insecure", "skip TLS verification (dev / self-signed only)")
   .showHelpAfterError();

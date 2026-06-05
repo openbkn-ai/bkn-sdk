@@ -4,6 +4,8 @@ export interface OutputOptions {
   json?: boolean;
   /** Single-line JSON (implies json). */
   compact?: boolean;
+  /** Human view: show every column instead of the trimmed key set. */
+  full?: boolean;
 }
 
 /**
@@ -19,13 +21,15 @@ export function printJson(value: unknown, opts: OutputOptions = {}): void {
   }
   const rows = toRows(value);
   if (rows) {
-    const columns = selectColumns(rows);
+    // `--full`: every column (only dropping all-empty ones). Default: trimmed.
+    const columns = opts.full
+      ? columnsOf(rows).filter((c) => rows.some((r) => stringifyCell(r[c]) !== ""))
+      : selectColumns(rows);
     if (columns.length > 0) {
-      const all = columnsOf(rows);
       printTable(rows, columns);
-      const hidden = all.length - columns.length;
-      if (hidden > 0) {
-        process.stdout.write(`… ${hidden} more column(s); use --json for the full record\n`);
+      const hidden = columnsOf(rows).length - columns.length;
+      if (hidden > 0 && !opts.full) {
+        process.stdout.write(`… ${hidden} more column(s); use --full or --json for everything\n`);
       }
       return;
     }
