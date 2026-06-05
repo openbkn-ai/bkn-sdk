@@ -48,6 +48,9 @@ export interface CreateFromCatalogOptions {
   tables?: string[];
   pkMap?: Record<string, string>;
   build?: boolean;
+  /** Per-table resource columns to vectorize (sets the build task's embedding_fields). */
+  embeddingFields?: Record<string, string[]>;
+  embeddingModel?: string;
   noRollback?: boolean;
   /** Pre-fetched row samples per table (e.g. from a CSV import) for PK detection. */
   sampleRows?: Record<string, Array<Record<string, string | null>>>;
@@ -242,10 +245,13 @@ export async function createFromCatalog(
     if (opts.build) {
       log("Submitting build tasks...");
       for (const t of targets) {
+        const embedding = opts.embeddingFields?.[t.name];
         const task = (await createBuildTask(ctx, {
           resource_id: viewMap[t.name] as string,
           mode: "batch",
           build_key_fields: [tablePk[t.name] as string],
+          ...(embedding && embedding.length > 0 ? { embedding_fields: embedding } : {}),
+          ...(opts.embeddingModel ? { embedding_model: opts.embeddingModel } : {}),
         })) as { id?: string };
         builds.push({ table: t.name, taskId: String(task.id ?? "") });
       }
@@ -357,6 +363,8 @@ export interface CreateFromCsvOptions {
   tables?: string[];
   pkMap?: Record<string, string>;
   build?: boolean;
+  embeddingFields?: Record<string, string[]>;
+  embeddingModel?: string;
   noRollback?: boolean;
   onProgress?: (msg: string) => void;
 }
@@ -385,6 +393,8 @@ export async function createFromCsv(
     tables: opts.tables && opts.tables.length > 0 ? opts.tables : imported.tables,
     pkMap: opts.pkMap,
     build: opts.build,
+    embeddingFields: opts.embeddingFields,
+    embeddingModel: opts.embeddingModel,
     noRollback: opts.noRollback,
     sampleRows: imported.sampleRows,
     onProgress: log,

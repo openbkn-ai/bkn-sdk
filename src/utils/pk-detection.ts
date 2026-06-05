@@ -112,6 +112,29 @@ export function parsePkMap(input: string): Record<string, string> {
   return out;
 }
 
+/** Parse `--embedding-fields "t1:col1+col2,t2:col"` into a record of field lists. */
+export function parseEmbeddingFields(input: string): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const pair of input
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)) {
+    const idx = pair.indexOf(":");
+    if (idx <= 0 || idx >= pair.length - 1) {
+      throw new Error(
+        `Invalid --embedding-fields entry '${pair}'. Expected '<table>:<col>[+<col>...][,...]'`,
+      );
+    }
+    const cols = pair
+      .slice(idx + 1)
+      .split("+")
+      .map((c) => c.trim())
+      .filter(Boolean);
+    if (cols.length > 0) out[pair.slice(0, idx).trim()] = cols;
+  }
+  return out;
+}
+
 /** Human-facing message when PK auto-detection fails. */
 export function formatPkDetectionError(
   tableName: string,
