@@ -64,23 +64,59 @@ function columnsOf(rows: Array<Record<string, unknown>>): string[] {
   return seen;
 }
 
-/** Max columns shown in the human view before truncating (use --json for all). */
+/** Max columns shown in the human view before truncating (use --full / --json). */
 const MAX_COLS = 8;
 
+/** Audit/bookkeeping columns hidden by default — rarely the point of a list. */
+const NOISE_COLS = new Set([
+  "creator",
+  "updater",
+  "create_by",
+  "update_by",
+  "create_user",
+  "update_user",
+  "operations",
+  "status_message",
+  "last_check_time",
+  "last_discover_status",
+  "health_check_result",
+  "health_check_enabled",
+]);
+const isNoiseCol = (c: string) => NOISE_COLS.has(c) || /_time$/.test(c);
+
+/** Identity / key attributes a human scans for first. */
+const isKeyCol = (c: string) =>
+  /^(id|name|key|title|label)$/i.test(c) ||
+  /_(id|name|key)$/i.test(c) ||
+  /^(status|state|type|category|mode|enabled|version|branch)$/i.test(c);
+
 /**
- * Pick the columns worth showing a human: drop columns empty across all rows,
- * drop nested-object columns (creator/updater/… — noise as truncated JSON), and
- * cap the count. The full record is always one `--json` away.
+ * Pick the columns worth showing a human: drop empty / nested-object / audit
+ * columns, then order by usefulness (identity & key attributes first, long free
+ * text last) and cap the count. The full record is always one `--full`/`--json`
+ * away.
  */
 function selectColumns(rows: Array<Record<string, unknown>>): string[] {
   const isObj = (v: unknown) => v !== null && typeof v === "object" && !Array.isArray(v);
   const kept = columnsOf(rows).filter((c) => {
+    if (isNoiseCol(c)) return false;
     const vals = rows.map((r) => r[c]);
     if (!vals.some((v) => stringifyCell(v) !== "")) return false; // all empty
     if (vals.every((v) => v === null || v === undefined || isObj(v))) return false; // nested objects
     return true;
   });
-  return kept.slice(0, MAX_COLS);
+  // Long free-text (always truncated) is informative but bulky → push to the end.
+  const isLongText = (c: string) =>
+    rows.every((r) => {
+      const s = stringifyCell(r[c]);
+      return s === "" || s.length >= CELL_MAX - 1;
+    });
+  const rank = (c: string) => (isKeyCol(c) ? 0 : isLongText(c) ? 2 : 1);
+  const ordered = kept
+    .map((c, i) => ({ c, i, r: rank(c) }))
+    .sort((a, b) => a.r - b.r || a.i - b.i) // stable: rank, then original order
+    .map((x) => x.c);
+  return ordered.slice(0, MAX_COLS);
 }
 
 /**
