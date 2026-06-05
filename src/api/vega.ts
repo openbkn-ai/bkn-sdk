@@ -68,6 +68,36 @@ export function getCatalog(ctx: RequestContext, id: string): Promise<unknown> {
   return request(ctx, `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}`);
 }
 
+/** POST /catalogs body. `connector_config` shape varies by connector (raw passthrough). */
+export interface CreateCatalogRequest {
+  name: string;
+  connectorType: string;
+  connectorConfig: unknown;
+  tags?: string[];
+  description?: string;
+  enabled?: boolean;
+}
+
+/** Create a Vega catalog (data source). Returns the created catalog (with its id). */
+export function createCatalog(ctx: RequestContext, req: CreateCatalogRequest): Promise<unknown> {
+  return request(ctx, `${VEGA_BASE}/catalogs`, {
+    method: "POST",
+    body: {
+      name: req.name,
+      connector_type: req.connectorType,
+      connector_config: req.connectorConfig,
+      ...(req.tags ? { tags: req.tags } : {}),
+      ...(req.description ? { description: req.description } : {}),
+      ...(req.enabled !== undefined ? { enabled: req.enabled } : {}),
+    },
+  });
+}
+
+/** Enable a catalog (catalogs are created disabled; discovery needs it enabled). */
+export function enableCatalog(ctx: RequestContext, id: string): Promise<unknown> {
+  return request(ctx, `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}/enable`, { method: "POST" });
+}
+
 /** Trigger a catalog metadata scan (discover). `wait=true` blocks until done. */
 export function discoverCatalog(ctx: RequestContext, id: string, wait = true): Promise<unknown> {
   return request(ctx, `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}/discover`, {

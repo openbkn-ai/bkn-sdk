@@ -40,6 +40,55 @@ export function vegaCommand(): Command {
     .action(async (ids: string[], _opts, cmd: Command) => {
       printJson(await clientFrom(cmd).vega.catalogHealth(ids), outputOptions(cmd));
     });
+  catalog
+    .command("create")
+    .description("Create a catalog (data source)")
+    .requiredOption("--name <s>", "catalog name")
+    .requiredOption("--connector-type <s>", "connector type (e.g. mysql)")
+    .requiredOption("--connector-config <json>", "connector config JSON")
+    .option("--tags <t1,t2>", "comma-separated tags")
+    .option("--description <s>", "description")
+    .option("--enabled", "create enabled (default: disabled)")
+    .action(async (opts, cmd: Command) => {
+      let connectorConfig: unknown;
+      try {
+        connectorConfig = JSON.parse(opts.connectorConfig);
+      } catch {
+        throw new Error("--connector-config must be valid JSON");
+      }
+      printJson(
+        await clientFrom(cmd).vega.createCatalog({
+          name: opts.name,
+          connectorType: opts.connectorType,
+          connectorConfig,
+          tags: opts.tags
+            ? String(opts.tags)
+                .split(",")
+                .map((t) => t.trim())
+                .filter(Boolean)
+            : undefined,
+          description: opts.description,
+          enabled: opts.enabled ? true : undefined,
+        }),
+        outputOptions(cmd),
+      );
+    });
+  catalog
+    .command("enable <id>")
+    .description("Enable a catalog (required before discovery)")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.enableCatalog(id), outputOptions(cmd));
+    });
+  catalog
+    .command("discover <id>")
+    .description("Trigger catalog resource discovery")
+    .option("--wait", "wait for discovery to complete")
+    .action(async (id: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).vega.discoverCatalog(id, Boolean(opts.wait)),
+        outputOptions(cmd),
+      );
+    });
 
   const connector = vega.command("connector-type").description("Connector types");
   connector
@@ -60,13 +109,15 @@ export function vegaCommand(): Command {
     .command("list")
     .description("List resources")
     .option("--datasource-id <id>", "filter by catalog/datasource id")
+    .option("--catalog-id <id>", "alias of --datasource-id")
     .option("--type <category>", "resource category")
+    .option("--category <category>", "alias of --type")
     .option("--limit <n>", "page size", (v) => Number.parseInt(v, 10), DEFAULT_LIST_LIMIT)
     .action(async (opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).resource.list({
-          datasourceId: opts.datasourceId,
-          category: opts.type,
+          datasourceId: opts.datasourceId ?? opts.catalogId,
+          category: opts.type ?? opts.category,
           limit: opts.limit,
         }),
         outputOptions(cmd),

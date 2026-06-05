@@ -1,9 +1,13 @@
 import {
   type BuildTask,
   type CreateBuildTaskRequest,
+  type CreateCatalogRequest,
   type ListCatalogsOptions,
   catalogHealthStatus,
   createBuildTask,
+  createCatalog,
+  discoverCatalog,
+  enableCatalog,
   getBuildTask,
   getCatalog,
   getConnectorType,
@@ -23,6 +27,9 @@ export function vega(ctx: RequestContext) {
   return {
     catalogs: (opts?: ListCatalogsOptions) => listCatalogs(ctx, opts),
     getCatalog: (id: string) => getCatalog(ctx, id),
+    createCatalog: (req: CreateCatalogRequest) => createCatalog(ctx, req),
+    enableCatalog: (id: string) => enableCatalog(ctx, id),
+    discoverCatalog: (id: string, wait = false) => discoverCatalog(ctx, id, wait),
     catalogResources: (id: string, category?: string) => listCatalogResources(ctx, id, category),
     catalogHealth: (ids: string[]) => catalogHealthStatus(ctx, ids),
     connectorTypes: () => listConnectorTypes(ctx),
