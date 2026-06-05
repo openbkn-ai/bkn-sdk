@@ -38,7 +38,17 @@ export async function createBuildTask(
   ctx: RequestContext,
   req: CreateBuildTaskRequest,
 ): Promise<BuildTask> {
-  const body = CreateBuildTaskRequest.parse(req);
+  const p = CreateBuildTaskRequest.parse(req);
+  // The backend takes embedding_fields / build_key_fields as comma-joined
+  // strings, not arrays — keep the SDK surface ergonomic, serialize here.
+  const body = {
+    resource_id: p.resource_id,
+    mode: p.mode,
+    ...(p.embedding_fields?.length ? { embedding_fields: p.embedding_fields.join(",") } : {}),
+    ...(p.build_key_fields?.length ? { build_key_fields: p.build_key_fields.join(",") } : {}),
+    ...(p.embedding_model ? { embedding_model: p.embedding_model } : {}),
+    ...(p.model_dimensions ? { model_dimensions: p.model_dimensions } : {}),
+  };
   const res = await request<unknown>(ctx, `${VEGA_BASE}/build-tasks`, { method: "POST", body });
   return BuildTask.parse(res);
 }

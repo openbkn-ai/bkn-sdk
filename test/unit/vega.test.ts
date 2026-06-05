@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   catalogHealthStatus,
   createBuildTask,
+  createCatalog,
   getCatalog,
   listCatalogResources,
   listConnectorTypes,
@@ -67,5 +68,35 @@ describe("createBuildTask", () => {
     const call = firstCall(f);
     expect(new URL(call[0]).pathname).toBe("/api/vega-backend/v1/build-tasks");
     expect(call[1].method).toBe("POST");
+  });
+
+  it("serializes embedding/build-key field arrays into comma-joined strings", async () => {
+    // The backend types these as `string`, not `[]string` — see build_task.go.
+    const f = mockFetch({ id: "t-1", resource_id: "r-1", mode: "batch" });
+    await createBuildTask(ctx, {
+      resource_id: "r-1",
+      mode: "batch",
+      embedding_fields: ["name", "description"],
+      build_key_fields: ["skill_id"],
+    });
+    const body = JSON.parse(firstCall(f)[1].body as string);
+    expect(body.embedding_fields).toBe("name,description");
+    expect(body.build_key_fields).toBe("skill_id");
+  });
+});
+
+describe("createCatalog", () => {
+  it("POSTs connector fields to /catalogs", async () => {
+    const f = mockFetch({ id: "c-9" });
+    await createCatalog(ctx, {
+      name: "my-cat",
+      connectorType: "mysql",
+      connectorConfig: { host: "h" },
+    });
+    const call = firstCall(f);
+    expect(new URL(call[0]).pathname).toBe("/api/vega-backend/v1/catalogs");
+    const body = JSON.parse(call[1].body as string);
+    expect(body.connector_type).toBe("mysql");
+    expect(body.connector_config).toEqual({ host: "h" });
   });
 });

@@ -92,6 +92,12 @@ describe("parseObjectTypeIndex", () => {
     expect(t?.embeddingModel).toBe("bge-m3");
   });
 
+  it("falls back to the primary key when the incremental key is blank", () => {
+    const blankIncr = EN.replace("Incremental Key: updated_at", "Incremental Key:");
+    const t = parseObjectTypeIndex(blankIncr);
+    expect(t?.buildKey).toBe("player_id"); // not the next heading
+  });
+
   it("returns null when no field is marked for a vector index", () => {
     const noVector = EN.replace("fulltext + vector", "keyword");
     expect(parseObjectTypeIndex(noVector)).toBeNull();

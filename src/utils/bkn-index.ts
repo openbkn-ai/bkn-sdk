@@ -153,11 +153,12 @@ function vectorProps(text: string): { names: string[]; model?: string } {
 /** Batch build key: Incremental Key if set, else the first Primary Key. */
 function buildKey(text: string): string | undefined {
   const clean = (v: string) => v.replace(/`/g, "").split(/[,，]/)[0]?.trim() || undefined;
-  const incr = text.match(/Incremental\s*Key\s*[:：]\s*(.+)/i);
+  // `[ \t]*` (not `\s*`) so the value can't swallow the next line's heading.
+  const incr = text.match(/Incremental[ \t]*Key[ \t]*[:：][ \t]*([^\n]+)/i);
   if (incr?.[1]?.trim()) return clean(incr[1]);
   const pk =
-    text.match(/Primary\s*Keys?\s*[:：]\s*(.+)/i) ||
-    text.match(/\*\*\s*主键\s*\*\*\s*[:：]\s*([^|\n]+)/);
+    text.match(/Primary[ \t]*Keys?[ \t]*[:：][ \t]*([^\n]+)/i) ||
+    text.match(/\*\*[ \t]*主键[ \t]*\*\*[ \t]*[:：][ \t]*([^|\n]+)/);
   if (pk?.[1]?.trim()) return clean(pk[1]);
   return undefined;
 }
