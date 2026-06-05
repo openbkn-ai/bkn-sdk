@@ -14,14 +14,16 @@ export function resourceCommand(): Command {
 
   cmd
     .command("list")
-    .description("List resources under a datasource/catalog")
-    .option("--datasource-id <id>", "filter by datasource/catalog id")
-    .option("--type <category>", "resource category (table | logicview)")
+    .description("List resources under a catalog")
+    .option("--catalog-id <id>", "filter by catalog id")
+    .option("--datasource-id <id>", "alias of --catalog-id")
+    .option("--category <c>", "resource category (table | logicview | dataset)")
+    .option("--type <c>", "alias of --category")
     .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
     .action(async (opts, cmd: Command) => {
       const data = await clientFrom(cmd).resource.list({
-        datasourceId: opts.datasourceId,
-        category: opts.type,
+        datasourceId: opts.catalogId ?? opts.datasourceId,
+        category: opts.category ?? opts.type,
         limit: opts.limit,
       });
       printJson(data, outputOptions(cmd));
@@ -32,11 +34,12 @@ export function resourceCommand(): Command {
     .description("Search resources by name (fuzzy; --exact for strict)")
     .requiredOption("--name <name>", "resource name to search")
     .option("--exact", "exact name match")
-    .option("--datasource-id <id>", "limit to a datasource/catalog")
+    .option("--catalog-id <id>", "limit to a catalog")
+    .option("--datasource-id <id>", "alias of --catalog-id")
     .action(async (opts, cmd: Command) => {
       const data = await clientFrom(cmd).resource.find(opts.name, {
         exact: opts.exact,
-        datasourceId: opts.datasourceId,
+        datasourceId: opts.catalogId ?? opts.datasourceId,
       });
       printJson(data, outputOptions(cmd));
     });
