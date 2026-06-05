@@ -23,14 +23,24 @@ export const CreateBuildTaskRequest = z.object({
 });
 export type CreateBuildTaskRequest = z.infer<typeof CreateBuildTaskRequest>;
 
-export const BuildTask = z.object({
-  id: z.string(),
-  resource_id: z.string(),
-  mode: BuildMode,
-  state: z.string().optional(),
-  synced_count: z.number().optional(),
-  vectorized_count: z.number().optional(),
-});
+// Lenient: create vs list vs status responses carry different subsets — `status`
+// is the live field (not `state`); the create response can omit `mode`.
+export const BuildTask = z
+  .object({
+    id: z.string(),
+    resource_id: z.string().optional(),
+    mode: BuildMode.optional(),
+    status: z.string().optional(),
+    state: z.string().optional(),
+    total_count: z.number().optional(),
+    synced_count: z.number().optional(),
+    vectorized_count: z.number().optional(),
+    embedding_fields: z.string().optional(),
+    build_key_fields: z.string().optional(),
+    embedding_model: z.string().optional(),
+    model_dimensions: z.number().optional(),
+  })
+  .passthrough();
 export type BuildTask = z.infer<typeof BuildTask>;
 
 /** Create an index BuildTask for a resource. Returns the task (with its id). */

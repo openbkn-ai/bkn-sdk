@@ -21,7 +21,7 @@ import {
  */
 import type { RequestContext } from "../types.js";
 
-const TERMINAL_STATES = new Set(["completed", "success", "failed"]);
+const TERMINAL_STATES = new Set(["completed", "success", "failed", "stopped", "error"]);
 
 export function vega(ctx: RequestContext) {
   return {
@@ -56,8 +56,9 @@ async function pollBuildTask(
   intervalMs: number,
 ): Promise<BuildTask> {
   const deadline = Date.now() + timeoutMs;
+  const terminal = (t: BuildTask) => TERMINAL_STATES.has((t.status ?? t.state ?? "").toLowerCase());
   let last = await getBuildTask(ctx, taskId);
-  while (!TERMINAL_STATES.has((last.state ?? "").toLowerCase()) && Date.now() < deadline) {
+  while (!terminal(last) && Date.now() < deadline) {
     await sleep(intervalMs);
     last = await getBuildTask(ctx, taskId);
   }
