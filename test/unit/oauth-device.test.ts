@@ -44,14 +44,15 @@ describe("deviceLogin (RFC 8628)", () => {
     expect(prompts).toEqual(["WXYZ-1234@https://platform/device"]);
   });
 
-  it("sends client_id + scope; no client secret", async () => {
+  it("sends client_id + scope + audience; no client secret", async () => {
     const f = mockDeviceFetch(AUTH, [[200, { access_token: "AT" }]]);
-    await deviceLogin("https://platform", {});
+    await deviceLogin("https://platform", { audience: "bkn-safe" });
     const calls = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls;
     const init = calls[0]?.[1];
     const body = String(init?.body);
-    expect(body).toContain("client_id=openbkn");
+    expect(body).toContain("client_id=openbkn-sdk");
     expect(body).toContain("scope=openid+offline"); // URLSearchParams encodes space as '+'
+    expect(body).toContain("audience=bkn-safe");
     expect(body).not.toContain("client_secret");
     expect(body).not.toContain("all"); // seeded client has no `all` scope
   });

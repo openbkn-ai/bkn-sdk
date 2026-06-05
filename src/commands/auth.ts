@@ -27,6 +27,7 @@ export function registerAuthLeaves(cmd: Command): void {
     .option("--product <name>", "OAuth product query (default 'adp')")
     .option("--no-browser", "headless: print the authorize URL instead of opening a browser")
     .option("--device", "headless device-code login (RFC 8628) — no callback server, no password")
+    .option("--audience <aud>", "device-code token audience", "bkn-safe")
     .action(async (url: string, opts, cmd: Command) => {
       const g = cmd.optsWithGlobals();
       if (g.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -51,6 +52,7 @@ export function registerAuthLeaves(cmd: Command): void {
       } else if (opts.device) {
         tokens = await deviceLogin(url, {
           clientId: opts.clientId,
+          audience: opts.audience,
           onPrompt: ({ userCode, verificationUri, verificationUriComplete }) => {
             process.stderr.write(`\n打开浏览器登录: ${verificationUri}\n验证码: ${userCode}\n`);
             if (verificationUriComplete) {

@@ -414,8 +414,8 @@ export async function passwordLogin(
 // ── device-code login (RFC 8628) ──────────────────────────────────────────────
 
 const DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
-/** Seeded public client; device flow needs no secret and no `all` scope. */
-const DEFAULT_DEVICE_CLIENT_ID = "openbkn";
+/** Seeded bkn-safe public client (device_code + refresh, auth none, scope openid offline). */
+const DEFAULT_DEVICE_CLIENT_ID = "openbkn-sdk";
 const DEVICE_SCOPE = "openid offline";
 
 export interface DevicePrompt {
@@ -427,6 +427,8 @@ export interface DevicePrompt {
 export interface DeviceLoginOptions {
   clientId?: string;
   scope?: string;
+  /** Requested token audience (the seeded client is scoped to `bkn-safe`). */
+  audience?: string;
   onPrompt?: (info: DevicePrompt) => void;
 }
 
@@ -459,7 +461,9 @@ export async function deviceLogin(
   const scope = opts.scope ?? DEVICE_SCOPE;
 
   // 1) device authorization request
-  const authRes = await fetch(`${base}/oauth2/device/auth`, form({ client_id: clientId, scope }));
+  const authParams: Record<string, string> = { client_id: clientId, scope };
+  if (opts.audience) authParams.audience = opts.audience;
+  const authRes = await fetch(`${base}/oauth2/device/auth`, form(authParams));
   if (!authRes.ok) {
     throw new Error(
       `Device auth failed (${authRes.status}): ${(await authRes.text()) || authRes.statusText}`,
