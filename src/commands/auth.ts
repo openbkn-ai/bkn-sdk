@@ -1,13 +1,32 @@
 /** `openbkn auth …` — login / session / token (store-backed). */
-import { readFileSync } from "node:fs";
+import { createInterface } from "node:readline";
 import { Command } from "commander";
 import { changePassword } from "../api/admin.js";
-import { browserLogin, deviceLogin, openBrowser, passwordLogin } from "../auth/oauth.js";
+import { deviceLogin, openBrowser, passwordLogin } from "../auth/oauth.js";
 import { resolveContext } from "../config/resolve.js";
 import { group } from "../help/grouped-help.js";
 import * as auth from "../resources/auth.js";
 import { printJson } from "../utils/output.js";
 import { outputOptions } from "./_shared.js";
+
+/** Prompt for a line on the TTY; when `hidden`, the typed characters are not echoed. */
+function promptLine(query: string, hidden = false): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    if (hidden) {
+      // Swallow the echo of typed chars; print the query once up front.
+      const mutable = rl as unknown as { _writeToOutput: (s: string) => void };
+      mutable._writeToOutput = (s: string) => {
+        if (s.startsWith(query)) process.stdout.write(query);
+      };
+    }
+    rl.question(query, (answer) => {
+      rl.close();
+      if (hidden) process.stdout.write("\n");
+      resolve(answer.trim());
+    });
+  });
+}
 
 /** Register the auth leaves onto a parent (shared by top-level `auth` + `admin auth`). */
 export function registerAuthLeaves(cmd: Command): void {
@@ -19,13 +38,9 @@ export function registerAuthLeaves(cmd: Command): void {
     .option("--token <token>", "provide a token directly (CI / headless)")
     .option("--client-id <id>", "use a fixed OAuth2 client id (skip dynamic registration)")
     .option("--client-secret <secret>", "OAuth2 client secret (omit for public/PKCE)")
-    .option("--port <n>", "local callback port", (v) => Number.parseInt(v, 10))
-    .option(
-      "--signin-public-key-file <path>",
-      "override the RSA public key (PEM) for password signin",
+    .option("--port <n>", "loopback redirect port for the auth_code flow", (v) =>
+      Number.parseInt(v, 10),
     )
-    .option("--product <name>", "OAuth product query (default 'adp')")
-    .option("--no-browser", "headless: print the authorize URL instead of opening a browser")
     .option("--device", "headless device-code login (RFC 8628) — no callback server, no password")
     .option("--audience <aud>", "device-code token audience", "bkn-safe")
     .action(async (url: string, opts, cmd: Command) => {
@@ -37,19 +52,10 @@ export function registerAuthLeaves(cmd: Command): void {
         printJson({ loggedIn: true, ...r }, outputOptions(cmd));
         return;
       }
-      const signinKey = opts.signinPublicKeyFile
-        ? readFileSync(opts.signinPublicKeyFile, "utf8")
-        : undefined;
-      // password (-u) → device (--device, headless) → browser PKCE (default).
-      // NOTE: flip the default to device by reordering the last two branches.
-      let tokens: Awaited<ReturnType<typeof browserLogin>>;
-      if (opts.username) {
-        tokens = await passwordLogin(url, opts.username, opts.password ?? "", {
-          clientId: opts.clientId,
-          port: opts.port,
-          signinPublicKeyPem: signinKey,
-        });
-      } else if (opts.device) {
+      // --device → device-code (RFC 8628); otherwise username/password (default).
+      // Credentials come from -u/-p; anything missing is prompted interactively.
+      let tokens: Awaited<ReturnType<typeof passwordLogin>>;
+      if (opts.device) {
         tokens = await deviceLogin(url, {
           clientId: opts.clientId,
           audience: opts.audience,
@@ -63,10 +69,11 @@ export function registerAuthLeaves(cmd: Command): void {
           },
         });
       } else {
-        tokens = await browserLogin(url, {
+        const username = opts.username ?? (await promptLine("用户名: "));
+        const password = opts.password ?? (await promptLine("密码: ", true));
+        tokens = await passwordLogin(url, username, password, {
           clientId: opts.clientId,
           port: opts.port,
-          noBrowser: opts.browser === false,
         });
       }
       const r = auth.attachToken(url, tokens.accessToken, {

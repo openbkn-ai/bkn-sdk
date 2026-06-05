@@ -1,28 +1,21 @@
 /**
- * OAuth2 login flows for `openbkn auth login` — browser (PKCE + loopback
- * callback) and headless password sign-in (RSA-encrypted password → `/oauth2/signin`).
- * Ports the kweaver-admin flow: dynamic client registration (Hydra), authorize
- * redirect, code exchange. Returns a token triple; the command persists it.
+ * OAuth2 login flows for `openbkn auth login` against bkn-safe + hydra:
+ *  - password: headless authorization_code + PKCE, driving bkn-safe /login +
+ *    /consent server-to-server (no browser).
+ *  - device:   RFC 8628 device-code (seeded public client `openbkn-sdk`).
+ *  - browser:  PKCE + loopback callback.
+ * All use pre-seeded fixed clients (no dynamic registration). Returns a token
+ * triple; the command persists it.
  */
 import { spawn } from "node:child_process";
-import { createHash, constants as cryptoConstants, publicEncrypt, randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { type IncomingMessage, type ServerResponse, createServer } from "node:http";
 import { InputError } from "../utils/errors.js";
 
 export const DEFAULT_REDIRECT_PORT = 9010;
 export const DEFAULT_SCOPE = "openid offline all";
-
-// Studioweb fixed RSA public key for `/oauth2/signin` password encryption
-// (kweaver deploy/auto_config LOGIN_PUBLIC_KEY).
-const STUDIOWEB_LOGIN_PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsyOstgbYuubBi2PUqeVj
-GKlkwVUY6w1Y8d4k116dI2SkZI8fxcjHALv77kItO4jYLVplk9gO4HAtsisnNE2o
-wlYIqdmyEPMwupaeFFFcg751oiTXJiYbtX7ABzU5KQYPjRSEjMq6i5qu/mL67XTk
-hvKwrC83zme66qaKApmKupDODPb0RRkutK/zHfd1zL7sciBQ6psnNadh8pE24w8O
-2XVy1v2bgSNkGHABgncR7seyIg81JQ3c/Axxd6GsTztjLnlvGAlmT1TphE84mi99
-fUaGD2A1u1qdIuNc+XuisFeNcUW6fct0+x97eS2eEGRr/7qxWmO/P20sFVzXc2bF
-1QIDAQAB
------END PUBLIC KEY-----`;
+/** Seeded bkn-safe public client for headless password login (authorization_code + PKCE). */
+const DEFAULT_PASSWORD_CLIENT_ID = "openbkn-cli";
 
 export interface OAuthTokens {
   accessToken: string;
@@ -252,68 +245,20 @@ function mergeCookies(existing: string, res: Response): string {
   return [...map.entries()].map(([k, v]) => `${k}=${v}`).join("; ");
 }
 
-function parseSigninProps(html: string): {
-  csrftoken: string;
-  challenge?: string;
-  remember?: boolean;
-} {
-  const m = html.match(/<script[^>]*\bid=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
-  if (!m?.[1]) throw new Error("Could not find __NEXT_DATA__ on /oauth2/signin.");
-  const data = JSON.parse(m[1]) as Record<string, unknown>;
-  const pp = (data.props as Record<string, unknown> | undefined)?.pageProps as
-    | Record<string, unknown>
-    | undefined;
-  const csrftoken = (pp?.csrftoken ?? pp?._csrf) as string | undefined;
-  if (typeof csrftoken !== "string") throw new Error("Sign-in page did not expose csrftoken.");
-  return {
-    csrftoken,
-    challenge: typeof pp?.challenge === "string" ? pp.challenge : undefined,
-    remember: pp?.remember === true || pp?.remember === "true",
-  };
-}
-
-async function followToCallback(
-  startUrl: string,
-  jar0: string,
-  state: string,
-  redirectUri: string,
-): Promise<string> {
-  let url = startUrl;
-  let jar = jar0;
-  const cb = new URL(redirectUri);
-  for (let hop = 0; hop < 40; hop++) {
-    const resp = await fetch(url, {
-      headers: { Cookie: jar, Accept: "text/html,*/*;q=0.8" },
-      redirect: "manual",
-    });
-    jar = mergeCookies(jar, resp);
-    if (![302, 303, 307, 308].includes(resp.status)) {
-      throw new Error(`Unexpected OAuth response (HTTP ${resp.status}).`);
-    }
-    const loc = resp.headers.get("location");
-    if (!loc) throw new Error(`OAuth redirect missing Location (HTTP ${resp.status}).`);
-    const next = new URL(loc, url);
-    if (next.origin === cb.origin && next.pathname === cb.pathname) {
-      const err = next.searchParams.get("error");
-      if (err) throw new Error(`Authorization failed: ${err}`);
-      const code = next.searchParams.get("code");
-      if (next.searchParams.get("state") !== state) throw new Error("OAuth state mismatch.");
-      if (!code) throw new Error("Callback missing authorization code.");
-      return code;
-    }
-    url = next.href;
-  }
-  throw new Error("Too many OAuth redirects.");
-}
-
 export interface PasswordLoginOptions {
   clientId?: string;
   port?: number;
   scope?: string;
-  signinPublicKeyPem?: string;
 }
 
-/** Headless password login via RSA-encrypted `/oauth2/signin`. */
+/**
+ * Headless password login against bkn-safe. Drives hydra's authorization_code +
+ * PKCE flow server-to-server (no browser, no callback server): authorize →
+ * POST /login (plaintext account/password over TLS) → POST /consent (allow) →
+ * capture the code off the loopback redirect → exchange for tokens. The redirect
+ * chain is followed manually, POSTing credentials/consent at the bkn-safe pages
+ * and GET-following hydra's verifier hops in between.
+ */
 export async function passwordLogin(
   baseUrl: string,
   username: string,
@@ -323,91 +268,80 @@ export async function passwordLogin(
   const base = normalizeBaseUrl(baseUrl);
   const port = opts.port ?? DEFAULT_REDIRECT_PORT;
   const redirectUri = `http://127.0.0.1:${port}/callback`;
-  const scope = opts.scope ?? DEFAULT_SCOPE;
-  const client = opts.clientId
-    ? { clientId: opts.clientId }
-    : await registerClient(base, redirectUri, scope);
+  // bkn-safe clients are scoped `openid offline` (no `all` — would be invalid_scope).
+  const scope = opts.scope ?? "openid offline";
+  const client = { clientId: opts.clientId ?? DEFAULT_PASSWORD_CLIENT_ID };
   const { verifier, challenge } = generatePkce();
   const state = randomBytes(12).toString("hex");
+  const cb = new URL(redirectUri);
 
   let jar = "";
+  const post = async (path: string, body: Record<string, string>) => {
+    const r = await fetch(`${base}${path}`, {
+      method: "POST",
+      headers: {
+        Cookie: jar,
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "text/html,*/*;q=0.8",
+      },
+      body: new URLSearchParams(body).toString(),
+      redirect: "manual",
+    });
+    jar = mergeCookies(jar, r);
+    return r;
+  };
+
+  // 1) kick off authorize → hydra 302s to bkn-safe /login?login_challenge=…
   const authResp = await fetch(
     buildAuthorizeUrl(base, client.clientId, redirectUri, state, challenge, scope),
     { redirect: "manual" },
   );
   jar = mergeCookies(jar, authResp);
-  const authLoc = authResp.headers.get("location");
-  if (!authLoc) throw new Error(`/oauth2/auth did not redirect (HTTP ${authResp.status}).`);
-  const signinUrl = new URL(authLoc, base);
-  if (!signinUrl.pathname.includes("signin")) {
-    throw new Error(`Expected a sign-in redirect, got: ${authLoc}`);
-  }
-
-  const pageResp = await fetch(signinUrl.href, {
-    headers: { Cookie: jar, Accept: "text/html,*/*;q=0.8" },
-    redirect: "manual",
-  });
-  jar = mergeCookies(jar, pageResp);
-  const props = parseSigninProps(await pageResp.text());
-  const loginChallenge =
-    signinUrl.searchParams.get("login_challenge")?.trim() || props.challenge?.trim();
-  if (!loginChallenge) throw new Error("Could not resolve the login challenge.");
-
-  const cipher = publicEncrypt(
-    {
-      key: opts.signinPublicKeyPem ?? STUDIOWEB_LOGIN_PUBLIC_KEY_PEM,
-      padding: cryptoConstants.RSA_PKCS1_PADDING,
-    },
-    Buffer.from(password, "utf8"),
-  ).toString("base64");
-
-  const postResp = await fetch(`${base}/oauth2/signin`, {
-    method: "POST",
-    headers: {
-      Cookie: jar,
-      "Content-Type": "application/json",
-      Accept: "application/json, text/plain, */*",
-      Origin: new URL(base).origin,
-      Referer: signinUrl.href,
-    },
-    body: JSON.stringify({
-      _csrf: props.csrftoken,
-      challenge: loginChallenge,
-      account: username,
-      password: cipher,
-      vcode: { id: "", content: "" },
-      dualfactorauthinfo: { validcode: { vcode: "" }, OTP: { OTP: "" } },
-      remember: props.remember ?? false,
-      device: { name: "", description: "", client_type: "console_web", udids: [] },
-    }),
-    redirect: "manual",
-  });
-  jar = mergeCookies(jar, postResp);
-
-  let code: string;
-  if ([302, 303, 307].includes(postResp.status)) {
-    const loc = postResp.headers.get("location");
-    if (!loc) throw new Error("Sign-in response missing Location.");
-    code = await followToCallback(new URL(loc, base).href, jar, state, redirectUri);
-  } else if (postResp.status === 200) {
-    const text = await postResp.text();
-    let json: Record<string, unknown> | null = null;
-    try {
-      json = JSON.parse(text) as Record<string, unknown>;
-    } catch {
-      /* not JSON */
-    }
-    const redir = json && typeof json.redirect === "string" ? json.redirect : "";
-    if (!redir) {
-      const msg = json && typeof json.message === "string" ? json.message : text.slice(0, 300);
-      throw new InputError(`Sign-in failed: ${msg}`);
-    }
-    code = await followToCallback(new URL(redir, base).href, jar, state, redirectUri);
-  } else {
-    throw new InputError(
-      `Sign-in failed (HTTP ${postResp.status}): ${(await postResp.text()).slice(0, 300)}`,
+  let loc = authResp.headers.get("location");
+  if (!loc) {
+    throw new Error(
+      `/oauth2/auth did not redirect (HTTP ${authResp.status}): ${(await authResp.text()).slice(0, 200)}`,
     );
   }
+
+  // 2) walk the redirect chain: POST creds at /login, approve at /consent, GET
+  //    hydra's verifier hops, stop when we land on the loopback callback.
+  let code = "";
+  for (let hop = 0; hop < 20; hop++) {
+    const u = new URL(loc, base);
+    if (u.origin === cb.origin && u.pathname === cb.pathname) {
+      if (u.searchParams.get("state") !== state) throw new Error("OAuth state mismatch.");
+      const c = u.searchParams.get("code");
+      if (!c) throw new InputError(`Callback missing authorization code: ${loc}`);
+      code = c;
+      break;
+    }
+    let r: Response;
+    if (u.pathname.endsWith("/login")) {
+      const lc = u.searchParams.get("login_challenge");
+      if (!lc) throw new Error(`/login without login_challenge: ${loc}`);
+      r = await post("/login", { login_challenge: lc, account: username, password });
+      if (r.status === 401) throw new InputError("登录失败：账号或密码错误");
+    } else if (u.pathname.endsWith("/consent")) {
+      const cc = u.searchParams.get("consent_challenge");
+      if (!cc) throw new Error(`/consent without consent_challenge: ${loc}`);
+      r = await post("/consent", { consent_challenge: cc, decision: "allow" });
+    } else {
+      r = await fetch(u.href, {
+        headers: { Cookie: jar, Accept: "text/html,*/*;q=0.8" },
+        redirect: "manual",
+      });
+      jar = mergeCookies(jar, r);
+    }
+    const next = r.headers.get("location");
+    if (!next) {
+      throw new InputError(
+        `OAuth flow stalled at ${u.pathname} (HTTP ${r.status}): ${(await r.text()).slice(0, 200)}`,
+      );
+    }
+    loc = next;
+  }
+  if (!code) throw new Error("Too many OAuth redirects without reaching the callback.");
   return exchangeCode(base, code, redirectUri, client, verifier);
 }
 
