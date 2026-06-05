@@ -179,7 +179,7 @@ function startCallbackServer(
   });
 }
 
-function openBrowser(url: string): void {
+export function openBrowser(url: string): void {
   const cmd =
     process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
   try {
@@ -409,4 +409,101 @@ export async function passwordLogin(
     );
   }
   return exchangeCode(base, code, redirectUri, client, verifier);
+}
+
+// ── device-code login (RFC 8628) ──────────────────────────────────────────────
+
+const DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
+/** Seeded public client; device flow needs no secret and no `all` scope. */
+const DEFAULT_DEVICE_CLIENT_ID = "openbkn";
+const DEVICE_SCOPE = "openid offline";
+
+export interface DevicePrompt {
+  userCode: string;
+  verificationUri: string;
+  verificationUriComplete?: string;
+}
+
+export interface DeviceLoginOptions {
+  clientId?: string;
+  scope?: string;
+  onPrompt?: (info: DevicePrompt) => void;
+}
+
+interface DeviceAuthResponse {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  verification_uri_complete?: string;
+  expires_in: number;
+  interval?: number;
+}
+
+const form = (body: Record<string, string>) =>
+  ({
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json",
+    },
+    body: new URLSearchParams(body).toString(),
+  }) satisfies RequestInit;
+
+/** Device-code login: request code → user authorizes in browser → poll token. */
+export async function deviceLogin(
+  baseUrl: string,
+  opts: DeviceLoginOptions = {},
+): Promise<OAuthTokens> {
+  const base = normalizeBaseUrl(baseUrl);
+  const clientId = opts.clientId ?? DEFAULT_DEVICE_CLIENT_ID;
+  const scope = opts.scope ?? DEVICE_SCOPE;
+
+  // 1) device authorization request
+  const authRes = await fetch(`${base}/oauth2/device/auth`, form({ client_id: clientId, scope }));
+  if (!authRes.ok) {
+    throw new Error(
+      `Device auth failed (${authRes.status}): ${(await authRes.text()) || authRes.statusText}`,
+    );
+  }
+  const da = (await authRes.json()) as DeviceAuthResponse;
+  if (!da.verification_uri) {
+    throw new Error(
+      "Device auth returned no verification_uri — is Hydra's device flow configured?",
+    );
+  }
+
+  // 2) surface user_code + URL to the caller (prints / opens browser)
+  opts.onPrompt?.({
+    userCode: da.user_code,
+    verificationUri: da.verification_uri,
+    verificationUriComplete: da.verification_uri_complete,
+  });
+
+  // 3) poll the token endpoint until authorized / expired
+  let interval = (da.interval ?? 5) * 1000;
+  const deadline = Date.now() + da.expires_in * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, interval));
+    const tokRes = await fetch(
+      `${base}/oauth2/token`,
+      form({ grant_type: DEVICE_GRANT, device_code: da.device_code, client_id: clientId }),
+    );
+    const data = (await tokRes.json().catch(() => ({}))) as Record<string, unknown>;
+    if (tokRes.ok) return mapToken(data as { access_token: string });
+
+    switch (data.error) {
+      case "authorization_pending":
+        break; // keep polling
+      case "slow_down":
+        interval += 5000; // back off per RFC 8628 §3.5
+        break;
+      case "access_denied":
+        throw new InputError("Device authorization denied.");
+      case "expired_token":
+        throw new InputError("Device code expired — run login again.");
+      default:
+        throw new Error(`Device token poll failed: ${String(data.error ?? tokRes.status)}`);
+    }
+  }
+  throw new InputError("Device login timed out.");
 }

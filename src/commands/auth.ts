@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import { changePassword } from "../api/admin.js";
-import { browserLogin, passwordLogin } from "../auth/oauth.js";
+import { browserLogin, deviceLogin, openBrowser, passwordLogin } from "../auth/oauth.js";
 import { resolveContext } from "../config/resolve.js";
 import { group } from "../help/grouped-help.js";
 import * as auth from "../resources/auth.js";
@@ -26,6 +26,7 @@ export function registerAuthLeaves(cmd: Command): void {
     )
     .option("--product <name>", "OAuth product query (default 'adp')")
     .option("--no-browser", "headless: print the authorize URL instead of opening a browser")
+    .option("--device", "headless device-code login (RFC 8628) — no callback server, no password")
     .action(async (url: string, opts, cmd: Command) => {
       const g = cmd.optsWithGlobals();
       if (g.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -38,17 +39,34 @@ export function registerAuthLeaves(cmd: Command): void {
       const signinKey = opts.signinPublicKeyFile
         ? readFileSync(opts.signinPublicKeyFile, "utf8")
         : undefined;
-      const tokens = opts.username
-        ? await passwordLogin(url, opts.username, opts.password ?? "", {
-            clientId: opts.clientId,
-            port: opts.port,
-            signinPublicKeyPem: signinKey,
-          })
-        : await browserLogin(url, {
-            clientId: opts.clientId,
-            port: opts.port,
-            noBrowser: opts.browser === false,
-          });
+      // password (-u) → device (--device, headless) → browser PKCE (default).
+      // NOTE: flip the default to device by reordering the last two branches.
+      let tokens: Awaited<ReturnType<typeof browserLogin>>;
+      if (opts.username) {
+        tokens = await passwordLogin(url, opts.username, opts.password ?? "", {
+          clientId: opts.clientId,
+          port: opts.port,
+          signinPublicKeyPem: signinKey,
+        });
+      } else if (opts.device) {
+        tokens = await deviceLogin(url, {
+          clientId: opts.clientId,
+          onPrompt: ({ userCode, verificationUri, verificationUriComplete }) => {
+            process.stderr.write(`\n打开浏览器登录: ${verificationUri}\n验证码: ${userCode}\n`);
+            if (verificationUriComplete) {
+              process.stderr.write(`或直接打开(已带码): ${verificationUriComplete}\n`);
+              openBrowser(verificationUriComplete);
+            }
+            process.stderr.write("等待授权…\n");
+          },
+        });
+      } else {
+        tokens = await browserLogin(url, {
+          clientId: opts.clientId,
+          port: opts.port,
+          noBrowser: opts.browser === false,
+        });
+      }
       const r = auth.attachToken(url, tokens.accessToken, {
         refreshToken: tokens.refreshToken,
         idToken: tokens.idToken,
