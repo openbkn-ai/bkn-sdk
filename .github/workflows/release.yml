@@ -20,6 +20,18 @@ jobs:
       # Trusted Publishing (OIDC) needs npm >= 11.5.1 — newer than what Node 22 ships.
       - run: npm install -g npm@latest
       - run: npm ci
+      # Derive the npm dist-tag from the version: a prerelease (e.g.
+      # 0.1.1-alpha.0) publishes under its label (`alpha`), never clobbering
+      # `latest`; a stable version publishes to `latest`.
+      - id: tag
+        run: |
+          v=$(node -p "require('./package.json').version")
+          if [[ "$v" == *-* ]]; then
+            label=${v#*-}; label=${label%%.*}
+            echo "dist=$label" >> "$GITHUB_OUTPUT"
+          else
+            echo "dist=latest" >> "$GITHUB_OUTPUT"
+          fi
       # No NODE_AUTH_TOKEN: npm exchanges the GitHub OIDC token with npmjs.
       # Provenance is generated automatically under Trusted Publishing.
-      - run: npm publish --access public
+      - run: npm publish --access public --tag ${{ steps.tag.outputs.dist }}
