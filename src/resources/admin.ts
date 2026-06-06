@@ -11,36 +11,47 @@ import type {
 import {
   assignRoleSafe,
   buildDepartmentTree,
+  createDepartmentSafe,
   createUserSafe,
+  deleteDepartmentSafe,
+  deleteUserSafe,
   getDepartmentSafe,
+  getRoleSafe,
   getUserRolesSafe,
   getUserSafe,
   listDepartmentsSafe,
+  listRolesSafe,
   notOnSafe,
+  removeRoleSafe,
+  roleMembersSafe,
   setUserPasswordSafe,
+  updateDepartmentSafe,
+  updateUserSafe,
 } from "../api/safe.js";
 import type { RequestContext } from "../types.js";
 
 /**
- * Admin (operator) resource surface, on bkn-safe's `/api/safe/v1` API. bkn-safe
- * owns a minimal identity surface, so several ISF-era operations have no
- * endpoint — those throw a clear "not available" via `notOnSafe` instead of a
- * raw 503. See docs/exec-plans/admin-bkn-safe-migration.md.
+ * Admin (operator) resource surface, on bkn-safe's `/api/safe/v1` API. Only
+ * `user list` (no enumeration endpoint) and `audit list` (no audit endpoint)
+ * have no bkn-safe equivalent — those throw a clear "not available" via
+ * `notOnSafe`. See docs/exec-plans/admin-bkn-safe-migration.md.
  */
 const DEFAULT_NEW_USER_PASSWORD = "openbkn"; // platform initial password (forced-change on first login)
 
 export function admin(ctx: RequestContext) {
   return {
-    // ── departments (read-only on bkn-safe) ──
+    // ── departments ──
     orgList: (_opts?: AdminListOptions) => listDepartmentsSafe(ctx),
     orgGet: (deptId: string) => getDepartmentSafe(ctx, deptId),
     orgTree: (_role?: string) => buildDepartmentTree(ctx),
     orgMembers: (_deptId: string, _opts?: unknown) => notOnSafe("org members"),
-    orgCreate: (_input: CreateOrgInput) => notOnSafe("org create"),
-    orgUpdate: (_deptId: string, _input: UpdateOrgInput) => notOnSafe("org update"),
-    orgDelete: (_deptId: string) => notOnSafe("org delete"),
+    orgCreate: (input: CreateOrgInput) =>
+      createDepartmentSafe(ctx, { name: input.name, parentId: input.parentId }),
+    orgUpdate: (deptId: string, input: UpdateOrgInput) =>
+      updateDepartmentSafe(ctx, deptId, { name: input.name }),
+    orgDelete: (deptId: string) => deleteDepartmentSafe(ctx, deptId),
 
-    // ── users (get/create/set-password + roles; no enumerate/update/delete) ──
+    // ── users ──
     userList: (_opts?: AdminListOptions) => notOnSafe("user list"),
     userGet: (userId: string) => getUserSafe(ctx, userId),
     userRoles: (userId: string) => getUserRolesSafe(ctx, userId),
@@ -51,19 +62,25 @@ export function admin(ctx: RequestContext) {
         name: input.displayName,
         email: input.email,
       }),
-    userUpdate: (_userId: string, _input: UpdateUserInput) => notOnSafe("user update"),
-    userDelete: (_userId: string) => notOnSafe("user delete"),
+    userUpdate: (userId: string, input: UpdateUserInput) =>
+      updateUserSafe(ctx, userId, {
+        name: input.displayName,
+        email: input.email,
+        telephone: input.telNumber,
+      }),
+    userDelete: (userId: string) => deleteUserSafe(ctx, userId),
     userResetPassword: (userId: string, newPassword: string) =>
       setUserPasswordSafe(ctx, userId, newPassword),
 
-    // ── roles (bind only; no enumerate/unbind) ──
-    roleList: (_opts?: ListRolesOptions) => notOnSafe("role list"),
-    roleGet: (_roleId: string) => notOnSafe("role get"),
-    roleMembers: (_roleId: string, _opts?: unknown) => notOnSafe("role members"),
+    // ── roles ──
+    roleList: (opts?: ListRolesOptions) =>
+      listRolesSafe(ctx, (opts as { source?: string } | undefined)?.source),
+    roleGet: (roleId: string) => getRoleSafe(ctx, roleId),
+    roleMembers: (roleId: string, _opts?: unknown) => roleMembersSafe(ctx, roleId),
     addRoleMember: (roleId: string, id: string, _type: MemberType = "user") =>
       assignRoleSafe(ctx, id, roleId),
-    removeRoleMember: (_roleId: string, _id: string, _type: MemberType = "user") =>
-      notOnSafe("role remove-member"),
+    removeRoleMember: (roleId: string, id: string, _type: MemberType = "user") =>
+      removeRoleSafe(ctx, id, roleId),
 
     auditList: (_opts?: AuditListOptions) => notOnSafe("audit list"),
   };
