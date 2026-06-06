@@ -20,7 +20,7 @@ Live: `admin user list` / `admin role list` → **503**. `admin llm/small-model`
 
 ## bkn-safe surface available today
 
-```
+```text
 directory:  GET  /api/safe/v1/directory/departments
             GET  /api/safe/v1/directory/users/:id
             GET  /api/safe/v1/directory/users/:id/department-ids
@@ -41,26 +41,42 @@ auth:       /login /consent /device · POST /api/safe/v1/auth/change-password (l
 
 ## Command-by-command mapping
 
-| CLI command | bkn-safe endpoint | Status |
-| --- | --- | --- |
-| `user list` | `POST /directory/search-org` | ✅ migratable |
-| `user get <id>` | `GET /directory/users/:id` | ✅ |
-| `user create` | `POST /directory/users` | ✅ |
-| `user reset-password` | `PUT /directory/users/:id/password` | ✅ |
-| `user assign-role` | `POST /authz/role-bindings` | ✅ |
-| `org list` | `GET /directory/departments` | ✅ |
-| `org tree` | build client-side from departments | ✅ |
-| `org get <id>` | `POST /directory/departments-detail` | ✅ |
-| `role add-member` | `POST /authz/role-bindings` | ✅ |
-| `org members <id>` | `GET /directory/groups/:id/members` (group vs dept?) | ⚠️ confirm |
-| **`user update`** | — | ❌ no PUT user (only password) |
-| **`user delete`** | — | ❌ |
-| **`user roles <user>`** | — | ❌ no "roles of accessor" read |
-| **`user revoke-role`** | — | ❌ role-bindings has no unbind |
-| **`org create / update / delete`** | — | ❌ no dept create/update/delete |
-| **`role list / get / members`** | — | ❌ no role enumeration |
-| **`role remove-member`** | — | ❌ no unbind |
-| **`audit list`** | — | ❌ EACP login-log gone, no bkn-safe audit |
+Migrated (CLI now calls these; ✅ verified against bkn-safe directly):
+
+| CLI command | bkn-safe endpoint |
+| --- | --- |
+| `user get <id>` | `GET /directory/users/:id` |
+| `user create` | `POST /directory/users` (account+default password `openbkn`; drops dept/code/position — unsupported) |
+| `user reset-password` | `PUT /directory/users/:id/password` |
+| `user roles <user>` | `POST /directory/users-detail` → `users[0].roles` |
+| `user assign-role` / `role add-member` | `POST /authz/role-bindings` |
+| `org list` | `GET /directory/departments?parent_id=` |
+| `org tree` | walk `GET /departments` from roots (client-side) |
+| `org get <id>` | `POST /directory/departments-detail` |
+
+No bkn-safe endpoint — the CLI now returns a clear "not available on bkn-safe"
+(via `notOnSafe`) instead of a 503:
+
+| CLI command | why |
+| --- | --- |
+| `user list` | no user enumeration (`search-org` is id-scoping, not a list) |
+| `user update` / `user delete` | only create + password exist |
+| `user revoke-role` / `role remove-member` | `role-bindings` is POST-only, no unbind |
+| `org create / update / delete` | departments are read-only |
+| `org members <id>` | `groups/:id/members` exists but group ≠ department (unconfirmed) |
+| `role list` / `role get` / `role members` | no role enumeration (roles are seeded) |
+| `audit list` | EACP login-log gone; no bkn-safe audit endpoint |
+
+## Gateway routing gap (blocks the migrated reads)
+
+The migrated CLI targets the right endpoints, verified against bkn-safe
+**directly**: `wget http://bkn-safe:3000/api/safe/v1/directory/departments` → 200.
+But the **nginx gateway only routes `/api/safe/v1/auth/*`** (login/consent/device/
+change-password). `GET https://10.211.55.4/api/safe/v1/directory/departments` and
+`/api/safe/v1/authz/*` → 404 at the edge. **Server action:** proxy
+`/api/safe/v1/directory` and `/api/safe/v1/authz` to bkn-safe:3000 like
+`/api/safe/v1/auth` already is. Until then the ✅ rows below 404 externally even
+though the code + bkn-safe handler are correct.
 
 ## Gaps to confirm with the server agent
 

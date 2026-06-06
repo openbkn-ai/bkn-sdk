@@ -129,7 +129,7 @@ export function adminCommand(): Command {
       const tree = await clientFrom(cmd).admin.orgTree(opts.role);
       const out = outputOptions(cmd);
       if (out.json) printJson(tree, out);
-      else console.log(renderOrgTree(tree));
+      else console.log(renderOrgTree(tree as Parameters<typeof renderOrgTree>[0]));
     });
 
   const user = admin.command("user").description("User management");
