@@ -234,7 +234,7 @@ export async function credentialDeviceLogin(
       const lc = u.searchParams.get("login_challenge");
       if (!lc) throw new Error(`/login without login_challenge: ${loc}`);
       r = await postForm("/login", { login_challenge: lc, account: username, password });
-      if (r.status === 401) throw new InputError("登录失败：账号或密码错误");
+      if (r.status === 401) throw new InputError("Sign-in failed: wrong account or password");
     } else if (u.pathname.endsWith("/consent")) {
       const cc = u.searchParams.get("consent_challenge");
       if (!cc) throw new Error(`/consent without consent_challenge: ${loc}`);

@@ -64,8 +64,8 @@ export function registerAuthLeaves(cmd: Command): void {
       //  default       → open the browser; user signs in + approves there.
       let tokens: Awaited<ReturnType<typeof deviceLogin>>;
       if (opts.username || opts.password) {
-        const username = opts.username ?? (await promptLine("用户名: "));
-        const password = opts.password ?? (await promptLine("密码: ", true));
+        const username = opts.username ?? (await promptLine("Username: "));
+        const password = opts.password ?? (await promptLine("Password: ", true));
         tokens = await credentialDeviceLogin(url, username, password, {
           clientId: opts.clientId,
           audience: opts.audience,
@@ -78,9 +78,9 @@ export function registerAuthLeaves(cmd: Command): void {
           audience: opts.audience,
           onPrompt: ({ userCode, verificationUri, verificationUriComplete }) => {
             const target = verificationUriComplete ?? verificationUri;
-            process.stderr.write(`\n打开下面的链接登录并授权:\n  ${target}\n验证码: ${userCode}\n`);
+            process.stderr.write(`\nOpen this URL to sign in and authorize:\n  ${target}\nUser code: ${userCode}\n`);
             if (openInBrowser) openBrowser(target);
-            process.stderr.write("等待授权…\n");
+            process.stderr.write("Waiting for authorization…\n");
           },
         });
       }
@@ -176,13 +176,13 @@ export function registerAuthLeaves(cmd: Command): void {
         businessDomain: g.bizDomain,
         insecure: g.insecure,
       });
-      const account = opts.account ?? (await promptLine("账号: "));
-      const oldPassword = opts.oldPassword ?? (await promptLine("当前密码: ", true));
+      const account = opts.account ?? (await promptLine("Account: "));
+      const oldPassword = opts.oldPassword ?? (await promptLine("Current password: ", true));
       let newPassword = opts.newPassword;
       if (!newPassword) {
-        newPassword = await promptLine("新密码: ", true);
-        const confirm = await promptLine("再次输入新密码: ", true);
-        if (newPassword !== confirm) throw new Error("两次输入的新密码不一致。");
+        newPassword = await promptLine("New password: ", true);
+        const confirm = await promptLine("Confirm new password: ", true);
+        if (newPassword !== confirm) throw new Error("New passwords do not match.");
       }
       try {
         printJson(
@@ -193,10 +193,10 @@ export function registerAuthLeaves(cmd: Command): void {
         // 401 here means bad account/old password, not a missing session;
         // 400 means the new password equals the old one.
         if (e instanceof HttpError && e.status === 401) {
-          throw new InputError("账号或当前密码错误。");
+          throw new InputError("Wrong account or current password.");
         }
         if (e instanceof HttpError && e.status === 400) {
-          throw new InputError("新密码不能与旧密码相同。");
+          throw new InputError("New password must differ from the current one.");
         }
         throw e;
       }
