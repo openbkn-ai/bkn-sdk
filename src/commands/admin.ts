@@ -325,6 +325,38 @@ export function adminCommand(): Command {
         outputOptions(cmd),
       );
     });
+  role
+    .command("create")
+    .description("Create a custom role (bkn-safe; built-in roles are read-only)")
+    .requiredOption("--name <name>", "role name")
+    .option("--description <text>", "role description")
+    .action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).admin.roleCreate(opts.name, opts.description),
+        outputOptions(cmd),
+      );
+    });
+  role
+    .command("update <role>")
+    .description("Update a custom role's name/description (403 on built-in)")
+    .option("--name <name>", "new name")
+    .option("--description <text>", "new description")
+    .action(async (roleId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).admin.roleUpdate(roleId, {
+          name: opts.name,
+          description: opts.description,
+        }),
+        outputOptions(cmd),
+      );
+    });
+  role
+    .command("delete <role>")
+    .description("Delete a custom role (403 on built-in)")
+    .option("-y, --yes", "skip confirmation")
+    .action(async (roleId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).admin.roleDelete(roleId), outputOptions(cmd));
+    });
 
   // Models management reuses the (validated) mf-model-manager client. Granular
   // flags assemble the request body; `--body`/`--body-file` override wins.

@@ -12,39 +12,45 @@ import {
   assignRoleSafe,
   buildDepartmentTree,
   createDepartmentSafe,
+  createRoleSafe,
   createUserSafe,
   deleteDepartmentSafe,
+  deleteRoleSafe,
   deleteUserSafe,
+  getDepartmentMembersSafe,
   getDepartmentSafe,
   getRoleSafe,
   getUserRolesSafe,
   getUserSafe,
   listDepartmentsSafe,
   listRolesSafe,
+  listUsersSafe,
   notOnSafe,
   removeRoleSafe,
   roleMembersSafe,
   setUserPasswordSafe,
   updateDepartmentSafe,
+  updateRoleSafe,
   updateUserSafe,
 } from "../api/safe.js";
 import type { RequestContext } from "../types.js";
 
 /**
- * Admin (operator) resource surface, on bkn-safe's `/api/safe/v1` API. Only
- * `user list` (no enumeration endpoint) and `audit list` (no audit endpoint)
- * have no bkn-safe equivalent — those throw a clear "not available" via
- * `notOnSafe`. See docs/exec-plans/admin-bkn-safe-migration.md.
+ * Admin (operator) resource surface, on bkn-safe's token-gated
+ * `/api/safe/v1/admin/*` API. Only `audit list` has no endpoint (login-log
+ * retired by design) → `notOnSafe`. See
+ * docs/exec-plans/admin-bkn-safe-migration.md.
  */
 const DEFAULT_NEW_USER_PASSWORD = "openbkn"; // platform initial password (forced-change on first login)
 
 export function admin(ctx: RequestContext) {
   return {
     // ── departments ──
-    orgList: (_opts?: AdminListOptions) => listDepartmentsSafe(ctx),
+    orgList: (opts?: AdminListOptions) =>
+      listDepartmentsSafe(ctx, { search: opts?.name, offset: opts?.offset, limit: opts?.limit }),
     orgGet: (deptId: string) => getDepartmentSafe(ctx, deptId),
     orgTree: (_role?: string) => buildDepartmentTree(ctx),
-    orgMembers: (_deptId: string, _opts?: unknown) => notOnSafe("org members"),
+    orgMembers: (deptId: string, _opts?: unknown) => getDepartmentMembersSafe(ctx, deptId),
     orgCreate: (input: CreateOrgInput) =>
       createDepartmentSafe(ctx, { name: input.name, parentId: input.parentId }),
     orgUpdate: (deptId: string, input: UpdateOrgInput) =>
@@ -52,7 +58,8 @@ export function admin(ctx: RequestContext) {
     orgDelete: (deptId: string) => deleteDepartmentSafe(ctx, deptId),
 
     // ── users ──
-    userList: (_opts?: AdminListOptions) => notOnSafe("user list"),
+    userList: (opts?: AdminListOptions) =>
+      listUsersSafe(ctx, { search: opts?.name, offset: opts?.offset, limit: opts?.limit }),
     userGet: (userId: string) => getUserSafe(ctx, userId),
     userRoles: (userId: string) => getUserRolesSafe(ctx, userId),
     userCreate: (input: CreateUserInput) =>
@@ -73,14 +80,17 @@ export function admin(ctx: RequestContext) {
       setUserPasswordSafe(ctx, userId, newPassword),
 
     // ── roles ──
-    roleList: (opts?: ListRolesOptions) =>
-      listRolesSafe(ctx, (opts as { source?: string } | undefined)?.source),
+    roleList: (opts?: ListRolesOptions) => listRolesSafe(ctx),
     roleGet: (roleId: string) => getRoleSafe(ctx, roleId),
     roleMembers: (roleId: string, _opts?: unknown) => roleMembersSafe(ctx, roleId),
     addRoleMember: (roleId: string, id: string, _type: MemberType = "user") =>
       assignRoleSafe(ctx, id, roleId),
     removeRoleMember: (roleId: string, id: string, _type: MemberType = "user") =>
       removeRoleSafe(ctx, id, roleId),
+    roleCreate: (name: string, description?: string) => createRoleSafe(ctx, { name, description }),
+    roleUpdate: (roleId: string, input: { name?: string; description?: string }) =>
+      updateRoleSafe(ctx, roleId, input),
+    roleDelete: (roleId: string) => deleteRoleSafe(ctx, roleId),
 
     auditList: (_opts?: AuditListOptions) => notOnSafe("audit list"),
   };
