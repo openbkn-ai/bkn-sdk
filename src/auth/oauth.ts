@@ -177,12 +177,27 @@ export async function deviceLogin(
   const base = normalizeBaseUrl(baseUrl);
   const clientId = opts.clientId ?? DEFAULT_DEVICE_CLIENT_ID;
   const da = await requestDeviceCode(base, clientId, opts.scope ?? DEVICE_SCOPE, opts.audience);
+  // Hydra may advertise an internal host (e.g. its container name) in the
+  // verification URIs; present them on the base URL the user actually reached.
   opts.onPrompt?.({
     userCode: da.user_code,
-    verificationUri: da.verification_uri,
-    verificationUriComplete: da.verification_uri_complete,
+    verificationUri: onBaseHost(base, da.verification_uri),
+    verificationUriComplete: da.verification_uri_complete
+      ? onBaseHost(base, da.verification_uri_complete)
+      : undefined,
   });
   return pollDeviceToken(base, da.device_code, clientId, (da.interval ?? 5) * 1000, da.expires_in);
+}
+
+/** Re-host a URL onto the base origin, keeping its path + query. */
+function onBaseHost(base: string, uri: string): string {
+  try {
+    const u = new URL(uri);
+    const b = new URL(base);
+    return `${b.origin}${u.pathname}${u.search}`;
+  } catch {
+    return uri;
+  }
 }
 
 /**
