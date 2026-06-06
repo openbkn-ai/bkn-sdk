@@ -90,6 +90,8 @@ export interface DeviceLoginOptions {
   scope?: string;
   /** Requested token audience (the seeded client is scoped to `bkn-safe`). */
   audience?: string;
+  /** Cap the poll wait (ms); defaults to the device code's `expires_in`. */
+  timeoutMs?: number;
   onPrompt?: (info: DevicePrompt) => void;
 }
 
@@ -140,10 +142,10 @@ async function pollDeviceToken(
   deviceCode: string,
   clientId: string,
   intervalMs: number,
-  expiresIn: number,
+  windowMs: number,
 ): Promise<OAuthTokens> {
   let interval = intervalMs;
-  const deadline = Date.now() + expiresIn * 1000;
+  const deadline = Date.now() + windowMs;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, interval));
     const tokRes = await fetch(
@@ -186,7 +188,8 @@ export async function deviceLogin(
       ? onBaseHost(base, da.verification_uri_complete)
       : undefined,
   });
-  return pollDeviceToken(base, da.device_code, clientId, (da.interval ?? 5) * 1000, da.expires_in);
+  const windowMs = Math.min(opts.timeoutMs ?? Number.POSITIVE_INFINITY, da.expires_in * 1000);
+  return pollDeviceToken(base, da.device_code, clientId, (da.interval ?? 5) * 1000, windowMs);
 }
 
 /** Re-host a URL onto the base origin, keeping its path + query. */
@@ -261,5 +264,6 @@ export async function credentialDeviceLogin(
   }
 
   // Approval submitted — poll the device token.
-  return pollDeviceToken(base, da.device_code, clientId, (da.interval ?? 5) * 1000, da.expires_in);
+  const windowMs = Math.min(opts.timeoutMs ?? Number.POSITIVE_INFINITY, da.expires_in * 1000);
+  return pollDeviceToken(base, da.device_code, clientId, (da.interval ?? 5) * 1000, windowMs);
 }

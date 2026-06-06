@@ -44,6 +44,12 @@ export function registerAuthLeaves(cmd: Command): void {
     )
     .option("--device", "headless device-code login (RFC 8628) — no callback server, no password")
     .option("--audience <aud>", "device-code token audience", "bkn-safe")
+    .option(
+      "--timeout <s>",
+      "device-login wait before timing out",
+      (v) => Number.parseInt(v, 10),
+      120,
+    )
     // Legacy ISF sign-in flags — accepted for compatibility, ignored by the
     // bkn-safe device-code flow.
     .option("--no-browser", "(legacy) print the URL instead of opening a browser")
@@ -69,6 +75,7 @@ export function registerAuthLeaves(cmd: Command): void {
         tokens = await credentialDeviceLogin(url, username, password, {
           clientId: opts.clientId,
           audience: opts.audience,
+          timeoutMs: opts.timeout * 1000,
         });
       } else {
         // open the browser unless headless (--device) or --no-browser.
@@ -76,9 +83,12 @@ export function registerAuthLeaves(cmd: Command): void {
         tokens = await deviceLogin(url, {
           clientId: opts.clientId,
           audience: opts.audience,
+          timeoutMs: opts.timeout * 1000,
           onPrompt: ({ userCode, verificationUri, verificationUriComplete }) => {
             const target = verificationUriComplete ?? verificationUri;
-            process.stderr.write(`\nOpen this URL to sign in and authorize:\n  ${target}\nUser code: ${userCode}\n`);
+            process.stderr.write(
+              `\nOpen this URL to sign in and authorize:\n  ${target}\nUser code: ${userCode}\n`,
+            );
             if (openInBrowser) openBrowser(target);
             process.stderr.write("Waiting for authorization…\n");
           },
