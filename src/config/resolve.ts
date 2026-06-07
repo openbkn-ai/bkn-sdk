@@ -5,7 +5,7 @@
  */
 import { type ClientOptions, DEFAULT_BUSINESS_DOMAIN, type RequestContext } from "../types.js";
 import { InputError } from "../utils/errors.js";
-import { activePlatform, readPlatformConfig, readToken } from "./store.js";
+import { activePlatform, readPlatformConfig, readToken, writeToken } from "./store.js";
 
 export function resolveContext(opts: ClientOptions = {}): RequestContext {
   const baseUrl = opts.baseUrl ?? process.env.BKN_BASE_URL ?? activePlatform();
@@ -17,10 +17,28 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
   const normalized = baseUrl.replace(/\/+$/, "");
 
   const stored = readToken(normalized);
-  const token = opts.token ?? process.env.BKN_TOKEN ?? stored?.accessToken;
+  const explicit = opts.token ?? process.env.BKN_TOKEN;
+  const token = explicit ?? stored?.accessToken;
   if (!token) {
     throw new InputError("No access token. Set BKN_TOKEN or run `openbkn auth login`.");
   }
+
+  const insecure = opts.insecure ?? stored?.tlsInsecure ?? false;
+  // Auto-refresh only for stored credentials with a refresh token (not --token/env).
+  const refresh =
+    !explicit && stored?.refreshToken
+      ? {
+          refreshToken: stored.refreshToken,
+          persist: (t: { accessToken: string; refreshToken?: string; idToken?: string }) => {
+            writeToken(normalized, {
+              ...stored,
+              accessToken: t.accessToken,
+              refreshToken: t.refreshToken ?? stored.refreshToken,
+              idToken: t.idToken ?? stored.idToken,
+            });
+          },
+        }
+      : undefined;
 
   return {
     baseUrl: normalized,
@@ -29,6 +47,7 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
       opts.businessDomain ??
       readPlatformConfig(normalized).businessDomain ??
       DEFAULT_BUSINESS_DOMAIN,
-    insecure: opts.insecure ?? stored?.tlsInsecure ?? false,
+    insecure,
+    ...(refresh ? { refresh } : {}),
   };
 }

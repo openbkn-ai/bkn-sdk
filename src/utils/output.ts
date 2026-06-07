@@ -37,7 +37,18 @@ export function printJson(value: unknown, opts: OutputOptions = {}): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
-const ROW_ENVELOPES = ["entries", "data", "cases", "reports", "results", "list", "recurringRules"];
+const ROW_ENVELOPES = [
+  "entries",
+  "data",
+  "cases",
+  "reports",
+  "results",
+  "list",
+  "recurringRules",
+  "users",
+  "roles",
+  "departments",
+];
 
 /** Find the primary array-of-objects in a value (unwrapping common envelopes). */
 function toRows(value: unknown): Array<Record<string, unknown>> | null {

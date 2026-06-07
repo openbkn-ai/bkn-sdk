@@ -72,6 +72,33 @@ function mergeCookies(existing: string, res: Response): string {
   return [...map.entries()].map(([k, v]) => `${k}=${v}`).join("; ");
 }
 
+/** Exchange a refresh token for a fresh access token (public client, no secret). */
+export async function refreshAccessToken(
+  baseUrl: string,
+  refreshToken: string,
+  clientId = "openbkn-sdk",
+): Promise<OAuthTokens> {
+  const base = normalizeBaseUrl(baseUrl);
+  const res = await fetch(`${base}/oauth2/token`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json",
+    },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: clientId,
+    }).toString(),
+  });
+  if (!res.ok) {
+    throw new Error(
+      `Token refresh failed (${res.status}): ${(await res.text()) || res.statusText}`,
+    );
+  }
+  return mapToken((await res.json()) as { access_token: string });
+}
+
 // ── device-code login (RFC 8628) ──────────────────────────────────────────────
 
 const DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";

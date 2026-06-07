@@ -15,8 +15,7 @@ const ADMIN = "/api/safe/v1/admin";
 /** Thrown for admin ops with no bkn-safe endpoint (only `audit list`). */
 export function notOnSafe(operation: string): never {
   throw new InputError(
-    `'${operation}' is not available on bkn-safe — its admin API has no such endpoint. ` +
-      "See docs/exec-plans/admin-bkn-safe-migration.md.",
+    `'${operation}' is not available on bkn-safe — its admin API has no such endpoint. See docs/exec-plans/admin-bkn-safe-migration.md.`,
   );
 }
 
