@@ -28,6 +28,7 @@ import {
   notOnSafe,
   removeRoleSafe,
   roleMembersSafe,
+  setRolePermissionSafe,
   setUserPasswordSafe,
   updateDepartmentSafe,
   updateRoleSafe,
@@ -91,6 +92,13 @@ export function admin(ctx: RequestContext) {
     roleUpdate: (roleId: string, input: { name?: string; description?: string }) =>
       updateRoleSafe(ctx, roleId, input),
     roleDelete: (roleId: string) => deleteRoleSafe(ctx, roleId),
+    rolePermission: (
+      roleId: string,
+      grant: boolean,
+      resourceType: string,
+      resourceId: string,
+      operations: string[],
+    ) => setRolePermissionSafe(ctx, roleId, grant, { resourceType, resourceId, operations }),
 
     auditList: (_opts?: AuditListOptions) => notOnSafe("audit list"),
   };
