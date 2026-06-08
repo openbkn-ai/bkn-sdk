@@ -21,13 +21,16 @@ export function printJson(value: unknown, opts: OutputOptions = {}): void {
   }
   const rows = toRows(value);
   if (rows) {
-    // `--full`: every column (only dropping all-empty ones). Default: trimmed.
-    const columns = opts.full
-      ? columnsOf(rows).filter((c) => rows.some((r) => stringifyCell(r[c]) !== ""))
-      : selectColumns(rows);
+    // `--full` shows every non-empty column; default trims further. Hide the
+    // footer count is measured against `--full` so all-empty columns (which
+    // `--full` also drops) never inflate "N more".
+    const fullColumns = columnsOf(rows).filter((c) =>
+      rows.some((r) => stringifyCell(r[c]) !== ""),
+    );
+    const columns = opts.full ? fullColumns : selectColumns(rows);
     if (columns.length > 0) {
       printTable(rows, columns);
-      const hidden = columnsOf(rows).length - columns.length;
+      const hidden = fullColumns.length - columns.length;
       if (hidden > 0 && !opts.full) {
         process.stdout.write(`… ${hidden} more column(s); use --full or --json for everything\n`);
       }
