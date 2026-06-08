@@ -62,7 +62,18 @@ export function admin(ctx: RequestContext) {
     userList: (opts?: AdminListOptions) =>
       listUsersSafe(ctx, { search: opts?.name, offset: opts?.offset, limit: opts?.limit }),
     userGet: (userId: string) => getUserSafe(ctx, userId),
-    userRoles: (userId: string) => getUserRolesSafe(ctx, userId),
+    userRoles: async (userId: string) => {
+      // role-bindings returns ids only — enrich with names from the role list.
+      const [bound, all] = await Promise.all([getUserRolesSafe(ctx, userId), listRolesSafe(ctx)]);
+      const ids = (bound as { role_ids?: string[] }).role_ids ?? [];
+      const nameById = new Map(
+        ((all as { roles?: Array<{ id: string; name: string }> }).roles ?? []).map((r) => [
+          r.id,
+          r.name,
+        ]),
+      );
+      return { roles: ids.map((id) => ({ name: nameById.get(id) ?? id, id })) };
+    },
     userCreate: (input: CreateUserInput) =>
       createUserSafe(ctx, {
         account: input.loginName,
@@ -81,7 +92,7 @@ export function admin(ctx: RequestContext) {
       setUserPasswordSafe(ctx, userId, newPassword),
 
     // ── roles ──
-    roleList: (opts?: ListRolesOptions) => listRolesSafe(ctx),
+    roleList: (_opts?: ListRolesOptions) => listRolesSafe(ctx),
     roleGet: (roleId: string) => getRoleSafe(ctx, roleId),
     roleMembers: (roleId: string, _opts?: unknown) => roleMembersSafe(ctx, roleId),
     addRoleMember: (roleId: string, id: string, _type: MemberType = "user") =>
