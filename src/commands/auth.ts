@@ -58,10 +58,17 @@ export function registerAuthLeaves(cmd: Command): void {
     .action(async (url: string, opts, cmd: Command) => {
       const g = cmd.optsWithGlobals();
       if (g.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+      const out = outputOptions(cmd);
+      const report = (r: { baseUrl?: string; userId?: string; username?: string }) => {
+        if (out.json || out.compact) {
+          printJson({ loggedIn: true, ...r }, out);
+        } else {
+          process.stdout.write(`Logged in to ${r.baseUrl ?? url} as ${r.username ?? r.userId}\n`);
+        }
+      };
       const token = opts.token ?? g.token;
       if (token) {
-        const r = auth.attachToken(url, token, { insecure: g.insecure });
-        printJson({ loggedIn: true, ...r }, outputOptions(cmd));
+        report(auth.attachToken(url, token, { insecure: g.insecure }));
         return;
       }
       // All flows ride the device_code grant (the only seeded user client):
@@ -94,12 +101,13 @@ export function registerAuthLeaves(cmd: Command): void {
           },
         });
       }
-      const r = auth.attachToken(url, tokens.accessToken, {
-        refreshToken: tokens.refreshToken,
-        idToken: tokens.idToken,
-        insecure: g.insecure,
-      });
-      printJson({ loggedIn: true, ...r }, outputOptions(cmd));
+      report(
+        auth.attachToken(url, tokens.accessToken, {
+          refreshToken: tokens.refreshToken,
+          idToken: tokens.idToken,
+          insecure: g.insecure,
+        }),
+      );
     });
 
   cmd
