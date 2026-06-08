@@ -36,8 +36,13 @@ export function toExitCode(err: unknown): number {
 /** A short, actionable message for the user. Never leak tokens. */
 export function formatError(err: unknown): string {
   if (err instanceof HttpError) {
-    if (err.status === 401 || err.status === 403) {
-      return `Not authorized (HTTP ${err.status}). Run \`openbkn auth login\` and retry.`;
+    const serverMsg = serverError(err.body);
+    if (err.status === 401) {
+      return `Not authorized (HTTP 401)${serverMsg ? `: ${serverMsg}` : ""}. Run \`openbkn auth login\` and retry.`;
+    }
+    if (err.status === 403) {
+      // Surface the server reason (e.g. "not an admin", "built-in role read-only").
+      return `Forbidden (HTTP 403)${serverMsg ? `: ${serverMsg}` : " — admin privileges required"}.`;
     }
     const detail = err.body ? `: ${truncate(err.body, 500)}` : "";
     return `Request failed (HTTP ${err.status} ${err.statusText})${detail}`;
@@ -56,6 +61,18 @@ export function formatError(err: unknown): string {
     return err.message;
   }
   return String(err);
+}
+
+/** Pull a human message out of a server JSON error body, if any. */
+function serverError(body: string): string {
+  if (!body) return "";
+  try {
+    const j = JSON.parse(body) as Record<string, unknown>;
+    const m = j.error ?? j.detail ?? j.description ?? j.message;
+    return typeof m === "string" ? m : "";
+  } catch {
+    return "";
+  }
 }
 
 function isTlsCertError(code: string): boolean {
