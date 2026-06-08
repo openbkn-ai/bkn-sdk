@@ -94,7 +94,20 @@ export function admin(ctx: RequestContext) {
     // ── roles ──
     roleList: (_opts?: ListRolesOptions) => listRolesSafe(ctx),
     roleGet: (roleId: string) => getRoleSafe(ctx, roleId),
-    roleMembers: (roleId: string, _opts?: unknown) => roleMembersSafe(ctx, roleId),
+    roleMembers: async (roleId: string, _opts?: unknown) => {
+      // members are accessor ids — enrich with account names from the user list.
+      const [mem, users] = await Promise.all([
+        roleMembersSafe(ctx, roleId),
+        listUsersSafe(ctx, { limit: 500 }),
+      ]);
+      const ids = (mem as { accessor_ids?: string[] }).accessor_ids ?? [];
+      const nameById = new Map(
+        (
+          (users as { users?: Array<{ id: string; account?: string; name?: string }> }).users ?? []
+        ).map((u) => [u.id, u.account ?? u.name ?? u.id] as const),
+      );
+      return { members: ids.map((id) => ({ account: nameById.get(id) ?? id, id })) };
+    },
     addRoleMember: (roleId: string, id: string, _type: MemberType = "user") =>
       assignRoleSafe(ctx, id, roleId),
     removeRoleMember: (roleId: string, id: string, _type: MemberType = "user") =>

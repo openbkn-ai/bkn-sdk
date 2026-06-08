@@ -117,9 +117,10 @@ export function registerAuthLeaves(cmd: Command): void {
       let tokens: Awaited<ReturnType<typeof deviceLogin>>;
       let account: string | undefined;
       if (opts.username || opts.password) {
-        account = opts.username ?? (await promptLine("Username: "));
+        const username = opts.username ?? (await promptLine("Username: "));
+        account = username;
         const password = opts.password ?? (await promptLine("Password: ", true));
-        tokens = await credentialDeviceLogin(url, account, password, {
+        tokens = await credentialDeviceLogin(url, username, password, {
           clientId: opts.clientId,
           audience: opts.audience,
           timeoutMs: opts.timeout * 1000,
