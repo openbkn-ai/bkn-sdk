@@ -29,6 +29,22 @@ function promptLine(query: string, hidden = false): Promise<string> {
   });
 }
 
+/** Render saved sessions as a tree: platform → users, `*` marks the active one. */
+function renderSessions(items: auth.PlatformListItem[]): string {
+  const byPlatform = new Map<string, auth.PlatformListItem[]>();
+  for (const it of items) {
+    const arr = byPlatform.get(it.baseUrl) ?? [];
+    arr.push(it);
+    byPlatform.set(it.baseUrl, arr);
+  }
+  const lines: string[] = [];
+  for (const [platform, users] of byPlatform) {
+    lines.push(platform);
+    for (const u of users) lines.push(`  ${u.active ? "*" : " "} ${u.username ?? u.userId}`);
+  }
+  return lines.join("\n") || "(no saved sessions)";
+}
+
 /** Register the auth leaves onto a parent (shared by top-level `auth` + `admin auth`). */
 export function registerAuthLeaves(cmd: Command): void {
   cmd
@@ -76,10 +92,11 @@ export function registerAuthLeaves(cmd: Command): void {
       //  -u/-p         → CLI drives login/consent with the credentials (CI).
       //  default       → open the browser; user signs in + approves there.
       let tokens: Awaited<ReturnType<typeof deviceLogin>>;
+      let account: string | undefined;
       if (opts.username || opts.password) {
-        const username = opts.username ?? (await promptLine("Username: "));
+        account = opts.username ?? (await promptLine("Username: "));
         const password = opts.password ?? (await promptLine("Password: ", true));
-        tokens = await credentialDeviceLogin(url, username, password, {
+        tokens = await credentialDeviceLogin(url, account, password, {
           clientId: opts.clientId,
           audience: opts.audience,
           timeoutMs: opts.timeout * 1000,
@@ -106,6 +123,7 @@ export function registerAuthLeaves(cmd: Command): void {
           refreshToken: tokens.refreshToken,
           idToken: tokens.idToken,
           insecure: g.insecure,
+          username: account,
         }),
       );
     });
@@ -133,8 +151,13 @@ export function registerAuthLeaves(cmd: Command): void {
   cmd
     .command("list")
     .alias("ls")
-    .description("List platforms with a saved session")
-    .action((_opts, cmd: Command) => printJson(auth.listPlatforms(), outputOptions(cmd)));
+    .description("List saved sessions (platform → users; * = active)")
+    .action((_opts, cmd: Command) => {
+      const items = auth.listPlatforms();
+      const out = outputOptions(cmd);
+      if (out.json || out.compact) printJson(items, out);
+      else process.stdout.write(`${renderSessions(items)}\n`);
+    });
 
   cmd
     .command("use <url>")
@@ -157,17 +180,24 @@ export function registerAuthLeaves(cmd: Command): void {
     );
 
   cmd
-    .command("switch <url> <user-id>")
-    .description("Switch the active user for a platform")
-    .action((url: string, userId: string, _opts, cmd: Command) => {
-      printJson(auth.switchUser(url, userId), outputOptions(cmd));
+    .command("switch <url> <user>")
+    .description("Switch the active user for a platform (by username or user id)")
+    .action((url: string, user: string, _opts, cmd: Command) => {
+      const r = auth.switchUser(url, user);
+      const out = outputOptions(cmd);
+      if (out.json || out.compact) printJson(r, out);
+      else process.stdout.write(`Switched to ${r.username ?? r.userId} on ${r.baseUrl}\n`);
     });
 
   cmd
     .command("users <url>")
-    .description("List saved user profiles for a platform")
+    .description("List saved users for a platform (* = active)")
     .action((url: string, _opts, cmd: Command) => {
-      printJson(auth.usersOf(url), outputOptions(cmd));
+      const norm = url.replace(/\/+$/, "");
+      const items = auth.listPlatforms().filter((i) => i.baseUrl === norm);
+      const out = outputOptions(cmd);
+      if (out.json || out.compact) printJson(items, out);
+      else process.stdout.write(`${renderSessions(items)}\n`);
     });
 
   cmd
