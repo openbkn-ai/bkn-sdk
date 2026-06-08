@@ -2,13 +2,36 @@
 import { createInterface } from "node:readline";
 import { Command } from "commander";
 import { changePasswordSafe } from "../api/admin.js";
+import { getUserSafe } from "../api/safe.js";
+import { decodeJwt } from "../auth/jwt.js";
 import { credentialDeviceLogin, deviceLogin, openBrowser } from "../auth/oauth.js";
 import { resolveContext } from "../config/resolve.js";
 import { group } from "../help/grouped-help.js";
 import * as auth from "../resources/auth.js";
+import { DEFAULT_BUSINESS_DOMAIN } from "../types.js";
 import { HttpError, InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { outputOptions } from "./_shared.js";
+
+/** Best-effort: resolve the logged-in user's account name from their token. */
+async function resolveAccount(
+  baseUrl: string,
+  accessToken: string,
+  insecure: boolean,
+  idToken?: string,
+): Promise<string | undefined> {
+  const sub = decodeJwt(idToken ?? accessToken)?.sub;
+  if (!sub) return undefined;
+  try {
+    const u = (await getUserSafe(
+      { baseUrl, token: accessToken, businessDomain: DEFAULT_BUSINESS_DOMAIN, insecure },
+      sub,
+    )) as { account?: string };
+    return u.account; // needs admin; ignored on 403 for non-admins
+  } catch {
+    return undefined;
+  }
+}
 
 /** Prompt for a line on the TTY; when `hidden`, the typed characters are not echoed. */
 function promptLine(query: string, hidden = false): Promise<string> {
@@ -117,6 +140,16 @@ export function registerAuthLeaves(cmd: Command): void {
             process.stderr.write("Waiting for authorization…\n");
           },
         });
+      }
+      // For browser/device logins (no -u), look the account name up so the
+      // session list shows a name, not a UUID.
+      if (!account) {
+        account = await resolveAccount(
+          url,
+          tokens.accessToken,
+          Boolean(g.insecure),
+          tokens.idToken,
+        );
       }
       report(
         auth.attachToken(url, tokens.accessToken, {
