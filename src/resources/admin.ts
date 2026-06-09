@@ -1,62 +1,129 @@
-import {
-  type AdminListOptions,
-  type AuditListOptions,
-  type CreateOrgInput,
-  type CreateUserInput,
-  type ListRolesOptions,
-  type MemberType,
-  type UpdateOrgInput,
-  type UpdateUserInput,
-  createDepartment,
-  createUser,
-  deleteDepartment,
-  deleteUser,
-  getDepartment,
-  getDepartmentMembers,
-  getRole,
-  getUser,
-  getUserRoles,
-  listAllDepartments,
-  listAuditLogs,
-  listDepartments,
-  listRoleMembers,
-  listRoles,
-  listUsers,
-  modifyRoleMembers,
-  setUserPassword,
-  updateDepartment,
-  updateUser,
+import type {
+  AdminListOptions,
+  AuditListOptions,
+  CreateOrgInput,
+  CreateUserInput,
+  ListRolesOptions,
+  MemberType,
+  UpdateOrgInput,
+  UpdateUserInput,
 } from "../api/admin.js";
+import {
+  assignRoleSafe,
+  buildDepartmentTree,
+  createDepartmentSafe,
+  createRoleSafe,
+  createUserSafe,
+  deleteDepartmentSafe,
+  deleteRoleSafe,
+  deleteUserSafe,
+  getDepartmentMembersSafe,
+  getDepartmentSafe,
+  getRoleSafe,
+  getUserRolesSafe,
+  getUserSafe,
+  listDepartmentsSafe,
+  listRolesSafe,
+  listUsersSafe,
+  notOnSafe,
+  removeRoleSafe,
+  roleMembersSafe,
+  setRolePermissionSafe,
+  setUserPasswordSafe,
+  updateDepartmentSafe,
+  updateRoleSafe,
+  updateUserSafe,
+} from "../api/safe.js";
 import type { RequestContext } from "../types.js";
-/** Admin (operator) resource surface. */
-import { buildOrgTree } from "../utils/org-tree.js";
+
+/**
+ * Admin (operator) resource surface, on bkn-safe's token-gated
+ * `/api/safe/v1/admin/*` API. Only `audit list` has no endpoint (login-log
+ * retired by design) → `notOnSafe`. See
+ * docs/exec-plans/admin-bkn-safe-migration.md.
+ */
+const DEFAULT_NEW_USER_PASSWORD = "openbkn"; // platform initial password (forced-change on first login)
 
 export function admin(ctx: RequestContext) {
   return {
-    orgList: (opts?: AdminListOptions) => listDepartments(ctx, opts),
-    orgGet: (deptId: string) => getDepartment(ctx, deptId),
-    orgMembers: (deptId: string, opts?: { role?: string; offset?: number; limit?: number }) =>
-      getDepartmentMembers(ctx, deptId, opts),
-    orgTree: async (role?: string) => buildOrgTree(await listAllDepartments(ctx, role)),
-    orgCreate: (input: CreateOrgInput) => createDepartment(ctx, input),
-    orgUpdate: (deptId: string, input: UpdateOrgInput) => updateDepartment(ctx, deptId, input),
-    orgDelete: (deptId: string) => deleteDepartment(ctx, deptId),
-    userList: (opts?: AdminListOptions) => listUsers(ctx, opts),
-    userGet: (userId: string) => getUser(ctx, userId),
-    userRoles: (userId: string) => getUserRoles(ctx, userId),
-    userCreate: (input: CreateUserInput) => createUser(ctx, input),
-    userUpdate: (userId: string, input: UpdateUserInput) => updateUser(ctx, userId, input),
-    userDelete: (userId: string) => deleteUser(ctx, userId),
+    // ── departments ──
+    orgList: (opts?: AdminListOptions) =>
+      listDepartmentsSafe(ctx, { search: opts?.name, offset: opts?.offset, limit: opts?.limit }),
+    orgGet: (deptId: string) => getDepartmentSafe(ctx, deptId),
+    orgTree: (_role?: string) => buildDepartmentTree(ctx),
+    orgMembers: (deptId: string, _opts?: unknown) => getDepartmentMembersSafe(ctx, deptId),
+    orgCreate: (input: CreateOrgInput) =>
+      createDepartmentSafe(ctx, { name: input.name, parentId: input.parentId }),
+    orgUpdate: (deptId: string, input: UpdateOrgInput) =>
+      updateDepartmentSafe(ctx, deptId, { name: input.name }),
+    orgDelete: (deptId: string) => deleteDepartmentSafe(ctx, deptId),
+
+    // ── users ──
+    userList: (opts?: AdminListOptions) =>
+      listUsersSafe(ctx, { search: opts?.name, offset: opts?.offset, limit: opts?.limit }),
+    userGet: (userId: string) => getUserSafe(ctx, userId),
+    userRoles: async (userId: string) => {
+      // role-bindings returns ids only — enrich with names from the role list.
+      const [bound, all] = await Promise.all([getUserRolesSafe(ctx, userId), listRolesSafe(ctx)]);
+      const ids = (bound as { role_ids?: string[] }).role_ids ?? [];
+      const nameById = new Map(
+        ((all as { roles?: Array<{ id: string; name: string }> }).roles ?? []).map((r) => [
+          r.id,
+          r.name,
+        ]),
+      );
+      return { roles: ids.map((id) => ({ name: nameById.get(id) ?? id, id })) };
+    },
+    userCreate: (input: CreateUserInput) =>
+      createUserSafe(ctx, {
+        account: input.loginName,
+        password: DEFAULT_NEW_USER_PASSWORD,
+        name: input.displayName,
+        email: input.email,
+      }),
+    userUpdate: (userId: string, input: UpdateUserInput) =>
+      updateUserSafe(ctx, userId, {
+        name: input.displayName,
+        email: input.email,
+        telephone: input.telNumber,
+      }),
+    userDelete: (userId: string) => deleteUserSafe(ctx, userId),
     userResetPassword: (userId: string, newPassword: string) =>
-      setUserPassword(ctx, userId, newPassword),
-    roleList: (opts?: ListRolesOptions) => listRoles(ctx, opts),
-    roleGet: (roleId: string) => getRole(ctx, roleId),
-    roleMembers: (roleId: string, opts?: { keyword?: string; limit?: number }) =>
-      listRoleMembers(ctx, roleId, opts),
-    addRoleMember: (roleId: string, id: string, type: MemberType = "user") =>
-      modifyRoleMembers(ctx, roleId, "POST", [{ id, type }]),
-    removeRoleMember: (roleId: string, id: string, type: MemberType = "user") =>
-      modifyRoleMembers(ctx, roleId, "DELETE", [{ id, type }]),
-    auditList: (opts?: AuditListOptions) => listAuditLogs(ctx, opts),
+      setUserPasswordSafe(ctx, userId, newPassword),
+
+    // ── roles ──
+    roleList: (_opts?: ListRolesOptions) => listRolesSafe(ctx),
+    roleGet: (roleId: string) => getRoleSafe(ctx, roleId),
+    roleMembers: async (roleId: string, _opts?: unknown) => {
+      // members are accessor ids — enrich with account names from the user list.
+      const [mem, users] = await Promise.all([
+        roleMembersSafe(ctx, roleId),
+        listUsersSafe(ctx, { limit: 500 }),
+      ]);
+      const ids = (mem as { accessor_ids?: string[] }).accessor_ids ?? [];
+      const nameById = new Map(
+        (
+          (users as { users?: Array<{ id: string; account?: string; name?: string }> }).users ?? []
+        ).map((u) => [u.id, u.account ?? u.name ?? u.id] as const),
+      );
+      return { members: ids.map((id) => ({ account: nameById.get(id) ?? id, id })) };
+    },
+    addRoleMember: (roleId: string, id: string, _type: MemberType = "user") =>
+      assignRoleSafe(ctx, id, roleId),
+    removeRoleMember: (roleId: string, id: string, _type: MemberType = "user") =>
+      removeRoleSafe(ctx, id, roleId),
+    roleCreate: (name: string, description?: string) => createRoleSafe(ctx, { name, description }),
+    roleUpdate: (roleId: string, input: { name?: string; description?: string }) =>
+      updateRoleSafe(ctx, roleId, input),
+    roleDelete: (roleId: string) => deleteRoleSafe(ctx, roleId),
+    rolePermission: (
+      roleId: string,
+      grant: boolean,
+      resourceType: string,
+      resourceId: string,
+      operations: string[],
+    ) => setRolePermissionSafe(ctx, roleId, grant, { resourceType, resourceId, operations }),
+
+    auditList: (_opts?: AuditListOptions) => notOnSafe("audit list"),
   };
 }

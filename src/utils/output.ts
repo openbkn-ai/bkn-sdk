@@ -21,23 +21,48 @@ export function printJson(value: unknown, opts: OutputOptions = {}): void {
   }
   const rows = toRows(value);
   if (rows) {
-    // `--full`: every column (only dropping all-empty ones). Default: trimmed.
-    const columns = opts.full
-      ? columnsOf(rows).filter((c) => rows.some((r) => stringifyCell(r[c]) !== ""))
-      : selectColumns(rows);
+    // `--full` shows every non-empty column; default trims further. Hide the
+    // footer count is measured against `--full` so all-empty columns (which
+    // `--full` also drops) never inflate "N more".
+    const fullColumns = columnsOf(rows).filter((c) => rows.some((r) => stringifyCell(r[c]) !== ""));
+    const columns = opts.full ? fullColumns : selectColumns(rows);
     if (columns.length > 0) {
       printTable(rows, columns);
-      const hidden = columnsOf(rows).length - columns.length;
+      const hidden = fullColumns.length - columns.length;
       if (hidden > 0 && !opts.full) {
         process.stdout.write(`… ${hidden} more column(s); use --full or --json for everything\n`);
       }
       return;
     }
   }
+  // A recognized list envelope that's simply empty → say so, not raw JSON.
+  if (isEmptyEnvelope(value)) {
+    process.stdout.write("(no results)\n");
+    return;
+  }
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
-const ROW_ENVELOPES = ["entries", "data", "cases", "reports", "results", "list", "recurringRules"];
+/** True when value is `{ <envelope>: [] }` (an empty list response). */
+function isEmptyEnvelope(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const o = value as Record<string, unknown>;
+  return ROW_ENVELOPES.some((k) => Array.isArray(o[k]) && (o[k] as unknown[]).length === 0);
+}
+
+const ROW_ENVELOPES = [
+  "entries",
+  "data",
+  "cases",
+  "reports",
+  "results",
+  "list",
+  "recurringRules",
+  "users",
+  "roles",
+  "departments",
+  "members",
+];
 
 /** Find the primary array-of-objects in a value (unwrapping common envelopes). */
 function toRows(value: unknown): Array<Record<string, unknown>> | null {

@@ -1,13 +1,72 @@
 /** `openbkn auth …` — login / session / token (store-backed). */
-import { readFileSync } from "node:fs";
+import { createInterface } from "node:readline";
 import { Command } from "commander";
-import { changePassword } from "../api/admin.js";
-import { browserLogin, passwordLogin } from "../auth/oauth.js";
+import { changePasswordSafe } from "../api/admin.js";
+import { getUserSafe } from "../api/safe.js";
+import { decodeJwt } from "../auth/jwt.js";
+import { credentialDeviceLogin, deviceLogin, openBrowser } from "../auth/oauth.js";
 import { resolveContext } from "../config/resolve.js";
 import { group } from "../help/grouped-help.js";
 import * as auth from "../resources/auth.js";
+import { DEFAULT_BUSINESS_DOMAIN } from "../types.js";
+import { HttpError, InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { outputOptions } from "./_shared.js";
+
+/** Best-effort: resolve the logged-in user's account name from their token. */
+async function resolveAccount(
+  baseUrl: string,
+  accessToken: string,
+  insecure: boolean,
+  idToken?: string,
+): Promise<string | undefined> {
+  const sub = decodeJwt(idToken ?? accessToken)?.sub;
+  if (!sub) return undefined;
+  try {
+    const u = (await getUserSafe(
+      { baseUrl, token: accessToken, businessDomain: DEFAULT_BUSINESS_DOMAIN, insecure },
+      sub,
+    )) as { account?: string };
+    return u.account; // needs admin; ignored on 403 for non-admins
+  } catch {
+    return undefined;
+  }
+}
+
+/** Prompt for a line on the TTY; when `hidden`, the typed characters are not echoed. */
+function promptLine(query: string, hidden = false): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    if (hidden) {
+      // Swallow the echo of typed chars; print the query once up front.
+      const mutable = rl as unknown as { _writeToOutput: (s: string) => void };
+      mutable._writeToOutput = (s: string) => {
+        if (s.startsWith(query)) process.stdout.write(query);
+      };
+    }
+    rl.question(query, (answer) => {
+      rl.close();
+      if (hidden) process.stdout.write("\n");
+      resolve(answer.trim());
+    });
+  });
+}
+
+/** Render saved sessions as a tree: platform → users, `*` marks the active one. */
+function renderSessions(items: auth.PlatformListItem[]): string {
+  const byPlatform = new Map<string, auth.PlatformListItem[]>();
+  for (const it of items) {
+    const arr = byPlatform.get(it.baseUrl) ?? [];
+    arr.push(it);
+    byPlatform.set(it.baseUrl, arr);
+  }
+  const lines: string[] = [];
+  for (const [platform, users] of byPlatform) {
+    lines.push(platform);
+    for (const u of users) lines.push(`  ${u.active ? "*" : " "} ${u.username ?? u.userId}`);
+  }
+  return lines.join("\n") || "(no saved sessions)";
+}
 
 /** Register the auth leaves onto a parent (shared by top-level `auth` + `admin auth`). */
 export function registerAuthLeaves(cmd: Command): void {
@@ -19,42 +78,88 @@ export function registerAuthLeaves(cmd: Command): void {
     .option("--token <token>", "provide a token directly (CI / headless)")
     .option("--client-id <id>", "use a fixed OAuth2 client id (skip dynamic registration)")
     .option("--client-secret <secret>", "OAuth2 client secret (omit for public/PKCE)")
-    .option("--port <n>", "local callback port", (v) => Number.parseInt(v, 10))
-    .option(
-      "--signin-public-key-file <path>",
-      "override the RSA public key (PEM) for password signin",
+    .option("--port <n>", "loopback redirect port for the auth_code flow", (v) =>
+      Number.parseInt(v, 10),
     )
-    .option("--product <name>", "OAuth product query (default 'adp')")
-    .option("--no-browser", "headless: print the authorize URL instead of opening a browser")
+    .option("--device", "headless device-code login (RFC 8628) — no callback server, no password")
+    .option("--audience <aud>", "device-code token audience", "bkn-safe")
+    .option(
+      "--timeout <s>",
+      "device-login wait before timing out",
+      (v) => Number.parseInt(v, 10),
+      120,
+    )
+    // Legacy ISF sign-in flags — accepted for compatibility, ignored by the
+    // bkn-safe device-code flow.
+    .option("--no-browser", "(legacy) print the URL instead of opening a browser")
+    .option("--product <name>", "(legacy) ISF OAuth product query")
+    .option("--signin-public-key-file <path>", "(legacy) RSA public key for ISF /oauth2/signin")
     .action(async (url: string, opts, cmd: Command) => {
       const g = cmd.optsWithGlobals();
       if (g.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+      const out = outputOptions(cmd);
+      const report = (r: { baseUrl?: string; userId?: string; username?: string }) => {
+        if (out.json || out.compact) {
+          printJson({ loggedIn: true, ...r }, out);
+        } else {
+          process.stdout.write(`Logged in to ${r.baseUrl ?? url} as ${r.username ?? r.userId}\n`);
+        }
+      };
       const token = opts.token ?? g.token;
       if (token) {
-        const r = auth.attachToken(url, token, { insecure: g.insecure });
-        printJson({ loggedIn: true, ...r }, outputOptions(cmd));
+        report(auth.attachToken(url, token, { insecure: g.insecure }));
         return;
       }
-      const signinKey = opts.signinPublicKeyFile
-        ? readFileSync(opts.signinPublicKeyFile, "utf8")
-        : undefined;
-      const tokens = opts.username
-        ? await passwordLogin(url, opts.username, opts.password ?? "", {
-            clientId: opts.clientId,
-            port: opts.port,
-            signinPublicKeyPem: signinKey,
-          })
-        : await browserLogin(url, {
-            clientId: opts.clientId,
-            port: opts.port,
-            noBrowser: opts.browser === false,
-          });
-      const r = auth.attachToken(url, tokens.accessToken, {
-        refreshToken: tokens.refreshToken,
-        idToken: tokens.idToken,
-        insecure: g.insecure,
-      });
-      printJson({ loggedIn: true, ...r }, outputOptions(cmd));
+      // All flows ride the device_code grant (the only seeded user client):
+      //  --device      → print the URL/code; approve on any machine (headless).
+      //  -u/-p         → CLI drives login/consent with the credentials (CI).
+      //  default       → open the browser; user signs in + approves there.
+      let tokens: Awaited<ReturnType<typeof deviceLogin>>;
+      let account: string | undefined;
+      if (opts.username || opts.password) {
+        const username = opts.username ?? (await promptLine("Username: "));
+        account = username;
+        const password = opts.password ?? (await promptLine("Password: ", true));
+        tokens = await credentialDeviceLogin(url, username, password, {
+          clientId: opts.clientId,
+          audience: opts.audience,
+          timeoutMs: opts.timeout * 1000,
+        });
+      } else {
+        // open the browser unless headless (--device) or --no-browser.
+        const openInBrowser = !opts.device && opts.browser !== false;
+        tokens = await deviceLogin(url, {
+          clientId: opts.clientId,
+          audience: opts.audience,
+          timeoutMs: opts.timeout * 1000,
+          onPrompt: ({ userCode, verificationUri, verificationUriComplete }) => {
+            const target = verificationUriComplete ?? verificationUri;
+            process.stderr.write(
+              `\nOpen this URL to sign in and authorize:\n  ${target}\nUser code: ${userCode}\n`,
+            );
+            if (openInBrowser) openBrowser(target);
+            process.stderr.write("Waiting for authorization…\n");
+          },
+        });
+      }
+      // For browser/device logins (no -u), look the account name up so the
+      // session list shows a name, not a UUID.
+      if (!account) {
+        account = await resolveAccount(
+          url,
+          tokens.accessToken,
+          Boolean(g.insecure),
+          tokens.idToken,
+        );
+      }
+      report(
+        auth.attachToken(url, tokens.accessToken, {
+          refreshToken: tokens.refreshToken,
+          idToken: tokens.idToken,
+          insecure: g.insecure,
+          username: account,
+        }),
+      );
     });
 
   cmd
@@ -80,8 +185,13 @@ export function registerAuthLeaves(cmd: Command): void {
   cmd
     .command("list")
     .alias("ls")
-    .description("List platforms with a saved session")
-    .action((_opts, cmd: Command) => printJson(auth.listPlatforms(), outputOptions(cmd)));
+    .description("List saved sessions (platform → users; * = active)")
+    .action((_opts, cmd: Command) => {
+      const items = auth.listPlatforms();
+      const out = outputOptions(cmd);
+      if (out.json || out.compact) printJson(items, out);
+      else process.stdout.write(`${renderSessions(items)}\n`);
+    });
 
   cmd
     .command("use <url>")
@@ -104,17 +214,24 @@ export function registerAuthLeaves(cmd: Command): void {
     );
 
   cmd
-    .command("switch <url> <user-id>")
-    .description("Switch the active user for a platform")
-    .action((url: string, userId: string, _opts, cmd: Command) => {
-      printJson(auth.switchUser(url, userId), outputOptions(cmd));
+    .command("switch <url> <user>")
+    .description("Switch the active user for a platform (by username or user id)")
+    .action((url: string, user: string, _opts, cmd: Command) => {
+      const r = auth.switchUser(url, user);
+      const out = outputOptions(cmd);
+      if (out.json || out.compact) printJson(r, out);
+      else process.stdout.write(`Switched to ${r.username ?? r.userId} on ${r.baseUrl}\n`);
     });
 
   cmd
     .command("users <url>")
-    .description("List saved user profiles for a platform")
+    .description("List saved users for a platform (* = active)")
     .action((url: string, _opts, cmd: Command) => {
-      printJson(auth.usersOf(url), outputOptions(cmd));
+      const norm = url.replace(/\/+$/, "");
+      const items = auth.listPlatforms().filter((i) => i.baseUrl === norm);
+      const out = outputOptions(cmd);
+      if (out.json || out.compact) printJson(items, out);
+      else process.stdout.write(`${renderSessions(items)}\n`);
     });
 
   cmd
@@ -126,24 +243,45 @@ export function registerAuthLeaves(cmd: Command): void {
 
   cmd
     .command("change-password [url]")
-    .description("Change your account password (EACP, RSA-encrypted in transit)")
-    .requiredOption("-a, --account <name>", "account / login name")
-    .requiredOption("--old-password <pwd>", "current password")
-    .requiredOption("--new-password <pwd>", "new password")
-    .option("--public-key-file <path>", "override the RSA public key (PEM) for password encryption")
-    .action(async (_url: string | undefined, opts, cmd: Command) => {
+    .description("Change your account password (bkn-safe self-service; no browser)")
+    .option("-a, --account <name>", "account / login name (the login column, e.g. admin)")
+    .option("--old-password <pwd>", "current password")
+    .option("--new-password <pwd>", "new password")
+    .option("--public-key-file <path>", "(legacy) RSA public key for ISF password encryption")
+    .action(async (url: string | undefined, opts, cmd: Command) => {
       const g = cmd.optsWithGlobals();
+      if (g.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
       const ctx = resolveContext({
-        baseUrl: g.baseUrl,
+        baseUrl: url ?? g.baseUrl,
         token: g.token,
         user: g.user,
         businessDomain: g.bizDomain,
         insecure: g.insecure,
       });
-      printJson(
-        await changePassword(ctx, opts.account, opts.oldPassword, opts.newPassword),
-        outputOptions(cmd),
-      );
+      const account = opts.account ?? (await promptLine("Account: "));
+      const oldPassword = opts.oldPassword ?? (await promptLine("Current password: ", true));
+      let newPassword = opts.newPassword;
+      if (!newPassword) {
+        newPassword = await promptLine("New password: ", true);
+        const confirm = await promptLine("Confirm new password: ", true);
+        if (newPassword !== confirm) throw new Error("New passwords do not match.");
+      }
+      try {
+        printJson(
+          await changePasswordSafe(ctx, account, oldPassword, newPassword),
+          outputOptions(cmd),
+        );
+      } catch (e) {
+        // 401 here means bad account/old password, not a missing session;
+        // 400 means the new password equals the old one.
+        if (e instanceof HttpError && e.status === 401) {
+          throw new InputError("Wrong account or current password.");
+        }
+        if (e instanceof HttpError && e.status === 400) {
+          throw new InputError("New password must differ from the current one.");
+        }
+        throw e;
+      }
     });
 }
 

@@ -12,7 +12,7 @@ import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { renderOrgTree } from "../utils/org-tree.js";
 import { printJson } from "../utils/output.js";
-import { clientFrom, outputOptions, readBody } from "./_shared.js";
+import { clientFrom, csv, outputOptions, readBody } from "./_shared.js";
 import { registerAuthLeaves } from "./auth.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
@@ -129,7 +129,7 @@ export function adminCommand(): Command {
       const tree = await clientFrom(cmd).admin.orgTree(opts.role);
       const out = outputOptions(cmd);
       if (out.json) printJson(tree, out);
-      else console.log(renderOrgTree(tree));
+      else console.log(renderOrgTree(tree as Parameters<typeof renderOrgTree>[0]));
     });
 
   const user = admin.command("user").description("User management");
@@ -325,6 +325,61 @@ export function adminCommand(): Command {
         outputOptions(cmd),
       );
     });
+  role
+    .command("create")
+    .description("Create a custom role (bkn-safe; built-in roles are read-only)")
+    .requiredOption("--name <name>", "role name")
+    .option("--description <text>", "role description")
+    .action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).admin.roleCreate(opts.name, opts.description),
+        outputOptions(cmd),
+      );
+    });
+  role
+    .command("update <role>")
+    .description("Update a custom role's name/description (403 on built-in)")
+    .option("--name <name>", "new name")
+    .option("--description <text>", "new description")
+    .action(async (roleId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).admin.roleUpdate(roleId, {
+          name: opts.name,
+          description: opts.description,
+        }),
+        outputOptions(cmd),
+      );
+    });
+  role
+    .command("delete <role>")
+    .description("Delete a custom role (403 on built-in)")
+    .option("-y, --yes", "skip confirmation")
+    .action(async (roleId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).admin.roleDelete(roleId), outputOptions(cmd));
+    });
+  for (const [verb, grant] of [
+    ["grant-perm", true],
+    ["revoke-perm", false],
+  ] as const) {
+    role
+      .command(`${verb} <role>`)
+      .description(`${grant ? "Grant" : "Revoke"} a permission on a custom role (403 on built-in)`)
+      .requiredOption("--resource-type <t>", "resource type (e.g. catalog)")
+      .option("--resource-id <id>", "resource id ('*' = whole type)", "*")
+      .requiredOption("--operations <list>", "comma-separated operations")
+      .action(async (roleId: string, opts, cmd: Command) => {
+        printJson(
+          await clientFrom(cmd).admin.rolePermission(
+            roleId,
+            grant,
+            opts.resourceType,
+            opts.resourceId,
+            csv(opts.operations) ?? [],
+          ),
+          outputOptions(cmd),
+        );
+      });
+  }
 
   // Models management reuses the (validated) mf-model-manager client. Granular
   // flags assemble the request body; `--body`/`--body-file` override wins.

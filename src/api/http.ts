@@ -2,6 +2,7 @@
  * Thin fetch wrapper: explicit timeout, auth headers, JSON in/out, typed errors.
  * The single choke point for every backend call — resources build on this.
  */
+import { refreshAccessToken } from "../auth/oauth.js";
 import type { RequestContext } from "../types.js";
 import { HttpError } from "../utils/errors.js";
 import { buildHeaders } from "./headers.js";
@@ -35,8 +36,8 @@ export async function request<T = unknown>(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), init.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
-  try {
-    const res = await fetch(url, {
+  const send = () =>
+    fetch(url, {
       method: init.method ?? (hasBody ? "POST" : "GET"),
       headers: buildHeaders(ctx, {
         ...(hasBody ? { "content-type": "application/json" } : {}),
@@ -46,10 +47,30 @@ export async function request<T = unknown>(
       signal: controller.signal,
     });
 
+  try {
+    let res = await send();
+    // On a 401 with stored credentials, refresh the access token once and retry.
+    if (res.status === 401 && ctx.refresh && (await tryRefresh(ctx))) {
+      res = await send();
+    }
     const text = await res.text();
     if (!res.ok) throw new HttpError(res.status, res.statusText, text);
     return (text ? JSON.parse(text) : undefined) as T;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/** Refresh ctx.token from its refresh token, persist, and report success. */
+async function tryRefresh(ctx: RequestContext): Promise<boolean> {
+  if (!ctx.refresh) return false;
+  try {
+    const t = await refreshAccessToken(ctx.baseUrl, ctx.refresh.refreshToken, ctx.refresh.clientId);
+    ctx.token = t.accessToken;
+    if (t.refreshToken) ctx.refresh.refreshToken = t.refreshToken;
+    ctx.refresh.persist(t);
+    return true;
+  } catch {
+    return false; // surface the original 401
   }
 }

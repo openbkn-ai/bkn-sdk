@@ -43,7 +43,7 @@ function usernameOf(token: TokenConfig | undefined): string | undefined {
 export function attachToken(
   baseUrl: string,
   accessToken: string,
-  opts: { refreshToken?: string; idToken?: string; insecure?: boolean } = {},
+  opts: { refreshToken?: string; idToken?: string; insecure?: boolean; username?: string } = {},
 ): { baseUrl: string; userId: string; username?: string } {
   const url = normalize(baseUrl);
   const token: TokenConfig = {
@@ -52,7 +52,8 @@ export function attachToken(
     refreshToken: opts.refreshToken,
     idToken: opts.idToken,
     tlsInsecure: opts.insecure,
-    username: decodeJwt(opts.idToken ?? accessToken)?.preferred_username,
+    // Prefer the account the user typed (-u); device tokens carry no username.
+    username: opts.username ?? decodeJwt(opts.idToken ?? accessToken)?.preferred_username,
   };
   const userId = writeToken(url, token); // also sets active user
   setActivePlatform(url);
@@ -138,15 +139,25 @@ export function deletePlatform(baseUrl: string, userId?: string): boolean {
   return deleteToken(normalize(baseUrl), userId);
 }
 
-/** Switch the active user for a platform (token must already be saved). */
-export function switchUser(baseUrl: string, userId: string): { baseUrl: string; userId: string } {
+/**
+ * Switch the active user for a platform. Accepts a stored user id OR a username
+ * (the account stored at login), so callers need not know the UUID.
+ */
+export function switchUser(
+  baseUrl: string,
+  userOrName: string,
+): { baseUrl: string; userId: string; username?: string } {
   const url = normalize(baseUrl);
-  if (!readToken(url, userId)) {
-    throw new InputError(`No saved token for user '${userId}' on ${url}.`);
+  const users = usersOf(url);
+  const match =
+    users.find((u) => u.userId === userOrName) ??
+    users.find((u) => (u.username ?? u.displayName) === userOrName);
+  if (!match) {
+    throw new InputError(`No saved user '${userOrName}' on ${url}. Try \`auth users ${url}\`.`);
   }
-  setActiveUser(url, userId);
+  setActiveUser(url, match.userId);
   setActivePlatform(url);
-  return { baseUrl: url, userId };
+  return { baseUrl: url, userId: match.userId, username: match.username ?? match.displayName };
 }
 
 /** List saved user profiles for one platform. */
