@@ -4,7 +4,7 @@ import { Command } from "commander";
 import { changePasswordSafe } from "../api/admin.js";
 import { getUserSafe } from "../api/safe.js";
 import { decodeJwt } from "../auth/jwt.js";
-import { credentialDeviceLogin, deviceLogin, openBrowser } from "../auth/oauth.js";
+import { credentialDeviceLogin, deviceLogin, fetchAuthStatus, openBrowser } from "../auth/oauth.js";
 import { resolveContext } from "../config/resolve.js";
 import { group } from "../help/grouped-help.js";
 import * as auth from "../resources/auth.js";
@@ -120,6 +120,16 @@ export function registerAuthLeaves(cmd: Command): void {
       }
       // Explicit no-auth (open platform / no bkn-safe): store a tokenless session.
       if (opts.auth === false) {
+        report(auth.attachNoAuth(url, { insecure: g.insecure }));
+        return;
+      }
+      // Auto-detect: the platform's install-status.json declares whether auth is
+      // on. Disabled → register a tokenless session (no point in credentials).
+      const authStatus = await fetchAuthStatus(url);
+      if (authStatus && !authStatus.enabled) {
+        process.stderr.write(
+          `Platform auth is disabled (stack: ${authStatus.stack ?? "none"}) — registering without auth.\n`,
+        );
         report(auth.attachNoAuth(url, { insecure: g.insecure }));
         return;
       }

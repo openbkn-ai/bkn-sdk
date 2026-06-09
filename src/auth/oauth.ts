@@ -72,6 +72,26 @@ function mergeCookies(existing: string, res: Response): string {
   return [...map.entries()].map(([k, v]) => `${k}=${v}`).join("; ");
 }
 
+/**
+ * Read the platform's `/install-status.json` to learn whether auth is enabled.
+ * Returns `{ enabled, stack }`, or null if the doc is absent/unreadable.
+ */
+export async function fetchAuthStatus(
+  baseUrl: string,
+): Promise<{ enabled: boolean; stack?: string } | null> {
+  try {
+    const res = await fetch(`${normalizeBaseUrl(baseUrl)}/install-status.json`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const j = (await res.json()) as { auth?: { enabled?: boolean; stack?: string } };
+    if (!j.auth) return null;
+    return { enabled: Boolean(j.auth.enabled), stack: j.auth.stack };
+  } catch {
+    return null;
+  }
+}
+
 /** Exchange a refresh token for a fresh access token (public client, no secret). */
 export async function refreshAccessToken(
   baseUrl: string,
