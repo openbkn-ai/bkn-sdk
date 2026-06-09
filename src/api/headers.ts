@@ -6,8 +6,8 @@ export function buildHeaders(
   extra?: Record<string, string>,
 ): Record<string, string> {
   return {
-    authorization: `Bearer ${ctx.token}`,
-    token: ctx.token,
+    // No token = a no-auth platform (no bkn-safe); send no Authorization.
+    ...(ctx.token ? { authorization: `Bearer ${ctx.token}`, token: ctx.token } : {}),
     "x-business-domain": ctx.businessDomain,
     ...extra,
   };

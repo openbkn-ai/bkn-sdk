@@ -18,8 +18,10 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
 
   const stored = readToken(normalized);
   const explicit = opts.token ?? process.env.BKN_TOKEN;
-  const token = explicit ?? stored?.accessToken;
-  if (!token) {
+  const token = explicit ?? stored?.accessToken ?? "";
+  // A no-auth platform (saved by `auth login` against a stack with no bkn-safe)
+  // carries no token; otherwise a token is required.
+  if (!token && !stored?.noAuth) {
     throw new InputError("No access token. Set BKN_TOKEN or run `openbkn auth login`.");
   }
 

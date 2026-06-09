@@ -33,6 +33,8 @@ export interface TokenConfig {
   expiresAt?: string;
   /** Skip TLS verification for this platform (saved by `auth login -k`). */
   tlsInsecure?: boolean;
+  /** Platform has no auth stack (no bkn-safe) — requests carry no token. */
+  noAuth?: boolean;
   /** Login name persisted at login time (fallback when JWT lacks claims). */
   username?: string;
   /** Human-readable name from userinfo. */

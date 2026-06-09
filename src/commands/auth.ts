@@ -94,13 +94,21 @@ export function registerAuthLeaves(cmd: Command): void {
     .option("--no-browser", "(legacy) print the URL instead of opening a browser")
     .option("--product <name>", "(legacy) ISF OAuth product query")
     .option("--signin-public-key-file <path>", "(legacy) RSA public key for ISF /oauth2/signin")
+    .option("--no-auth", "register the platform with no authentication (no bkn-safe)")
     .action(async (url: string, opts, cmd: Command) => {
       const g = cmd.optsWithGlobals();
       if (g.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
       const out = outputOptions(cmd);
-      const report = (r: { baseUrl?: string; userId?: string; username?: string }) => {
+      const report = (r: {
+        baseUrl?: string;
+        userId?: string;
+        username?: string;
+        noAuth?: boolean;
+      }) => {
         if (out.json || out.compact) {
           printJson({ loggedIn: true, ...r }, out);
+        } else if (r.noAuth) {
+          process.stdout.write(`Registered ${r.baseUrl ?? url} (no authentication)\n`);
         } else {
           process.stdout.write(`Logged in to ${r.baseUrl ?? url} as ${r.username ?? r.userId}\n`);
         }
@@ -110,37 +118,53 @@ export function registerAuthLeaves(cmd: Command): void {
         report(auth.attachToken(url, token, { insecure: g.insecure }));
         return;
       }
+      // Explicit no-auth (open platform / no bkn-safe): store a tokenless session.
+      if (opts.auth === false) {
+        report(auth.attachNoAuth(url, { insecure: g.insecure }));
+        return;
+      }
       // All flows ride the device_code grant (the only seeded user client):
       //  --device      → print the URL/code; approve on any machine (headless).
       //  -u/-p         → CLI drives login/consent with the credentials (CI).
       //  default       → open the browser; user signs in + approves there.
       let tokens: Awaited<ReturnType<typeof deviceLogin>>;
       let account: string | undefined;
-      if (opts.username || opts.password) {
-        const username = opts.username ?? (await promptLine("Username: "));
-        account = username;
-        const password = opts.password ?? (await promptLine("Password: ", true));
-        tokens = await credentialDeviceLogin(url, username, password, {
-          clientId: opts.clientId,
-          audience: opts.audience,
-          timeoutMs: opts.timeout * 1000,
-        });
-      } else {
-        // open the browser unless headless (--device) or --no-browser.
-        const openInBrowser = !opts.device && opts.browser !== false;
-        tokens = await deviceLogin(url, {
-          clientId: opts.clientId,
-          audience: opts.audience,
-          timeoutMs: opts.timeout * 1000,
-          onPrompt: ({ userCode, verificationUri, verificationUriComplete }) => {
-            const target = verificationUriComplete ?? verificationUri;
-            process.stderr.write(
-              `\nOpen this URL to sign in and authorize:\n  ${target}\nUser code: ${userCode}\n`,
-            );
-            if (openInBrowser) openBrowser(target);
-            process.stderr.write("Waiting for authorization…\n");
-          },
-        });
+      try {
+        if (opts.username || opts.password) {
+          const username = opts.username ?? (await promptLine("Username: "));
+          account = username;
+          const password = opts.password ?? (await promptLine("Password: ", true));
+          tokens = await credentialDeviceLogin(url, username, password, {
+            clientId: opts.clientId,
+            audience: opts.audience,
+            timeoutMs: opts.timeout * 1000,
+          });
+        } else {
+          // open the browser unless headless (--device) or --no-browser.
+          const openInBrowser = !opts.device && opts.browser !== false;
+          tokens = await deviceLogin(url, {
+            clientId: opts.clientId,
+            audience: opts.audience,
+            timeoutMs: opts.timeout * 1000,
+            onPrompt: ({ userCode, verificationUri, verificationUriComplete }) => {
+              const target = verificationUriComplete ?? verificationUri;
+              process.stderr.write(
+                `\nOpen this URL to sign in and authorize:\n  ${target}\nUser code: ${userCode}\n`,
+              );
+              if (openInBrowser) openBrowser(target);
+              process.stderr.write("Waiting for authorization…\n");
+            },
+          });
+        }
+      } catch (e) {
+        // No device-auth endpoint → the platform has no auth stack (no bkn-safe).
+        // Register a tokenless session instead of failing.
+        if (e instanceof Error && /Device auth failed \(404\)/.test(e.message)) {
+          process.stderr.write("No auth endpoint found — registering platform without auth.\n");
+          report(auth.attachNoAuth(url, { insecure: g.insecure }));
+          return;
+        }
+        throw e;
       }
       // For browser/device logins (no -u), look the account name up so the
       // session list shows a name, not a UUID.
