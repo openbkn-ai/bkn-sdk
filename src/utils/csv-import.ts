@@ -3,9 +3,9 @@
  * dataflow DAG (`@internal/database/write`) per batch: the first batch creates
  * the table, later batches append. All target columns default to VARCHAR(512).
  */
-import { statSync } from "node:fs";
-import { glob, readFile } from "node:fs/promises";
-import { basename, resolve } from "node:path";
+import { readdirSync, statSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { basename, dirname, resolve } from "node:path";
 import { parse } from "csv-parse/sync";
 
 export interface CsvData {
@@ -100,6 +100,24 @@ export function buildImportDag(opts: DagBodyOptions): Record<string, unknown> {
   };
 }
 
+/** Single-level glob (`dir/*.csv`) — readdir + basename match. Node 18 safe. */
+function globOne(pattern: string): string[] {
+  const dir = dirname(pattern);
+  const re = new RegExp(
+    `^${basename(pattern)
+      .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+      .replace(/\*/g, ".*")
+      .replace(/\?/g, ".")}$`,
+  );
+  let entries: string[];
+  try {
+    entries = readdirSync(resolve(dir));
+  } catch {
+    return [];
+  }
+  return entries.filter((f) => re.test(f)).map((f) => resolve(dir, f));
+}
+
 /** Resolve a comma/glob file pattern into absolute .csv paths. */
 export async function resolveFiles(pattern: string): Promise<string[]> {
   const out: string[] = [];
@@ -108,9 +126,8 @@ export async function resolveFiles(pattern: string): Promise<string[]> {
     .map((p) => p.trim())
     .filter(Boolean)) {
     if (part.includes("*") || part.includes("?")) {
-      for await (const entry of glob(part)) {
-        const p = String(entry);
-        if (/\.csv$/i.test(p)) out.push(resolve(p));
+      for (const p of globOne(part)) {
+        if (/\.csv$/i.test(p)) out.push(p);
       }
     } else {
       statSync(resolve(part)); // throws if missing
