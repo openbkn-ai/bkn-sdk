@@ -16,6 +16,8 @@ import { clientFrom, csv, outputOptions, readBody } from "./_shared.js";
 import { registerAuthLeaves } from "./auth.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
+/** Platform initial password — what `reset-password` resets to by default. */
+const DEFAULT_RESET_PASSWORD = "openbkn";
 
 export function adminCommand(): Command {
   const admin = new Command("admin").description(
@@ -250,19 +252,27 @@ export function adminCommand(): Command {
     });
   user
     .command("reset-password [id]")
-    .description("Reset a user's password (RSA-encrypted in transit)")
+    .description("Reset a user's password (defaults to the platform initial password)")
     .option("--id <userId>", "explicit user UUID (alt to the positional id)")
     .option("--user <account>", "resolve the user by account / login name")
-    .option("--password <s>", "the new password")
+    .option("--password <s>", "the new password (default: platform initial 'openbkn')")
     .option("--new-password <s>", "the new password (alias of --password)")
-    .option("--prompt-password", "prompt for the new password interactively")
     .option("-y, --yes", "skip confirmation")
     .action(async (id: string | undefined, opts, cmd: Command) => {
       const userId = id ?? opts.id ?? opts.user;
-      const pwd = opts.password ?? opts.newPassword;
       if (!userId) throw new Error("Provide a user id (positional or --id).");
-      if (!pwd) throw new Error("Provide --password / --new-password.");
-      printJson(await clientFrom(cmd).admin.userResetPassword(userId, pwd), outputOptions(cmd));
+      // Reset = set the platform initial password (forced-change on next login)
+      // unless an explicit new password is given.
+      const pwd = opts.password ?? opts.newPassword ?? DEFAULT_RESET_PASSWORD;
+      const r = await clientFrom(cmd).admin.userResetPassword(userId, pwd);
+      const out = outputOptions(cmd);
+      if (out.json || out.compact) printJson(r, out);
+      else if (opts.password || opts.newPassword)
+        process.stdout.write(`Password reset for ${userId}.\n`);
+      else
+        process.stdout.write(
+          `Password reset for ${userId} to the initial password '${DEFAULT_RESET_PASSWORD}' (must change on next login).\n`,
+        );
     });
 
   const role = admin.command("role").description("Role management");
