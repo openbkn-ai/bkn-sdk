@@ -1,6 +1,6 @@
 {
   "name": "@openbkn/bkn-sdk",
-  "version": "0.1.1-alpha.3",
+  "version": "0.1.1-alpha.4",
   "description": "Unified TypeScript SDK + CLI for the BKN (Business Knowledge Network) platform.",
   "type": "module",
   "license": "Apache-2.0",
@@ -18,12 +18,7 @@
       "import": "./dist/index.js"
     }
   },
-  "files": [
-    "dist",
-    "README.md",
-    "README.zh.md",
-    "LICENSE"
-  ],
+  "files": ["dist", "README.md", "README.zh.md", "LICENSE"],
   "publishConfig": {
     "access": "public"
   },
@@ -31,14 +26,7 @@
     "type": "git",
     "url": "git+https://github.com/openbkn-ai/bkn-sdk.git"
   },
-  "keywords": [
-    "bkn",
-    "openbkn",
-    "knowledge-network",
-    "cli",
-    "sdk",
-    "typescript"
-  ],
+  "keywords": ["bkn", "openbkn", "knowledge-network", "cli", "sdk", "typescript"],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
