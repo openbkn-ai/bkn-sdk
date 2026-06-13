@@ -1,5 +1,25 @@
+import { EventEmitter } from "node:events";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { deviceLogin } from "../../src/auth/oauth.js";
+
+vi.mock("node:child_process", () => ({
+  // Simulate a headless server with no `xdg-open`: spawn returns a child that
+  // asynchronously emits an 'error' (ENOENT) instead of throwing synchronously.
+  spawn: vi.fn(() => {
+    const child = new EventEmitter() as EventEmitter & { unref: () => void };
+    child.unref = () => {};
+    queueMicrotask(() =>
+      child.emit(
+        "error",
+        Object.assign(new Error("spawn xdg-open ENOENT"), {
+          code: "ENOENT",
+        }),
+      ),
+    );
+    return child;
+  }),
+}));
+
+import { deviceLogin, isHeadless, openBrowser } from "../../src/auth/oauth.js";
 
 /**
  * Mock fetch for the device flow: `/oauth2/device/auth` returns the supplied
@@ -65,6 +85,40 @@ describe("deviceLogin (RFC 8628)", () => {
   it("throws on expired_token", async () => {
     mockDeviceFetch(AUTH, [[400, { error: "expired_token" }]]);
     await expect(deviceLogin("https://platform")).rejects.toThrow(/expired/i);
+  });
+
+  it("openBrowser swallows spawn ENOENT on a headless server", async () => {
+    const onError = vi.fn();
+    process.on("uncaughtException", onError);
+    try {
+      openBrowser("https://platform/device?user_code=WXYZ-1234");
+      // let the async 'error' event fire — an unhandled one would crash the CLI
+      await new Promise((r) => setTimeout(r, 5));
+    } finally {
+      process.off("uncaughtException", onError);
+    }
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("isHeadless: linux with no DISPLAY/WAYLAND is headless", () => {
+    const orig = { ...process.env };
+    const platform = process.platform;
+    try {
+      Object.defineProperty(process, "platform", { value: "linux", configurable: true });
+      process.env.DISPLAY = undefined;
+      process.env.WAYLAND_DISPLAY = undefined;
+      delete process.env.DISPLAY;
+      delete process.env.WAYLAND_DISPLAY;
+      expect(isHeadless()).toBe(true);
+      process.env.DISPLAY = ":0";
+      expect(isHeadless()).toBe(false);
+      Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
+      delete process.env.DISPLAY;
+      expect(isHeadless()).toBe(false); // macOS always has a GUI
+    } finally {
+      Object.defineProperty(process, "platform", { value: platform, configurable: true });
+      process.env = orig;
+    }
   });
 
   it("throws when device auth omits verification_uri", async () => {

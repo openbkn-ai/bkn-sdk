@@ -36,15 +36,32 @@ function mapToken(data: {
   };
 }
 
+/**
+ * True when there's no usable browser to open — a headless server (e.g. SSH'd
+ * into a box with no desktop). On Linux that means no X11/Wayland display; in
+ * that case `auth login` should just print the URL/code for approval on another
+ * machine instead of trying (and failing) to spawn xdg-open. macOS/Windows
+ * always have a GUI shell available.
+ */
+export function isHeadless(): boolean {
+  if (process.platform !== "linux") return false;
+  return !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY;
+}
+
 export function openBrowser(url: string): void {
   const cmd =
     process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
   try {
-    spawn(cmd, [url], {
+    const child = spawn(cmd, [url], {
       stdio: "ignore",
       detached: true,
       shell: process.platform === "win32",
-    }).unref();
+    });
+    // ENOENT (e.g. no xdg-open on a headless server) surfaces as an async
+    // 'error' event, not a sync throw — swallow it so the process keeps
+    // polling. The URL is already printed by the caller.
+    child.on("error", () => {});
+    child.unref();
   } catch {
     /* fall through — URL is printed by the caller */
   }

@@ -4,7 +4,13 @@ import { Command } from "commander";
 import { changePasswordSafe } from "../api/admin.js";
 import { getUserSafe } from "../api/safe.js";
 import { decodeJwt } from "../auth/jwt.js";
-import { credentialDeviceLogin, deviceLogin, fetchAuthStatus, openBrowser } from "../auth/oauth.js";
+import {
+  credentialDeviceLogin,
+  deviceLogin,
+  fetchAuthStatus,
+  isHeadless,
+  openBrowser,
+} from "../auth/oauth.js";
 import { resolveContext } from "../config/resolve.js";
 import { group } from "../help/grouped-help.js";
 import * as auth from "../resources/auth.js";
@@ -150,8 +156,11 @@ export function registerAuthLeaves(cmd: Command): void {
             timeoutMs: opts.timeout * 1000,
           });
         } else {
-          // open the browser unless headless (--device) or --no-browser.
-          const openInBrowser = !opts.device && opts.browser !== false;
+          // Open the browser unless asked not to (--device / --no-browser) or
+          // there's none to open (headless server). On a headless box we just
+          // print the URL/code — approve it on any machine with a browser.
+          const headless = isHeadless();
+          const openInBrowser = !opts.device && opts.browser !== false && !headless;
           tokens = await deviceLogin(url, {
             clientId: opts.clientId,
             audience: opts.audience,
@@ -162,6 +171,8 @@ export function registerAuthLeaves(cmd: Command): void {
                 `\nOpen this URL to sign in and authorize:\n  ${target}\nUser code: ${userCode}\n`,
               );
               if (openInBrowser) openBrowser(target);
+              else if (headless && !opts.device && opts.browser !== false)
+                process.stderr.write("(headless — approve on any machine with a browser)\n");
               process.stderr.write("Waiting for authorization…\n");
             },
           });
