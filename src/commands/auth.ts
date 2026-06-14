@@ -247,7 +247,33 @@ export function registerAuthLeaves(cmd: Command): void {
           /* not an admin / offline — fall back to token claims */
         }
       }
-      printJson(me, outputOptions(cmd));
+      const out = outputOptions(cmd);
+      // --json/--compact/--full → the complete claim set. Default → a trimmed,
+      // human summary of the key identity fields (the raw JWT is mostly noise).
+      if (out.json || out.compact || out.full) {
+        printJson(me, out);
+        return;
+      }
+      const expMs = typeof me.exp === "number" ? me.exp * 1000 : undefined;
+      const expired = expMs !== undefined && expMs < Date.now();
+      const rows: [string, string][] = [
+        ["User", String(me.username ?? me.sub ?? "(unknown)")],
+        ...(me.name && me.name !== me.username
+          ? ([["Name", String(me.name)]] as [string, string][])
+          : []),
+        ["ID", String(me.userId ?? me.sub ?? "-")],
+        ["Platform", String(me.baseUrl ?? "-")],
+        ...(expMs !== undefined
+          ? ([["Expires", `${new Date(expMs).toISOString()}${expired ? " (expired)" : ""}`]] as [
+              string,
+              string,
+            ][])
+          : []),
+      ];
+      const pad = Math.max(...rows.map(([k]) => k.length));
+      process.stdout.write(
+        `${rows.map(([k, v]) => `${k.padEnd(pad)}  ${v}`).join("\n")}\n… use --full or --json for all claims\n`,
+      );
     });
 
   cmd
