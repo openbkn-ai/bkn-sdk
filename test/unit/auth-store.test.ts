@@ -39,7 +39,14 @@ describe("auth store round-trip", () => {
       expired: false,
     });
 
-    expect(auth.whoami().sub).toBe("u-1");
+    // whoami enriches the bare claims with the active session's identity so a
+    // device-flow `sub`-only token still says who you are.
+    expect(auth.whoami()).toMatchObject({
+      sub: "u-1",
+      baseUrl: "https://demo.example.com",
+      userId: "u-1",
+      username: "alice",
+    });
     expect(auth.currentToken()).toBe(token);
 
     const list = auth.listPlatforms();

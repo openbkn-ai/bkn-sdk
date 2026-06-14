@@ -223,9 +223,32 @@ export function registerAuthLeaves(cmd: Command): void {
     .command("whoami [url]")
     .description("Show current user identity (from the token)")
     .option("--no-lookup", "skip the backend identity fallback (eacp/user/get)")
-    .action((_url: string | undefined, _opts, cmd: Command) =>
-      printJson(auth.whoami(), outputOptions(cmd)),
-    );
+    .action(async (_url: string | undefined, opts, cmd: Command) => {
+      const g = cmd.optsWithGlobals();
+      if (g.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+      const me = auth.whoami();
+      // The device-flow id_token carries only `sub` (a UUID), so the token
+      // alone can't say *who* you are. Resolve the account name from the
+      // backend (needs admin; best-effort — skipped with --no-lookup).
+      if (opts.lookup !== false && me.baseUrl && me.sub) {
+        try {
+          const u = (await getUserSafe(
+            {
+              baseUrl: me.baseUrl,
+              token: auth.currentToken(),
+              businessDomain: DEFAULT_BUSINESS_DOMAIN,
+              insecure: Boolean(g.insecure),
+            },
+            me.sub,
+          )) as { account?: string; name?: string };
+          if (u.account) me.username = u.account;
+          if (u.name) me.name = u.name;
+        } catch {
+          /* not an admin / offline — fall back to token claims */
+        }
+      }
+      printJson(me, outputOptions(cmd));
+    });
 
   cmd
     .command("list")

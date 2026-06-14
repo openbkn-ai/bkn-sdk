@@ -102,7 +102,16 @@ export function currentToken(): string {
   return token.accessToken;
 }
 
-export function whoami(): JwtClaims {
+export interface WhoamiResult extends JwtClaims {
+  /** Platform the active session belongs to. */
+  baseUrl?: string;
+  /** Stored user id (UUID) for the active session. */
+  userId?: string;
+  /** Resolved account/login name — what `auth login` looked up and stored. */
+  username?: string;
+}
+
+export function whoami(): WhoamiResult {
   const baseUrl = activePlatform();
   const token = baseUrl ? readToken(baseUrl) : undefined;
   // The access token may be Ory-opaque; the id_token carries the JWT identity.
@@ -112,7 +121,15 @@ export function whoami(): JwtClaims {
       "No decodable identity (token is opaque and no id_token saved). Use `auth status`.",
     );
   }
-  return claims;
+  // The device-flow id_token often carries only `sub` (a UUID), so the bare
+  // claims don't say *who* you are. Surface the account name resolved + stored
+  // at login (falling back to the JWT's own name/preferred_username/sub).
+  return {
+    ...claims,
+    baseUrl: baseUrl ?? undefined,
+    userId: baseUrl ? activeUserId(baseUrl) : undefined,
+    username: usernameOf(token),
+  };
 }
 
 export interface PlatformListItem {
