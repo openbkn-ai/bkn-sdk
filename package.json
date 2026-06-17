@@ -1,6 +1,6 @@
 {
   "name": "@openbkn/bkn-sdk",
-  "version": "0.1.1-alpha.8",
+  "version": "0.1.1-alpha.9",
   "description": "Unified TypeScript SDK + CLI for the BKN (Business Knowledge Network) platform.",
   "type": "module",
   "license": "Apache-2.0",
