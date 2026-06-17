@@ -6,6 +6,40 @@ import { printJson } from "../utils/output.js";
 import { clientFrom, outputOptions } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
+const collectArg = (v: string, prev: string[]): string[] => {
+  prev.push(v);
+  return prev;
+};
+
+/**
+ * Build a tool/method argument object from `--args <json>` and/or repeatable
+ * `--arg key=value`. `--arg` values are parsed as JSON (so numbers, booleans,
+ * and arrays work) and fall back to a raw string. `--arg` overrides `--args`.
+ * This is the generic path: any MCP tool — current or future — is callable
+ * without a hand-written wrapper.
+ */
+function buildArgs(opts: { args?: string; arg?: string[] }): Record<string, unknown> {
+  let out: Record<string, unknown> = {};
+  if (opts.args) {
+    try {
+      out = JSON.parse(opts.args);
+    } catch {
+      throw new InputError("--args must be valid JSON");
+    }
+  }
+  for (const pair of opts.arg ?? []) {
+    const idx = pair.indexOf("=");
+    if (idx <= 0) throw new InputError(`--arg must be key=value (got: ${pair})`);
+    const key = pair.slice(0, idx);
+    const raw = pair.slice(idx + 1);
+    try {
+      out[key] = JSON.parse(raw);
+    } catch {
+      out[key] = raw;
+    }
+  }
+  return out;
+}
 
 export function contextCommand(): Command {
   const cmd = new Command("context").description(
@@ -59,16 +93,38 @@ export function contextCommand(): Command {
 
   cmd
     .command("tool-call <kn-id> <name>")
-    .description("Call any MCP tool directly (--args JSON)")
-    .requiredOption("--args <json>", "tool arguments as JSON")
+    .description("Call any MCP tool by name — current or future (use `tools` to discover)")
+    .option("--args <json>", "tool arguments as JSON")
+    .option(
+      "--arg <key=value>",
+      "one argument (repeatable; value parsed as JSON, else string)",
+      collectArg,
+      [],
+    )
     .action(async (knId: string, name: string, opts, cmd: Command) => {
-      let args: Record<string, unknown>;
-      try {
-        args = JSON.parse(opts.args);
-      } catch {
-        throw new InputError("--args must be valid JSON");
-      }
-      printJson(await clientFrom(cmd).context.toolCall(knId, name, args), outputOptions(cmd));
+      printJson(
+        await clientFrom(cmd).context.toolCall(knId, name, buildArgs(opts)),
+        outputOptions(cmd),
+      );
+    });
+
+  cmd
+    .command("call-method <kn-id> <method>")
+    .description(
+      "Call any MCP method by name (e.g. tools/list, resources/read) — current or future",
+    )
+    .option("--args <json>", "method params as JSON")
+    .option(
+      "--arg <key=value>",
+      "one param (repeatable; value parsed as JSON, else string)",
+      collectArg,
+      [],
+    )
+    .action(async (knId: string, method: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).context.callMethod(knId, method, buildArgs(opts)),
+        outputOptions(cmd),
+      );
     });
 
   cmd
@@ -120,7 +176,7 @@ export function contextCommand(): Command {
   };
   cmd
     .command("query-instance-subgraph <kn-id>")
-    .description("Layer-2: query an instance subgraph across relation-type paths")
+    .description("Query an instance subgraph across relation-type paths")
     .requiredOption("--args <json>", "tool arguments as JSON")
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(
@@ -130,7 +186,7 @@ export function contextCommand(): Command {
     });
   cmd
     .command("get-logic-properties <kn-id>")
-    .description("Layer-3: compute logic-property values for instances")
+    .description("Compute logic-property values for instances")
     .requiredOption("--args <json>", "tool arguments as JSON")
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(
@@ -140,7 +196,7 @@ export function contextCommand(): Command {
     });
   cmd
     .command("get-action-info <kn-id>")
-    .description("Layer-3: fetch action info / dynamic tools for an instance")
+    .description("Fetch action info / dynamic tools for an instance")
     .requiredOption("--args <json>", "tool arguments as JSON")
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(

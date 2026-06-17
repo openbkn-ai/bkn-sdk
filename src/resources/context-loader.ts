@@ -1,6 +1,7 @@
 /** Context-loader resource surface (MCP over agent-retrieval). */
 import {
   type SearchSchemaOptions,
+  callMethod,
   callTool,
   findSkills,
   getActionInfo,
@@ -28,6 +29,10 @@ export function context(ctx: RequestContext) {
     tools: (knId: string) => listTools(ctx, knId),
     toolCall: (knId: string, name: string, args: Record<string, unknown>) =>
       callTool(ctx, knId, name, args),
+    // Generic MCP method passthrough — covers methods not yet wrapped, so the
+    // surface doesn't have to grow every time the server adds one.
+    callMethod: (knId: string, method: string, params?: Record<string, unknown>) =>
+      callMethod(ctx, knId, method, params),
     queryInstanceSubgraph: (knId: string, args: Record<string, unknown>) =>
       queryInstanceSubgraph(ctx, knId, args),
     logicProperties: (knId: string, args: Record<string, unknown>) =>
