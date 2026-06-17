@@ -41,6 +41,32 @@ function buildArgs(opts: { args?: string; arg?: string[] }): Record<string, unkn
   return out;
 }
 
+/**
+ * Render an MCP tool catalog (`info` / `tools`). Default view is a readable
+ * table of name + description; `--json`/`--compact` emit the raw response. The
+ * tools array is dug out of the common envelope shapes; an unrecognised shape
+ * falls back to raw JSON so nothing is hidden.
+ */
+function printToolList(res: unknown, out: { json?: boolean; compact?: boolean }): void {
+  if (out.json || out.compact) {
+    printJson(res, out);
+    return;
+  }
+  const r = (res ?? {}) as { tools?: unknown; result?: { tools?: unknown }; data?: unknown };
+  const arr = [res, r.tools, r.result?.tools, r.data].find(Array.isArray) as
+    | Array<Record<string, unknown>>
+    | undefined;
+  if (!arr) {
+    printJson(res, out);
+    return;
+  }
+  const rows = arr.map((t) => ({
+    name: t.name ?? t.tool_name ?? t.key ?? "",
+    description: typeof t.description === "string" ? t.description : "",
+  }));
+  printJson(rows, out);
+}
+
 export function contextCommand(): Command {
   const cmd = new Command("context").description(
     "Context loader (MCP) — schema discovery, instance query, skill recall",
@@ -88,14 +114,14 @@ export function contextCommand(): Command {
     .command("info")
     .description("List the deploy's MCP tool catalog (global — no KN needed)")
     .action(async (_opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).context.info(), outputOptions(cmd));
+      printToolList(await clientFrom(cmd).context.info(), outputOptions(cmd));
     });
 
   cmd
     .command("tools <kn-id>")
     .description("List MCP tools advertised for a KN session")
     .action(async (knId: string, _opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).context.tools(knId), outputOptions(cmd));
+      printToolList(await clientFrom(cmd).context.tools(knId), outputOptions(cmd));
     });
 
   cmd
