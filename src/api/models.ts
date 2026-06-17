@@ -4,6 +4,7 @@ import type { RequestContext } from "../types.js";
  * invocation (mf-model-api), mirroring kweaver-sdk. Passed through as JSON.
  */
 import { HttpError } from "../utils/errors.js";
+import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
 import { applyTls } from "./tls.js";
@@ -80,15 +81,17 @@ export async function chatCompletionsStream(
   onDelta: (text: string) => void,
 ): Promise<string> {
   applyTls(ctx);
-  const res = await fetch(`${ctx.baseUrl}${API}/chat/completions`, {
-    method: "POST",
-    headers: {
-      ...buildHeaders(ctx),
-      "content-type": "application/json",
-      accept: "text/event-stream",
-    },
-    body: JSON.stringify({ model, messages, stream: true }),
-  });
+  const res = await authFetch(ctx, () =>
+    fetch(`${ctx.baseUrl}${API}/chat/completions`, {
+      method: "POST",
+      headers: {
+        ...buildHeaders(ctx),
+        "content-type": "application/json",
+        accept: "text/event-stream",
+      },
+      body: JSON.stringify({ model, messages, stream: true }),
+    }),
+  );
   if (!res.ok) throw new HttpError(res.status, res.statusText, await res.text());
 
   const reader = res.body?.getReader();

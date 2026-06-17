@@ -6,6 +6,7 @@ import type { RequestContext } from "../types.js";
  * the answer text out of it after each frame, emitting only the new suffix.
  */
 import { HttpError } from "../utils/errors.js";
+import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
 import { applyTls } from "./tls.js";
@@ -118,16 +119,18 @@ export async function sendChat(
   };
   if (opts.conversationId) body.conversation_id = opts.conversationId;
 
-  const res = await fetch(`${ctx.baseUrl}${FACTORY}/v1/app/${info.key}/chat/completion`, {
-    method: "POST",
-    headers: {
-      ...buildHeaders(ctx),
-      "content-type": "application/json",
-      accept: opts.stream ? "text/event-stream" : "application/json",
-      "x-language": "zh-CN",
-    },
-    body: JSON.stringify(body),
-  });
+  const res = await authFetch(ctx, () =>
+    fetch(`${ctx.baseUrl}${FACTORY}/v1/app/${info.key}/chat/completion`, {
+      method: "POST",
+      headers: {
+        ...buildHeaders(ctx),
+        "content-type": "application/json",
+        accept: opts.stream ? "text/event-stream" : "application/json",
+        "x-language": "zh-CN",
+      },
+      body: JSON.stringify(body),
+    }),
+  );
   if (!res.ok) throw new HttpError(res.status, res.statusText, await res.text());
 
   const contentType = res.headers.get("content-type") ?? "";

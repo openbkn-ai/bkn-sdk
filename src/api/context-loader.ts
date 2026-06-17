@@ -6,6 +6,7 @@
  */
 import type { RequestContext } from "../types.js";
 import { HttpError } from "../utils/errors.js";
+import { authFetch } from "./auth-fetch.js";
 import { applyTls } from "./tls.js";
 
 const MCP_PATH = "/api/agent-retrieval/v1/mcp";
@@ -57,11 +58,13 @@ async function post(
   body: unknown,
 ) {
   applyTls(ctx);
-  const res = await fetch(mcpUrl(ctx), {
-    method: "POST",
-    headers: headers(ctx, knId, sessionId),
-    body: JSON.stringify(body),
-  });
+  const res = await authFetch(ctx, () =>
+    fetch(mcpUrl(ctx), {
+      method: "POST",
+      headers: headers(ctx, knId, sessionId),
+      body: JSON.stringify(body),
+    }),
+  );
   const text = await res.text();
   if (!res.ok) throw new HttpError(res.status, res.statusText, text);
   return { res, text };

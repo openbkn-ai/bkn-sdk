@@ -4,6 +4,7 @@ import type { RequestContext } from "../types.js";
  * mirroring kweaver-sdk api/bkn-backend.ts. Passed through as parsed JSON.
  */
 import { HttpError } from "../utils/errors.js";
+import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
 import { applyTls } from "./tls.js";
@@ -35,7 +36,9 @@ export async function uploadBkn(
     "bkn.tar",
   );
   // Let fetch set the multipart boundary; only send auth/domain headers.
-  const res = await fetch(url, { method: "POST", headers: buildHeaders(ctx), body: form });
+  const res = await authFetch(ctx, () =>
+    fetch(url, { method: "POST", headers: buildHeaders(ctx), body: form }),
+  );
   const text = await res.text();
   if (!res.ok) throw new HttpError(res.status, res.statusText, text);
   return text ? JSON.parse(text) : undefined;
@@ -53,7 +56,7 @@ export async function downloadBkn(
   applyTls(ctx);
   const url = new URL(`${ctx.baseUrl}${BKNS}/${encodeURIComponent(knId)}`);
   url.searchParams.set("branch", opts.branch ?? "main");
-  const res = await fetch(url, { method: "GET", headers: buildHeaders(ctx) });
+  const res = await authFetch(ctx, () => fetch(url, { method: "GET", headers: buildHeaders(ctx) }));
   if (!res.ok) throw new HttpError(res.status, res.statusText, await res.text());
   return Buffer.from(await res.arrayBuffer());
 }

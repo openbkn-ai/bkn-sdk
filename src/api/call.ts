@@ -5,8 +5,8 @@
  */
 import { readFileSync } from "node:fs";
 import type { RequestContext } from "../types.js";
+import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
-import { tryRefresh } from "./http.js";
 import { applyTls } from "./tls.js";
 
 export interface RawCallOptions {
@@ -86,15 +86,13 @@ export async function rawCall(
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 30_000);
-  const send = () => fetch(url, { method, headers: headersFor(), body, signal: controller.signal });
   try {
-    let res = await send();
-    // On a 401 with stored credentials, refresh the access token once and retry
-    // — matches the SDK request path so `call`/`curl` self-heals on an expired
-    // token instead of surfacing "token is invalid".
-    if (res.status === 401 && ctx.refresh && (await tryRefresh(ctx))) {
-      res = await send();
-    }
+    // On a 401 with stored credentials, authFetch refreshes the token once and
+    // retries — matches the SDK request path so `call`/`curl` self-heals on an
+    // expired token instead of surfacing "token is invalid".
+    const res = await authFetch(ctx, () =>
+      fetch(url, { method, headers: headersFor(), body, signal: controller.signal }),
+    );
     return { status: res.status, statusText: res.statusText, body: await res.text() };
   } finally {
     clearTimeout(timer);

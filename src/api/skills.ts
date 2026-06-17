@@ -4,6 +4,7 @@ import type { RequestContext } from "../types.js";
  * mirroring kweaver-sdk api/skills.ts. Passed through as parsed JSON.
  */
 import { HttpError } from "../utils/errors.js";
+import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
 import { applyTls } from "./tls.js";
@@ -22,11 +23,13 @@ export async function registerSkillZip(
   form.set("file", new Blob([bytes]), opts.filename ?? "skill.zip");
   if (opts.source) form.set("source", opts.source);
   if (opts.extendInfo) form.set("extend_info", JSON.stringify(opts.extendInfo));
-  const res = await fetch(`${ctx.baseUrl}${BASE}/skills`, {
-    method: "POST",
-    headers: buildHeaders(ctx),
-    body: form,
-  });
+  const res = await authFetch(ctx, () =>
+    fetch(`${ctx.baseUrl}${BASE}/skills`, {
+      method: "POST",
+      headers: buildHeaders(ctx),
+      body: form,
+    }),
+  );
   const text = await res.text();
   if (!res.ok) throw new HttpError(res.status, res.statusText, text);
   return text ? JSON.parse(text) : undefined;
@@ -43,11 +46,13 @@ export async function updateSkillPackageZip(
   const form = new FormData();
   form.set("file_type", "zip");
   form.set("file", new Blob([bytes]), filename);
-  const res = await fetch(`${ctx.baseUrl}${BASE}/skills/${encodeURIComponent(skillId)}/package`, {
-    method: "PUT",
-    headers: buildHeaders(ctx),
-    body: form,
-  });
+  const res = await authFetch(ctx, () =>
+    fetch(`${ctx.baseUrl}${BASE}/skills/${encodeURIComponent(skillId)}/package`, {
+      method: "PUT",
+      headers: buildHeaders(ctx),
+      body: form,
+    }),
+  );
   const text = await res.text();
   if (!res.ok) throw new HttpError(res.status, res.statusText, text);
   return text ? JSON.parse(text) : undefined;
@@ -56,9 +61,11 @@ export async function updateSkillPackageZip(
 /** Download a skill as a zip archive (raw bytes). */
 export async function downloadSkill(ctx: RequestContext, skillId: string): Promise<Uint8Array> {
   applyTls(ctx);
-  const res = await fetch(`${ctx.baseUrl}${BASE}/skills/${encodeURIComponent(skillId)}/download`, {
-    headers: buildHeaders(ctx),
-  });
+  const res = await authFetch(ctx, () =>
+    fetch(`${ctx.baseUrl}${BASE}/skills/${encodeURIComponent(skillId)}/download`, {
+      headers: buildHeaders(ctx),
+    }),
+  );
   if (!res.ok) throw new HttpError(res.status, res.statusText, await res.text());
   return new Uint8Array(await res.arrayBuffer());
 }

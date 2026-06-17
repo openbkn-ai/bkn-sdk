@@ -6,6 +6,7 @@ import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import type { RequestContext } from "../types.js";
 import { HttpError } from "../utils/errors.js";
+import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
 import { applyTls } from "./tls.js";
@@ -22,9 +23,10 @@ export async function exportConfig(
   type: ImpexType = "toolbox",
 ): Promise<Uint8Array> {
   applyTls(ctx);
-  const res = await fetch(
-    `${ctx.baseUrl}${IMPEX}/export/${encodeURIComponent(type)}/${encodeURIComponent(id)}`,
-    { headers: buildHeaders(ctx) },
+  const res = await authFetch(ctx, () =>
+    fetch(`${ctx.baseUrl}${IMPEX}/export/${encodeURIComponent(type)}/${encodeURIComponent(id)}`, {
+      headers: buildHeaders(ctx),
+    }),
   );
   const buf = new Uint8Array(await res.arrayBuffer());
   if (!res.ok) throw new HttpError(res.status, res.statusText, new TextDecoder().decode(buf));
@@ -41,11 +43,13 @@ export async function importConfig(
   const buf = await readFile(filePath);
   const form = new FormData();
   form.append("data", new Blob([new Uint8Array(buf)]), basename(filePath));
-  const res = await fetch(`${ctx.baseUrl}${IMPEX}/import/${encodeURIComponent(type)}`, {
-    method: "POST",
-    headers: buildHeaders(ctx),
-    body: form,
-  });
+  const res = await authFetch(ctx, () =>
+    fetch(`${ctx.baseUrl}${IMPEX}/import/${encodeURIComponent(type)}`, {
+      method: "POST",
+      headers: buildHeaders(ctx),
+      body: form,
+    }),
+  );
   const text = await res.text();
   if (!res.ok) throw new HttpError(res.status, res.statusText, text);
   return text ? JSON.parse(text) : text;
@@ -66,11 +70,13 @@ export async function uploadTool(
   const form = new FormData();
   form.append("metadata_type", metadataType);
   form.append("data", new Blob([new Uint8Array(buf)]), basename(filePath));
-  const res = await fetch(`${ctx.baseUrl}${PATH}/${encodeURIComponent(boxId)}/tool`, {
-    method: "POST",
-    headers: buildHeaders(ctx),
-    body: form,
-  });
+  const res = await authFetch(ctx, () =>
+    fetch(`${ctx.baseUrl}${PATH}/${encodeURIComponent(boxId)}/tool`, {
+      method: "POST",
+      headers: buildHeaders(ctx),
+      body: form,
+    }),
+  );
   const text = await res.text();
   if (!res.ok) throw new HttpError(res.status, res.statusText, text);
   return text ? JSON.parse(text) : text;
