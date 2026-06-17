@@ -1,5 +1,16 @@
-import { describe, expect, it } from "vitest";
-import { parseFormField, parseHeader } from "../../src/api/call.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { parseFormField, parseHeader, rawCall } from "../../src/api/call.js";
+import type { RequestContext } from "../../src/types.js";
+
+function ctx(over: Partial<RequestContext> = {}): RequestContext {
+  return {
+    baseUrl: "https://demo.example.com",
+    token: "OLD",
+    businessDomain: "bd_public",
+    insecure: false,
+    ...over,
+  };
+}
 
 describe("parseHeader", () => {
   it("splits on the first colon and trims", () => {
@@ -23,5 +34,50 @@ describe("parseFormField", () => {
   });
   it("throws without =", () => {
     expect(() => parseFormField("bad")).toThrow();
+  });
+});
+
+describe("rawCall refresh-on-401", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("refreshes the token and retries once on a 401", async () => {
+    const auths: (string | null)[] = [];
+    let persisted: string | undefined;
+    const f = vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith("/oauth2/token")) {
+        return new Response(JSON.stringify({ access_token: "NEW" }), { status: 200 });
+      }
+      auths.push(new Headers(init?.headers).get("authorization"));
+      // First call (OLD token) → 401; retry (NEW token) → 200.
+      return auths.length === 1
+        ? new Response("denied", { status: 401 })
+        : new Response("ok", { status: 200 });
+    });
+    vi.stubGlobal("fetch", f);
+
+    const res = await rawCall(
+      ctx({
+        refresh: {
+          refreshToken: "RT",
+          persist: (t) => {
+            persisted = t.accessToken;
+          },
+        },
+      }),
+      "/api/x",
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body).toBe("ok");
+    expect(auths).toEqual(["Bearer OLD", "Bearer NEW"]); // retried with the fresh token
+    expect(persisted).toBe("NEW"); // and persisted it
+  });
+
+  it("does not retry a 401 without stored refresh credentials", async () => {
+    const f = vi.fn(async () => new Response("denied", { status: 401 }));
+    vi.stubGlobal("fetch", f);
+    const res = await rawCall(ctx(), "/api/x"); // no ctx.refresh
+    expect(res.status).toBe(401);
+    expect(f).toHaveBeenCalledTimes(1); // single shot, surfaces the 401
   });
 });

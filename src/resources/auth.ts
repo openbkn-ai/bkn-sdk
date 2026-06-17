@@ -4,6 +4,7 @@
  * here via `attachToken`.
  */
 import { type JwtClaims, decodeJwt, isExpired } from "../auth/jwt.js";
+import { refreshAccessToken } from "../auth/oauth.js";
 import {
   type PlatformUser,
   type TokenConfig,
@@ -99,6 +100,43 @@ export function currentToken(): string {
   const baseUrl = activePlatform();
   const token = baseUrl ? readToken(baseUrl) : undefined;
   if (!token) throw new InputError("Not logged in. Run `openbkn auth login <url> --token <t>`.");
+  return token.accessToken;
+}
+
+/**
+ * Like {@link currentToken} but proactively refreshes an expired access token
+ * when a refresh token is stored, persisting the result. API requests already
+ * refresh on a 401 (see api/http.ts); this covers the `auth token` getter,
+ * whose output is copied out and used elsewhere where no 401 retry can help.
+ */
+export async function currentTokenFresh(): Promise<string> {
+  const baseUrl = activePlatform();
+  const token = baseUrl ? readToken(baseUrl) : undefined;
+  if (!baseUrl || !token) {
+    throw new InputError("Not logged in. Run `openbkn auth login <url> --token <t>`.");
+  }
+  // Refresh unless we can positively prove the token is still valid. A JWT is
+  // refreshed only when its `exp` has passed; an opaque token (Ory access
+  // tokens are opaque — no decodable `exp`) is always refreshed, since `auth
+  // token`'s output is consumed externally where no 401-retry can recover it.
+  const claims = decodeJwt(token.accessToken);
+  const decodable = claims?.exp !== undefined;
+  const needsRefresh = decodable ? isExpired(claims) : true;
+  if (token.refreshToken && needsRefresh) {
+    try {
+      const t = await refreshAccessToken(baseUrl, token.refreshToken);
+      writeToken(baseUrl, {
+        ...token,
+        accessToken: t.accessToken,
+        refreshToken: t.refreshToken ?? token.refreshToken,
+        idToken: t.idToken ?? token.idToken,
+      });
+      return t.accessToken;
+    } catch {
+      // Refresh failed (revoked / offline) — return the stale token; the
+      // caller learns it's expired when the server rejects it.
+    }
+  }
   return token.accessToken;
 }
 

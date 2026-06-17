@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 import type { RequestContext } from "../types.js";
 import { buildHeaders } from "./headers.js";
+import { tryRefresh } from "./http.js";
 import { applyTls } from "./tls.js";
 
 export interface RawCallOptions {
@@ -77,17 +78,23 @@ export async function rawCall(
   }
 
   const method = opts.method ?? (body !== undefined ? "POST" : "GET");
-  const headers = buildHeaders(
-    { ...ctx, businessDomain: opts.businessDomain ?? ctx.businessDomain },
-    extra,
-  );
+  // Headers carry the bearer token, so rebuild them after a refresh swaps it.
+  const headersFor = () =>
+    buildHeaders({ ...ctx, businessDomain: opts.businessDomain ?? ctx.businessDomain }, extra);
 
   if (opts.verbose) process.stderr.write(`> ${method} ${url}\n`);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 30_000);
+  const send = () => fetch(url, { method, headers: headersFor(), body, signal: controller.signal });
   try {
-    const res = await fetch(url, { method, headers, body, signal: controller.signal });
+    let res = await send();
+    // On a 401 with stored credentials, refresh the access token once and retry
+    // — matches the SDK request path so `call`/`curl` self-heals on an expired
+    // token instead of surfacing "token is invalid".
+    if (res.status === 401 && ctx.refresh && (await tryRefresh(ctx))) {
+      res = await send();
+    }
     return { status: res.status, statusText: res.statusText, body: await res.text() };
   } finally {
     clearTimeout(timer);

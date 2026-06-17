@@ -62,7 +62,7 @@ export async function request<T = unknown>(
 }
 
 /** Refresh ctx.token from its refresh token, persist, and report success. */
-async function tryRefresh(ctx: RequestContext): Promise<boolean> {
+export async function tryRefresh(ctx: RequestContext): Promise<boolean> {
   if (!ctx.refresh) return false;
   try {
     const t = await refreshAccessToken(ctx.baseUrl, ctx.refresh.refreshToken, ctx.refresh.clientId);

@@ -214,9 +214,13 @@ export function registerAuthLeaves(cmd: Command): void {
 
   cmd
     .command("token")
-    .description("Print the current access token (keep secret)")
-    .action(() => {
-      process.stdout.write(`${auth.currentToken()}\n`);
+    .description("Print the current access token, refreshing it if expired (keep secret)")
+    .option("--no-refresh", "print the stored token as-is, without refreshing")
+    .action(async (opts, cmd: Command) => {
+      const g = cmd.optsWithGlobals();
+      if (g.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+      const token = opts.refresh === false ? auth.currentToken() : await auth.currentTokenFresh();
+      process.stdout.write(`${token}\n`);
     });
 
   cmd
