@@ -85,8 +85,15 @@ export function contextCommand(): Command {
     });
 
   cmd
+    .command("info")
+    .description("List the deploy's MCP tool catalog (global — no KN needed)")
+    .action(async (_opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).context.info(), outputOptions(cmd));
+    });
+
+  cmd
     .command("tools <kn-id>")
-    .description("List MCP tools")
+    .description("List MCP tools advertised for a KN session")
     .action(async (knId: string, _opts, cmd: Command) => {
       printJson(await clientFrom(cmd).context.tools(knId), outputOptions(cmd));
     });

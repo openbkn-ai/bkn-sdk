@@ -7,6 +7,7 @@
 import type { RequestContext } from "../types.js";
 import { HttpError } from "../utils/errors.js";
 import { authFetch } from "./auth-fetch.js";
+import { request } from "./http.js";
 import { applyTls } from "./tls.js";
 
 const MCP_PATH = "/api/agent-retrieval/v1/mcp";
@@ -22,6 +23,16 @@ function nextId(): number {
 
 function mcpUrl(ctx: RequestContext): string {
   return `${ctx.baseUrl}${MCP_PATH}`;
+}
+
+/**
+ * The deploy's MCP tool catalog (`GET .../mcp/info`) — global, no KN needed.
+ * Use this to discover what tools exist before binding to a specific KN; the
+ * per-KN `tools/list` (see {@link listTools}) returns the same catalog scoped
+ * to a session.
+ */
+export function mcpInfo(ctx: RequestContext): Promise<unknown> {
+  return request(ctx, `${MCP_PATH}/info`);
 }
 
 function headers(ctx: RequestContext, knId: string, sessionId?: string): Record<string, string> {

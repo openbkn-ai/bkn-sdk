@@ -11,6 +11,7 @@ import {
   listResourceTemplates,
   listResources,
   listTools,
+  mcpInfo,
   queryInstanceSubgraph,
   queryObjectInstance,
   readResource,
@@ -26,6 +27,7 @@ export function context(ctx: RequestContext) {
       queryObjectInstance(ctx, knId, args),
     findSkills: (knId: string, objectTypeId: string, topK?: number) =>
       findSkills(ctx, knId, objectTypeId, topK),
+    info: () => mcpInfo(ctx),
     tools: (knId: string) => listTools(ctx, knId),
     toolCall: (knId: string, name: string, args: Record<string, unknown>) =>
       callTool(ctx, knId, name, args),
