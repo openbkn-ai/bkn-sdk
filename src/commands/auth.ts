@@ -1,5 +1,4 @@
 /** `openbkn auth …` — login / session / token (store-backed). */
-import { createInterface } from "node:readline";
 import { Command } from "commander";
 import { changePasswordSafe } from "../api/admin.js";
 import { getUserSafe } from "../api/safe.js";
@@ -17,6 +16,7 @@ import * as auth from "../resources/auth.js";
 import { DEFAULT_BUSINESS_DOMAIN } from "../types.js";
 import { HttpError, InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
+import { promptLine } from "../utils/prompt.js";
 import { outputOptions } from "./_shared.js";
 
 /** Best-effort: resolve the logged-in user's account name from their token. */
@@ -37,25 +37,6 @@ async function resolveAccount(
   } catch {
     return undefined;
   }
-}
-
-/** Prompt for a line on the TTY; when `hidden`, the typed characters are not echoed. */
-function promptLine(query: string, hidden = false): Promise<string> {
-  return new Promise((resolve) => {
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
-    if (hidden) {
-      // Swallow the echo of typed chars; print the query once up front.
-      const mutable = rl as unknown as { _writeToOutput: (s: string) => void };
-      mutable._writeToOutput = (s: string) => {
-        if (s.startsWith(query)) process.stdout.write(query);
-      };
-    }
-    rl.question(query, (answer) => {
-      rl.close();
-      if (hidden) process.stdout.write("\n");
-      resolve(answer.trim());
-    });
-  });
 }
 
 /** Render saved sessions as a tree: platform → users, `*` marks the active one. */

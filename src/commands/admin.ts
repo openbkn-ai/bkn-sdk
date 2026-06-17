@@ -10,8 +10,10 @@ import { resolveContext } from "../config/resolve.js";
 import { activePlatform, setActivePlatform } from "../config/store.js";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
+import { InputError } from "../utils/errors.js";
 import { renderOrgTree } from "../utils/org-tree.js";
 import { printJson } from "../utils/output.js";
+import { promptLine } from "../utils/prompt.js";
 import { clientFrom, csv, outputOptions, readBody } from "./_shared.js";
 import { registerAuthLeaves } from "./auth.js";
 
@@ -257,18 +259,23 @@ export function adminCommand(): Command {
     .option("--user <account>", "resolve the user by account / login name")
     .option("--password <s>", "the new password (default: platform initial 'openbkn')")
     .option("--new-password <s>", "the new password (alias of --password)")
+    .option("--prompt-password", "type the new password interactively (input hidden)")
     .option("-y, --yes", "skip confirmation")
     .action(async (id: string | undefined, opts, cmd: Command) => {
       const userId = id ?? opts.id ?? opts.user;
       if (!userId) throw new Error("Provide a user id (positional or --id).");
       // Reset = set the platform initial password (forced-change on next login)
-      // unless an explicit new password is given.
-      const pwd = opts.password ?? opts.newPassword ?? DEFAULT_RESET_PASSWORD;
+      // unless an explicit new password is given (flag or interactive prompt).
+      let explicit = opts.password ?? opts.newPassword;
+      if (!explicit && opts.promptPassword) {
+        explicit = await promptLine("New password: ", true);
+        if (!explicit) throw new InputError("No password entered.");
+      }
+      const pwd = explicit ?? DEFAULT_RESET_PASSWORD;
       const r = await clientFrom(cmd).admin.userResetPassword(userId, pwd);
       const out = outputOptions(cmd);
       if (out.json || out.compact) printJson(r, out);
-      else if (opts.password || opts.newPassword)
-        process.stdout.write(`Password reset for ${userId}.\n`);
+      else if (explicit) process.stdout.write(`Password reset for ${userId}.\n`);
       else
         process.stdout.write(
           `Password reset for ${userId} to the initial password '${DEFAULT_RESET_PASSWORD}' (must change on next login).\n`,
