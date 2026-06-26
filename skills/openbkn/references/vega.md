@@ -6,9 +6,32 @@
 | `catalog resources <id> [--category table]` | Resources under a catalog. |
 | `catalog health <ids...>` | Health-status for one or more catalogs. |
 | `connector-type list` / `connector-type get <type>` | Available connector types. |
+| `sql --resource-type <t> --query "<sql>"` / `sql -d <json>` | Run SQL (MySQL/MariaDB/PostgreSQL) or OpenSearch DSL directly against a data source. See below. |
 | `resource …` | Vega-backend resources (mirror of top-level `resource`). |
 | `dataset build <resource-id> --mode batch\|streaming [--embedding-fields a,b] [--build-key-fields k] [--embedding-model <id>] [--model-dimensions <n>] [--wait]` | Create an index BuildTask. **Index build lives on the resource (one resource = one table); there is no KN-level build.** `batch` requires `--build-key-fields` (else `400 build_key_fields is required for batch mode`). |
 | `dataset build-status <resource-id> <task-id>` | BuildTask state + progress. |
+
+## SQL / DSL against a data source
+
+`POST /api/vega-backend/v1/resources/query` — vega-backend connects directly to
+MySQL/MariaDB/PostgreSQL (SQL) or OpenSearch (DSL); no Trino.
+
+```bash
+# simple: --resource-type + --query (SQL quoted; reference the resource as {{<id>}})
+openbkn vega sql --resource-type mysql --query "SELECT * FROM {{<resource-id>}} LIMIT 5"
+
+# advanced: full JSON body (stream_size, query_timeout, query_id, OpenSearch DSL object)
+openbkn vega sql -d '{"resource_type":"mysql","query":"SELECT ...","stream_size":1000}'
+```
+
+- **Always use a `{{<resource-id>}}` placeholder** for the table — it tells the
+  backend which Catalog connector to use. Bare SQL may fail with
+  `connector config is incomplete`. The `<resource-id>` is a Vega resource id
+  (`vega resource get` / `resource find --name <table> --exact`).
+- `--resource-type` values come from `vega connector-type list` (mysql, mariadb,
+  postgresql, opensearch, …).
+- `-d` wins over `--query`/`--resource-type` when both are given.
+- The data source must first be a registered Catalog + Resource (see below).
 
 ## catalog → resource → index
 

@@ -6,6 +6,7 @@ import {
   getCatalog,
   listCatalogResources,
   listConnectorTypes,
+  runSql,
 } from "../../src/api/vega.js";
 import type { RequestContext } from "../../src/types.js";
 
@@ -83,6 +84,24 @@ describe("createBuildTask", () => {
     const body = JSON.parse(firstCall(f)[1].body as string);
     expect(body.embedding_fields).toBe("name,description");
     expect(body.build_key_fields).toBe("skill_id");
+  });
+});
+
+describe("runSql", () => {
+  it("POSTs query + resource_type to /resources/query", async () => {
+    const f = mockFetch({ rows: [] });
+    await runSql(ctx, {
+      query: "SELECT * FROM {{r-1}} LIMIT 5",
+      resource_type: "mysql",
+      stream_size: 1000,
+    });
+    const call = firstCall(f);
+    expect(new URL(call[0]).pathname).toBe("/api/vega-backend/v1/resources/query");
+    expect(call[1].method).toBe("POST");
+    const body = JSON.parse(call[1].body as string);
+    expect(body.query).toBe("SELECT * FROM {{r-1}} LIMIT 5");
+    expect(body.resource_type).toBe("mysql");
+    expect(body.stream_size).toBe(1000);
   });
 });
 
