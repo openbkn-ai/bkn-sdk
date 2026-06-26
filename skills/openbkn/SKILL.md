@@ -15,7 +15,8 @@ description: >-
   语义搜索 / 建索引 / create-from-catalog / create-from-csv / Agent / 智能体 /
   跟 Agent 对话 / 大模型 / 小模型 / embedding / rerank / Skill / 技能包 /
   toolbox / 工具箱 / tool / dataflow / 数据流 / trace / 证据链 / diagnose /
-  eval-set / Vega / Catalog / 数据源 / 组织 / 用户 / 角色 / 审计 audit 等意图时使用。
+  eval-set / Vega / Catalog / 数据源 / 组织 / 用户 / 角色 / 审计 audit /
+  AppKey / api-key / bak_ 凭据 / 签发 key / 撤销 key 等意图时使用。
 allowed-tools: Bash(openbkn *), Bash(npx openbkn *)
 argument-hint: [自然语言指令]
 ---
@@ -67,6 +68,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user-id>
 |--------|------|---------|
 | `auth` | 认证 / 会话 / 多用户 | `login`（token / `-u -p` OAuth / 浏览器）、`status`/`whoami`/`token`/`list`/`use`/`switch`/`users`/`export`、`change-password` |
 | `config` | 平台 CLI 配置 | `config show` / `config set <key> <value>` |
+| `appkey` | 用户自助签发的 AppKey（`bak_` 长期凭据，仅 Context Loader 可用） | `list`、`create --name <s> [--expire-days <n> \| --expires-at <rfc3339> \| --never-expire]`（明文 `key` **只返回一次**）、`regenerate <id>`（轮换：同 id 出新 key，旧 key 立即失效）、`revoke <id>`、`admin list [--owner-id]`/`admin revoke <id>` |
 | `bkn` | 知识网络 + Schema + 查询 + 本地包 | `list`/`get`/`search`/`stats`/`export`、`object-type/relation-type/action-type list/get/create/update/delete`、`action-type query/execute/inputs`、`metric …`、`concept-group …`、`action-log/action-schedule/job …`、`subgraph`、`relation-type-paths`、`resources`、`push <dir>`/`pull <kn> [dir]`、`validate <dir>`、`create-from-catalog <catalog> --name …`、`create-from-csv <catalog> --files <glob> --name …`（`--build`、`--pk-map t:col`） |
 | `resource` | Vega-backend 资源 | `list`/`get`/`find --name`/`query`/`delete` |
 | `vega` | Catalog + 索引构建 + SQL | `catalog list/get`、`catalog resources`、`connector-types`、`sql --resource-type <t> --query "<sql>"`（直连 MySQL/PG/OpenSearch，SQL 用 `{{resource-id}}` 占位）、`build`（索引 BuildTask）+ 状态 |
@@ -88,6 +90,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user-id>
 | 主题 | 文件 |
 |------|------|
 | 认证 / 会话 / 多用户 | [auth.md](references/auth.md) |
+| AppKey 签发 / 撤销（`bak_`） | [appkey.md](references/appkey.md) |
 | 知识网络 + Schema + 查询 + 建网 | [bkn.md](references/bkn.md) |
 | Agent CRUD / 对话 / 挂载技能 | [agent.md](references/agent.md) |
 | 模型工厂 | [model.md](references/model.md) |

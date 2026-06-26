@@ -62,6 +62,7 @@ const ROW_ENVELOPES = [
   "roles",
   "departments",
   "members",
+  "keys",
 ];
 
 /** Find the primary array-of-objects in a value (unwrapping common envelopes). */

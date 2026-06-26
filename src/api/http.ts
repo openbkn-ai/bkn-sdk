@@ -54,11 +54,23 @@ export async function request<T = unknown>(
       res = await send();
     }
     const text = await res.text();
-    if (!res.ok) throw new HttpError(res.status, res.statusText, text);
+    if (!res.ok) throw new HttpError(res.status, res.statusText, text, hintFor(ctx, res.status));
     return (text ? JSON.parse(text) : undefined) as T;
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Status-specific next-step guidance. An AppKey (`bak_…`) 401 means the key is
+ * invalid/expired/revoked or its owner was disabled — re-issue, don't retry or
+ * `auth login` (an AppKey has no login/refresh).
+ */
+function hintFor(ctx: RequestContext, status: number): string | undefined {
+  if (status === 401 && ctx.token.startsWith("bak_")) {
+    return "AppKey invalid / expired / revoked / owner disabled — re-issue with `openbkn appkey create` (or `appkey regenerate <id>`). Do not auto-retry.";
+  }
+  return undefined;
 }
 
 /** Refresh ctx.token from its refresh token, persist, and report success. */

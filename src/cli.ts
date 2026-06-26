@@ -7,6 +7,7 @@ import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
 import { adminCommand } from "./commands/admin.js";
 import { agentCommand } from "./commands/agent.js";
+import { appkeyCommand } from "./commands/appkey.js";
 import { authCommand } from "./commands/auth.js";
 import { bknCommand } from "./commands/bkn.js";
 import { callCommand } from "./commands/call.js";
@@ -43,6 +44,7 @@ program
 program.addCommand(authCommand());
 program.addCommand(callCommand());
 program.addCommand(configCommand());
+program.addCommand(appkeyCommand());
 program.addCommand(vegaCommand());
 program.addCommand(bknCommand());
 program.addCommand(resourceCommand());

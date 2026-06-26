@@ -5,13 +5,16 @@ export class HttpError extends Error {
   readonly status: number;
   readonly statusText: string;
   readonly body: string;
+  /** Optional next-step guidance, overriding the status default (e.g. AppKey re-issue). */
+  readonly hint?: string;
 
-  constructor(status: number, statusText: string, body: string) {
+  constructor(status: number, statusText: string, body: string, hint?: string) {
     super(`HTTP ${status} ${statusText}`);
     this.name = "HttpError";
     this.status = status;
     this.statusText = statusText;
     this.body = body;
+    this.hint = hint;
   }
 }
 
@@ -38,7 +41,8 @@ export function formatError(err: unknown): string {
   if (err instanceof HttpError) {
     const serverMsg = serverError(err.body);
     if (err.status === 401) {
-      return `Not authorized (HTTP 401)${serverMsg ? `: ${serverMsg}` : ""}. Run \`openbkn auth login\` and retry.`;
+      const next = err.hint ?? "Run `openbkn auth login` and retry.";
+      return `Not authorized (HTTP 401)${serverMsg ? `: ${serverMsg}` : ""}. ${next}`;
     }
     if (err.status === 403) {
       // Surface the server reason (e.g. "not an admin", "built-in role read-only").
