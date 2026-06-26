@@ -113,7 +113,7 @@ export function vegaCommand(): Command {
     .description("Run SQL / OpenSearch DSL directly against a vega-backend data source")
     .option(
       "--resource-type <type>",
-      "source type (mysql | postgresql | opensearch | …); optional — inferred from the {{<id>}} placeholder",
+      "source type: mysql | mariadb | postgresql | opensearch (from `connector-type list`)",
     )
     .option(
       "--query <sql>",
@@ -134,14 +134,15 @@ export function vegaCommand(): Command {
           throw new InputError("--data must be valid JSON");
         }
       } else {
-        if (!opts.query) {
-          throw new InputError("Provide --query (and optionally --resource-type), or --data.");
+        // vega-backend requires resource_type (it does NOT infer it from the
+        // placeholder — verified live: 400 ResourceType when omitted). Find a
+        // catalog's type with `vega catalog get <id>` → connector_type.
+        if (!opts.query || !opts.resourceType) {
+          throw new InputError("Provide --resource-type and --query, or a full body with --data.");
         }
         body = {
           query: opts.query,
-          // Optional — the backend infers the type from the {{<id>}} placeholder's
-          // catalog connector when omitted.
-          ...(opts.resourceType ? { resource_type: opts.resourceType } : {}),
+          resource_type: opts.resourceType,
           ...(opts.streamSize !== undefined ? { stream_size: opts.streamSize } : {}),
           ...(opts.queryTimeout !== undefined ? { query_timeout: opts.queryTimeout } : {}),
         };

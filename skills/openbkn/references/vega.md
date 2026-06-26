@@ -6,7 +6,7 @@
 | `catalog resources <id> [--category table]` | Resources under a catalog. |
 | `catalog health <ids...>` | Health-status for one or more catalogs. |
 | `connector-type list` / `connector-type get <type>` | Available connector types. |
-| `sql --query "<sql>"` / `sql -d <json>` | Run SQL (MySQL/MariaDB/PostgreSQL) or OpenSearch DSL directly against a data source. Table = `{{<resource-id>}}`; `--resource-type` optional. See [§ vega sql](#vega-sql--run-sql--dsl-against-a-data-source). |
+| `sql --resource-type <t> --query "<sql>"` / `sql -d <json>` | Run SQL (MySQL/MariaDB/PostgreSQL) or OpenSearch DSL directly against a data source. Table = `{{<resource-id>}}`; `--resource-type` **required**. See [§ vega sql](#vega-sql--run-sql--dsl-against-a-data-source). |
 | `resource …` | Vega-backend resources (mirror of top-level `resource`). |
 | `dataset build <resource-id> --mode batch\|streaming [--embedding-fields a,b] [--build-key-fields k] [--embedding-model <id>] [--model-dimensions <n>] [--wait]` | Create an index BuildTask. **Index build lives on the resource (one resource = one table); there is no KN-level build.** `batch` requires `--build-key-fields` (else `400 build_key_fields is required for batch mode`). |
 | `dataset build-status <resource-id> <task-id>` | BuildTask state + progress. |
@@ -34,24 +34,38 @@ Bare table names (no placeholder) usually fail with
 `connector config is incomplete` — the backend falls back to a global default
 connector that isn't configured. **Always use the placeholder.**
 
-### Usage
+### `--resource-type` is REQUIRED
+
+vega-backend does **not** infer the type — omitting it returns
+`400 VegaBackend.InvalidParameter.ResourceType` (verified live). Find a
+resource's type via its catalog:
 
 ```bash
-# Simple — only --query is required; resource_type is inferred from the placeholder
-openbkn vega sql --query "SELECT * FROM {{d7nicrcjto2s73d9g67g}} LIMIT 10"
+openbkn resource get <resource-id> --json     # → catalog_id
+openbkn vega catalog get <catalog-id> --json  # → connector_type (e.g. "mysql")
+```
 
-# With a WHERE / projection (standard SQL, the source's dialect)
-openbkn vega sql --query "SELECT id, name FROM {{<res-id>}} WHERE status = 'active' ORDER BY id DESC LIMIT 50"
+(The KN-scoped MCP `run_sql` tool *does* auto-resolve the type — see
+[context.md](context.md). `vega sql` does not.)
 
-# Override the inferred type, larger stream batch
-openbkn vega sql --resource-type postgresql --stream-size 5000 \
-  --query "SELECT count(*) FROM {{<res-id>}}"
+### Usage — verified against the Fjelstul World Cup catalog (mysql)
+
+```bash
+# Simple SELECT (resource id d8sl8edr563s73afv2s0 = worldcup.wc_tournaments)
+openbkn vega sql --resource-type mysql \
+  --query "SELECT * FROM {{d8sl8edr563s73afv2s0}} LIMIT 3"
+# → tournament_id  tournament_name            year  …
+#   WC-1930        1930 FIFA Men's World Cup  1930  …
+
+# WHERE / projection (standard SQL, the source's dialect)
+openbkn vega sql --resource-type mysql \
+  --query "SELECT tournament_name, year FROM {{<res-id>}} WHERE year >= 2000 ORDER BY year DESC LIMIT 20"
 
 # OpenSearch DSL — query is a JSON object, not a SQL string → use --data
 openbkn vega sql -d '{"query":{"match":{"name":"web-pod"}},"resource_type":"opensearch"}'
 
-# Advanced — full body (any field below)
-openbkn vega sql -d '{"query":"SELECT ...","stream_size":1000,"query_timeout":120}'
+# Advanced — full body
+openbkn vega sql -d '{"query":"SELECT ...","resource_type":"mysql","stream_size":1000,"query_timeout":120}'
 ```
 
 ### Parameters
@@ -59,11 +73,23 @@ openbkn vega sql -d '{"query":"SELECT ...","stream_size":1000,"query_timeout":12
 | Flag / field | Required | Default | Notes |
 | --- | :---: | --- | --- |
 | `--query` / body `query` | ✅ (unless `-d` carries it) | — | SQL string, **or** an OpenSearch DSL object (object → must use `-d`). Reference the table as `{{<resource-id>}}`. |
-| `--resource-type` / `resource_type` | optional | inferred from the placeholder's catalog connector | One of `vega connector-type list` (e.g. `mysql`, `mariadb`, `postgresql`, `opensearch`). Pass only to override. |
+| `--resource-type` / `resource_type` | ✅ | — | One of `vega connector-type list`: `mysql`, `mariadb`, `postgresql`, `opensearch`. **Required** — not inferred. |
 | `--stream-size` / `stream_size` | optional | server default (≈10000) | Streaming batch size, 100–10000. |
 | `--query-timeout` / `query_timeout` | optional | 60 | Seconds, 1–3600. |
 | `query_id` (body only) | optional | — | Cursor session id for paged streaming. |
 | `-d` / `--data` | — | — | Full JSON body. **Wins over** `--query`/`--resource-type`/etc. when both given. |
+
+### `vega sql` vs `context … run_sql`
+
+Two different SQL paths — don't confuse them:
+
+| | `vega sql` | `context tool-call <kn> run_sql` |
+| --- | --- | --- |
+| Backend | vega-backend `/resources/query` | MCP `run_sql` tool (KN-scoped) |
+| Dialect | source-native (mysql/pg), sqlglot-translated | **Trino** |
+| `resource_type` | **required** | optional (auto-resolved) |
+| Placeholder | `{{<resource-id>}}` | `{{.<resource-id>}}` (**leading dot**), id = object type's `data_source.id` |
+| Limits | `--stream-size` (≤10000) | SELECT/WITH only, ≤10000 rows, no cross-catalog join |
 
 ### Gotchas
 

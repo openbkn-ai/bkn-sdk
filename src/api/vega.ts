@@ -73,11 +73,12 @@ export interface SqlQueryRequest {
   /** SQL string (MySQL/MariaDB/PostgreSQL) or an OpenSearch DSL object. */
   query: string | Record<string, unknown>;
   /**
-   * Source type (mysql | mariadb | postgresql | opensearch …). Optional — when
-   * the query carries a `{{<resource-id>}}` placeholder the backend infers the
-   * type from that resource's Catalog connector. Pass it only to override.
+   * Source type (mysql | mariadb | postgresql | opensearch). REQUIRED by
+   * vega-backend — it does not infer the type from the placeholder (verified
+   * live: 400 `VegaBackend.InvalidParameter.ResourceType` when omitted). The
+   * KN-scoped MCP `run_sql` tool DOES auto-resolve it; this endpoint does not.
    */
-  resource_type?: string;
+  resource_type: string;
   /** Streaming batch size (100–10000, default server-side). */
   stream_size?: number;
   /** Query timeout in seconds (1–3600). */
