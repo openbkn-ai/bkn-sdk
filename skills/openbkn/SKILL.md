@@ -69,7 +69,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user-id>
 | `config` | 平台 CLI 配置 | `config show` / `config set <key> <value>` |
 | `bkn` | 知识网络 + Schema + 查询 + 本地包 | `list`/`get`/`search`/`stats`/`export`、`object-type/relation-type/action-type list/get/create/update/delete`、`action-type query/execute/inputs`、`metric …`、`concept-group …`、`action-log/action-schedule/job …`、`subgraph`、`relation-type-paths`、`resources`、`push <dir>`/`pull <kn> [dir]`、`validate <dir>`、`create-from-catalog <catalog> --name …`、`create-from-csv <catalog> --files <glob> --name …`（`--build`、`--pk-map t:col`） |
 | `resource` | Vega-backend 资源 | `list`/`get`/`find --name`/`query`/`delete` |
-| `vega` | Catalog + 索引构建 | `catalog list/get`、`catalog resources`、`connector-types`、`build`（索引 BuildTask）+ 状态 |
+| `vega` | Catalog + 索引构建 + SQL | `catalog list/get`、`catalog resources`、`connector-types`、`sql --resource-type <t> --query "<sql>"`（直连 MySQL/PG/OpenSearch，SQL 用 `{{resource-id}}` 占位）、`build`（索引 BuildTask）+ 状态 |
 | `context` | MCP 检索 | `info`（全局 tool 目录，无需 KN）、`search-schema`、`query-object-instance`、`find-skills`、`tools <kn>`、`tool-call <name> [--arg k=v]`、`call-method <method>`、`resources/templates/prompts`、`query-instance-subgraph`/`get-logic-properties`/`get-action-info`；新工具用 `info`/`tools` 发现 + `tool-call` 调用，无需改 CLI |
 | `agent` | Decision Agent | `list`/`personal-list`/`template-list`/`get`/`create`/`update`/`delete`/`publish`、`chat <id> -m "…" [--stream]`、`sessions`、`history`、`trace`、`skill list/add/remove` |
 | `model` | 模型工厂 | `llm/small list/get/add/edit/delete/test`、`llm chat <id> -m "…" [--stream]`、`small embeddings/rerank` |

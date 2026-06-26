@@ -69,6 +69,33 @@ export async function getBuildTask(ctx: RequestContext, taskId: string): Promise
   return BuildTask.parse(res);
 }
 
+export interface SqlQueryRequest {
+  /** SQL string (MySQL/MariaDB/PostgreSQL) or an OpenSearch DSL object. */
+  query: string | Record<string, unknown>;
+  /**
+   * Source type (mysql | mariadb | postgresql | opensearch …). Optional — when
+   * the query carries a `{{<resource-id>}}` placeholder the backend infers the
+   * type from that resource's Catalog connector. Pass it only to override.
+   */
+  resource_type?: string;
+  /** Streaming batch size (100–10000, default server-side). */
+  stream_size?: number;
+  /** Query timeout in seconds (1–3600). */
+  query_timeout?: number;
+  /** Cursor session id for paged streaming. */
+  query_id?: string;
+}
+
+/**
+ * Run SQL (or an OpenSearch DSL) directly against a data source. vega-backend
+ * connects through the resource's Catalog connector — reference the resource in
+ * the SQL with a `{{<resource-id>}}` placeholder so the backend knows which
+ * connector to use. `POST /api/vega-backend/v1/resources/query`.
+ */
+export function runSql(ctx: RequestContext, body: SqlQueryRequest): Promise<unknown> {
+  return request(ctx, `${VEGA_BASE}/resources/query`, { method: "POST", body });
+}
+
 export interface ListCatalogsOptions {
   limit?: number;
   offset?: number;

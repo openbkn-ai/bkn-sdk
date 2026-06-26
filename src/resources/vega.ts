@@ -3,6 +3,7 @@ import {
   type CreateBuildTaskRequest,
   type CreateCatalogRequest,
   type ListCatalogsOptions,
+  type SqlQueryRequest,
   catalogHealthStatus,
   createBuildTask,
   createCatalog,
@@ -14,6 +15,7 @@ import {
   listCatalogResources,
   listCatalogs,
   listConnectorTypes,
+  runSql,
 } from "../api/vega.js";
 /**
  * Vega resource surface — the exported SDK API for Catalog + index builds.
@@ -34,6 +36,9 @@ export function vega(ctx: RequestContext) {
     catalogHealth: (ids: string[]) => catalogHealthStatus(ctx, ids),
     connectorTypes: () => listConnectorTypes(ctx),
     connectorType: (type: string) => getConnectorType(ctx, type),
+
+    /** Run SQL / OpenSearch DSL directly against a data source. */
+    sql: (body: SqlQueryRequest) => runSql(ctx, body),
 
     /** Build a resource's index. With `wait`, polls until terminal. */
     build: async (

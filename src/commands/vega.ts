@@ -1,9 +1,13 @@
 /** `openbkn vega …` — Catalog reads + index BuildTask. */
 import { Command } from "commander";
+import type { SqlQueryRequest } from "../api/vega.js";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
+import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, csv, outputOptions } from "./_shared.js";
+
+const int = (v: string) => Number.parseInt(v, 10);
 
 export function vegaCommand(): Command {
   const vega = new Command("vega").description(
@@ -102,6 +106,47 @@ export function vegaCommand(): Command {
     .description("Get a connector type")
     .action(async (type: string, _opts, cmd: Command) => {
       printJson(await clientFrom(cmd).vega.connectorType(type), outputOptions(cmd));
+    });
+
+  vega
+    .command("sql")
+    .description("Run SQL / OpenSearch DSL directly against a vega-backend data source")
+    .option(
+      "--resource-type <type>",
+      "source type (mysql | postgresql | opensearch | …); optional — inferred from the {{<id>}} placeholder",
+    )
+    .option(
+      "--query <sql>",
+      "SQL string; reference a resource with a {{<resource-id>}} placeholder",
+    )
+    .option("--stream-size <n>", "streaming batch size (100–10000)", int)
+    .option("--query-timeout <s>", "query timeout in seconds (1–3600)", int)
+    .option(
+      "-d, --data <json>",
+      "full request body as JSON (advanced; wins over --query/--resource-type)",
+    )
+    .action(async (opts, cmd: Command) => {
+      let body: SqlQueryRequest;
+      if (opts.data) {
+        try {
+          body = JSON.parse(opts.data);
+        } catch {
+          throw new InputError("--data must be valid JSON");
+        }
+      } else {
+        if (!opts.query) {
+          throw new InputError("Provide --query (and optionally --resource-type), or --data.");
+        }
+        body = {
+          query: opts.query,
+          // Optional — the backend infers the type from the {{<id>}} placeholder's
+          // catalog connector when omitted.
+          ...(opts.resourceType ? { resource_type: opts.resourceType } : {}),
+          ...(opts.streamSize !== undefined ? { stream_size: opts.streamSize } : {}),
+          ...(opts.queryTimeout !== undefined ? { query_timeout: opts.queryTimeout } : {}),
+        };
+      }
+      printJson(await clientFrom(cmd).vega.sql(body), outputOptions(cmd));
     });
 
   const resource = vega.command("resource").description("Vega-backend resources");
