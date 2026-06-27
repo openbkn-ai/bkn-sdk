@@ -18,6 +18,8 @@ export interface ApiKey {
   id: string;
   key_id: string;
   name: string;
+  /** Masked preview for display, e.g. `bak_b3ff****b234` — safe to show in lists. */
+  masked: string;
   enabled: boolean;
   /** `null` = never expires. */
   expires_at: string | null;

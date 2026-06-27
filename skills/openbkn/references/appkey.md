@@ -13,7 +13,7 @@ user's OAuth token, not a separate permission set. Two sides:
 
 | Command | Notes |
 |---------|-------|
-| `appkey list` | Your own keys. No secrets; `last_used_at: null` = never used (zombie). |
+| `appkey list` | Your own keys. No secrets; each carries a `masked` preview (`bak_b3ff****b234`) for display. `last_used_at: null` = never used (zombie). |
 | `appkey create --name <s> [--expires-at <rfc3339>] [--expire-days <n>] [--never-expire]` | Issue a key. **The `key` field (plaintext) is returned ONCE** — copy it now. Default expiry 1 year. See [§ create](#appkey-create). |
 | `appkey regenerate <id>` (alias `rotate`) | Rotate in place: keep the same record `id`, mint a **new plaintext `key`** (shown once); the old `bak_…` stops working **immediately**. See [§ regenerate](#appkey-regenerate). |
 | `appkey revoke <id>` (alias `delete`, `rm`) | Revoke immediately. Use the **`id`**, not `key_id`. 404 if not yours. |
