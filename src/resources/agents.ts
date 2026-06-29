@@ -34,6 +34,11 @@ function setSkillMembers(agent: Record<string, unknown>, members: unknown[]): vo
   (config.skills as Record<string, unknown>).skills = members;
 }
 
+/**
+ * Decision Agent resource surface.
+ * @deprecated The Decision Agent (agent-factory) surface is being phased out and
+ * may be removed in a future release. Avoid building new integrations on it.
+ */
 export function agents(ctx: RequestContext) {
   return {
     list: (opts?: ListAgentsOptions) => listAgents(ctx, opts),

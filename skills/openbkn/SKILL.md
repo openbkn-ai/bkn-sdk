@@ -73,7 +73,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user-id>
 | `resource` | Vega-backend 资源 | `list`/`get`/`find --name`/`query`/`delete` |
 | `vega` | Catalog + 索引构建 + SQL | `catalog list/get`、`catalog resources`、`connector-types`、`sql --resource-type <t> --query "<sql>"`（直连 MySQL/PG/OpenSearch，SQL 用 `{{resource-id}}` 占位）、`build`（索引 BuildTask）+ 状态 |
 | `context` | MCP 检索 | `info`（全局 tool 目录，无需 KN）、`search-schema`、`query-object-instance`、`find-skills`、`tools <kn>`、`tool-call <name> [--arg k=v]`、`call-method <method>`、`resources/templates/prompts`、`query-instance-subgraph`/`get-logic-properties`/`get-action-info`；新工具用 `info`/`tools` 发现 + `tool-call` 调用，无需改 CLI |
-| `agent` | Decision Agent | `list`/`personal-list`/`template-list`/`get`/`create`/`update`/`delete`/`publish`、`chat <id> -m "…" [--stream]`、`sessions`、`history`、`trace`、`skill list/add/remove` |
+| `agent` | **[已废弃]** Decision Agent（agent-factory，逐步淘汰，勿用于新集成） | `list`/`personal-list`/`template-list`/`get`/`create`/`update`/`delete`/`publish`、`chat <id> -m "…" [--stream]`、`sessions`、`history`、`trace`、`skill list/add/remove`（运行会向 stderr 打废弃警告） |
 | `model` | 模型工厂 | `llm/small list/get/add/edit/delete/test`、`llm chat <id> -m "…" [--stream]`、`small embeddings/rerank` |
 | `skill` | Skill 注册/市场/生命周期 | `list`/`market`/`get`/`content`/`read-file`/`history`/`set-status`、`register <dir>`/`download`/`install`、`update-metadata`/`update-package`、`republish`/`publish-history` |
 | `toolbox` / `tool` | 工具箱与工具 | toolbox `list/create/publish/delete/export/import`；tool `upload <file> --toolbox <id>`、`execute`/`debug` |
@@ -92,7 +92,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user-id>
 | 认证 / 会话 / 多用户 | [auth.md](references/auth.md) |
 | AppKey 签发 / 撤销（`bak_`） | [appkey.md](references/appkey.md) |
 | 知识网络 + Schema + 查询 + 建网 | [bkn.md](references/bkn.md) |
-| Agent CRUD / 对话 / 挂载技能 | [agent.md](references/agent.md) |
+| Agent CRUD / 对话 / 挂载技能 **[已废弃]** | [agent.md](references/agent.md) |
 | 模型工厂 | [model.md](references/model.md) |
 | Vega Catalog + 索引构建 | [vega.md](references/vega.md) |
 | vega-backend 资源 | [resource.md](references/resource.md) |

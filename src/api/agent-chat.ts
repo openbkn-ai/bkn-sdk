@@ -4,6 +4,8 @@ import type { RequestContext } from "../types.js";
  * each SSE `data:` line is a JSON-patch-ish `{key, content, action}` that mutates
  * a server-side result tree. We replay those patches into a local tree and pull
  * the answer text out of it after each frame, emitting only the new suffix.
+ * @deprecated The Decision Agent (agent-factory) surface is being phased out and
+ * may be removed in a future release. Avoid building new integrations on it.
  */
 import { HttpError } from "../utils/errors.js";
 import { authFetch } from "./auth-fetch.js";

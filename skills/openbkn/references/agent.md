@@ -1,5 +1,10 @@
 # agent — decision agents
 
+> ⚠️ **DEPRECATED.** The Decision Agent (`agent-factory`) surface is being phased
+> out and may be removed in a future release. Existing commands still work, but
+> avoid building new integrations on `openbkn agent …` / `client.agents`. Running
+> any `agent` subcommand prints a deprecation warning to stderr.
+
 | Command | Notes |
 |---------|-------|
 | `list` / `personal-list` / `template-list` / `category-list` | Published / personal / templates / categories. |

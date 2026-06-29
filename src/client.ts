@@ -28,6 +28,10 @@ export interface BknClient {
   readonly kn: ReturnType<typeof kn>;
   readonly resource: ReturnType<typeof resources>;
   readonly dataflows: ReturnType<typeof dataflows>;
+  /**
+   * @deprecated Decision Agent (agent-factory) is being phased out and may be
+   * removed in a future release. Avoid building new integrations on it.
+   */
   readonly agents: ReturnType<typeof agents>;
   readonly context: ReturnType<typeof context>;
   readonly models: ReturnType<typeof models>;

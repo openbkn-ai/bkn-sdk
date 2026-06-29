@@ -1,4 +1,8 @@
-/** `openbkn agent …` — decision agents (read side + listings). */
+/**
+ * `openbkn agent …` — Decision Agent (agent-factory). DEPRECATED: this surface
+ * is being phased out and may be removed in a future release; avoid building new
+ * integrations on it.
+ */
 import { Command } from "commander";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
@@ -8,7 +12,16 @@ import { clientFrom, csv, outputOptions, readBody } from "./_shared.js";
 const int = (v: string) => Number.parseInt(v, 10);
 
 export function agentCommand(): Command {
-  const cmd = new Command("agent").description("Agent CRUD, chat, sessions, publish");
+  const cmd = new Command("agent").description(
+    "[DEPRECATED] Decision Agent — CRUD, chat, sessions, publish (being phased out)",
+  );
+
+  // Warn once (stderr, doesn't pollute --json stdout) before any subcommand runs.
+  cmd.hook("preAction", () => {
+    process.stderr.write(
+      "⚠️  `openbkn agent` is deprecated and may be removed in a future release.\n",
+    );
+  });
 
   cmd
     .command("list")

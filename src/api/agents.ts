@@ -1,6 +1,8 @@
 /**
  * Agent client (agent-factory v3). Read side + published listing, mirroring
  * kweaver-sdk api/agent-list.ts. Responses passed through as parsed JSON.
+ * @deprecated The Decision Agent (agent-factory) surface is being phased out and
+ * may be removed in a future release. Avoid building new integrations on it.
  */
 import type { RequestContext } from "../types.js";
 import { request } from "./http.js";
