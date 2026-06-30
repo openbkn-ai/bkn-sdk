@@ -8,11 +8,14 @@ import {
   deleteModels,
   editModel,
   embeddings,
+  getDefaultSmallModel,
   getLlmModel,
   getSmallModel,
   listLlmModels,
   listSmallModels,
   rerank,
+  setDefaultLlm,
+  setDefaultSmallModel,
   testModel,
 } from "../api/models.js";
 import type { RequestContext } from "../types.js";
@@ -29,6 +32,8 @@ export function models(ctx: RequestContext) {
       edit: (body: unknown) => editModel(ctx, "llm", body),
       delete: (modelIds: string[]) => deleteModels(ctx, "llm", modelIds),
       test: (body: unknown) => testModel(ctx, "llm", body),
+      /** Set (or clear) the system default LLM. */
+      setDefault: (modelId: string, isDefault = true) => setDefaultLlm(ctx, modelId, isDefault),
     },
     small: {
       list: (opts?: ListModelsOptions) => listSmallModels(ctx, opts),
@@ -40,6 +45,11 @@ export function models(ctx: RequestContext) {
       edit: (body: unknown) => editModel(ctx, "small-model", body),
       delete: (modelIds: string[]) => deleteModels(ctx, "small-model", modelIds),
       test: (body: unknown) => testModel(ctx, "small-model", body),
+      /** Set (or clear) the system default small model (type inferred from the model). */
+      setDefault: (modelId: string, isDefault = true) =>
+        setDefaultSmallModel(ctx, modelId, isDefault),
+      /** Get the system default small model for a type (default "embedding"). */
+      getDefault: (modelType?: string) => getDefaultSmallModel(ctx, modelType),
     },
   };
 }

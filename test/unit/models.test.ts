@@ -2,9 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   chatCompletions,
   chatCompletionsStream,
+  getDefaultSmallModel,
   getLlmModel,
   listLlmModels,
   listSmallModels,
+  setDefaultLlm,
+  setDefaultSmallModel,
 } from "../../src/api/models.js";
 import type { RequestContext } from "../../src/types.js";
 
@@ -46,6 +49,45 @@ describe("model management (mf-model-manager)", () => {
     const f = mockFetch();
     await listSmallModels(ctx);
     expect(new URL(firstCall(f)[0]).pathname).toBe("/api/mf-model-manager/v1/small-model/list");
+  });
+});
+
+describe("default model selection", () => {
+  it("set default LLM POSTs /llm/default/edit with {model_id, default}", async () => {
+    const f = mockFetch();
+    await setDefaultLlm(ctx, "m-1");
+    const call = firstCall(f);
+    expect(new URL(call[0]).pathname).toBe("/api/mf-model-manager/v1/llm/default/edit");
+    expect(call[1].method).toBe("POST");
+    expect(JSON.parse(call[1].body as string)).toEqual({ model_id: "m-1", default: true });
+  });
+
+  it("clear default LLM sends default:false", async () => {
+    const f = mockFetch();
+    await setDefaultLlm(ctx, "m-1", false);
+    expect(JSON.parse(firstCall(f)[1].body as string)).toEqual({ model_id: "m-1", default: false });
+  });
+
+  it("set default small model POSTs /small-model/set-default", async () => {
+    const f = mockFetch();
+    await setDefaultSmallModel(ctx, "s-1");
+    const call = firstCall(f);
+    expect(new URL(call[0]).pathname).toBe("/api/mf-model-manager/v1/small-model/set-default");
+    expect(JSON.parse(call[1].body as string)).toEqual({ model_id: "s-1", default: true });
+  });
+
+  it("get default small model GETs /small-model/get_default with model_type (default embedding)", async () => {
+    const f = mockFetch();
+    await getDefaultSmallModel(ctx);
+    const u = new URL(firstCall(f)[0]);
+    expect(u.pathname).toBe("/api/mf-model-manager/v1/small-model/get_default");
+    expect(u.searchParams.get("model_type")).toBe("embedding");
+  });
+
+  it("get default small model passes an explicit type", async () => {
+    const f = mockFetch();
+    await getDefaultSmallModel(ctx, "reranker");
+    expect(new URL(firstCall(f)[0]).searchParams.get("model_type")).toBe("reranker");
   });
 });
 

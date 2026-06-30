@@ -1,11 +1,25 @@
 /** `openbkn model …` — model factory (llm / small-model). */
 import { Command } from "commander";
+import type { BknClient } from "../client.js";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
+import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, csv, outputOptions, readBody } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
+
+/**
+ * `chat` resolves the model by NAME (the mf-model-api `model` field). Accept a
+ * numeric id too — look up its name first — so it matches `get`/`set-default`,
+ * which take ids. A non-numeric arg is assumed to already be a name.
+ */
+async function resolveLlmModelName(client: BknClient, model: string): Promise<string> {
+  if (!/^\d+$/.test(model)) return model;
+  const detail = (await client.models.llm.get(model)) as { model_name?: string };
+  if (!detail?.model_name) throw new InputError(`No LLM found with id ${model}.`);
+  return detail.model_name;
+}
 
 /** Management subcommands (add/edit/delete/test) wired to the model resource. */
 function addManagementCommands(parent: Command, kind: "llm" | "small"): void {
@@ -42,7 +56,9 @@ function addManagementCommands(parent: Command, kind: "llm" | "small"): void {
 }
 
 export function modelCommand(): Command {
-  const model = new Command("model").description("Model factory — LLM / small-model CRUD + chat");
+  const model = new Command("model").description(
+    "Model factory — LLM / small-model CRUD, chat / embeddings / rerank, default selection",
+  );
 
   const llm = model.command("llm").description("Large language models");
   llm
@@ -70,18 +86,32 @@ export function modelCommand(): Command {
       printJson(await clientFrom(cmd).models.llm.get(id), outputOptions(cmd));
     });
   llm
-    .command("chat <modelId>")
-    .description("OpenAI-compatible chat completion")
+    .command("chat <model>")
+    .description("OpenAI-compatible chat completion (<model> = model name or numeric id)")
     .requiredOption("-m, --message <text>", "user message")
     .option("--stream", "stream the reply token-by-token to stdout")
-    .action(async (id: string, opts, cmd: Command) => {
+    .action(async (model: string, opts, cmd: Command) => {
+      const client = clientFrom(cmd);
+      const name = await resolveLlmModelName(client, model);
       const messages = [{ role: "user", content: opts.message }];
       if (opts.stream) {
-        await clientFrom(cmd).models.llm.chatStream(id, messages, (t) => process.stdout.write(t));
+        await client.models.llm.chatStream(name, messages, (t) => process.stdout.write(t));
         process.stdout.write("\n");
         return;
       }
-      printJson(await clientFrom(cmd).models.llm.chat(id, messages), outputOptions(cmd));
+      printJson(await client.models.llm.chat(name, messages), outputOptions(cmd));
+    });
+  llm
+    .command("set-default <modelId>")
+    .description("Set this LLM as the system default (admin)")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).models.llm.setDefault(id, true), outputOptions(cmd));
+    });
+  llm
+    .command("unset-default <modelId>")
+    .description("Clear this LLM as the system default (admin)")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).models.llm.setDefault(id, false), outputOptions(cmd));
     });
   addManagementCommands(llm, "llm");
 
@@ -131,7 +161,42 @@ export function modelCommand(): Command {
         outputOptions(cmd),
       );
     });
+  small
+    .command("get-default")
+    .description("Show the system default small model for a type")
+    .option("--type <t>", "model type: embedding | reranker", "embedding")
+    .action(async (opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).models.small.getDefault(opts.type), outputOptions(cmd));
+    });
+  small
+    .command("set-default <modelId>")
+    .description("Set this small model as the system default for its type (admin)")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).models.small.setDefault(id, true), outputOptions(cmd));
+    });
+  small
+    .command("unset-default <modelId>")
+    .description("Clear this small model as the system default (admin)")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).models.small.setDefault(id, false), outputOptions(cmd));
+    });
   addManagementCommands(small, "small");
+
+  model.addHelpText(
+    "after",
+    `
+Identifiers:
+  • get / set-default / delete take the numeric model id (e.g. 2071747547839467520).
+  • chat takes a model NAME, but also accepts a numeric id (resolved to its name).
+
+Examples:
+  $ openbkn model llm list                          # ids + the 'default' flag
+  $ openbkn model llm chat deepseek_v4_flash -m hi  # by name
+  $ openbkn model llm chat 2071747547839467520 -m hi --stream   # by id, streamed
+  $ openbkn model llm set-default 2071747547839467520           # system default LLM
+  $ openbkn model small get-default --type embedding            # current default
+  $ openbkn model small set-default <id>                        # default embedding/reranker`,
+  );
 
   return group(model, "MODELS & SKILLS");
 }

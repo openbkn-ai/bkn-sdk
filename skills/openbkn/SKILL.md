@@ -74,7 +74,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user-id>
 | `vega` | Catalog + 索引构建 + SQL | `catalog list/get`、`catalog resources`、`connector-types`、`sql --resource-type <t> --query "<sql>"`（直连 MySQL/PG/OpenSearch，SQL 用 `{{resource-id}}` 占位）、`build`（索引 BuildTask）+ 状态 |
 | `context` | MCP 检索 | `info`（全局 tool 目录，无需 KN）、`search-schema`、`query-object-instance`、`find-skills`、`tools <kn>`、`tool-call <name> [--arg k=v]`、`call-method <method>`、`resources/templates/prompts`、`query-instance-subgraph`/`get-logic-properties`/`get-action-info`；新工具用 `info`/`tools` 发现 + `tool-call` 调用，无需改 CLI |
 | `agent` | **[已废弃]** Decision Agent（agent-factory，逐步淘汰，勿用于新集成） | `list`/`personal-list`/`template-list`/`get`/`create`/`update`/`delete`/`publish`、`chat <id> -m "…" [--stream]`、`sessions`、`history`、`trace`、`skill list/add/remove`（运行会向 stderr 打废弃警告） |
-| `model` | 模型工厂 | `llm/small list/get/add/edit/delete/test`、`llm chat <id> -m "…" [--stream]`、`small embeddings/rerank` |
+| `model` | 模型工厂 | `llm/small list/get/add/edit/delete/test`、`llm chat <name\|id> -m "…" [--stream]`（id 自动解析成 name）、`small embeddings/rerank`、`llm set-default/unset-default <id>`、`small set-default/unset-default <id>`、`small get-default [--type embedding\|reranker]` |
 | `skill` | Skill 注册/市场/生命周期 | `list`/`market`/`get`/`content`/`read-file`/`history`/`set-status`、`register <dir>`/`download`/`install`、`update-metadata`/`update-package`、`republish`/`publish-history` |
 | `toolbox` / `tool` | 工具箱与工具 | toolbox `list/create/publish/delete/export/import`；tool `upload <file> --toolbox <id>`、`execute`/`debug` |
 | `dataflow` | 文档流程 | `list`/`runs`/`logs`/`run`、`create`（JSON 文档）、`templates`/`create-dataset`/`create-bkn`（`--template <name> --set k=v`） |

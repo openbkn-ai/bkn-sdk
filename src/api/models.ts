@@ -156,6 +156,44 @@ export function testModel(ctx: RequestContext, kind: ModelKind, body: unknown): 
   return request(ctx, `${MANAGER}/${kind}/test`, { method: "POST", body });
 }
 
+// ---- default model selection (mf-model-manager) ----------------------------
+// LLM default state is also surfaced as a `default` flag on each `llm/list` row;
+// the small-model default is read back via `getDefaultSmallModel`.
+
+/** Set (or with `isDefault=false` clear) the system default LLM. Admin-only. */
+export function setDefaultLlm(
+  ctx: RequestContext,
+  modelId: string,
+  isDefault = true,
+): Promise<unknown> {
+  return request(ctx, `${MANAGER}/llm/default/edit`, {
+    method: "POST",
+    body: { model_id: modelId, default: isDefault },
+  });
+}
+
+/** Set (or clear) the system default small model. Type is inferred from the model. */
+export function setDefaultSmallModel(
+  ctx: RequestContext,
+  modelId: string,
+  isDefault = true,
+): Promise<unknown> {
+  return request(ctx, `${MANAGER}/small-model/set-default`, {
+    method: "POST",
+    body: { model_id: modelId, default: isDefault },
+  });
+}
+
+/** Get the system default small model for a type (`{}` when none is set). */
+export function getDefaultSmallModel(
+  ctx: RequestContext,
+  modelType = "embedding",
+): Promise<unknown> {
+  return request(ctx, `${MANAGER}/small-model/get_default`, {
+    query: { model_type: modelType },
+  });
+}
+
 export function rerank(
   ctx: RequestContext,
   model: string,
