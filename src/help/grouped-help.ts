@@ -1,5 +1,5 @@
 /**
- * Grouped help formatter for commander — reproduces the legacy Kweaver layout
+ * Grouped help formatter for commander — reproduces the legacy grouped layout
  * (section headers + USAGE / FLAGS) at every command level. One formatter, no
  * per-command help strings: each command carries a `group` tag read here.
  */

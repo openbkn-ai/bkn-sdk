@@ -1,6 +1,6 @@
 /**
- * Vega-backend resource client (list/find/get/query/delete). Endpoints mirror
- * kweaver-sdk `api/resources.ts`. Responses passed through as parsed JSON.
+ * Vega-backend resource client (list/find/get/query/delete).
+ * Responses passed through as parsed JSON.
  */
 import type { RequestContext } from "../types.js";
 import { request } from "./http.js";

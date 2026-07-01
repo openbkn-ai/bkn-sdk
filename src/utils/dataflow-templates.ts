@@ -20,7 +20,7 @@ import datasetElementTemplate from "../templates/dataset/document-element/templa
 };
 /**
  * Bundled dataflow/dataset/bkn templates + a renderer. Templates are config
- * assets (JSON) copied verbatim from kweaver-sdk; the rendering logic (merge
+ * assets (JSON) copied verbatim from the legacy templates; the rendering logic (merge
  * defaults → validate required → interpolate `{{arg}}`) is reimplemented here.
  * Used by `dataflow templates` / `create-dataset` / `create-bkn`.
  */

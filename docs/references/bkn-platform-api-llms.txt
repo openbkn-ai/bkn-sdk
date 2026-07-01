@@ -4,8 +4,8 @@ BKN PLATFORM API — REFERENCE CONTEXT (paste zone)
 Purpose: raw backend API context for the SDK's api/ layer. Append endpoint shapes,
 auth flows, and response examples here. Append-only; link from product-specs.
 
-Backend services (from legacy kweaver-sdk / kweaver-admin — verify against live API)
-------------------------------------------------------------------------------------
+Backend services (from the legacy SDK / operator CLI — verify against live API)
+-------------------------------------------------------------------------------
 - knowledge networks / BKN engine
 - decision agents + chat / conversations
 - dataflows (v1 / v2)
@@ -36,7 +36,7 @@ Index build — BuildTask (current/target model)
 - Resource property.feature_type ∈ {keyword, fulltext, vector} declares searchability (schema layer).
 - Resource.index_name is filled back by the build task after the index is built.
 - REPLACES the removed KN-level build (old: POST /api/ontology-manager/v1/knowledge-networks/{id}/jobs {job_type:"full"}).
-- NOTE: an older path POST {vega}/resources/{id}/build existed in legacy kweaver-sdk; the
+- NOTE: an older path POST {vega}/resources/{id}/build existed in the legacy SDK; the
   authoritative target is POST /build-tasks. Verify exact base path against live API.
 
 [ paste endpoint details / sample payloads below this line ]

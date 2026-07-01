@@ -1,6 +1,6 @@
 /**
  * Structural validation of a local BKN directory. This is a slim, dependency-free
- * check (the full `@kweaver-ai/bkn` network model is not vendored): it parses the
+ * check (the full network model is not vendored): it parses the
  * frontmatter of every `.bkn` file and verifies the network is internally
  * consistent enough to push — required files, well-formed frontmatter, object-type
  * name limits, unique ids, and relation endpoints that reference real object types.

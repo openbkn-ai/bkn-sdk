@@ -1,7 +1,7 @@
 import { decodeJwt } from "../auth/jwt.js";
 /**
- * Admin (operator) client — user-management + authorization. Mirrors
- * kweaver-admin. Reads and writes (org/user create/update/delete +
+ * Admin (operator) client — user-management + authorization.
+ * Reads and writes (org/user create/update/delete +
  * reset-password) implemented; org/user detail and writes go through ISFWeb
  * thrift where the REST routes are RegisterPrivate. Passed through as JSON.
  */

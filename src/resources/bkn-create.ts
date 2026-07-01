@@ -4,7 +4,7 @@ import { executeDataflow } from "../api/dataflow.js";
  * Vega catalog's tables:
  *   1. list catalog tables (scan/discover once if empty) + introspect columns
  *   2. resolve a single PK per table (override → schema → sample cardinality);
- *      fail-fast rather than silently pick a wrong key (kweaver-sdk #97)
+ *      fail-fast rather than silently pick a wrong key (legacy #97)
  *   3. create a vega resource per table (idempotent via findResource)
  *   4. create the KN, then batch-create object types (all-or-nothing)
  *   5. optional build: one Vega BuildTask per resource (index build lives on the

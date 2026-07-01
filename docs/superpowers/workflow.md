@@ -22,4 +22,4 @@ Development loop for non-trivial work. Priority: user instructions (`AGENTS.md`,
 
 - Writing code before an accepted design for non-trivial work.
 - Marking "done" before verification.
-- Copying legacy `kweaver-*` code verbatim instead of reimplementing slim.
+- Copying legacy code verbatim instead of reimplementing slim.

@@ -1,6 +1,6 @@
 /**
- * Toolbox + tool client (agent-operator-integration tool-box). Read side,
- * mirroring kweaver-sdk api/toolboxes.ts. Passed through as parsed JSON.
+ * Toolbox + tool client (agent-operator-integration tool-box). Read side.
+ * Passed through as parsed JSON.
  */
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Operator-side management merged from `kweaver-admin`: authentication, organizations, users, roles/permissions, and audit logs.
+Operator-side management merged from the legacy operator CLI: authentication, organizations, users, roles/permissions, and audit logs.
 
 ## User-visible behavior
 

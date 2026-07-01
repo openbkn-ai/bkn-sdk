@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Live read-path smoke test for `openbkn` against a real platform.
-# Reuses an existing `kweaver` session for the token (refresh needs TLS bypass
+# Reuses an existing legacy CLI session for the token (refresh needs TLS bypass
 # on self-signed platforms, hence NODE_TLS_REJECT_UNAUTHORIZED=0).
 #
 #   BKN_BASE_URL=https://host  BKN_KN_ID=<kn>  test/e2e/live-smoke.sh
@@ -11,12 +11,12 @@ set -uo pipefail
 export NODE_TLS_REJECT_UNAUTHORIZED=0
 
 BASE="${BKN_BASE_URL:-https://10.211.55.4}"
-TOKEN="${BKN_TOKEN:-$(kweaver token 2>/dev/null)}"
-KN="${BKN_KN_ID:-}"
 CLI="node $(cd "$(dirname "$0")/../.." && pwd)/dist/cli.js"
+TOKEN="${BKN_TOKEN:-$($CLI auth token 2>/dev/null)}"
+KN="${BKN_KN_ID:-}"
 
 if [ -z "$TOKEN" ]; then
-  echo "No token. Run \`kweaver auth login\` (or set BKN_TOKEN)." >&2
+  echo "No token. Log in first (or set BKN_TOKEN)." >&2
   exit 1
 fi
 

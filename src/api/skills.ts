@@ -1,7 +1,7 @@
 import type { RequestContext } from "../types.js";
 /**
- * Skill registry/market client (agent-operator-integration). Read + delete,
- * mirroring kweaver-sdk api/skills.ts. Passed through as parsed JSON.
+ * Skill registry/market client (agent-operator-integration). Read + delete.
+ * Passed through as parsed JSON.
  */
 import { HttpError } from "../utils/errors.js";
 import { authFetch } from "./auth-fetch.js";

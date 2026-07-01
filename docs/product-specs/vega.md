@@ -34,7 +34,7 @@ CLI:
 - `openbkn vega dataset build <resource-id> --mode batch [--embedding-fields …] [--build-key-fields …] [--embedding-model …] [--model-dimensions …] [--wait] [--timeout <s>]` — create a BuildTask.
 - `openbkn vega dataset build-status <resource-id> <task-id>` — progress: `state` + `SyncedCount` / `VectorizedCount`.
 
-**Reasonable-state fix:** legacy only forwarded `--mode` and forced raw `kweaver call /build-tasks` for everything else. Here the whole `CreateBuildTaskRequest` is exposed as flags.
+**Reasonable-state fix:** legacy only forwarded `--mode` and forced a raw `call /build-tasks` for everything else. Here the whole `CreateBuildTaskRequest` is exposed as flags.
 
 **Field searchability is separate** — declared on the resource property schema via
 `feature_type` (`keyword` | `fulltext` | `vector`). The BuildTask only decides

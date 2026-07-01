@@ -1,6 +1,5 @@
 /**
- * `openbkn admin …` — the kweaver-admin operator CLI, nested as a subcommand.
- * Mapping is 1:1: `kweaver-admin <x>` → `openbkn admin <x>`. org/user/role
+ * `openbkn admin …` — the operator CLI, nested as a subcommand. org/user/role
  * reads + writes (create/update/delete/reset-password) and org tree are real
  * and live-verified; operator `auth` reuses the top-level `openbkn auth`.
  */
@@ -22,9 +21,7 @@ const int = (v: string) => Number.parseInt(v, 10);
 const DEFAULT_RESET_PASSWORD = "openbkn";
 
 export function adminCommand(): Command {
-  const admin = new Command("admin").description(
-    "Operator CLI (kweaver-admin): org, user, role, models, audit",
-  );
+  const admin = new Command("admin").description("Operator CLI: org, user, role, models, audit");
 
   // Operator auth = the same leaves as top-level `openbkn auth` (1:1 nest).
   registerAuthLeaves(admin.command("auth").description("Operator authentication"));

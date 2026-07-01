@@ -23,8 +23,7 @@ argument-hint: [自然语言指令]
 
 # openbkn CLI
 
-BKN 平台命令行工具 —— 把旧的 `kweaver-sdk` + `kweaver-admin` 精简重写并合并为
-一个二进制。`kweaver <x>` → `openbkn <x>`；`kweaver-admin <x>` → `openbkn admin <x>`。
+BKN 平台的统一命令行工具 —— 一个二进制，运维面收进 `openbkn admin` 子命令。
 纯后端，无 Web UI。
 
 ## 安装
@@ -79,7 +78,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user-id>
 | `toolbox` / `tool` | 工具箱与工具 | toolbox `list/create/publish/delete/export/import`；tool `upload <file> --toolbox <id>`、`execute`/`debug` |
 | `dataflow` | 文档流程 | `list`/`runs`/`logs`/`run`、`create`（JSON 文档）、`templates`/`create-dataset`/`create-bkn`（`--template <name> --set k=v`） |
 | `trace` | Trace-AI | `get`、`search`、`diagnose <conv> [--llm]`（符号规则 + LLM rubric + synthesizer）、`scan <conv,…>`、`eval-set build <queries>`/`test <cases> --agent <id> [--llm]`、`schema validate <file>` |
-| `admin` | 运营（kweaver-admin） | `org/user/role …` CRUD + `reset-password`、`audit list`、`llm/small-model …`、`auth …`、`config`、`call` |
+| `admin` | 运营 | `org/user/role …` CRUD + `reset-password`、`audit list`、`llm/small-model …`、`auth …`、`config`、`call` |
 | `call`（别名 `curl`） | 通用 API 透传 | `call <url> [-X POST] [-d '<json>']` |
 | `explore` | 本地只读服务（bkn + vega JSON） | `explore [--port <n>]` |
 
@@ -120,7 +119,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user-id>
 /openbkn 把本地 ./my-bkn 目录校验后 push 上去
 /openbkn 有哪些 Agent；跟 Agent xxx 流式对话问"今天库存情况"
 /openbkn 诊断会话 conv-123 的 trace，带 LLM 判定
-/openbkn 在 skill market 里找名字含 kweaver 的 skill 并安装到 ./out
+/openbkn 在 skill market 里找名字含 retrieval 的 skill 并安装到 ./out
 /openbkn 把 ./openapi.json 上传到 toolbox 1234567890
 /openbkn 列出组织结构；给用户 u-1 重置密码
 ```

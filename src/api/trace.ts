@@ -1,6 +1,6 @@
 /**
  * Trace AI client (agent-observability). Implements raw trace search and a
- * two-hop "spans by conversation" fetch, mirroring kweaver-sdk. The full
+ * two-hop "spans by conversation" fetch. The full
  * diagnose/eval-set rule engine (LLM-as-judge) is a separate large feature and
  * is NOT included here — see docs/exec-plans/tech-debt-tracker.md.
  */

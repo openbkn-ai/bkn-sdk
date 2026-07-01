@@ -63,7 +63,7 @@ program.addCommand(exploreCommand());
 installGroupedHelp(program);
 
 // Legacy `-bd` is a 2-char short flag commander can't declare; rewrite it to
-// the canonical `--biz-domain` before parsing (kweaver compatibility).
+// the canonical `--biz-domain` before parsing (legacy compatibility).
 const argv = process.argv.map((a) => (a === "-bd" ? "--biz-domain" : a));
 
 try {

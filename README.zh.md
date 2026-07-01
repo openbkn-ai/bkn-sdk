@@ -1,9 +1,8 @@
 # @openbkn/bkn-sdk
 
 BKN（Business Knowledge Network）平台的统一 TypeScript SDK + CLI。一套工具、两个入口：
-可 import 的 SDK 与 `openbkn` 命令行——共享同一套领域逻辑。这是对旧版
-`kweaver-sdk` + `kweaver-admin` 的精简重写，合并为一个包（运维 CLI 收进
-`openbkn admin` 子命令）。纯后端，无 Web UI。
+可 import 的 SDK 与 `openbkn` 命令行——共享同一套领域逻辑。面向 BKN 平台的
+统一命令行工具，运维面收进 `openbkn admin` 子命令。纯后端，无 Web UI。
 
 > 状态：预发布。各域的读命令已实现并在真实平台上验证；部分写操作与 Trace-AI
 > 引擎仍在进行中（见 `docs/exec-plans/tech-debt-tracker.md`）。
@@ -40,7 +39,7 @@ openbkn model llm list
 openbkn agent list
 openbkn agent sessions <agent-key>
 
-# 运维（kweaver-admin，嵌套）
+# 运维（嵌套）
 openbkn admin org list
 openbkn admin role list
 
@@ -76,12 +75,12 @@ npm test         # vitest（单测；等价套件由 BKN_EQUIV_LIVE 控制）
 npm run build    # tsup → dist/（库 + openbkn bin）
 ```
 
-## 与旧 CLI 的一致性
+## 帮助系统
 
-`openbkn` 对齐已安装的 `kweaver` / `kweaver-admin` 命令树
-（`kweaver <x>` → `openbkn <x>`，`kweaver-admin <x>` → `openbkn admin <x>`）。
-全深度 `--help` 黄金基线与一致性测试见 `test/equivalence/`
-（用 `BKN_EQUIV_LIVE=1` 真机跑）。
+每个命令、子命令、孙命令都带分组 `--help`，列出各自的参数与位置参数，
+整棵命令树可端到端发现。全深度 `--help` 黄金基线与自洽性测试见
+`test/equivalence/`（每个节点都存在，其 `--help` 覆盖自身的参数与位置参数；
+用 `BKN_EQUIV_LIVE=1` 真机跑）。
 
 ## 许可证
 

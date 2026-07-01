@@ -2,7 +2,7 @@
  * Local config + token store under `~/.bkn/` (override: `BKN_CONFIG_DIR`).
  *
  * Multi-user by design (platforms are multi-tenant), aligned with the
- * kweaver-sdk layout — reimplemented slim, no legacy-migration paths:
+ * legacy layout — reimplemented slim, no legacy-migration paths:
  *
  *   <root>/state.json                      (or profiles/<BKN_PROFILE>/state.json)
  *   <root>/platforms/<base64url(baseUrl)>/users/<userId>/token.json

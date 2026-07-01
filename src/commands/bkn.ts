@@ -1,4 +1,4 @@
-/** `openbkn bkn …` — knowledge networks (kept identical to legacy `kweaver bkn`). */
+/** `openbkn bkn …` — knowledge networks. */
 import { Command } from "commander";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";

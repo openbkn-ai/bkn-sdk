@@ -1,6 +1,6 @@
 /**
  * Context-loader client over the agent-retrieval MCP endpoint (JSON-RPC).
- * Reimplemented slim from kweaver-sdk: initialize → session id →
+ * Slim implementation: initialize → session id →
  * notifications/initialized, then tools/call. Handles plain-JSON and
  * SSE (`data:`) response bodies. Per-process session cache (5 min TTL).
  */

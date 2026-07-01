@@ -136,7 +136,7 @@ export function assembleTraceTree(traceId: string, raw: RawSpan[]): TraceTree {
   return { traceId, spans, byKind };
 }
 
-// ── predicates (ported 1:1 from kweaver-sdk builtin-rules) ─────────────────────
+// ── predicates (ported 1:1 from the builtin rules) ─────────────────────────────
 
 function byStart(spans: Span[]): Span[] {
   return spans

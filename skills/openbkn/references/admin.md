@@ -1,4 +1,4 @@
-# admin — operator CLI (kweaver-admin, nested 1:1)
+# admin — operator CLI (nested 1:1)
 
 | Group | Commands |
 |-------|----------|

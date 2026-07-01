@@ -2,15 +2,14 @@
 
 Unified TypeScript SDK + CLI for the **BKN** (Business Knowledge Network) platform.
 One toolkit, two surfaces: the importable SDK and the `openbkn` CLI — both backed
-by the same domain logic. A slim rewrite of the legacy `kweaver-sdk` +
-`kweaver-admin`, merged into one package (the operator CLI lives under
-`openbkn admin`). Backend-only; no web UI.
+by the same domain logic. A single unified CLI for the BKN platform, with the
+operator surface nested under `openbkn admin`. Backend-only; no web UI.
 
-> Status: every legacy command/subcommand is implemented and full-depth
-> `--help`-equivalent with `kweaver` / `kweaver-admin` (196/196 parity test).
-> Reads + writes across all domains are validated against a live platform; a few
-> paths are environment-gated on the test cluster (EACP `change-password`/`audit`
-> upstream, physical-catalog `create-from-*`, populated trace index) — see
+> Status: every command/subcommand is implemented and self-consistent, with a
+> full-depth grouped `--help` for every node. Reads + writes across all domains
+> are validated against a live platform; a few paths are environment-gated on the
+> test cluster (EACP `change-password`/`audit` upstream, physical-catalog
+> `create-from-*`, populated trace index) — see
 > `docs/exec-plans/tech-debt-tracker.md`.
 
 ## Install
@@ -46,7 +45,7 @@ openbkn model llm list
 openbkn agent list
 openbkn agent sessions <agent-key>
 
-# Operator (kweaver-admin, nested)
+# Operator (nested)
 openbkn admin org list
 openbkn admin role list
 
@@ -82,13 +81,13 @@ npm test         # vitest (unit; equivalence suite gated by BKN_EQUIV_LIVE)
 npm run build    # tsup → dist/ (library + `openbkn` bin)
 ```
 
-## Equivalence with the legacy CLIs
+## Help system
 
-`openbkn` mirrors the installed `kweaver` / `kweaver-admin` command trees
-(`kweaver <x>` → `openbkn <x>`, `kweaver-admin <x>` → `openbkn admin <x>`).
-Golden `--help` baselines and a full-depth parity test live in
-`test/equivalence/` — **196/196** commands match (every node exists and its
-`--help` covers the legacy flags + arguments). Run live with `BKN_EQUIV_LIVE=1`.
+Every command, subcommand, and sub-subcommand ships a grouped `--help` that
+lists its flags and arguments, so the tree is discoverable end to end. Golden
+`--help` baselines and a full-depth self-consistency test live in
+`test/equivalence/` (every node exists and its `--help` covers its flags +
+arguments). Run live with `BKN_EQUIV_LIVE=1`.
 
 ## Agent skill
 

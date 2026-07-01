@@ -1,6 +1,6 @@
 /**
  * Dataflow backend client (automation v2). Read endpoints (list/runs/logs) are
- * implemented from kweaver-sdk; trigger/create bodies are deferred until the
+ * implemented; trigger/create bodies are deferred until the
  * contract is verified on a live env. Responses passed through as parsed JSON.
  */
 import type { RequestContext } from "../types.js";

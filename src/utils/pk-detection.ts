@@ -2,7 +2,7 @@
  * Primary-key / display-key resolution for BKN object types built from tables.
  *
  * Getting the PK wrong silently builds an index over the wrong key and drops
- * most rows (the kweaver-sdk #97 data-loss bug), so resolution is deliberate:
+ * most rows (the legacy #97 data-loss bug), so resolution is deliberate:
  *   1. caller override (--pk-map)
  *   2. schema-declared single PK (datasource metadata)
  *   3. sample-based cardinality detection

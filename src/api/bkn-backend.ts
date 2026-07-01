@@ -1,7 +1,7 @@
 import type { RequestContext } from "../types.js";
 /**
- * bkn-backend client (concept-groups, action-schedules, jobs). Read side,
- * mirroring kweaver-sdk api/bkn-backend.ts. Passed through as parsed JSON.
+ * bkn-backend client (concept-groups, action-schedules, jobs). Read side.
+ * Passed through as parsed JSON.
  */
 import { HttpError } from "../utils/errors.js";
 import { authFetch } from "./auth-fetch.js";

@@ -4,8 +4,8 @@
  * agent, fetches the resulting trace, and checks each assertion. Deterministic
  * assertion kinds (contains, regex, tool-call count/order, latency) need no LLM;
  * `semantic_match` reuses the local-claude judge. Builder lifts cases from a
- * queries file (JSON). The diagnosis-report lift + YAML shards + redaction from
- * kweaver-sdk are deferred — see tech-debt.
+ * queries file (JSON). The diagnosis-report lift + YAML shards + redaction
+ * are deferred — see tech-debt.
  */
 import type { Span } from "./diagnose.js";
 

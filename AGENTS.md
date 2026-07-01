@@ -57,7 +57,7 @@ Dependency direction is one-way: `commands → resources → api → auth/config
 
 - Default list `limit` = **30**; query/preview `limit` = **50**; `--limit` always overrides.
 - Global `--json` for machine-readable output where supported.
-- This is a **rewrite**, not a port: reference `kweaver-sdk` / `kweaver-admin`, but slim and unify — do not copy verbatim. Python SDK is dropped.
+- This is a **rewrite**, not a port: reference the legacy user/agent-SDK and operator-CLI predecessors, but slim and unify — do not copy verbatim. Python SDK is dropped.
 
 ## Domains
 

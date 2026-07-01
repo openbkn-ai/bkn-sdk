@@ -1,7 +1,7 @@
 import type { RequestContext } from "../types.js";
 /**
  * Model-factory client: management reads (mf-model-manager) + runtime
- * invocation (mf-model-api), mirroring kweaver-sdk. Passed through as JSON.
+ * invocation (mf-model-api). Passed through as JSON.
  */
 import { HttpError } from "../utils/errors.js";
 import { authFetch } from "./auth-fetch.js";

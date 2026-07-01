@@ -1,7 +1,7 @@
 # CLI command design
 
 The `openbkn` CLI is a single command tree that **merges** two legacy CLIs:
-`kweaver` (user/agent) + `kweaver-admin` (operator). Built on `commander`,
+a user/agent CLI + an operator CLI. Built on `commander`,
 with `chalk` + `cli-table3` for pretty output — no TUI. The tree must stay **equivalent** to the legacy
 CLIs — see [../../test/equivalence/command-map.md](../../test/equivalence/command-map.md) for the full mapping and drop list, enforced by [../../test/equivalence/help.test.ts](../../test/equivalence/help.test.ts).
 
@@ -14,7 +14,7 @@ openbkn
   config    show | set | set-bd | list-bd
   call      (curl)  curl-style passthrough with auto-injected auth headers
 
-  # knowledge networks  (kept as `bkn` — identical to legacy `kweaver bkn`)
+  # knowledge networks  (kept as `bkn` — identical to the legacy `bkn` group)
   # NOTE: no `build` here — KN-level build removed; index build = `vega dataset build`
   bkn       list | get | create | create-from-catalog | create-from-csv | update | delete
             | stats | export | validate | push | pull | search | subgraph | resources
@@ -68,7 +68,7 @@ DECISION AGENT            agent · toolbox · tool
 AI DATA PLATFORM          bkn · resource (res) · dataflow · vega · context (context-loader)
 TRACE AI                  trace
 MODELS & SKILLS           model · skill
-OPERATOR                  org · user · role · audit          # merged from kweaver-admin
+OPERATOR                  org · user · role · audit          # merged from the operator CLI
 FOUNDATION                explore · help
 
 FLAGS        --base-url · --token · --user · --json/--compact · -bd · --insecure
@@ -90,7 +90,7 @@ subcommand, and sub-subcommand must exist in `openbkn` with equivalent help:
 - leaf: `openbkn agent chat --help`, `openbkn bkn object-type --help`
 - deep leaf: `openbkn bkn object-type query --help`, `openbkn bkn metric dry-run --help`
 
-The legacy tree is **154 kweaver paths** (from `help all`) + **43 kweaver-admin
+The legacy tree is **154 SDK paths** (from `help all`) + **43 operator-CLI
 depth-2 paths**, enforced by [../../test/equivalence/help.test.ts](../../test/equivalence/help.test.ts).
 The same grouped formatter applies at every level: a command's own help groups
 its subcommands the way legacy does (e.g. `agent` → DISCOVERY / CRUD / RUNTIME;

@@ -6,7 +6,7 @@ import { z } from "zod";
 import type { RequestContext } from "../types.js";
 import { request } from "./http.js";
 
-// Vega backend base path (matches kweaver-sdk `api/vega.ts`).
+// Vega backend base path.
 const VEGA_BASE = "/api/vega-backend/v1";
 
 export const BuildMode = z.enum(["batch", "streaming"]);

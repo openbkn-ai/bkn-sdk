@@ -10,7 +10,7 @@ Phase 2 toolchain landed. Each criterion cites a concrete repo signal; write **T
 | Live validation | read commands work vs real backend | ✅ Validated on the deployed VM across rounds. This round live-verified: admin org get/members, user get/roles; bkn push/pull round-trip (CHECKSUM/SKILL.md/network.bkn); `model llm chat --stream` (qwen3.6-plus streamed a real reply). Caught+fixed 4 earlier bugs (`-k`, vega base path, model `size`, toolbox `/list`); this round corrected admin user/org-get to thrift after REST 400/404 |
 | Lint + format | `biome check` clean | ✅ `biome.json`; `npm run lint` (biome + tsc) clean |
 | E2E | separate entry, runs vs real backend | TBD — excluded in `vitest.config.ts`; no `test/e2e/` yet |
-| CLI equivalence | every legacy command/sub/sub-sub matched or dropped-with-reason | ✅ Full-depth: `BKN_EQUIV_LIVE=1` → **196/196 pass**. Every legacy command/sub exists in `openbkn` and its `--help` covers the legacy capability tokens (flags + Usage `<args>`), for both kweaver(sdk) top-level and kweaver-admin (nested 1:1 under `admin`). Tokenizer compares flags + usage args (prose-noise-free) |
+| CLI equivalence | every legacy command/sub/sub-sub matched or dropped-with-reason | ✅ Full-depth: `BKN_EQUIV_LIVE=1` → **196/196 pass**. Every legacy command/sub exists in `openbkn` and its `--help` covers the legacy capability tokens (flags + Usage `<args>`), for both the top-level user/agent SDK CLI and the operator CLI (nested 1:1 under `admin`). Tokenizer compares flags + usage args (prose-noise-free) |
 | Docs freshness | spec updated in same PR as behavior | Enforced by review; see [PLANS.md](PLANS.md) workflows |
 | CI | lint + test on PR | TBD — no workflow in `.github/` yet |
 

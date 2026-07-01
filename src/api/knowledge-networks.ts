@@ -1,6 +1,6 @@
 /**
  * Knowledge-network backend client (ontology-manager + agent-retrieval).
- * Endpoints mirror kweaver-sdk; responses are passed through as parsed JSON
+ * Responses are passed through as parsed JSON
  * (shapes vary by backend version — validate at higher layers as needed).
  */
 import type { RequestContext } from "../types.js";

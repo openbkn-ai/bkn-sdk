@@ -46,7 +46,7 @@ commands/ ──► resources/ ──► api/ ──► auth/ , config/ ──�
 
 ## Heritage
 
-Rewritten from `kweaver-sdk` (user/agent SDK) + `kweaver-admin` (operator CLI), merged into one package and one `openbkn` CLI. Python SDK dropped. Reference the originals for behavior; reimplement slim. BKN format itself is defined by the upstream BKN specification — see [docs/references/bkn-spec-llms.txt](docs/references/bkn-spec-llms.txt).
+A slim rewrite of legacy user/agent-SDK and operator-CLI predecessors, merged into one package and one `openbkn` CLI. Python SDK dropped. Reference the originals for behavior; reimplement slim. BKN format itself is defined by the upstream BKN specification — see [docs/references/bkn-spec-llms.txt](docs/references/bkn-spec-llms.txt).
 
 ## References
 
