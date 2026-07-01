@@ -199,6 +199,43 @@ export function findSkills(
   return callTool(ctx, knId, "find_skills", args);
 }
 
+/** Progressive KN-detail disclosure level: `summary` (skeleton + property names) | `full`. */
+export type DetailLevel = "summary" | "full";
+
+/**
+ * get_kn_detail — the KN schema at a chosen detail level. `summary` (the server
+ * default) returns the skeleton + per-property `name/display_name/type/comment`
+ * only; `full` returns everything (still deduped). Drill into specific types with
+ * `getObjectTypes` / `getRelationTypes`.
+ */
+export function getKnDetail(
+  ctx: RequestContext,
+  knId: string,
+  detailLevel?: DetailLevel,
+): Promise<unknown> {
+  const args: Record<string, unknown> = { response_format: "json" };
+  if (detailLevel) args.detail_level = detailLevel;
+  return callTool(ctx, knId, "get_kn_detail", args);
+}
+
+/**
+ * get_object_types — full definitions for the given object-type ids. Ids with no
+ * match come back under the response's `missing` array. `ids` is sent as a JSON
+ * array (the server rejects a comma-joined string).
+ */
+export function getObjectTypes(ctx: RequestContext, knId: string, ids: string[]): Promise<unknown> {
+  return callTool(ctx, knId, "get_object_types", { ids, response_format: "json" });
+}
+
+/** get_relation_types — full definitions for the given relation-type ids; unmatched under `missing`. */
+export function getRelationTypes(
+  ctx: RequestContext,
+  knId: string,
+  ids: string[],
+): Promise<unknown> {
+  return callTool(ctx, knId, "get_relation_types", { ids, response_format: "json" });
+}
+
 export function listTools(ctx: RequestContext, knId: string): Promise<unknown> {
   return callMethod(ctx, knId, "tools/list");
 }

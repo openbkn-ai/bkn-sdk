@@ -28,6 +28,30 @@ openbkn context tool-call <kn> <tool-name> --arg k=v --arg n=10 --arg list='["a"
 (`tools/list`, `resources/read`, `prompts/get`, …) that have no dedicated
 command.
 
+## Progressive schema disclosure (get_kn_detail + drill-down)
+
+A KN's full schema is heavy (a 27-object / 37-relation KN is ~143 KB). Read the
+**skeleton first, then drill into what you need** — don't pull `full` up front.
+
+| Command | Notes |
+| --- | --- |
+| `kn-detail <kn> [--detail-level summary\|full]` | KN schema. **`summary` (default)** = skeleton + per-property `name/display_name/type/comment` only (drops field mappings, query operators, logic-property sources, relation `mapping_rules`; dedups concept groups). `full` = everything (still deduped). |
+| `object-types <kn> <ids...>` | Full definitions for the named object-type ids. Ids with no match come back under `missing`. |
+| `relation-types <kn> <ids...>` | Full definitions for the named relation-type ids (incl. `mapping_rules`); unmatched → `missing`. |
+
+```bash
+# 1. skeleton — cheap, get the shape + ids
+openbkn context kn-detail worldcup_vega_catalog_bkn
+# 2. drill into the objects you care about (bad ids echo back in `missing`)
+openbkn context object-types worldcup_vega_catalog_bkn matches goals
+# 3. relation details on demand
+openbkn context relation-types worldcup_vega_catalog_bkn rel_award_winners_award
+```
+
+> `object-types` / `relation-types` send `ids` as a real array — prefer them over
+> `tool-call get_object_types --arg ids=a,b`, which the server rejects (a bare
+> comma string is not a JSON array).
+
 ## Named commands + argument shapes
 
 ### Schema discovery

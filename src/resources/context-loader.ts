@@ -3,13 +3,17 @@
 
 /** Context-loader resource surface (MCP over agent-retrieval). */
 import {
+  type DetailLevel,
   type SearchSchemaOptions,
   callMethod,
   callTool,
   findSkills,
   getActionInfo,
+  getKnDetail,
   getLogicProperties,
+  getObjectTypes,
   getPrompt,
+  getRelationTypes,
   listPrompts,
   listResourceTemplates,
   listResources,
@@ -30,6 +34,10 @@ export function context(ctx: RequestContext) {
       queryObjectInstance(ctx, knId, args),
     findSkills: (knId: string, objectTypeId: string, topK?: number) =>
       findSkills(ctx, knId, objectTypeId, topK),
+    // Progressive schema disclosure: skeleton first (summary), then drill down.
+    knDetail: (knId: string, detailLevel?: DetailLevel) => getKnDetail(ctx, knId, detailLevel),
+    objectTypes: (knId: string, ids: string[]) => getObjectTypes(ctx, knId, ids),
+    relationTypes: (knId: string, ids: string[]) => getRelationTypes(ctx, knId, ids),
     info: () => mcpInfo(ctx),
     tools: (knId: string) => listTools(ctx, knId),
     toolCall: (knId: string, name: string, args: Record<string, unknown>) =>

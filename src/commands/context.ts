@@ -114,6 +114,29 @@ export function contextCommand(): Command {
     });
 
   cmd
+    .command("kn-detail <kn-id>")
+    .description("Get a KN's schema at a detail level (progressive: summary skeleton → drill down)")
+    .option("--detail-level <level>", "summary (default) | full", "summary")
+    .action(async (knId: string, opts, cmd: Command) => {
+      const level = opts.detailLevel === "full" ? "full" : "summary";
+      printJson(await clientFrom(cmd).context.knDetail(knId, level), outputOptions(cmd));
+    });
+
+  cmd
+    .command("object-types <kn-id> <ids...>")
+    .description("Full definitions for the given object-type ids (unmatched → `missing`)")
+    .action(async (knId: string, ids: string[], _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).context.objectTypes(knId, ids), outputOptions(cmd));
+    });
+
+  cmd
+    .command("relation-types <kn-id> <ids...>")
+    .description("Full definitions for the given relation-type ids (unmatched → `missing`)")
+    .action(async (knId: string, ids: string[], _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).context.relationTypes(knId, ids), outputOptions(cmd));
+    });
+
+  cmd
     .command("info")
     .description("List the deploy's MCP tool catalog (global — no KN needed)")
     .action(async (_opts, cmd: Command) => {
