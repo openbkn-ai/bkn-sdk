@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * Auth resource — credential store + identity (multi-user, store-backed).
  * Interactive browser/password OAuth lives in `auth/oauth.ts` and is persisted

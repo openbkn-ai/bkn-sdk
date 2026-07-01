@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * Minimal JWT payload decoder — base64url decode only, NO signature check.
  * Used to surface identity (sub / username / email) from a stored token.

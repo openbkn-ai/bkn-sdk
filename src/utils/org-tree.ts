@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /** Build / render a department hierarchy from flat ISF search entries. */
 import type { DeptEntry } from "../api/admin.js";
 

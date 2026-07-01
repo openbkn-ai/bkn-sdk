@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * Trace diagnose engine. Fetches a conversation's spans, shapes them into a
  * trace tree, runs deterministic symbolic predicates, and (in hybrid mode) adds

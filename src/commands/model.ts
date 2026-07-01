@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /** `openbkn model …` — model factory (llm / small-model). */
 import { Command } from "commander";
 import type { BknClient } from "../client.js";

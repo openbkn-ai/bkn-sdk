@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * Context-loader client over the agent-retrieval MCP endpoint (JSON-RPC).
  * Slim implementation: initialize → session id →

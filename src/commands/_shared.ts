@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /** Helpers shared by command modules: client construction + output options. */
 import { readFileSync } from "node:fs";
 import type { Command } from "commander";

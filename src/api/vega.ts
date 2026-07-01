@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * Vega backend client — catalog/resource reads + BuildTask (index build).
  * Build config lives on the task (CreateBuildTaskRequest), per the platform model.

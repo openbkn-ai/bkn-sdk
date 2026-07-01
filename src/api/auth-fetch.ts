@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * Shared 401 refresh-and-retry for the direct-`fetch` escape hatches (raw
  * bytes, multipart uploads, SSE streams) that can't go through `request()`.

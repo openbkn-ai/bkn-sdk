@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * Raw API passthrough — the `call`/`curl` escape hatch. Builds a request with
  * auth headers injected and returns the raw response (status + body), WITHOUT

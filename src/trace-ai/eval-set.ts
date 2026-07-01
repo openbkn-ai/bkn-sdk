@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * Trace eval-set — build a set of evaluation cases and run them against a live
  * agent. Each case is {query, assertions[]}; `test` runs the query through the

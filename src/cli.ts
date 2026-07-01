@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * `openbkn` — unified CLI for the BKN platform.
  * Thin shell: parse argv → call a resource → print. No business logic here.

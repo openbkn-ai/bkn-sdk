@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * BKN directory ↔ tar helpers. Shells out to the system `tar` (present on
  * Linux/macOS and Windows 10 1803+). `COPYFILE_DISABLE=1` stops macOS from

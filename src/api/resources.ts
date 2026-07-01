@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * Vega-backend resource client (list/find/get/query/delete).
  * Responses passed through as parsed JSON.

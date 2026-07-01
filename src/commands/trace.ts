@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /** `openbkn trace …` — trace data (search/get) + diagnose + eval-set. */
 import { readFileSync, writeFileSync } from "node:fs";
 import { Command } from "commander";

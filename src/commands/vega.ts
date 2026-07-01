@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /** `openbkn vega …` — Catalog reads + index BuildTask. */
 import { Command } from "commander";
 import type { SqlQueryRequest } from "../api/vega.js";

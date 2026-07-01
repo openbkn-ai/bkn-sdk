@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 import type { RequestContext } from "../types.js";
 /**
  * bkn-backend client (concept-groups, action-schedules, jobs). Read side.

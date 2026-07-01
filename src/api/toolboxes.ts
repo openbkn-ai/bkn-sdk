@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * Toolbox + tool client (agent-operator-integration tool-box). Read side.
  * Passed through as parsed JSON.

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * LLM judge backed by the local `claude` CLI run as a one-shot subprocess:
  *   claude -p --output-format=json --dangerously-skip-permissions  (prompt on stdin)

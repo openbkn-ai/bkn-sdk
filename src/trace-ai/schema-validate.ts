@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * `trace schema validate` — validate a local eval-set or diagnosis-rule file
  * (JSON or YAML) against a zod schema. Catches malformed cases/rules before

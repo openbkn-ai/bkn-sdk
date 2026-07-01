@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * `openbkn agent …` — Decision Agent (agent-factory). DEPRECATED: this surface
  * is being phased out and may be removed in a future release; avoid building new

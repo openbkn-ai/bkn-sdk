@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * Skill package ↔ zip helpers (jszip). Skills are shipped as a zip whose root
  * holds SKILL.md plus any referenced files; the backend reads `skill_file_index`

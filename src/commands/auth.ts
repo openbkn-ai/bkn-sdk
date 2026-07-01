@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /** `openbkn auth …` — login / session / token (store-backed). */
 import { Command } from "commander";
 import { changePasswordSafe } from "../api/admin.js";

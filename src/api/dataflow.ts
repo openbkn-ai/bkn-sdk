@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * Dataflow backend client (automation v2). Read endpoints (list/runs/logs) are
  * implemented; trigger/create bodies are deferred until the

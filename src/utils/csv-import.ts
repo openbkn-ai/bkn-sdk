@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * CSV → vega-catalog import helpers. A CSV is ingested by running a one-shot
  * dataflow DAG (`@internal/database/write`) per batch: the first batch creates

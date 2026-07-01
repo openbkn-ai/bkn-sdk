@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 import { executeDataflow } from "../api/dataflow.js";
 /**
  * `bkn create-from-catalog` orchestration. Build a knowledge network from a

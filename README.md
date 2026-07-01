@@ -123,4 +123,7 @@ to live `openbkn <group> <sub> --help` for exact flags.
 
 ## License
 
-Apache-2.0
+BKN SDK is part of the OpenBKN project and is licensed under the **OpenBKN
+License** — a modified version of the Apache License, Version 2.0, with
+additional conditions. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Versions
+previously distributed under Apache-2.0 remain available under that license.

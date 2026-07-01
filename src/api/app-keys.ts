@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * AppKey API (`/api/safe/v1/{me,admin}/api-keys`, OAuth-token-gated). AppKeys
  * are user-issued long-lived credentials (prefix `bak_`) that authenticate AS

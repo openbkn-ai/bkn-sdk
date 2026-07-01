@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /** `openbkn call`/`curl` — curl-style API passthrough with auth headers. */
 import { Command } from "commander";
 import { rawCall } from "../api/call.js";

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 import type { RequestContext } from "../types.js";
 /**
  * Model-factory client: management reads (mf-model-manager) + runtime

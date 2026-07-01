@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /** `openbkn resource` (alias `res`) — vega-backend resources. */
 import { Command } from "commander";
 import { group } from "../help/grouped-help.js";

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * Trace AI client (agent-observability). Implements raw trace search and a
  * two-hop "spans by conversation" fetch. The full

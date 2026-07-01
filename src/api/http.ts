@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * Thin fetch wrapper: explicit timeout, auth headers, JSON in/out, typed errors.
  * The single choke point for every backend call — resources build on this.

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * @openbkn/bkn-sdk — library entry.
  * Re-exports the client factory, resource namespaces, and shared types.

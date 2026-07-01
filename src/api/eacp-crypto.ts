@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * EACP password crypto. The UserManagement / EACP `modifypassword` endpoint
  * wants the password RSA-PKCS1-encrypted with a fixed 1024-bit public key, then

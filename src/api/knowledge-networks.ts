@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * Knowledge-network backend client (ontology-manager + agent-retrieval).
  * Responses are passed through as parsed JSON

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * `openbkn explore` — a minimal local web server exposing read-only JSON
  * endpoints for **bkn** and **vega** (no SPA bundle, no chat). Reuses the

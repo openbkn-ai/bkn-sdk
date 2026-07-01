@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /** `openbkn dataflow …` — document/data flow workflows. */
 import { Command } from "commander";
 import { group } from "../help/grouped-help.js";

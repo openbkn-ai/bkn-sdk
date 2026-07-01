@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 import { type SendChatOptions, fetchAgentInfo, sendChat } from "../api/agent-chat.js";
 /** Agent resource surface (read side + published listing). */
 import {

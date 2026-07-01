@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /** Output helpers: clean JSON for scripts, aligned plain columns for humans. */
 export interface OutputOptions {
   /** Emit machine-readable JSON instead of a table. */

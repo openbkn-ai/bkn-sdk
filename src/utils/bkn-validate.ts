@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * Structural validation of a local BKN directory. This is a slim, dependency-free
  * check (the full network model is not vendored): it parses the

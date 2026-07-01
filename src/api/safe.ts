@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * bkn-safe admin API (`/api/safe/v1/admin/*`, token-gated; the gateway-exposed
  * replacement for the retired ISF UserManagement / Authorization / EACP). The

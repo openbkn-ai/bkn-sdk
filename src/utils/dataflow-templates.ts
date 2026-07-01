@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 import bknDocumentManifest from "../templates/bkn/document/manifest.json" with { type: "json" };
 import bknDocumentTemplate from "../templates/bkn/document/template.json" with { type: "json" };
 import dataflowUnstructuredManifest from "../templates/dataflow/unstructured/manifest.json" with {

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /** Shared types for the SDK surface. No runtime, no side effects. */
 
 /** Options a caller supplies; any field may be resolved from env/config store. */

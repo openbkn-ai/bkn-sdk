@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /** Trace resource surface (data fetch + symbolic/rubric diagnose + eval-set). */
 import { fetchAgentInfo, sendChat } from "../api/agent-chat.js";
 import { getRawSpansByConversation, getSpansByConversation, traceSearch } from "../api/trace.js";

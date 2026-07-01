@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /** Typed errors and their mapping to user-facing messages + exit codes. */
 
 /** Raised when an HTTP request returns a non-2xx status. */

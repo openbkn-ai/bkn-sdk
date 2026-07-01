@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * Agent client (agent-factory v3). Read side + published listing.
  * Responses passed through as parsed JSON.

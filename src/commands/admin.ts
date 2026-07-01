@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * `openbkn admin …` — the operator CLI, nested as a subcommand. org/user/role
  * reads + writes (create/update/delete/reset-password) and org tree are real

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * `openbkn appkey …` — manage user-issued AppKeys (long-lived `bak_` credentials
  * for the Context Loader). Managing keys needs a real OAuth session (the normal

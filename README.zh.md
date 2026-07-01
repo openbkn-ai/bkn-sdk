@@ -84,4 +84,6 @@ npm run build    # tsup → dist/（库 + openbkn bin）
 
 ## 许可证
 
-Apache-2.0
+BKN SDK 是 OpenBKN 项目的一部分，采用 **OpenBKN License** —— Apache License 2.0
+的修改版，附加若干条件。见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。此前以
+Apache-2.0 分发的版本仍按 Apache-2.0 授权。

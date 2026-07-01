@@ -1,3 +1,6 @@
+// Copyright (c) 2026 OpenBKN. All rights reserved.
+// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+
 /**
  * Resolve a full RequestContext from explicit options → env → store.
  * Order: caller options win, then env vars, then the active platform/user
