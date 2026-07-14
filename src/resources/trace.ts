@@ -4,7 +4,7 @@
 /** Trace resource surface (data fetch + symbolic/rubric diagnose + eval-set). */
 import { fetchAgentInfo, sendChat } from "../api/agent-chat.js";
 import { getRawSpansByConversation, getSpansByConversation, traceSearch } from "../api/trace.js";
-import { claudeAvailable, judgeJson } from "../trace-ai/claude-judge.js";
+import { claudeAvailable, judgeJson } from "../bkn-trace/claude-judge.js";
 import {
   BUILTIN_RULES,
   type DiagnoseReport,
@@ -13,13 +13,13 @@ import {
   runRubric,
   runRules,
   synthesizeFindings,
-} from "../trace-ai/diagnose.js";
+} from "../bkn-trace/diagnose.js";
 import {
   type EvalCase,
   type EvalSetResult,
   buildCasesFromQueries,
   runEvalSet,
-} from "../trace-ai/eval-set.js";
+} from "../bkn-trace/eval-set.js";
 import type { RequestContext } from "../types.js";
 
 async function semanticJudge(

@@ -13,7 +13,7 @@ Backend services (from the legacy SDK / operator CLI — verify against live API
 - model-factory: mf-model-manager (CRUD), mf-model-api (chat / small-model)
 - skills, toolboxes (execution factory)
 - vega (catalog / observability)
-- trace-ai (trace, scan, diagnose, eval-set)
+- bkn-trace (trace, scan, diagnose, eval-set)
 - identity: OAuth2 / Hydra, user-management, org/role, audit, eacp
 
 Auth

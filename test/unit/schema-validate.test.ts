@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { validateSchemaFile } from "../../src/trace-ai/schema-validate.js";
+import { validateSchemaFile } from "../../src/bkn-trace/schema-validate.js";
 
 const temps: string[] = [];
 function file(name: string, content: string): string {

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { RawSpan } from "../../src/api/trace.js";
-import { claudeAvailable, judgeJson } from "../../src/trace-ai/claude-judge.js";
+import { claudeAvailable, judgeJson } from "../../src/bkn-trace/claude-judge.js";
 import {
   assembleTraceTree,
   runRubric,
   runRules,
   synthesizeFindings,
-} from "../../src/trace-ai/diagnose.js";
+} from "../../src/bkn-trace/diagnose.js";
 
 // Live: hits the local `claude` CLI. Gated — only runs with BKN_JUDGE_LIVE=1.
 const live = process.env.BKN_JUDGE_LIVE === "1";

@@ -1,4 +1,4 @@
-# Trace AI (evidence & observability)
+# BKN Trace (evidence & observability)
 
 ## Goal
 

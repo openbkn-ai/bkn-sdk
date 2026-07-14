@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { Span } from "../../src/trace-ai/diagnose.js";
+import type { Span } from "../../src/bkn-trace/diagnose.js";
 import {
   buildCasesFromQueries,
   evaluateAssertion,
   runEvalSet,
-} from "../../src/trace-ai/eval-set.js";
+} from "../../src/bkn-trace/eval-set.js";
 
 const toolSpan = (name: string, i: number): Span => ({
   spanId: `s${i}`,

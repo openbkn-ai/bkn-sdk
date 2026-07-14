@@ -2,7 +2,7 @@
 // Licensed under the OpenBKN License. See the LICENSE file in the project root.
 
 /**
- * Trace AI client (agent-observability). Implements raw trace search and a
+ * BKN Trace client (agent-observability). Implements raw trace search and a
  * two-hop "spans by conversation" fetch. The full
  * diagnose/eval-set rule engine (LLM-as-judge) is a separate large feature and
  * is NOT included here — see docs/exec-plans/tech-debt-tracker.md.

@@ -24,4 +24,4 @@ Runtime expectations for the SDK and CLI as a client of the BKN backend.
 ## Observability
 
 - `--json` output is stable and scriptable.
-- Trace/evidence inspection is a first-class domain: [product-specs/trace-ai.md](product-specs/trace-ai.md).
+- Trace/evidence inspection is a first-class domain: [product-specs/bkn-trace.md](product-specs/bkn-trace.md).

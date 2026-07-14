@@ -4,15 +4,15 @@
 /** `openbkn trace …` — trace data (search/get) + diagnose + eval-set. */
 import { readFileSync, writeFileSync } from "node:fs";
 import { Command } from "commander";
+import { renderReportMarkdown } from "../bkn-trace/diagnose.js";
+import { validateSchemaFile } from "../bkn-trace/schema-validate.js";
 import { group } from "../help/grouped-help.js";
-import { renderReportMarkdown } from "../trace-ai/diagnose.js";
-import { validateSchemaFile } from "../trace-ai/schema-validate.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, outputOptions, readBody } from "./_shared.js";
 
 export function traceCommand(): Command {
   const cmd = new Command("trace").description(
-    "Trace AI — fetch spans, diagnose (symbolic + LLM rubric), scan, eval-set, schema validate",
+    "BKN Trace — fetch spans, diagnose (symbolic + LLM rubric), scan, eval-set, schema validate",
   );
 
   cmd
