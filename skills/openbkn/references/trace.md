@@ -1,4 +1,4 @@
-# trace — Trace-AI
+# trace — BKN Trace
 
 | Command | Notes |
 |---------|-------|

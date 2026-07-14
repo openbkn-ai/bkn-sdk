@@ -7,7 +7,7 @@ description: >-
   索引构建任务、Context Loader（MCP 检索）、Decision Agent（CRUD、流式对话、
   会话、挂载技能）、模型工厂（大模型/小模型 CRUD、OpenAI 兼容对话/embedding/
   rerank）、Skill 注册（zip 注册/下载/安装 + 生命周期）、Toolbox/Tool（上传、
-  导入导出、调用）、Dataflow 文档流程（+模板）、Trace-AI（拉取 spans、用符号
+  导入导出、调用）、Dataflow 文档流程（+模板）、BKN Trace（拉取 spans、用符号
   规则 + LLM rubric 判定诊断一条 trace、scan、eval-set 构建/测试、schema 校验）、
   以及运营面（`openbkn admin`：组织/用户/角色 CRUD、审计、模型管理）与认证
   （token + OAuth 密码/浏览器）。
@@ -77,7 +77,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user-id>
 | `skill` | Skill 注册/市场/生命周期 | `list`/`market`/`get`/`content`/`read-file`/`history`/`set-status`、`register <dir>`/`download`/`install`、`update-metadata`/`update-package`、`republish`/`publish-history` |
 | `toolbox` / `tool` | 工具箱与工具 | toolbox `list/create/publish/delete/export/import`；tool `upload <file> --toolbox <id>`、`execute`/`debug` |
 | `dataflow` | 文档流程 | `list`/`runs`/`logs`/`run`、`create`（JSON 文档）、`templates`/`create-dataset`/`create-bkn`（`--template <name> --set k=v`） |
-| `trace` | Trace-AI | `get`、`search`、`diagnose <conv> [--llm]`（符号规则 + LLM rubric + synthesizer）、`scan <conv,…>`、`eval-set build <queries>`/`test <cases> --agent <id> [--llm]`、`schema validate <file>` |
+| `trace` | BKN Trace | `get`、`search`、`diagnose <conv> [--llm]`（符号规则 + LLM rubric + synthesizer）、`scan <conv,…>`、`eval-set build <queries>`/`test <cases> --agent <id> [--llm]`、`schema validate <file>` |
 | `admin` | 运营 | `org/user/role …` CRUD + `reset-password`、`audit list`、`llm/small-model …`、`auth …`、`config`、`call` |
 | `call`（别名 `curl`） | 通用 API 透传 | `call <url> [-X POST] [-d '<json>']` |
 | `explore` | 本地只读服务（bkn + vega JSON） | `explore [--port <n>]` |
@@ -99,7 +99,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user-id>
 | Context Loader（MCP） | [context.md](references/context.md) |
 | Skill 注册 / 生命周期 | [skill.md](references/skill.md) |
 | Toolbox / Tool | [toolbox.md](references/toolbox.md) |
-| Trace-AI（diagnose / eval-set） | [trace.md](references/trace.md) |
+| BKN Trace（diagnose / eval-set） | [trace.md](references/trace.md) |
 | 运营（org/user/role/audit） | [admin.md](references/admin.md) |
 | 通用 API 透传 | [call.md](references/call.md) |
 

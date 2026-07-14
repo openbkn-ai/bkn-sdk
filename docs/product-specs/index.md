@@ -11,7 +11,7 @@ Behavior per product domain. Each file: goals, user-visible behavior, CLI/SDK to
 | [model-factory.md](model-factory.md) | LLM + small-model management, invocation, OpenAI-compatible chat |
 | [skills-toolboxes.md](skills-toolboxes.md) | Skill registry/install, toolbox + tool execution |
 | [vega.md](vega.md) | Data catalog, resources, connectors, health checks |
-| [trace-ai.md](trace-ai.md) | Evidence chain, trace inspection, scan, diagnose, eval-set |
+| [bkn-trace.md](bkn-trace.md) | Evidence chain, trace inspection, scan, diagnose, eval-set |
 | [identity-access.md](identity-access.md) | OAuth, org, user, role/permission, audit (operator side) |
 
 Add a row when you add a domain.

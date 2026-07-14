@@ -19,7 +19,7 @@
        +-- model-factory (llm + small-model + invocation)
        +-- skills + toolboxes (execution factory)
        +-- vega (data catalog / observability)
-       +-- trace-ai (evidence chain, scan, diagnose, eval-set)
+       +-- bkn-trace (evidence chain, scan, diagnose, eval-set)
        +-- identity & access (OAuth/Hydra, org, user, role, audit)
 ```
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RawSpan } from "../../src/api/trace.js";
-import { assembleTraceTree, renderReportMarkdown, runRules } from "../../src/trace-ai/diagnose.js";
+import { assembleTraceTree, renderReportMarkdown, runRules } from "../../src/bkn-trace/diagnose.js";
 
 let t = 0;
 function span(attrs: Record<string, unknown>, over: Partial<RawSpan> = {}): RawSpan {

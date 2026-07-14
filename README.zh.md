@@ -4,7 +4,7 @@ BKN（Business Knowledge Network）平台的统一 TypeScript SDK + CLI。一套
 可 import 的 SDK 与 `openbkn` 命令行——共享同一套领域逻辑。面向 BKN 平台的
 统一命令行工具，运维面收进 `openbkn admin` 子命令。纯后端，无 Web UI。
 
-> 状态：预发布。各域的读命令已实现并在真实平台上验证；部分写操作与 Trace-AI
+> 状态：预发布。各域的读命令已实现并在真实平台上验证；部分写操作与 BKN Trace
 > 引擎仍在进行中（见 `docs/exec-plans/tech-debt-tracker.md`）。
 
 ## 安装
