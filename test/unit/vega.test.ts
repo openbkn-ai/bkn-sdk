@@ -3,10 +3,15 @@ import {
   catalogHealthStatus,
   createBuildTask,
   createCatalog,
+  deleteBuildTasks,
   getCatalog,
+  listBuildTasks,
   listCatalogResources,
+  listCatalogs,
   listConnectorTypes,
   runSql,
+  startBuildTask,
+  stopBuildTask,
 } from "../../src/api/vega.js";
 import type { RequestContext } from "../../src/types.js";
 
@@ -61,6 +66,37 @@ describe("vega uses the vega-backend base path", () => {
     expect(u.pathname).toBe("/api/vega-backend/v1/connector-types");
     expect(u.searchParams.get("sort")).toBe("name");
   });
+
+  it("listCatalogs sends new filters and repeated extension params", async () => {
+    const f = mockFetch();
+    await listCatalogs(ctx, {
+      name: "prod",
+      tag: "crm",
+      type: "physical",
+      enabled: true,
+      healthCheckStatus: "healthy",
+      includeExtensions: true,
+      includeExtensionKeys: "owner,env",
+      extensionPairs: [
+        { key: "owner", value: "data" },
+        { key: "env", value: "prod" },
+      ],
+      sort: "name",
+      direction: "asc",
+    });
+    const u = new URL(firstCall(f)[0]);
+    expect(u.searchParams.get("name")).toBe("prod");
+    expect(u.searchParams.get("tag")).toBe("crm");
+    expect(u.searchParams.get("type")).toBe("physical");
+    expect(u.searchParams.get("enabled")).toBe("true");
+    expect(u.searchParams.get("health_check_status")).toBe("healthy");
+    expect(u.searchParams.get("include_extensions")).toBe("true");
+    expect(u.searchParams.get("include_extension_keys")).toBe("owner,env");
+    expect(u.searchParams.getAll("extension_key")).toEqual(["owner", "env"]);
+    expect(u.searchParams.getAll("extension_value")).toEqual(["data", "prod"]);
+    expect(u.searchParams.get("sort")).toBe("name");
+    expect(u.searchParams.get("direction")).toBe("asc");
+  });
 });
 
 describe("createBuildTask", () => {
@@ -72,18 +108,61 @@ describe("createBuildTask", () => {
     expect(call[1].method).toBe("POST");
   });
 
-  it("serializes embedding/build-key field arrays into comma-joined strings", async () => {
-    // The backend types these as `string`, not `[]string` — see build_task.go.
+  it("sends execute_type but no resource index fields in the task body", async () => {
     const f = mockFetch({ id: "t-1", resource_id: "r-1", mode: "batch" });
     await createBuildTask(ctx, {
       resource_id: "r-1",
       mode: "batch",
-      embedding_fields: ["name", "description"],
-      build_key_fields: ["skill_id"],
+      execute_type: "full",
     });
     const body = JSON.parse(firstCall(f)[1].body as string);
-    expect(body.embedding_fields).toBe("name,description");
-    expect(body.build_key_fields).toBe("skill_id");
+    expect(body).toEqual({ resource_id: "r-1", mode: "batch", execute_type: "full" });
+  });
+
+  it("lists build tasks with server-side filters", async () => {
+    const f = mockFetch({ entries: [] });
+    await listBuildTasks(ctx, {
+      resourceId: "r-1",
+      catalogId: "c-1",
+      status: ["running", "init"],
+      active: true,
+      mode: "batch",
+      orderBy: "status",
+      order: "asc",
+      limit: 5,
+      offset: 10,
+    });
+    const u = new URL(firstCall(f)[0]);
+    expect(u.pathname).toBe("/api/vega-backend/v1/build-tasks");
+    expect(u.searchParams.get("resource_id")).toBe("r-1");
+    expect(u.searchParams.get("catalog_id")).toBe("c-1");
+    expect(u.searchParams.get("status")).toBe("running,init");
+    expect(u.searchParams.get("active")).toBe("true");
+    expect(u.searchParams.get("mode")).toBe("batch");
+    expect(u.searchParams.get("order_by")).toBe("status");
+    expect(u.searchParams.get("order")).toBe("asc");
+    expect(u.searchParams.get("limit")).toBe("5");
+    expect(u.searchParams.get("offset")).toBe("10");
+  });
+
+  it("starts, stops, and deletes build tasks", async () => {
+    const f = mockFetch({});
+    await startBuildTask(ctx, "t-1", { reset: true });
+    await stopBuildTask(ctx, "t-1");
+    await deleteBuildTasks(ctx, ["t-1", "t-2"], {
+      ignoreMissing: true,
+      deleteActiveIndex: true,
+    });
+    const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+    expect(new URL(calls[0]?.[0] ?? "").pathname).toBe(
+      "/api/vega-backend/v1/build-tasks/t-1/start",
+    );
+    expect(JSON.parse(calls[0]?.[1].body as string)).toEqual({ reset: true });
+    expect(new URL(calls[1]?.[0] ?? "").pathname).toBe("/api/vega-backend/v1/build-tasks/t-1/stop");
+    const deleteUrl = new URL(calls[2]?.[0] ?? "");
+    expect(deleteUrl.pathname).toBe("/api/vega-backend/v1/build-tasks/t-1,t-2");
+    expect(deleteUrl.searchParams.get("ignore_missing")).toBe("true");
+    expect(deleteUrl.searchParams.get("delete_active_index")).toBe("true");
   });
 });
 

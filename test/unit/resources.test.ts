@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  configureResourceIndex,
+  createResource,
   deleteResource,
   findResource,
   listResources,
   queryResource,
+  updateResource,
 } from "../../src/api/resources.js";
 import type { RequestContext } from "../../src/types.js";
 
@@ -30,14 +33,140 @@ function firstCall(fetchMock: typeof fetch): CallArgs {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("listResources", () => {
-  it("maps datasourceId→catalog_id and type→category", async () => {
+  it("maps list filters to vega-backend query params", async () => {
     const f = mockFetch();
-    await listResources(ctx, { datasourceId: "ds-1", category: "table", limit: 10 });
+    await listResources(ctx, {
+      datasourceId: "ds-1",
+      category: "table",
+      status: "active",
+      database: "app",
+      limit: 10,
+      offset: 20,
+      includeExtensions: true,
+      includeExtensionKeys: "owner",
+      extensionPairs: [{ key: "owner", value: "data" }],
+      sort: "name",
+      direction: "asc",
+    });
     const url = new URL(firstCall(f)[0]);
     expect(url.pathname).toBe("/api/vega-backend/v1/resources");
     expect(url.searchParams.get("catalog_id")).toBe("ds-1");
     expect(url.searchParams.get("category")).toBe("table");
+    expect(url.searchParams.get("status")).toBe("active");
+    expect(url.searchParams.get("database")).toBe("app");
     expect(url.searchParams.get("limit")).toBe("10");
+    expect(url.searchParams.get("offset")).toBe("20");
+    expect(url.searchParams.get("include_extensions")).toBe("true");
+    expect(url.searchParams.get("include_extension_keys")).toBe("owner");
+    expect(url.searchParams.getAll("extension_key")).toEqual(["owner"]);
+    expect(url.searchParams.getAll("extension_value")).toEqual(["data"]);
+    expect(url.searchParams.get("sort")).toBe("name");
+    expect(url.searchParams.get("direction")).toBe("asc");
+  });
+});
+
+describe("createResource", () => {
+  it("creates dataset resources by default because physical resources are discover-owned", async () => {
+    const f = mockFetch({ id: "r-1" });
+    await createResource(ctx, {
+      name: "dataset",
+      catalogId: "c-1",
+      sourceIdentifier: "dataset",
+      fields: [{ name: "title", type: "text" }],
+    });
+    const body = JSON.parse(firstCall(f)[1].body as string);
+    expect(body.category).toBe("dataset");
+    expect(body.catalog_id).toBe("c-1");
+    expect(body.schema_definition).toEqual([{ name: "title", type: "text" }]);
+  });
+
+  it("passes index_config when creating dataset resources", async () => {
+    const f = mockFetch({ id: "r-1" });
+    await createResource(ctx, {
+      name: "dataset",
+      catalogId: "c-1",
+      sourceIdentifier: "dataset",
+      fields: [{ name: "title", type: "text" }],
+      indexConfig: {
+        build_key_fields: ["id"],
+        default_embedding_model: "text-embedding-v4",
+        default_fulltext_analyzer: "ik_max_word",
+      },
+    });
+    const body = JSON.parse(firstCall(f)[1].body as string);
+    expect(body.index_config).toEqual({
+      build_key_fields: ["id"],
+      default_embedding_model: "text-embedding-v4",
+      default_fulltext_analyzer: "ik_max_word",
+    });
+  });
+});
+
+describe("updateResource/configureResourceIndex", () => {
+  it("merges required resource fields before PUT update", async () => {
+    const f = mockFetch({
+      entries: [
+        {
+          id: "r-1",
+          catalog_id: "c-1",
+          name: "orders",
+          category: "table",
+          status: "active",
+          source_identifier: "orders",
+          schema_definition: [{ name: "title", type: "text" }],
+        },
+      ],
+    });
+    await updateResource(ctx, "r-1", { indexConfig: { build_key_fields: ["id"] } });
+    const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+    expect(new URL(calls[1]?.[0] ?? "").pathname).toBe("/api/vega-backend/v1/resources/r-1");
+    const body = JSON.parse(calls[1]?.[1].body as string);
+    expect(body.name).toBe("orders");
+    expect(body.catalog_id).toBe("c-1");
+    expect(body.index_config).toEqual({ build_key_fields: ["id"] });
+  });
+
+  it("writes resource index_config and schema features for build intent", async () => {
+    const f = mockFetch({
+      entries: [
+        {
+          id: "r-1",
+          catalog_id: "c-1",
+          name: "orders",
+          category: "table",
+          status: "active",
+          source_identifier: "orders",
+          schema_definition: [
+            { name: "title", type: "text" },
+            { name: "body", type: "text", features: [] },
+          ],
+        },
+      ],
+    });
+    await configureResourceIndex(ctx, "r-1", {
+      buildKeyFields: ["id"],
+      embeddingFields: ["title"],
+      embeddingModel: "text-embedding-v4",
+      fulltextFields: ["body"],
+      fulltextAnalyzer: "ik_max_word",
+    });
+    const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+    const body = JSON.parse(calls[1]?.[1].body as string);
+    expect(body.index_config).toEqual({
+      build_key_fields: ["id"],
+      default_embedding_model: "text-embedding-v4",
+      default_fulltext_analyzer: "ik_max_word",
+    });
+    expect(body.schema_definition[0].features[0]).toMatchObject({
+      feature_type: "vector",
+      ref_property: "title",
+      config: { embedding_model: "text-embedding-v4" },
+    });
+    expect(body.schema_definition[1].features[0]).toMatchObject({
+      feature_type: "fulltext",
+      ref_property: "body",
+      config: { analyzer: "ik_max_word" },
+    });
   });
 });
 
@@ -53,12 +182,14 @@ describe("queryResource", () => {
 });
 
 describe("deleteResource", () => {
-  it("DELETEs by id", async () => {
+  it("DELETEs by ids with ignore_missing", async () => {
     const f = mockFetch({});
-    await deleteResource(ctx, "r 9");
+    await deleteResource(ctx, ["r 9", "r-10"], { ignoreMissing: true });
     const call = firstCall(f);
     expect(call[1].method).toBe("DELETE");
-    expect(new URL(call[0]).pathname).toBe("/api/vega-backend/v1/resources/r%209");
+    const url = new URL(call[0]);
+    expect(url.pathname).toBe("/api/vega-backend/v1/resources/r%209,r-10");
+    expect(url.searchParams.get("ignore_missing")).toBe("true");
   });
 });
 

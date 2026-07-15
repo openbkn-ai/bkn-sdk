@@ -11,6 +11,17 @@ import { printJson } from "../utils/output.js";
 import { clientFrom, csv, outputOptions } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
+const parsePairs = (raw?: string): Array<{ key: string; value: string }> | undefined => {
+  if (!raw) return undefined;
+  return raw
+    .split(",")
+    .map((part) => {
+      const idx = part.indexOf("=");
+      if (idx < 1) throw new InputError("--extension must be key=value[,key=value]");
+      return { key: part.slice(0, idx).trim(), value: part.slice(idx + 1).trim() };
+    })
+    .filter((p) => p.key.length > 0);
+};
 
 export function vegaCommand(): Command {
   const vega = new Command("vega").description(
@@ -23,9 +34,32 @@ export function vegaCommand(): Command {
     .description("List catalog entries")
     .option("--limit <n>", "page size", (v) => Number.parseInt(v, 10), DEFAULT_LIST_LIMIT)
     .option("--offset <n>", "page offset", (v) => Number.parseInt(v, 10), 0)
+    .option("--name <s>", "filter by name")
+    .option("--tag <s>", "filter by tag")
+    .option("--type <type>", "filter by catalog type: physical | logical")
+    .option("--enabled <bool>", "filter by enabled state")
+    .option("--health-check-status <s>", "filter by health status")
+    .option("--include-extensions", "include all extension key/value pairs")
+    .option("--include-extension-keys <keys>", "include selected extension keys")
+    .option("--extension <k=v,...>", "filter by extension key/value pairs")
+    .option("--sort <field>", "sort field: name | create_time | update_time")
+    .option("--direction <dir>", "sort direction: asc | desc")
     .action(async (_opts, cmd: Command) => {
       const o = cmd.optsWithGlobals();
-      const data = await clientFrom(cmd).vega.catalogs({ limit: o.limit, offset: o.offset });
+      const data = await clientFrom(cmd).vega.catalogs({
+        limit: o.limit,
+        offset: o.offset,
+        name: o.name,
+        tag: o.tag,
+        type: o.type,
+        enabled: o.enabled === undefined ? undefined : o.enabled === "true",
+        healthCheckStatus: o.healthCheckStatus,
+        includeExtensions: o.includeExtensions,
+        includeExtensionKeys: o.includeExtensionKeys,
+        extensionPairs: parsePairs(o.extension),
+        sort: o.sort,
+        direction: o.direction,
+      });
       printJson(data, outputOptions(cmd));
     });
   catalog
@@ -53,9 +87,12 @@ export function vegaCommand(): Command {
     .requiredOption("--name <s>", "catalog name")
     .requiredOption("--connector-type <s>", "connector type (e.g. mysql)")
     .requiredOption("--connector-config <json>", "connector config JSON")
+    .option("--id <id>", "explicit catalog id")
     .option("--tags <t1,t2>", "comma-separated tags")
     .option("--description <s>", "description")
     .option("--enabled", "create enabled (default: disabled)")
+    .option("--internal", "create an internal catalog")
+    .option("--extensions <json>", "extension key/value JSON object")
     .action(async (opts, cmd: Command) => {
       let connectorConfig: unknown;
       try {
@@ -63,8 +100,10 @@ export function vegaCommand(): Command {
       } catch {
         throw new Error("--connector-config must be valid JSON");
       }
+      const extensions = opts.extensions ? JSON.parse(opts.extensions) : undefined;
       printJson(
         await clientFrom(cmd).vega.createCatalog({
+          id: opts.id,
           name: opts.name,
           connectorType: opts.connectorType,
           connectorConfig,
@@ -76,6 +115,39 @@ export function vegaCommand(): Command {
             : undefined,
           description: opts.description,
           enabled: opts.enabled ? true : undefined,
+          internal: opts.internal ? true : undefined,
+          extensions,
+        }),
+        outputOptions(cmd),
+      );
+    });
+  catalog
+    .command("update <id>")
+    .description("Update a catalog")
+    .option("--name <s>", "catalog name")
+    .option("--connector-type <s>", "connector type")
+    .option("--connector-config <json>", "connector config JSON")
+    .option("--tags <t1,t2>", "comma-separated tags")
+    .option("--description <s>", "description")
+    .option("--enabled <bool>", "enabled state")
+    .option("--extensions <json>", "extension key/value JSON object")
+    .action(async (id: string, opts, cmd: Command) => {
+      const connectorConfig = opts.connectorConfig ? JSON.parse(opts.connectorConfig) : undefined;
+      const extensions = opts.extensions ? JSON.parse(opts.extensions) : undefined;
+      printJson(
+        await clientFrom(cmd).vega.updateCatalog(id, {
+          name: opts.name,
+          connectorType: opts.connectorType,
+          connectorConfig,
+          tags: opts.tags
+            ? String(opts.tags)
+                .split(",")
+                .map((t) => t.trim())
+                .filter(Boolean)
+            : undefined,
+          description: opts.description,
+          enabled: opts.enabled === undefined ? undefined : opts.enabled === "true",
+          extensions,
         }),
         outputOptions(cmd),
       );
@@ -85,6 +157,24 @@ export function vegaCommand(): Command {
     .description("Enable a catalog (required before discovery)")
     .action(async (id: string, _opts, cmd: Command) => {
       printJson(await clientFrom(cmd).vega.enableCatalog(id), outputOptions(cmd));
+    });
+  catalog
+    .command("disable <id>")
+    .description("Disable a catalog")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.disableCatalog(id), outputOptions(cmd));
+    });
+  catalog
+    .command("delete <id>")
+    .description("Delete a catalog")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.deleteCatalog(id), outputOptions(cmd));
+    });
+  catalog
+    .command("test-connection <id>")
+    .description("Test a catalog connection")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.testCatalogConnection(id), outputOptions(cmd));
     });
   catalog
     .command("discover <id>")
@@ -114,10 +204,8 @@ export function vegaCommand(): Command {
   vega
     .command("sql")
     .description("Run SQL / OpenSearch DSL directly against a vega-backend data source")
-    .option(
-      "--resource-type <type>",
-      "source type (mysql | postgresql | opensearch | …); optional — inferred from the {{<id>}} placeholder",
-    )
+    .requiredOption("--resource-type <type>", "source type (mysql | postgresql | opensearch | …)")
+    .option("--query-type <type>", "query mode: standard | stream")
     .option(
       "--query <sql>",
       "SQL string; reference a resource with a {{<resource-id>}} placeholder",
@@ -142,9 +230,8 @@ export function vegaCommand(): Command {
         }
         body = {
           query: opts.query,
-          // Optional — the backend infers the type from the {{<id>}} placeholder's
-          // catalog connector when omitted.
-          ...(opts.resourceType ? { resource_type: opts.resourceType } : {}),
+          resource_type: opts.resourceType,
+          ...(opts.queryType ? { query_type: opts.queryType } : {}),
           ...(opts.streamSize !== undefined ? { stream_size: opts.streamSize } : {}),
           ...(opts.queryTimeout !== undefined ? { query_timeout: opts.queryTimeout } : {}),
         };
@@ -160,13 +247,29 @@ export function vegaCommand(): Command {
     .option("--catalog-id <id>", "alias of --datasource-id")
     .option("--type <category>", "resource category")
     .option("--category <category>", "alias of --type")
+    .option("--status <status>", "filter by status")
+    .option("--database <name>", "filter by database")
     .option("--limit <n>", "page size", (v) => Number.parseInt(v, 10), DEFAULT_LIST_LIMIT)
+    .option("--offset <n>", "page offset", int, 0)
+    .option("--include-extensions", "include all extension key/value pairs")
+    .option("--include-extension-keys <keys>", "include selected extension keys")
+    .option("--extension <k=v,...>", "filter by extension key/value pairs")
+    .option("--sort <field>", "sort field: name | create_time | update_time")
+    .option("--direction <dir>", "sort direction: asc | desc")
     .action(async (opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).resource.list({
           datasourceId: opts.datasourceId ?? opts.catalogId,
           category: opts.type ?? opts.category,
+          status: opts.status,
+          database: opts.database,
           limit: opts.limit,
+          offset: opts.offset,
+          includeExtensions: opts.includeExtensions,
+          includeExtensionKeys: opts.includeExtensionKeys,
+          extensionPairs: parsePairs(opts.extension),
+          sort: opts.sort,
+          direction: opts.direction,
         }),
         outputOptions(cmd),
       );
@@ -199,20 +302,37 @@ export function vegaCommand(): Command {
       "--build-key-fields <list>",
       "comma-separated key fields (batch: time; streaming: row id)",
     )
-    .option("--embedding-model <id>", "embedding model id (default if omitted)")
-    .option("--model-dimensions <n>", "vector dimensions", (v) => Number.parseInt(v, 10))
+    .option("--embedding-model <id>", "default embedding model name/id")
+    .option("--fulltext-fields <list>", "comma-separated fields for fulltext index")
+    .option("--fulltext-analyzer <name>", "fulltext analyzer")
+    .option("--execute-type <type>", "batch execution type: incremental | full")
     .option("--wait", "poll until the build reaches a terminal state")
     .option("--timeout <s>", "wait timeout in seconds", (v) => Number.parseInt(v, 10), 300)
     .action(async (resourceId: string, _opts, cmd: Command) => {
       const o = cmd.optsWithGlobals();
+      const embeddingFields = csv(o.embeddingFields);
+      const buildKeyFields = csv(o.buildKeyFields);
+      const fulltextFields = csv(o.fulltextFields);
+      if (
+        embeddingFields ||
+        buildKeyFields ||
+        o.embeddingModel ||
+        fulltextFields ||
+        o.fulltextAnalyzer
+      ) {
+        await clientFrom(cmd).resource.configureIndex(resourceId, {
+          embeddingFields,
+          buildKeyFields,
+          embeddingModel: o.embeddingModel,
+          fulltextFields,
+          fulltextAnalyzer: o.fulltextAnalyzer,
+        });
+      }
       const task = await clientFrom(cmd).vega.build(
         {
           resource_id: resourceId,
           mode: o.mode,
-          embedding_fields: csv(o.embeddingFields),
-          build_key_fields: csv(o.buildKeyFields),
-          embedding_model: o.embeddingModel,
-          model_dimensions: o.modelDimensions,
+          execute_type: o.executeType,
         },
         { wait: Boolean(o.wait), timeoutMs: o.timeout * 1000 },
       );
@@ -225,6 +345,68 @@ export function vegaCommand(): Command {
     .action(async (_resourceId: string, taskId: string, _opts, cmd: Command) => {
       const task = await clientFrom(cmd).vega.buildStatus(taskId);
       printJson(task, outputOptions(cmd));
+    });
+
+  dataset
+    .command("build-list")
+    .description("List BuildTasks")
+    .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
+    .option("--offset <n>", "page offset", int, 0)
+    .option("--resource-id <id>", "filter by resource id")
+    .option("--catalog-id <id>", "filter by catalog id")
+    .option("--status <status>", "comma-separated statuses")
+    .option("--active", "only running/init tasks")
+    .option("--mode <mode>", "filter by mode: batch | streaming")
+    .option("--order-by <field>", "default | created_at | updated_at | status | mode")
+    .option("--order <dir>", "asc | desc")
+    .action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).vega.buildTasks({
+          limit: opts.limit,
+          offset: opts.offset,
+          resourceId: opts.resourceId,
+          catalogId: opts.catalogId,
+          status: opts.status,
+          active: opts.active,
+          mode: opts.mode,
+          orderBy: opts.orderBy,
+          order: opts.order,
+        }),
+        outputOptions(cmd),
+      );
+    });
+
+  dataset
+    .command("build-start <task-id>")
+    .description("Start a BuildTask")
+    .option("--reset", "restart from the beginning")
+    .action(async (taskId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).vega.startBuildTask(taskId, { reset: opts.reset }),
+        outputOptions(cmd),
+      );
+    });
+
+  dataset
+    .command("build-stop <task-id>")
+    .description("Stop a BuildTask")
+    .action(async (taskId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.stopBuildTask(taskId), outputOptions(cmd));
+    });
+
+  dataset
+    .command("build-delete <ids...>")
+    .description("Delete one or more BuildTasks")
+    .option("--ignore-missing", "ignore missing task ids")
+    .option("--delete-active-index", "delete active indexes too")
+    .action(async (ids: string[], opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).vega.deleteBuildTasks(ids, {
+          ignoreMissing: opts.ignoreMissing,
+          deleteActiveIndex: opts.deleteActiveIndex,
+        }),
+        outputOptions(cmd),
+      );
     });
 
   return group(vega, "AI DATA PLATFORM");

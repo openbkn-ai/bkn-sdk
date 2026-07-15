@@ -5,20 +5,30 @@ import {
   type BuildTask,
   type CreateBuildTaskRequest,
   type CreateCatalogRequest,
+  type DeleteBuildTasksOptions,
+  type ListBuildTasksOptions,
   type ListCatalogsOptions,
   type SqlQueryRequest,
   catalogHealthStatus,
   createBuildTask,
   createCatalog,
+  deleteBuildTasks,
+  deleteCatalog,
+  disableCatalog,
   discoverCatalog,
   enableCatalog,
   getBuildTask,
   getCatalog,
   getConnectorType,
+  listBuildTasks,
   listCatalogResources,
   listCatalogs,
   listConnectorTypes,
   runSql,
+  startBuildTask,
+  stopBuildTask,
+  testCatalogConnection,
+  updateCatalog,
 } from "../api/vega.js";
 /**
  * Vega resource surface — the exported SDK API for Catalog + index builds.
@@ -33,7 +43,11 @@ export function vega(ctx: RequestContext) {
     catalogs: (opts?: ListCatalogsOptions) => listCatalogs(ctx, opts),
     getCatalog: (id: string) => getCatalog(ctx, id),
     createCatalog: (req: CreateCatalogRequest) => createCatalog(ctx, req),
+    updateCatalog: (id: string, req: Partial<CreateCatalogRequest>) => updateCatalog(ctx, id, req),
     enableCatalog: (id: string) => enableCatalog(ctx, id),
+    disableCatalog: (id: string) => disableCatalog(ctx, id),
+    deleteCatalog: (id: string) => deleteCatalog(ctx, id),
+    testCatalogConnection: (id: string) => testCatalogConnection(ctx, id),
     discoverCatalog: (id: string, wait = false) => discoverCatalog(ctx, id, wait),
     catalogResources: (id: string, category?: string) => listCatalogResources(ctx, id, category),
     catalogHealth: (ids: string[]) => catalogHealthStatus(ctx, ids),
@@ -54,6 +68,12 @@ export function vega(ctx: RequestContext) {
     },
 
     buildStatus: (taskId: string) => getBuildTask(ctx, taskId),
+    buildTasks: (opts?: ListBuildTasksOptions) => listBuildTasks(ctx, opts),
+    deleteBuildTasks: (ids: string[], opts?: DeleteBuildTasksOptions) =>
+      deleteBuildTasks(ctx, ids, opts),
+    startBuildTask: (taskId: string, opts?: { reset?: boolean }) =>
+      startBuildTask(ctx, taskId, opts),
+    stopBuildTask: (taskId: string) => stopBuildTask(ctx, taskId),
   };
 }
 

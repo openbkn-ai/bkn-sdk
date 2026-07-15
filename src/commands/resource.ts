@@ -9,6 +9,17 @@ import { printJson } from "../utils/output.js";
 import { clientFrom, outputOptions } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
+const parsePairs = (raw?: string): Array<{ key: string; value: string }> | undefined => {
+  if (!raw) return undefined;
+  return raw
+    .split(",")
+    .map((part) => {
+      const idx = part.indexOf("=");
+      if (idx < 1) throw new Error("--extension must be key=value[,key=value]");
+      return { key: part.slice(0, idx).trim(), value: part.slice(idx + 1).trim() };
+    })
+    .filter((p) => p.key.length > 0);
+};
 
 export function resourceCommand(): Command {
   const cmd = new Command("resource")
@@ -22,12 +33,28 @@ export function resourceCommand(): Command {
     .option("--datasource-id <id>", "alias of --catalog-id")
     .option("--category <c>", "resource category (table | logicview | dataset)")
     .option("--type <c>", "alias of --category")
+    .option("--status <status>", "filter by status")
+    .option("--database <name>", "filter by database")
     .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
+    .option("--offset <n>", "page offset", int, 0)
+    .option("--include-extensions", "include all extension key/value pairs")
+    .option("--include-extension-keys <keys>", "include selected extension keys")
+    .option("--extension <k=v,...>", "filter by extension key/value pairs")
+    .option("--sort <field>", "sort field: name | create_time | update_time")
+    .option("--direction <dir>", "sort direction: asc | desc")
     .action(async (opts, cmd: Command) => {
       const data = await clientFrom(cmd).resource.list({
         datasourceId: opts.catalogId ?? opts.datasourceId,
         category: opts.category ?? opts.type,
+        status: opts.status,
+        database: opts.database,
         limit: opts.limit,
+        offset: opts.offset,
+        includeExtensions: opts.includeExtensions,
+        includeExtensionKeys: opts.includeExtensionKeys,
+        extensionPairs: parsePairs(opts.extension),
+        sort: opts.sort,
+        direction: opts.direction,
       });
       printJson(data, outputOptions(cmd));
     });
