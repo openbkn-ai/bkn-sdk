@@ -8,7 +8,8 @@ import { executeDataflow } from "../api/dataflow.js";
  *   1. list catalog tables (scan/discover once if empty) + introspect columns
  *   2. resolve a single PK per table (override → schema → sample cardinality);
  *      fail-fast rather than silently pick a wrong key (legacy #97)
- *   3. create a vega resource per table (idempotent via findResource)
+ *   3. reuse the discovered vega table resources (physical resources are not
+ *      created through REST anymore)
  *   4. create the KN, then batch-create object types (all-or-nothing)
  *   5. optional build: one Vega BuildTask per resource (index build lives on the
  *      catalog/resource now — there is no KN-level build)
@@ -21,7 +22,7 @@ import {
   deleteKnowledgeNetwork,
 } from "../api/knowledge-networks.js";
 import {
-  createResource,
+  configureResourceIndex,
   findResource,
   getResource,
   listResources,
@@ -51,7 +52,7 @@ export interface CreateFromCatalogOptions {
   tables?: string[];
   pkMap?: Record<string, string>;
   build?: boolean;
-  /** Per-table resource columns to vectorize (sets the build task's embedding_fields). */
+  /** Per-table resource columns to vectorize (sets resource schema index features). */
   embeddingFields?: Record<string, string[]>;
   embeddingModel?: string;
   noRollback?: boolean;
@@ -193,7 +194,7 @@ export async function createFromCatalog(
   }
 
   // 2. Create a vega resource per table (idempotent).
-  log(`Creating resources for ${targets.length} table(s)...`);
+  log(`Resolving discovered resources for ${targets.length} table(s)...`);
   const viewMap: Record<string, string> = {};
   for (const t of targets) {
     const found = asArray(
@@ -203,13 +204,9 @@ export async function createFromCatalog(
     if (existingId) {
       viewMap[t.name] = existingId;
     } else {
-      const created = (await createResource(ctx, {
-        name: t.name,
-        catalogId: opts.catalogId,
-        sourceIdentifier: t.name,
-        fields: t.columns.map((c) => ({ name: c.name, type: c.type })),
-      })) as { id?: string };
-      viewMap[t.name] = String(created.id ?? "");
+      throw new Error(
+        `Table '${t.name}' has no discovered Vega resource. Run catalog discover and retry.`,
+      );
     }
   }
 
@@ -249,12 +246,14 @@ export async function createFromCatalog(
       log("Submitting build tasks...");
       for (const t of targets) {
         const embedding = opts.embeddingFields?.[t.name];
+        await configureResourceIndex(ctx, viewMap[t.name] as string, {
+          buildKeyFields: [tablePk[t.name] as string],
+          ...(embedding && embedding.length > 0 ? { embeddingFields: embedding } : {}),
+          ...(opts.embeddingModel ? { embeddingModel: opts.embeddingModel } : {}),
+        });
         const task = (await createBuildTask(ctx, {
           resource_id: viewMap[t.name] as string,
           mode: "batch",
-          build_key_fields: [tablePk[t.name] as string],
-          ...(embedding && embedding.length > 0 ? { embedding_fields: embedding } : {}),
-          ...(opts.embeddingModel ? { embedding_model: opts.embeddingModel } : {}),
         })) as { id?: string };
         builds.push({ table: t.name, taskId: String(task.id ?? "") });
       }

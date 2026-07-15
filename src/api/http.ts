@@ -16,7 +16,7 @@ export interface RequestInitEx {
   /** JSON body — serialized and Content-Type set automatically. */
   body?: unknown;
   /** Query params appended to the path. */
-  query?: Record<string, string | number | boolean | undefined>;
+  query?: Record<string, string | number | boolean | Array<string | number | boolean> | undefined>;
   headers?: Record<string, string>;
   /** Per-request timeout; defaults to 30s. */
   timeoutMs?: number;
@@ -31,7 +31,11 @@ export async function request<T = unknown>(
 ): Promise<T> {
   const url = new URL(path.startsWith("http") ? path : `${ctx.baseUrl}${path}`);
   for (const [k, v] of Object.entries(init.query ?? {})) {
-    if (v !== undefined) url.searchParams.set(k, String(v));
+    if (Array.isArray(v)) {
+      for (const item of v) url.searchParams.append(k, String(item));
+    } else if (v !== undefined) {
+      url.searchParams.set(k, String(v));
+    }
   }
 
   applyTls(ctx);

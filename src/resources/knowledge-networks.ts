@@ -67,6 +67,7 @@ import {
   updateSchemaItem,
   validateMetric,
 } from "../api/knowledge-networks.js";
+import { configureResourceIndex } from "../api/resources.js";
 import { createBuildTask } from "../api/vega.js";
 import type { RequestContext } from "../types.js";
 import { collectIndexTargets } from "../utils/bkn-index.js";
@@ -169,14 +170,21 @@ export function kn(ctx: RequestContext) {
       const targets = collectIndexTargets(dir);
       const buildTasks: Array<{ objectType: string; resourceId: string; taskId: string }> = [];
       for (const t of targets) {
+        if (!t.buildKey) {
+          throw new Error(
+            `Object type '${t.objectType}' declares a vector index but no build key; batch Vega builds require resource index_config.build_key_fields.`,
+          );
+        }
+        await configureResourceIndex(ctx, t.resourceId, {
+          buildKeyFields: [t.buildKey],
+          embeddingFields: t.embeddingFields,
+          ...((t.embeddingModel ?? opts.embeddingModel)
+            ? { embeddingModel: t.embeddingModel ?? opts.embeddingModel }
+            : {}),
+        });
         const task = (await createBuildTask(ctx, {
           resource_id: t.resourceId,
           mode: "batch",
-          embedding_fields: t.embeddingFields,
-          ...(t.buildKey ? { build_key_fields: [t.buildKey] } : {}),
-          ...((t.embeddingModel ?? opts.embeddingModel)
-            ? { embedding_model: t.embeddingModel ?? opts.embeddingModel }
-            : {}),
         })) as { id?: string };
         buildTasks.push({
           objectType: t.objectType,
