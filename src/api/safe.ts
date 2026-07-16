@@ -8,9 +8,10 @@
  * Only `audit list` has no endpoint (login-log retired by design). Response
  * shapes: `{users|roles|departments, total}`; department `parent_id` (not the
  * ISF `parent_deps[]`). See docs/exec-plans/admin-bkn-safe-migration.md.
+ * Also carries the cluster license hub (`/admin/license/*`, issue #224).
  */
 import type { RequestContext } from "../types.js";
-import { InputError } from "../utils/errors.js";
+import { HttpError, InputError } from "../utils/errors.js";
 import { request } from "./http.js";
 
 const ADMIN = "/api/safe/v1/admin";
@@ -322,4 +323,116 @@ export async function setRolePermissionSafe(
     },
   });
   return { ok: true };
+}
+
+// ── license (cluster license hub) ────────────────────────────────────────────
+// bkn-safe holds the cluster's one signed .lic; import/activate/remove happen
+// here and nowhere else. Its state answers are WEAK judgements (display/ops) —
+// modules gate by verifying the license signature locally, never off this API.
+
+/** licverify judgement states. `invalid` also covers "no license installed". */
+export type LicenseState = "valid" | "grace" | "fallback_community" | "invalid";
+
+/** GET /admin/license response (admin detail view). */
+export interface LicenseDetail {
+  state: LicenseState;
+  /** Whether the installed license is fingerprint-bound to this instance. */
+  activated: boolean;
+  /** This cluster's machine code (present even with no license installed). */
+  instance_fp: string;
+  error?: string;
+  /** Background auto-renew failure — license itself may still be valid. */
+  renew_error?: string;
+  edition?: string;
+  lic_id?: string;
+  customer?: { name?: string; [k: string]: unknown };
+  /** Unix seconds; expires_at 0 = never expires (community). */
+  issued_at?: number;
+  expires_at?: number;
+  contract_expires_at?: number;
+  /** Only present in `grace` state. */
+  grace_remaining_days?: number;
+  features?: string[];
+  limits?: Record<string, number>;
+}
+
+/**
+ * Import outcome. Plain success = the stored license's detail. `stored: true`
+ * = the .lic was verified and stored, but issuer activation failed (HTTP
+ * 409/502) — both facts matter, the import is not lost.
+ */
+export type LicenseImportResult =
+  | LicenseDetail
+  | { stored: true; error: string; license: LicenseDetail };
+
+/** GET /admin/license — current license detail (weak judgement). */
+export function getLicenseSafe(ctx: RequestContext): Promise<LicenseDetail> {
+  return request(ctx, `${ADMIN}/license`);
+}
+
+/**
+ * POST /admin/license/import (or /receipt) — verify and store a full .lic
+ * text; online deployments auto-activate. `receipt` marks an offline
+ * activation receipt (same verification; separate route for UI flow + audit).
+ * Throws 400 = malformed/bad signature, 409 = bound to another instance;
+ * a `stored:true` error body (activation refused after storing) is returned,
+ * not thrown.
+ */
+export async function importLicenseSafe(
+  ctx: RequestContext,
+  licenseText: string,
+  opts: { receipt?: boolean } = {},
+): Promise<LicenseImportResult> {
+  const text = licenseText.trim();
+  if (!text) throw new InputError("license text is empty");
+  try {
+    return await request(ctx, `${ADMIN}/license/${opts.receipt ? "receipt" : "import"}`, {
+      method: "POST",
+      body: { license: text },
+    });
+  } catch (err) {
+    if (err instanceof HttpError) {
+      const stored = storedImport(err.body);
+      if (stored) return stored;
+    }
+    throw err;
+  }
+}
+
+/** Parse a stored-but-activation-failed import error body, if that's what it is. */
+function storedImport(
+  body: string,
+): { stored: true; error: string; license: LicenseDetail } | null {
+  try {
+    const parsed = JSON.parse(body);
+    if (parsed && parsed.stored === true) return parsed;
+  } catch {
+    /* not JSON — a real error */
+  }
+  return null;
+}
+
+/**
+ * POST /admin/license/activate — report the installed license to the issuer
+ * and store the reissued, fingerprint-bound text. Throws 400 = offline
+ * deployment or no license, 409 = already activated by another instance,
+ * 502 = issuer unreachable.
+ */
+export function activateLicenseSafe(ctx: RequestContext): Promise<LicenseDetail> {
+  return request(ctx, `${ADMIN}/license/activate`, { method: "POST" });
+}
+
+/** DELETE /admin/license — drop the installed license (204; back to unactivated). */
+export async function removeLicenseSafe(ctx: RequestContext): Promise<{ ok: true }> {
+  await request(ctx, `${ADMIN}/license`, { method: "DELETE" });
+  return { ok: true };
+}
+
+/**
+ * GET /admin/license/fingerprint — this cluster's machine code. Works with no
+ * license installed: quoted for portal registration and offline activation
+ * (activation request codes are retired — the raw fingerprint is what's pasted).
+ */
+export function getLicenseFingerprintSafe(ctx: RequestContext): Promise<{ instance_fp: string }> {
+  return request(ctx, `${ADMIN}/license/fingerprint`);
 }

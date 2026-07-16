@@ -12,6 +12,7 @@ import type {
   UpdateUserInput,
 } from "../api/admin.js";
 import {
+  activateLicenseSafe,
   assignRoleSafe,
   buildDepartmentTree,
   createDepartmentSafe,
@@ -22,13 +23,17 @@ import {
   deleteUserSafe,
   getDepartmentMembersSafe,
   getDepartmentSafe,
+  getLicenseFingerprintSafe,
+  getLicenseSafe,
   getRoleSafe,
   getUserRolesSafe,
   getUserSafe,
+  importLicenseSafe,
   listDepartmentsSafe,
   listRolesSafe,
   listUsersSafe,
   notOnSafe,
+  removeLicenseSafe,
   removeRoleSafe,
   roleMembersSafe,
   setRolePermissionSafe,
@@ -128,5 +133,13 @@ export function admin(ctx: RequestContext) {
     ) => setRolePermissionSafe(ctx, roleId, grant, { resourceType, resourceId, operations }),
 
     auditList: (_opts?: AuditListOptions) => notOnSafe("audit list"),
+
+    // ── license (cluster license hub; weak judgements — display/ops only) ──
+    licenseGet: () => getLicenseSafe(ctx),
+    licenseImport: (licenseText: string, opts?: { receipt?: boolean }) =>
+      importLicenseSafe(ctx, licenseText, opts),
+    licenseActivate: () => activateLicenseSafe(ctx),
+    licenseRemove: () => removeLicenseSafe(ctx),
+    licenseFingerprint: () => getLicenseFingerprintSafe(ctx),
   };
 }

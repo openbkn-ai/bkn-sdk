@@ -47,7 +47,24 @@ if [ -n "$KN" ]; then
   check "context tools" context tools "$KN"
 fi
 
+# Operator (admin) endpoints need an operator token; run only when one is
+# provided. License checks are reads (fingerprint works with no license
+# installed; show reports state=invalid then — both count as reachable).
+if [ -n "${BKN_ADMIN_TOKEN:-}" ]; then
+  a() { $CLI --base-url "$BASE" --token "$BKN_ADMIN_TOKEN" -k "$@" 2>&1 | grep -v -i warning; }
+  acheck() {
+    local label="$1"; shift
+    if a "$@" | grep -qE '"(instance_fp|state)"'; then
+      echo "✅ $label"; pass=$((pass + 1))
+    else
+      echo "❌ $label"; fail=$((fail + 1))
+    fi
+  }
+  acheck "admin license fingerprint" admin license fingerprint
+  acheck "admin license show" admin license show
+fi
+
 echo "---"
 echo "passed=$pass failed=$fail"
-# Operator (admin) endpoints need an operator token; skipped here by design.
+# Remaining operator (admin) endpoints need dedicated fixtures; skipped by design.
 [ "$fail" -eq 0 ]

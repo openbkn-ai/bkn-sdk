@@ -6,6 +6,7 @@
 | `user` | `list`/`get <id>`/`roles <user>`/`create --login …`/`update <id> …`/`delete <id>`/`assign-role`/`revoke-role`/`reset-password [id] --password …`. |
 | `role` | `list [--source]`/`get <role> [--view]`/`members <role>`/`add-member <role> <id> [--type]`/`remove-member`. |
 | `llm` / `small-model` | `list/get/add/edit/delete/test` (granular flags or `--body`). |
+| `license` | `show`/`import <file.lic>`/`receipt <file.lic>`/`activate`/`remove`/`fingerprint` — cluster license hub on bkn-safe (super-admin). `import` auto-activates online; exit 1 + `stored:true` = stored but issuer refused activation. Offline flow: `fingerprint` → paste at license portal → `receipt <file>`. States: `valid`/`grace`/`fallback_community`/`invalid` (weak judgement, display only). |
 | `audit list` | EACP login-log (may be unreachable if the eacp upstream is cluster-internal). |
 | `auth` | Same leaves as top-level `openbkn auth`. |
 | `config` / `call` | Active-platform config / operator API passthrough. |

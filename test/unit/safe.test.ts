@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  activateLicenseSafe,
   assignRoleSafe,
   createDepartmentSafe,
   createRoleSafe,
@@ -7,12 +8,16 @@ import {
   deleteUserSafe,
   findUserByAccountSafe,
   getDepartmentMembersSafe,
+  getLicenseFingerprintSafe,
+  getLicenseSafe,
   getUserRolesSafe,
   getUserSafe,
+  importLicenseSafe,
   listDepartmentsSafe,
   listRolesSafe,
   listUsersSafe,
   notOnSafe,
+  removeLicenseSafe,
   removeRoleSafe,
   setRolePermissionSafe,
   setUserPasswordSafe,
@@ -155,5 +160,87 @@ describe("safe admin api → /api/safe/v1/admin", () => {
 
   it("notOnSafe throws an InputError-style message", () => {
     expect(() => notOnSafe("audit list")).toThrow(/not available on bkn-safe/);
+  });
+});
+
+describe("safe license api → /api/safe/v1/admin/license", () => {
+  it("getLicense: GET /admin/license", async () => {
+    const f = mockFetch({ state: "valid", activated: true, instance_fp: "fp_x" });
+    const detail = await getLicenseSafe(ctx);
+    expect(new URL(call(f)[0]).pathname).toBe("/api/safe/v1/admin/license");
+    expect(detail.state).toBe("valid");
+  });
+
+  it("import: POST /license/import with trimmed {license}", async () => {
+    const f = mockFetch({ state: "valid", activated: true, instance_fp: "fp_x" });
+    await importLicenseSafe(ctx, "v1.abc.def\n");
+    const c = call(f);
+    expect(new URL(c[0]).pathname).toBe("/api/safe/v1/admin/license/import");
+    expect(c[1].method).toBe("POST");
+    expect(bodyOf(c)).toEqual({ license: "v1.abc.def" });
+  });
+
+  it("import: receipt flag targets /license/receipt", async () => {
+    const f = mockFetch({ state: "valid", activated: true, instance_fp: "fp_x" });
+    await importLicenseSafe(ctx, "v1.abc.def", { receipt: true });
+    expect(new URL(call(f)[0]).pathname).toBe("/api/safe/v1/admin/license/receipt");
+  });
+
+  it("import: empty text rejected before any request", async () => {
+    const f = mockFetch();
+    await expect(importLicenseSafe(ctx, "  \n")).rejects.toThrow(/empty/);
+    expect((f as unknown as { mock: { calls: unknown[] } }).mock.calls).toHaveLength(0);
+  });
+
+  it("import: stored-but-activation-failed (409 stored:true) returns, not throws", async () => {
+    const body = {
+      stored: true,
+      error: "license: already activated by another instance",
+      license: { state: "valid", activated: false, instance_fp: "fp_x" },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify(body), { status: 409 })),
+    );
+    const res = await importLicenseSafe(ctx, "v1.abc.def");
+    expect(res).toMatchObject({ stored: true });
+  });
+
+  it("import: plain 400 (bad signature) still throws HttpError", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ error: "license: malformed or signature invalid" }), {
+            status: 400,
+          }),
+      ),
+    );
+    await expect(importLicenseSafe(ctx, "garbage")).rejects.toThrow(/HTTP 400/);
+  });
+
+  it("activate: POST /license/activate", async () => {
+    const f = mockFetch({ state: "valid", activated: true, instance_fp: "fp_x" });
+    await activateLicenseSafe(ctx);
+    const c = call(f);
+    expect(new URL(c[0]).pathname).toBe("/api/safe/v1/admin/license/activate");
+    expect(c[1].method).toBe("POST");
+  });
+
+  it("remove: DELETE /admin/license (204) → {ok:true}", async () => {
+    const f = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", f);
+    const res = await removeLicenseSafe(ctx);
+    const c = call(f as unknown as typeof fetch);
+    expect(new URL(c[0]).pathname).toBe("/api/safe/v1/admin/license");
+    expect(c[1].method).toBe("DELETE");
+    expect(res).toEqual({ ok: true });
+  });
+
+  it("fingerprint: GET /license/fingerprint works pre-import", async () => {
+    const f = mockFetch({ instance_fp: "fp_abc123" });
+    const res = await getLicenseFingerprintSafe(ctx);
+    expect(new URL(call(f)[0]).pathname).toBe("/api/safe/v1/admin/license/fingerprint");
+    expect(res.instance_fp).toBe("fp_abc123");
   });
 });

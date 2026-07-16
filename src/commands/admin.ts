@@ -6,6 +6,7 @@
  * reads + writes (create/update/delete/reset-password) and org tree are real
  * and live-verified; operator `auth` reuses the top-level `openbkn auth`.
  */
+import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import { rawCall } from "../api/call.js";
 import { resolveContext } from "../config/resolve.js";
@@ -22,6 +23,18 @@ import { registerAuthLeaves } from "./auth.js";
 const int = (v: string) => Number.parseInt(v, 10);
 /** Platform initial password — what `reset-password` resets to by default. */
 const DEFAULT_RESET_PASSWORD = "openbkn";
+
+/**
+ * Read a .lic file and import it. A `stored: true` result (imported fine but
+ * the issuer refused activation) prints both facts and exits nonzero so
+ * scripts notice the activation still needs resolving.
+ */
+async function importLicenseFile(cmd: Command, file: string, receipt: boolean): Promise<void> {
+  const text = readFileSync(file, "utf8");
+  const res = await clientFrom(cmd).admin.licenseImport(text, { receipt });
+  printJson(res, outputOptions(cmd));
+  if ("stored" in res && res.stored) process.exitCode = 1;
+}
 
 export function adminCommand(): Command {
   const admin = new Command("admin").description("Operator CLI: org, user, role, models, audit");
@@ -513,6 +526,47 @@ export function adminCommand(): Command {
         );
       });
   }
+
+  // ── license (cluster license hub on bkn-safe; super-admin only) ──
+  const license = admin.command("license").description("Cluster license management");
+  license
+    .command("show")
+    .description("Current license detail (state/edition/expiry/features)")
+    .action(async (_opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).admin.licenseGet(), outputOptions(cmd));
+    });
+  license
+    .command("import <file>")
+    .description("Import a .lic license file (online deployments auto-activate)")
+    .action(async (file: string, _opts, cmd: Command) => {
+      await importLicenseFile(cmd, file, false);
+    });
+  license
+    .command("receipt <file>")
+    .description("Import an offline activation receipt (.lic from the license portal)")
+    .action(async (file: string, _opts, cmd: Command) => {
+      await importLicenseFile(cmd, file, true);
+    });
+  license
+    .command("activate")
+    .description("Report the installed license to the issuer (online deployments)")
+    .action(async (_opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).admin.licenseActivate(), outputOptions(cmd));
+    });
+  license
+    .command("remove")
+    .description("Remove the installed license (back to unactivated)")
+    .action(async (_opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).admin.licenseRemove(), outputOptions(cmd));
+    });
+  license
+    .command("fingerprint")
+    .description(
+      "This cluster's machine code (paste into the license portal for offline activation)",
+    )
+    .action(async (_opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).admin.licenseFingerprint(), outputOptions(cmd));
+    });
 
   admin
     .command("audit")

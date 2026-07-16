@@ -78,7 +78,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user-id>
 | `toolbox` / `tool` | 工具箱与工具 | toolbox `list/create/publish/delete/export/import`；tool `upload <file> --toolbox <id>`、`execute`/`debug` |
 | `dataflow` | 文档流程 | `list`/`runs`/`logs`/`run`、`create`（JSON 文档）、`templates`/`create-dataset`/`create-bkn`（`--template <name> --set k=v`） |
 | `trace` | BKN Trace | `get`、`search`、`diagnose <conv> [--llm]`（符号规则 + LLM rubric + synthesizer）、`scan <conv,…>`、`eval-set build <queries>`/`test <cases> --agent <id> [--llm]`、`schema validate <file>` |
-| `admin` | 运营 | `org/user/role …` CRUD + `reset-password`、`audit list`、`llm/small-model …`、`auth …`、`config`、`call` |
+| `admin` | 运营 | `org/user/role …` CRUD + `reset-password`、`license show/import/receipt/activate/remove/fingerprint`（集群授权）、`audit list`、`llm/small-model …`、`auth …`、`config`、`call` |
 | `call`（别名 `curl`） | 通用 API 透传 | `call <url> [-X POST] [-d '<json>']` |
 | `explore` | 本地只读服务（bkn + vega JSON） | `explore [--port <n>]` |
 
