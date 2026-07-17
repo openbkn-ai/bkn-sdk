@@ -64,20 +64,6 @@ export function attachToken(
   return { baseUrl: url, userId, username: usernameOf(token) };
 }
 
-/** Register a no-auth platform session (no token; the platform has no bkn-safe). */
-export function attachNoAuth(
-  baseUrl: string,
-  opts: { insecure?: boolean } = {},
-): {
-  baseUrl: string;
-  noAuth: true;
-} {
-  const url = normalize(baseUrl);
-  writeToken(url, { baseUrl: url, accessToken: "", noAuth: true, tlsInsecure: opts.insecure });
-  setActivePlatform(url);
-  return { baseUrl: url, noAuth: true };
-}
-
 export interface AuthStatus {
   baseUrl?: string;
   userId?: string;
