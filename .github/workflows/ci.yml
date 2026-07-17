@@ -15,6 +15,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # A package must never depend on itself: `npm install <own-name>` inside the
+      # repo self-installs at the current version and ships a stale copy to every
+      # consumer. npm does not reject it, so this gate does. Also runs inside
+      # `npm run lint` and `prepublishOnly`; kept as its own step so a failure is
+      # obvious rather than buried in lint output.
+      - name: No self-dependency
+        run: npm run check:deps
       - run: npm run lint
       - run: npm test
       - run: npm run build
