@@ -54,6 +54,8 @@ interface StoreState {
 }
 
 const PROFILE_RE = /^[A-Za-z0-9_-]{1,64}$/;
+/** A userId becomes a path segment under the store — it must not escape it. */
+const USER_ID_RE = /^[A-Za-z0-9._@-]{1,128}$/;
 const IS_WIN = process.platform === "win32";
 
 export function configDir(): string {
@@ -92,9 +94,24 @@ function userDir(baseUrl: string, userId: string): string {
   return join(platformDir(baseUrl), "users", userId);
 }
 
-/** userId from the token's JWT `sub` (id_token first), else "default". */
+/**
+ * userId from the token's JWT `sub` (id_token first), else "default".
+ *
+ * The `sub` is attacker-supplied — the JWT is never signature-checked — and it
+ * becomes a path segment under `userDir`. An unconstrained one escapes the
+ * store: `sub: "../../<other-platform>/users/default"` overwrites another
+ * platform's saved token, so the victim's later commands there authenticate as
+ * whoever issued this token. Constrain it the way BKN_PROFILE is constrained.
+ */
 export function userIdFromToken(token: TokenConfig): string {
-  return decodeJwt(token.idToken ?? "")?.sub ?? decodeJwt(token.accessToken)?.sub ?? "default";
+  const sub = decodeJwt(token.idToken ?? "")?.sub ?? decodeJwt(token.accessToken)?.sub;
+  if (sub === undefined) return "default";
+  if (typeof sub !== "string" || !USER_ID_RE.test(sub) || sub === "." || sub === "..") {
+    throw new Error(
+      `Token subject '${String(sub)}' is not a usable user id (expected 1-128 chars from [A-Za-z0-9._@-]). Refusing to store this token.`,
+    );
+  }
+  return sub;
 }
 
 // ---- state ----------------------------------------------------------------

@@ -126,4 +126,25 @@ describe("auth store round-trip", () => {
   it("use without saved creds throws", () => {
     expect(() => auth.use("https://unknown.example.com")).toThrow();
   });
+
+  // The JWT is never signature-checked, so `sub` is attacker-supplied and lands
+  // in a filesystem path. Left unconstrained, `auth login --token <hostile>`
+  // writes token.json outside the store — including over another platform's
+  // saved credentials, which silently repoints that platform at the attacker.
+  it.each([
+    ["../../../../escaped", "traversal"],
+    ["../../aHR0cHM6Ly9wcm9k/users/default", "another platform's token"],
+    ["..", "parent"],
+    ["a/b", "separator"],
+    ["a\\b", "windows separator"],
+  ])("refuses to store a token whose sub is %j (%s)", (sub) => {
+    expect(() => auth.attachToken("https://demo.example.com", jwt({ sub }))).toThrow(
+      /not a usable user id/,
+    );
+  });
+
+  it("stores a token whose sub is an ordinary opaque id", () => {
+    const sub = "8f14e45f-ceea-467a-9575-4b0b6f3b1a2c";
+    expect(auth.attachToken("https://demo.example.com", jwt({ sub })).userId).toBe(sub);
+  });
 });
