@@ -3,8 +3,7 @@
 
 /** `openbkn auth …` — login / session / token (store-backed). */
 import { Command } from "commander";
-import { changePasswordSafe } from "../api/admin.js";
-import { getUserSafe } from "../api/safe.js";
+import { changePasswordSafe, getUserSafe } from "../api/safe.js";
 import { decodeJwt } from "../auth/jwt.js";
 import {
   credentialDeviceLogin,

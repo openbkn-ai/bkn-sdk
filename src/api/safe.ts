@@ -117,6 +117,25 @@ export async function setUserPasswordSafe(
   return { ok: true };
 }
 
+/**
+ * POST /api/safe/v1/auth/change-password — self-service change. Outside
+ * `/admin` and unauthenticated by design (it's a pre-login credential change),
+ * so it spells out its own path. Plaintext over TLS. 204 on success; 401 wrong
+ * account/old password; 400 new == old.
+ */
+export async function changePasswordSafe(
+  ctx: RequestContext,
+  account: string,
+  oldPassword: string,
+  newPassword: string,
+): Promise<{ ok: true }> {
+  await request(ctx, "/api/safe/v1/auth/change-password", {
+    method: "POST",
+    body: { account, old_password: oldPassword, new_password: newPassword },
+  });
+  return { ok: true };
+}
+
 // ── role bindings ────────────────────────────────────────────────────────────
 
 /** GET /admin/role-bindings?accessor_id= — role ids bound to a user ({role_ids}). */
