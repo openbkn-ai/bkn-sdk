@@ -8,9 +8,12 @@ export function buildHeaders(
   ctx: RequestContext,
   extra?: Record<string, string>,
 ): Record<string, string> {
+  // Only `authorization` carries the token. A custom header would survive a
+  // cross-origin redirect that strips `authorization`, handing the bearer to
+  // the redirect target (the download routes follow redirects); bkn-safe
+  // rejects a request that carries one anyway.
   return {
     authorization: `Bearer ${ctx.token}`,
-    token: ctx.token,
     "x-business-domain": ctx.businessDomain,
     ...extra,
   };
