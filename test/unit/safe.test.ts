@@ -6,7 +6,6 @@ import {
   createRoleSafe,
   createUserSafe,
   deleteUserSafe,
-  findUserByAccountSafe,
   getDepartmentMembersSafe,
   getLicenseFingerprintSafe,
   getLicenseSafe,
@@ -54,12 +53,6 @@ describe("safe admin api → /api/safe/v1/admin", () => {
     expect(u.pathname).toBe("/api/safe/v1/admin/users");
     expect(u.searchParams.get("search")).toBe("ann");
     expect(u.searchParams.get("limit")).toBe("50");
-  });
-
-  it("findUserByAccount: GET /admin/users?account=", async () => {
-    const f = mockFetch({ users: [], total: 0 });
-    await findUserByAccountSafe(ctx, "admin");
-    expect(new URL(call(f)[0]).searchParams.get("account")).toBe("admin");
   });
 
   it("getUser: GET /admin/users/:id (encoded)", async () => {

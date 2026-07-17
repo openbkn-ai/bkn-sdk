@@ -35,11 +35,6 @@ export function listUsersSafe(
   });
 }
 
-/** GET /admin/users?account= — exact login lookup ({users:[u]|[]}). */
-export function findUserByAccountSafe(ctx: RequestContext, account: string): Promise<unknown> {
-  return request(ctx, `${ADMIN}/users`, { query: { account } });
-}
-
 /** GET /admin/users/:id — detail (incl. roles + departments). */
 export function getUserSafe(ctx: RequestContext, userId: string): Promise<unknown> {
   return request(ctx, `${ADMIN}/users/${encodeURIComponent(userId)}`);

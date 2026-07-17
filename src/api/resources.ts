@@ -101,45 +101,8 @@ export function getResource(ctx: RequestContext, id: string): Promise<unknown> {
   return request(ctx, `${BASE}/${encodeURIComponent(id)}`);
 }
 
-export interface CreateResourceOptions {
-  name: string;
-  catalogId: string;
-  category?: "dataset" | "logicview";
-  /** Source table/identifier in the catalog. */
-  sourceIdentifier: string;
-  fields?: Array<{ name: string; type: string }>;
-  tags?: string[];
-  description?: string;
-  status?: string;
-  database?: string;
-  sourceMetadata?: Record<string, unknown>;
-  indexConfig?: ResourceIndexConfig;
-  logicDefinition?: unknown;
-  extensions?: Record<string, string>;
-}
-
 /** Create a vega-backend resource from a fully-formed body (e.g. a rendered template). */
 export function createResourceRaw(ctx: RequestContext, body: unknown): Promise<unknown> {
-  return request(ctx, BASE, { method: "POST", body });
-}
-
-/** Create a vega-backend table resource bound to a catalog source. */
-export function createResource(ctx: RequestContext, opts: CreateResourceOptions): Promise<unknown> {
-  const body: Record<string, unknown> = {
-    name: opts.name,
-    catalog_id: opts.catalogId,
-    category: opts.category ?? "dataset",
-    source_identifier: opts.sourceIdentifier,
-    ...(opts.tags ? { tags: opts.tags } : {}),
-    ...(opts.description ? { description: opts.description } : {}),
-    ...(opts.status ? { status: opts.status } : {}),
-    ...(opts.database ? { database: opts.database } : {}),
-    ...(opts.sourceMetadata ? { source_metadata: opts.sourceMetadata } : {}),
-    ...(opts.indexConfig ? { index_config: opts.indexConfig } : {}),
-    ...(opts.logicDefinition ? { logic_definition: opts.logicDefinition } : {}),
-    ...(opts.extensions ? { extensions: opts.extensions } : {}),
-  };
-  if (opts.fields && opts.fields.length > 0) body.schema_definition = opts.fields;
   return request(ctx, BASE, { method: "POST", body });
 }
 
