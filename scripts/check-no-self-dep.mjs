@@ -31,10 +31,27 @@ const MANIFEST_FIELDS = [
   "resolutions",
 ];
 
-for (const field of MANIFEST_FIELDS) {
-  if (pkg[field]?.[self]) {
-    problems.push(`package.json: ${field}["${self}"] = "${pkg[field][self]}"`);
+/** True if `spec` aliases the package under another name (`npm:<self>@...`). */
+const isSelfAlias = (spec) => typeof spec === "string" && spec.startsWith(`npm:${self}@`);
+
+/**
+ * Walk a dependency map. `in` — not truthiness — decides: `""` is a falsy but
+ * perfectly installable spec (an empty range means `*`). Values matter too, or
+ * an alias smuggles the package back in under a different key. `overrides`
+ * nests arbitrarily, so recurse.
+ */
+function scanMap(map, where) {
+  if (!map || typeof map !== "object") return;
+  if (self in map) problems.push(`${where}["${self}"] = ${JSON.stringify(map[self])}`);
+  for (const [name, spec] of Object.entries(map)) {
+    if (isSelfAlias(spec)) problems.push(`${where}["${name}"] = ${JSON.stringify(spec)} (alias)`);
+    // A nested object is an `overrides` sub-tree keyed by the parent package.
+    if (spec && typeof spec === "object") scanMap(spec, `${where}["${name}"]`);
   }
+}
+
+for (const field of MANIFEST_FIELDS) {
+  scanMap(pkg[field], `package.json: ${field}`);
 }
 
 // bundledDependencies / bundleDependencies are arrays of names, not maps.
@@ -55,12 +72,12 @@ if (lock) {
   for (const [path, entry] of Object.entries(lock.packages ?? {})) {
     // The root entry legitimately carries `name: <self>`; only its dep maps matter.
     for (const field of MANIFEST_FIELDS) {
-      if (entry[field]?.[self]) {
-        problems.push(`package-lock.json: ${path || "<root>"} → ${field}["${self}"]`);
-      }
+      scanMap(entry[field], `package-lock.json: ${path || "<root>"} → ${field}`);
     }
-    if (path === `node_modules/${self}`) {
-      problems.push(`package-lock.json: resolved self as a tree entry (${entry.version})`);
+    // An alias installs under its alias key, so the path alone misses it — the
+    // entry's own `name` is what says which package actually landed there.
+    if (path === `node_modules/${self}` || (path && entry.name === self)) {
+      problems.push(`package-lock.json: resolved self as a tree entry at ${path}`);
     }
   }
 }
