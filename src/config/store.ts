@@ -150,11 +150,20 @@ export function readToken(
   return readJson<TokenConfig>(join(userDir(baseUrl, userId), "token.json")) ?? undefined;
 }
 
-/** Persist a token under its derived userId and make it the active user. */
-export function writeToken(baseUrl: string, token: TokenConfig): string {
+/**
+ * Persist a token under its derived userId and, by default, make it the active
+ * user. Pass `setActive: false` for a write that must not move the active user
+ * — a `--user` request refreshing its own token is transient, and switching the
+ * default identity as a side effect of a refresh would outlive the command.
+ */
+export function writeToken(
+  baseUrl: string,
+  token: TokenConfig,
+  opts: { setActive?: boolean } = {},
+): string {
   const userId = userIdFromToken(token);
   writeJson(join(userDir(baseUrl, userId), "token.json"), token, 0o600);
-  setActiveUser(baseUrl, userId);
+  if (opts.setActive !== false) setActiveUser(baseUrl, userId);
   return userId;
 }
 

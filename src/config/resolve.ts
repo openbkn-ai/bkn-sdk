@@ -8,7 +8,33 @@
  */
 import { type ClientOptions, DEFAULT_BUSINESS_DOMAIN, type RequestContext } from "../types.js";
 import { InputError } from "../utils/errors.js";
-import { activePlatform, readPlatformConfig, readToken, writeToken } from "./store.js";
+import {
+  activePlatform,
+  listPlatforms,
+  readPlatformConfig,
+  readToken,
+  writeToken,
+} from "./store.js";
+
+/**
+ * Map `--user` (a stored user id OR the username saved at login) to a user id.
+ * Throws rather than falling back to the active user: the flag exists to pin
+ * *which* identity acts, so quietly using a different one — plausibly a more
+ * privileged one — is the one outcome it must never produce.
+ */
+function resolveUserId(baseUrl: string, userOrName: string): string {
+  const users = listPlatforms().find((p) => p.baseUrl === baseUrl)?.users ?? [];
+  const match =
+    users.find((u) => u.userId === userOrName) ??
+    users.find((u) => (u.username ?? u.displayName) === userOrName);
+  if (!match) {
+    const known = users.map((u) => u.username ?? u.userId).join(", ") || "(none)";
+    throw new InputError(
+      `No saved user '${userOrName}' on ${baseUrl}. Saved: ${known}. See \`openbkn auth users ${baseUrl}\`.`,
+    );
+  }
+  return match.userId;
+}
 
 export function resolveContext(opts: ClientOptions = {}): RequestContext {
   const baseUrl = opts.baseUrl ?? process.env.BKN_BASE_URL ?? activePlatform();
@@ -19,7 +45,10 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
   }
   const normalized = baseUrl.replace(/\/+$/, "");
 
-  const stored = readToken(normalized);
+  const user = opts.user ?? process.env.BKN_USER;
+  const stored = user
+    ? readToken(normalized, resolveUserId(normalized, user))
+    : readToken(normalized);
   const explicit = opts.token ?? process.env.BKN_TOKEN;
   const token = explicit ?? stored?.accessToken ?? "";
   if (!token) {
@@ -36,12 +65,18 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
       ? {
           refreshToken: stored.refreshToken,
           persist: (t: { accessToken: string; refreshToken?: string; idToken?: string }) => {
-            writeToken(normalized, {
-              ...stored,
-              accessToken: t.accessToken,
-              refreshToken: t.refreshToken ?? stored.refreshToken,
-              idToken: t.idToken ?? stored.idToken,
-            });
+            writeToken(
+              normalized,
+              {
+                ...stored,
+                accessToken: t.accessToken,
+                refreshToken: t.refreshToken ?? stored.refreshToken,
+                idToken: t.idToken ?? stored.idToken,
+              },
+              // `--user` picks an identity for this command only; a refresh
+              // must not promote it to the default for the next one.
+              { setActive: !user },
+            );
           },
         }
       : undefined;
