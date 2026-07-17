@@ -10,30 +10,23 @@ import { type ClientOptions, DEFAULT_BUSINESS_DOMAIN, type RequestContext } from
 import { InputError } from "../utils/errors.js";
 import {
   activePlatform,
-  listPlatforms,
+  findUserId,
   readPlatformConfig,
   readToken,
+  usersOfPlatform,
   writeToken,
 } from "./store.js";
 
-/**
- * Map `--user` (a stored user id OR the username saved at login) to a user id.
- * Throws rather than falling back to the active user: the flag exists to pin
- * *which* identity acts, so quietly using a different one — plausibly a more
- * privileged one — is the one outcome it must never produce.
- */
+/** Resolve `--user` to a user id, or explain what is saved instead. */
 function resolveUserId(baseUrl: string, userOrName: string): string {
-  const users = listPlatforms().find((p) => p.baseUrl === baseUrl)?.users ?? [];
-  const match =
-    users.find((u) => u.userId === userOrName) ??
-    users.find((u) => (u.username ?? u.displayName) === userOrName);
-  if (!match) {
-    const known = users.map((u) => u.username ?? u.userId).join(", ") || "(none)";
-    throw new InputError(
-      `No saved user '${userOrName}' on ${baseUrl}. Saved: ${known}. See \`openbkn auth users ${baseUrl}\`.`,
-    );
-  }
-  return match.userId;
+  const id = findUserId(baseUrl, userOrName);
+  if (id) return id;
+  const known = usersOfPlatform(baseUrl)
+    .map((u) => u.username ?? u.userId)
+    .join(", ");
+  throw new InputError(
+    `No saved user '${userOrName}' on ${baseUrl}. Saved: ${known || "(none)"}. See \`openbkn auth users ${baseUrl}\`.`,
+  );
 }
 
 export function resolveContext(opts: ClientOptions = {}): RequestContext {

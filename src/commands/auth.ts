@@ -156,7 +156,9 @@ export function registerAuthLeaves(cmd: Command): void {
   cmd
     .command("status")
     .description("Show base URL and whether a token is configured")
-    .action((_opts, cmd: Command) => printJson(auth.status(), outputOptions(cmd)));
+    .action((_opts, cmd: Command) =>
+      printJson(auth.status({ user: cmd.optsWithGlobals().user }), outputOptions(cmd)),
+    );
 
   cmd
     .command("token")
@@ -166,8 +168,8 @@ export function registerAuthLeaves(cmd: Command): void {
       const g = cmd.optsWithGlobals();
       const token =
         opts.refresh === false
-          ? auth.currentToken()
-          : await auth.currentTokenFresh({ insecure: g.insecure });
+          ? auth.currentToken({ user: g.user })
+          : await auth.currentTokenFresh({ insecure: g.insecure, user: g.user });
       process.stdout.write(`${token}\n`);
     });
 
@@ -177,7 +179,7 @@ export function registerAuthLeaves(cmd: Command): void {
     .option("--no-lookup", "skip the backend identity fallback (eacp/user/get)")
     .action(async (_url: string | undefined, opts, cmd: Command) => {
       const g = cmd.optsWithGlobals();
-      const me = auth.whoami();
+      const me = auth.whoami({ user: g.user });
       // The device-flow id_token carries only `sub` (a UUID), so the token
       // alone can't say *who* you are. Resolve the account name from the
       // backend (needs admin; best-effort — skipped with --no-lookup).
@@ -186,7 +188,7 @@ export function registerAuthLeaves(cmd: Command): void {
           const u = (await getUserSafe(
             {
               baseUrl: me.baseUrl,
-              token: auth.currentToken(),
+              token: auth.currentToken({ user: g.user }),
               businessDomain: DEFAULT_BUSINESS_DOMAIN,
               insecure: Boolean(g.insecure),
             },

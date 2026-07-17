@@ -227,6 +227,25 @@ export function listPlatforms(): PlatformEntry[] {
   return out;
 }
 
+/**
+ * Map a `--user` value — a stored user id OR the username saved at login — to a
+ * user id, or null when nothing matches. Callers decide what a miss means; the
+ * one thing none of them may do is fall back to the active user, since the
+ * point of naming a user is to not act as a different one.
+ */
+export function findUserId(baseUrl: string, userOrName: string): string | null {
+  const users = listPlatforms().find((p) => p.baseUrl === baseUrl)?.users ?? [];
+  const match =
+    users.find((u) => u.userId === userOrName) ??
+    users.find((u) => (u.username ?? u.displayName) === userOrName);
+  return match?.userId ?? null;
+}
+
+/** Saved users for a platform, for building a "did you mean" list. */
+export function usersOfPlatform(baseUrl: string): PlatformUser[] {
+  return listPlatforms().find((p) => p.baseUrl === baseUrl)?.users ?? [];
+}
+
 function decodeKey(key: string): string | null {
   try {
     const b64 = key.replace(/-/g, "+").replace(/_/g, "/");

@@ -14,11 +14,13 @@ import {
   activePlatform,
   activeUserId,
   deleteToken,
+  findUserId,
   listPlatforms as listStored,
   readToken,
   setActivePlatform,
   setActiveUser,
   userIdFromToken,
+  usersOfPlatform,
   writeToken,
 } from "../config/store.js";
 import { InputError } from "../utils/errors.js";
@@ -63,6 +65,26 @@ export function attachToken(
   return { baseUrl: url, userId, username: usernameOf(token) };
 }
 
+/**
+ * The user a session-inspection call is about: `--user` when given, else the
+ * platform's active user. `auth whoami --user X` is exactly how someone checks
+ * which identity `--user X` selects, so it must not answer about a different
+ * one.
+ */
+function targetUser(baseUrl: string, userOrName?: string): string | undefined {
+  if (!userOrName) return activeUserId(baseUrl);
+  const id = findUserId(baseUrl, userOrName);
+  if (!id) {
+    const known = usersOfPlatform(baseUrl)
+      .map((u) => u.username ?? u.userId)
+      .join(", ");
+    throw new InputError(
+      `No saved user '${userOrName}' on ${baseUrl}. Saved: ${known || "(none)"}.`,
+    );
+  }
+  return id;
+}
+
 export interface AuthStatus {
   baseUrl?: string;
   userId?: string;
@@ -71,22 +93,23 @@ export interface AuthStatus {
   expired?: boolean;
 }
 
-export function status(): AuthStatus {
+export function status(opts: { user?: string } = {}): AuthStatus {
   const baseUrl = activePlatform();
   if (!baseUrl) return { hasToken: false };
-  const token = readToken(baseUrl);
+  const userId = targetUser(baseUrl, opts.user);
+  const token = readToken(baseUrl, userId);
   return {
     baseUrl,
-    userId: activeUserId(baseUrl),
+    userId,
     hasToken: token !== undefined,
     username: usernameOf(token),
     expired: token ? isExpired(decodeJwt(token.accessToken)) : undefined,
   };
 }
 
-export function currentToken(): string {
+export function currentToken(opts: { user?: string } = {}): string {
   const baseUrl = activePlatform();
-  const token = baseUrl ? readToken(baseUrl) : undefined;
+  const token = baseUrl ? readToken(baseUrl, targetUser(baseUrl, opts.user)) : undefined;
   if (!token) throw new InputError("Not logged in. Run `openbkn auth login <url> --token <t>`.");
   return token.accessToken;
 }
@@ -97,9 +120,12 @@ export function currentToken(): string {
  * refresh on a 401 (see api/http.ts); this covers the `auth token` getter,
  * whose output is copied out and used elsewhere where no 401 retry can help.
  */
-export async function currentTokenFresh(opts: { insecure?: boolean } = {}): Promise<string> {
+export async function currentTokenFresh(
+  opts: { insecure?: boolean; user?: string } = {},
+): Promise<string> {
   const baseUrl = activePlatform();
-  const token = baseUrl ? readToken(baseUrl) : undefined;
+  const userId = baseUrl ? targetUser(baseUrl, opts.user) : undefined;
+  const token = baseUrl ? readToken(baseUrl, userId) : undefined;
   if (!baseUrl || !token) {
     throw new InputError("Not logged in. Run `openbkn auth login <url> --token <t>`.");
   }
@@ -113,12 +139,16 @@ export async function currentTokenFresh(opts: { insecure?: boolean } = {}): Prom
   if (token.refreshToken && needsRefresh) {
     try {
       const t = await refreshAccessToken(baseUrl, token.refreshToken, undefined, opts.insecure);
-      writeToken(baseUrl, {
-        ...token,
-        accessToken: t.accessToken,
-        refreshToken: t.refreshToken ?? token.refreshToken,
-        idToken: t.idToken ?? token.idToken,
-      });
+      writeToken(
+        baseUrl,
+        {
+          ...token,
+          accessToken: t.accessToken,
+          refreshToken: t.refreshToken ?? token.refreshToken,
+          idToken: t.idToken ?? token.idToken,
+        },
+        { setActive: !opts.user },
+      );
       return t.accessToken;
     } catch {
       // Refresh failed (revoked / offline) — return the stale token; the
@@ -137,9 +167,10 @@ export interface WhoamiResult extends JwtClaims {
   username?: string;
 }
 
-export function whoami(): WhoamiResult {
+export function whoami(opts: { user?: string } = {}): WhoamiResult {
   const baseUrl = activePlatform();
-  const token = baseUrl ? readToken(baseUrl) : undefined;
+  const userId = baseUrl ? targetUser(baseUrl, opts.user) : undefined;
+  const token = baseUrl ? readToken(baseUrl, userId) : undefined;
   // The access token may be Ory-opaque; the id_token carries the JWT identity.
   const claims = decodeJwt(token?.idToken ?? "") ?? decodeJwt(token?.accessToken ?? "");
   if (!claims) {
@@ -153,7 +184,7 @@ export function whoami(): WhoamiResult {
   return {
     ...claims,
     baseUrl: baseUrl ?? undefined,
-    userId: baseUrl ? activeUserId(baseUrl) : undefined,
+    userId,
     username: usernameOf(token),
   };
 }
