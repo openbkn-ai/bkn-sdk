@@ -1,9 +1,0 @@
-Usage: kweaver-admin org tree [options]
-
-Print department hierarchy as a text tree
-
-Options:
-  --role <role>  Which UserManagement role to call as (e.g. super_admin,
-                 org_manager). Must be allowed for your login. Default: env
-                 KWEAVER_UM_ROLE, else super_admin. (default: "super_admin")
-  -h, --help     display help for command

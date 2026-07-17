@@ -1,9 +1,0 @@
-Usage: kweaver-admin small-model get [options] <modelId>
-
-Get small model details
-
-Arguments:
-  modelId     Model id
-
-Options:
-  -h, --help  display help for command

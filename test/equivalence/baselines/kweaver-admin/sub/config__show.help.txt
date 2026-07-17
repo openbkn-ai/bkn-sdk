@@ -1,6 +1,0 @@
-Usage: kweaver-admin config show [options]
-
-Show current config (~/.kweaver-admin/config.json)
-
-Options:
-  -h, --help  display help for command

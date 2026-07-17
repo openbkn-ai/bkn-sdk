@@ -127,4 +127,15 @@ describe("deviceLogin (RFC 8628)", () => {
     ]);
     await expect(deviceLogin("https://platform")).rejects.toThrow(/verification_uri/);
   });
+
+  // `auth login` matches this exact wording to turn a platform with no auth
+  // stack into a friendly error instead of a raw failure. Reword it and that
+  // branch silently stops matching, so the shape is part of the contract.
+  it("reports a missing device-auth endpoint as `Device auth failed (404)`", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("not found", { status: 404 })),
+    );
+    await expect(deviceLogin("https://platform")).rejects.toThrow(/Device auth failed \(404\)/);
+  });
 });

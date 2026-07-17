@@ -1,5 +1,5 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
-// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+// Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 import type { RequestContext } from "../types.js";
 /**
@@ -10,7 +10,7 @@ import { HttpError } from "../utils/errors.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
-import { applyTls } from "./tls.js";
+import { tlsFetch } from "./tls.js";
 
 const BASE = "/api/bkn-backend/v1/knowledge-networks";
 const BKNS = "/api/bkn-backend/v1/bkns";
@@ -29,7 +29,6 @@ export async function uploadBkn(
   tarBuffer: Buffer,
   opts: { branch?: string } = {},
 ): Promise<unknown> {
-  applyTls(ctx);
   const url = new URL(`${ctx.baseUrl}${BKNS}`);
   url.searchParams.set("branch", opts.branch ?? "main");
   const form = new FormData();
@@ -40,7 +39,7 @@ export async function uploadBkn(
   );
   // Let fetch set the multipart boundary; only send auth/domain headers.
   const res = await authFetch(ctx, () =>
-    fetch(url, { method: "POST", headers: buildHeaders(ctx), body: form }),
+    tlsFetch(ctx.insecure, url, { method: "POST", headers: buildHeaders(ctx), body: form }),
   );
   const text = await res.text();
   if (!res.ok) throw new HttpError(res.status, res.statusText, text);
@@ -56,10 +55,11 @@ export async function downloadBkn(
   knId: string,
   opts: { branch?: string } = {},
 ): Promise<Buffer> {
-  applyTls(ctx);
   const url = new URL(`${ctx.baseUrl}${BKNS}/${encodeURIComponent(knId)}`);
   url.searchParams.set("branch", opts.branch ?? "main");
-  const res = await authFetch(ctx, () => fetch(url, { method: "GET", headers: buildHeaders(ctx) }));
+  const res = await authFetch(ctx, () =>
+    tlsFetch(ctx.insecure, url, { method: "GET", headers: buildHeaders(ctx) }),
+  );
   if (!res.ok) throw new HttpError(res.status, res.statusText, await res.text());
   return Buffer.from(await res.arrayBuffer());
 }

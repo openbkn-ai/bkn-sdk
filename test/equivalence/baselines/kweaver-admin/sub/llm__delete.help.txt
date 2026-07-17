@@ -1,9 +1,0 @@
-Usage: kweaver-admin llm delete [options] <modelId...>
-
-Delete LLM model(s)
-
-Arguments:
-  modelId     Model ids
-
-Options:
-  -h, --help  display help for command

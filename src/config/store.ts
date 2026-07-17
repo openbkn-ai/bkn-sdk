@@ -1,5 +1,5 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
-// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+// Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 /**
  * Local config + token store under `~/.bkn/` (override: `BKN_CONFIG_DIR`).
@@ -34,10 +34,6 @@ export interface TokenConfig {
   refreshToken?: string;
   idToken?: string;
   expiresAt?: string;
-  /** Skip TLS verification for this platform (saved by `auth login -k`). */
-  tlsInsecure?: boolean;
-  /** Platform has no auth stack (no bkn-safe) — requests carry no token. */
-  noAuth?: boolean;
   /** Login name persisted at login time (fallback when JWT lacks claims). */
   username?: string;
   /** Human-readable name from userinfo. */
@@ -56,6 +52,8 @@ interface StoreState {
 }
 
 const PROFILE_RE = /^[A-Za-z0-9_-]{1,64}$/;
+/** A userId becomes a path segment under the store — it must not escape it. */
+const USER_ID_RE = /^[A-Za-z0-9._@-]{1,128}$/;
 const IS_WIN = process.platform === "win32";
 
 export function configDir(): string {
@@ -94,9 +92,24 @@ function userDir(baseUrl: string, userId: string): string {
   return join(platformDir(baseUrl), "users", userId);
 }
 
-/** userId from the token's JWT `sub` (id_token first), else "default". */
+/**
+ * userId from the token's JWT `sub` (id_token first), else "default".
+ *
+ * The `sub` is attacker-supplied — the JWT is never signature-checked — and it
+ * becomes a path segment under `userDir`. An unconstrained one escapes the
+ * store: `sub: "../../<other-platform>/users/default"` overwrites another
+ * platform's saved token, so the victim's later commands there authenticate as
+ * whoever issued this token. Constrain it the way BKN_PROFILE is constrained.
+ */
 export function userIdFromToken(token: TokenConfig): string {
-  return decodeJwt(token.idToken ?? "")?.sub ?? decodeJwt(token.accessToken)?.sub ?? "default";
+  const sub = decodeJwt(token.idToken ?? "")?.sub ?? decodeJwt(token.accessToken)?.sub;
+  if (sub === undefined) return "default";
+  if (typeof sub !== "string" || !USER_ID_RE.test(sub) || sub === "." || sub === "..") {
+    throw new Error(
+      `Token subject '${String(sub)}' is not a usable user id (expected 1-128 chars from [A-Za-z0-9._@-]). Refusing to store this token.`,
+    );
+  }
+  return sub;
 }
 
 // ---- state ----------------------------------------------------------------
@@ -137,11 +150,20 @@ export function readToken(
   return readJson<TokenConfig>(join(userDir(baseUrl, userId), "token.json")) ?? undefined;
 }
 
-/** Persist a token under its derived userId and make it the active user. */
-export function writeToken(baseUrl: string, token: TokenConfig): string {
+/**
+ * Persist a token under its derived userId and, by default, make it the active
+ * user. Pass `setActive: false` for a write that must not move the active user
+ * — a `--user` request refreshing its own token is transient, and switching the
+ * default identity as a side effect of a refresh would outlive the command.
+ */
+export function writeToken(
+  baseUrl: string,
+  token: TokenConfig,
+  opts: { setActive?: boolean } = {},
+): string {
   const userId = userIdFromToken(token);
   writeJson(join(userDir(baseUrl, userId), "token.json"), token, 0o600);
-  setActiveUser(baseUrl, userId);
+  if (opts.setActive !== false) setActiveUser(baseUrl, userId);
   return userId;
 }
 
@@ -203,6 +225,25 @@ export function listPlatforms(): PlatformEntry[] {
     }
   }
   return out;
+}
+
+/**
+ * Map a `--user` value — a stored user id OR the username saved at login — to a
+ * user id, or null when nothing matches. Callers decide what a miss means; the
+ * one thing none of them may do is fall back to the active user, since the
+ * point of naming a user is to not act as a different one.
+ */
+export function findUserId(baseUrl: string, userOrName: string): string | null {
+  const users = listPlatforms().find((p) => p.baseUrl === baseUrl)?.users ?? [];
+  const match =
+    users.find((u) => u.userId === userOrName) ??
+    users.find((u) => (u.username ?? u.displayName) === userOrName);
+  return match?.userId ?? null;
+}
+
+/** Saved users for a platform, for building a "did you mean" list. */
+export function usersOfPlatform(baseUrl: string): PlatformUser[] {
+  return listPlatforms().find((p) => p.baseUrl === baseUrl)?.users ?? [];
 }
 
 function decodeKey(key: string): string | null {

@@ -1,5 +1,5 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
-// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+// Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 /** Output helpers: clean JSON for scripts, aligned plain columns for humans. */
 export interface OutputOptions {
@@ -12,7 +12,7 @@ export interface OutputOptions {
 }
 
 /**
- * Primary output sink. With `--json`/`--compact` (the equivalence path) it
+ * Primary output sink. With `--json`/`--compact` it
  * prints JSON. Otherwise it renders a human table when the payload is a list of
  * objects (unwrapping common envelopes like `entries`/`data`/`cases`), falling
  * back to pretty JSON for single objects / scalars.

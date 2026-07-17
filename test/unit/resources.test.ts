@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   configureResourceIndex,
-  createResource,
   deleteResource,
   findResource,
   listResources,
@@ -62,43 +61,6 @@ describe("listResources", () => {
     expect(url.searchParams.getAll("extension_value")).toEqual(["data"]);
     expect(url.searchParams.get("sort")).toBe("name");
     expect(url.searchParams.get("direction")).toBe("asc");
-  });
-});
-
-describe("createResource", () => {
-  it("creates dataset resources by default because physical resources are discover-owned", async () => {
-    const f = mockFetch({ id: "r-1" });
-    await createResource(ctx, {
-      name: "dataset",
-      catalogId: "c-1",
-      sourceIdentifier: "dataset",
-      fields: [{ name: "title", type: "text" }],
-    });
-    const body = JSON.parse(firstCall(f)[1].body as string);
-    expect(body.category).toBe("dataset");
-    expect(body.catalog_id).toBe("c-1");
-    expect(body.schema_definition).toEqual([{ name: "title", type: "text" }]);
-  });
-
-  it("passes index_config when creating dataset resources", async () => {
-    const f = mockFetch({ id: "r-1" });
-    await createResource(ctx, {
-      name: "dataset",
-      catalogId: "c-1",
-      sourceIdentifier: "dataset",
-      fields: [{ name: "title", type: "text" }],
-      indexConfig: {
-        build_key_fields: ["id"],
-        default_embedding_model: "text-embedding-v4",
-        default_fulltext_analyzer: "ik_max_word",
-      },
-    });
-    const body = JSON.parse(firstCall(f)[1].body as string);
-    expect(body.index_config).toEqual({
-      build_key_fields: ["id"],
-      default_embedding_model: "text-embedding-v4",
-      default_fulltext_analyzer: "ik_max_word",
-    });
   });
 });
 

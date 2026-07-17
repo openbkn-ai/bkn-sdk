@@ -1,23 +1,47 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
-// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+// Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 /**
  * TLS handling for self-signed platforms (`--insecure` / `-k`).
  *
- * Node's global `fetch` (undici) has no per-call "skip verification" option
- * that works reliably across versions, so for an insecure context we disable
- * verification process-wide via NODE_TLS_REJECT_UNAUTHORIZED. This matches the
- * legacy CLI behavior. Scope is the whole process, which is fine for a CLI run
- * (one platform per invocation); SDK consumers opt in explicitly via
- * `insecure: true`.
+ * The opt-out is scoped to the requests that asked for it, via an undici
+ * dispatcher. It used to flip `NODE_TLS_REJECT_UNAUTHORIZED=0`, which is
+ * process-wide and never restored: one `-k` disabled certificate verification
+ * for every later request in the process — including, for a library consumer,
+ * their own unrelated HTTPS traffic.
  *
- * TODO: move to a per-request undici dispatcher so library use does not flip a
- * global. Tracked in docs/exec-plans/tech-debt-tracker.md.
+ * Node's built-in `fetch` will not accept a dispatcher from a userland undici
+ * (version skew — `UND_ERR_INVALID_ARG`), so requests go through undici's own
+ * `fetch`, which does.
  */
-import type { RequestContext } from "../types.js";
+import { Agent, fetch as undiciFetch } from "undici";
 
-export function applyTls(ctx: RequestContext): void {
-  if (ctx.insecure && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0") {
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-  }
+type UndiciInit = NonNullable<Parameters<typeof undiciFetch>[1]>;
+
+// One shared agent — building an Agent per request leaks connection pools.
+let insecureAgent: Agent | undefined;
+function insecureDispatcher(): Agent {
+  insecureAgent ??= new Agent({ connect: { rejectUnauthorized: false } });
+  return insecureAgent;
+}
+
+/**
+ * `fetch`, with certificate verification disabled for this call alone when
+ * `insecure` is set. Use it instead of the global `fetch` for every request
+ * that honours `--insecure`.
+ *
+ * The ordinary path stays on the platform's own `fetch`; only an insecure
+ * request detours through undici, since that is the only reason to carry a
+ * dispatcher at all.
+ */
+export function tlsFetch(
+  insecure: boolean | undefined,
+  url: string | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  if (!insecure) return fetch(url, init);
+  return undiciFetch(url, {
+    ...(init as UndiciInit | undefined),
+    dispatcher: insecureDispatcher(),
+  }) as unknown as Promise<Response>;
 }

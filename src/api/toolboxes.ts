@@ -1,5 +1,5 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
-// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+// Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 /**
  * Toolbox + tool client (agent-operator-integration tool-box). Read side.
@@ -12,7 +12,7 @@ import { HttpError } from "../utils/errors.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
-import { applyTls } from "./tls.js";
+import { tlsFetch } from "./tls.js";
 
 const PATH = "/api/agent-operator-integration/v1/tool-box";
 
@@ -25,11 +25,14 @@ export async function exportConfig(
   id: string,
   type: ImpexType = "toolbox",
 ): Promise<Uint8Array> {
-  applyTls(ctx);
   const res = await authFetch(ctx, () =>
-    fetch(`${ctx.baseUrl}${IMPEX}/export/${encodeURIComponent(type)}/${encodeURIComponent(id)}`, {
-      headers: buildHeaders(ctx),
-    }),
+    tlsFetch(
+      ctx.insecure,
+      `${ctx.baseUrl}${IMPEX}/export/${encodeURIComponent(type)}/${encodeURIComponent(id)}`,
+      {
+        headers: buildHeaders(ctx),
+      },
+    ),
   );
   const buf = new Uint8Array(await res.arrayBuffer());
   if (!res.ok) throw new HttpError(res.status, res.statusText, new TextDecoder().decode(buf));
@@ -42,12 +45,11 @@ export async function importConfig(
   filePath: string,
   type: ImpexType = "toolbox",
 ): Promise<unknown> {
-  applyTls(ctx);
   const buf = await readFile(filePath);
   const form = new FormData();
   form.append("data", new Blob([new Uint8Array(buf)]), basename(filePath));
   const res = await authFetch(ctx, () =>
-    fetch(`${ctx.baseUrl}${IMPEX}/import/${encodeURIComponent(type)}`, {
+    tlsFetch(ctx.insecure, `${ctx.baseUrl}${IMPEX}/import/${encodeURIComponent(type)}`, {
       method: "POST",
       headers: buildHeaders(ctx),
       body: form,
@@ -68,13 +70,12 @@ export async function uploadTool(
   filePath: string,
   metadataType = "openapi",
 ): Promise<unknown> {
-  applyTls(ctx);
   const buf = await readFile(filePath);
   const form = new FormData();
   form.append("metadata_type", metadataType);
   form.append("data", new Blob([new Uint8Array(buf)]), basename(filePath));
   const res = await authFetch(ctx, () =>
-    fetch(`${ctx.baseUrl}${PATH}/${encodeURIComponent(boxId)}/tool`, {
+    tlsFetch(ctx.insecure, `${ctx.baseUrl}${PATH}/${encodeURIComponent(boxId)}/tool`, {
       method: "POST",
       headers: buildHeaders(ctx),
       body: form,

@@ -1,215 +1,202 @@
-OpenBKN License
 
-BKN SDK is part of the OpenBKN project and is licensed under the
-OpenBKN License — a modified version of the Apache License, Version 2.0,
-with the following additional conditions.
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
 
-Copyright (c) 2026 OpenBKN. All rights reserved.
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
 
-================================================================
-PREAMBLE
-================================================================
+   1. Definitions.
 
-This license applies only to the OpenBKN modules that expressly
-reference this file in their source headers (the "Licensed Modules"),
-including but not limited to BKN Safe and BKN SDK.
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
 
-The Licensed Modules are licensed under the terms of the Apache
-License, Version 2.0 (the "Apache License"), the full text of which is
-available at http://www.apache.org/licenses/LICENSE-2.0, as modified and
-supplemented by the Additional Conditions set out below.
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
 
-In the event of any conflict between the Additional Conditions and the
-Apache License, the Additional Conditions shall control with respect to
-the Licensed Modules.
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
 
-This license does not apply to:
-  (a) components that originate from the upstream project
-      kweaver-ai/kweaver-core, which remain licensed solely under the
-      Apache License, Version 2.0, with their original copyright
-      notices preserved; nor
-  (b) OpenBKN components or individual files expressly designated as
-      licensed under the plain Apache License, Version 2.0, in their
-      own license notice or source header.
-See the NOTICE file for the per-component breakdown.
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
 
-================================================================
-ADDITIONAL CONDITIONS
-================================================================
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
 
-1. Commercial Use.
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
 
-   The Licensed Modules may be used for commercial purposes, including
-   as a component within your own application or business, subject to
-   the conditions below.
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
 
-   a. Implementation Services.
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
 
-      Any person or legal entity may provide paid or unpaid consulting,
-      development, SDK or API integration, deployment, configuration,
-      training, support, upgrade, or maintenance services for a single
-      End Customer, provided that:
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
 
-      i. the Licensed Modules are deployed in an environment dedicated
-         to that End Customer and owned or ultimately controlled by
-         that End Customer;
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
 
-     ii. the End Customer's use remains within the rights granted under
-         this license or is covered by a valid commercial subscription;
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
 
-    iii. no license key, activation receipt, Commercial Entitlement, or
-         environment is shared across End Customers beyond its
-         authorized scope; and
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
 
-     iv. the service provider does not operate a Restricted Hosted
-         Service as defined below.
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
 
-      Providing these Implementation Services does not by itself
-      require the End Customer or the service provider to obtain a
-      commercial subscription.
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
 
-   b. Commercial Entitlements and No Circumvention.
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
 
-      A separate commercial subscription is required to enable or use
-      features, modules, distributions, services, or product-
-      customization rights expressly designated by OpenBKN as
-      Professional, Enterprise Standard, Industry Solution, or other
-      commercial entitlements for the applicable released version
-      (collectively, "Commercial Entitlements").
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
 
-      You may not, directly or indirectly:
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
 
-      i. enable or use a Commercial Entitlement without a valid
-         commercial subscription covering the applicable End Customer,
-         project, and environment;
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
 
-     ii. bypass, disable, alter, or interfere with license checks,
-         activation mechanisms, entitlement controls, or usage
-         restrictions;
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
 
-    iii. share, reuse, transfer, or misapply a license key, activation
-         receipt, or Commercial Entitlement beyond its authorized
-         scope;
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
 
-     iv. conceal or misrepresent an End Customer, project, tenant,
-         installation, or deployment model for the purpose of avoiding
-         commercial licensing; or
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
 
-      v. assist or enable another person or legal entity to do any of
-         the foregoing.
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
 
-      This Section does not prohibit independent development of
-      extensions, connectors, Skills, ontologies, or applications
-      through documented interfaces, provided that such development
-      does not copy commercial-only code or circumvent the controls
-      described above.
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
 
-   c. Restricted Hosted Services.
+   END OF TERMS AND CONDITIONS
 
-      Without prior written authorization from OpenBKN, you may not use
-      the Licensed Modules to:
+   APPENDIX: How to apply the Apache License to your work.
 
-      i. operate a shared or multi-tenant service for separate End
-         Customers;
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
 
-     ii. provide the substantial features or functionality of the
-         Licensed Modules as a hosted platform controlled by the
-         service provider;
+   Copyright [yyyy] [name of copyright owner]
 
-    iii. offer a white-label, OEM, or other service substantially
-         similar to the official hosted or managed services offered by
-         OpenBKN; or
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
 
-     iv. use one End Customer's subscription, Commercial Entitlement,
-         or environment to provide services to another End Customer.
+       http://www.apache.org/licenses/LICENSE-2.0
 
-      Implementation Services performed in accordance with Section
-      1(a) are not Restricted Hosted Services.
-
-      For purposes of these Additional Conditions, "End Customer"
-      means the final organization that obtains and uses the Licensed
-      Modules for its own business. An environment remains controlled
-      by the End Customer when a service provider performs delegated
-      maintenance, provided that the End Customer retains ultimate
-      administrative and data control.
-
-2. Logo and Copyright Notices.
-
-   When using the front end or console of the Licensed Modules, you may
-   not remove or modify the OpenBKN logo, trademarks, or copyright and
-   licensing notices displayed therein, except to the extent expressly
-   permitted by a valid commercial subscription that includes product-
-   customization rights. This condition does not apply to uses of the
-   Licensed Modules that do not involve their front end or console.
-
-3. Contributions.
-
-   Code that you contribute to the Licensed Modules may be used by
-   OpenBKN for any purpose, including commercial purposes and
-   OpenBKN's cloud or hosted business, and may be licensed by
-   OpenBKN under any terms. By submitting a contribution, you
-   represent that you have the right to grant, and you grant to
-   OpenBKN, a perpetual, worldwide, non-exclusive, royalty-free,
-   irrevocable license to use, reproduce, modify, distribute, and
-   relicense your contribution for such purposes.
-
-4. Adjustment of Terms.
-
-   OpenBKN may adjust the terms of this license, making them either
-   more or less restrictive, for future versions of the Licensed
-   Modules. Any such adjustment applies only to versions released after
-   the adjustment; it does not retroactively alter the terms applicable
-   to versions already released.
-
-5. Trademarks.
-
-   This license does not grant you any right to use the trade names,
-   trademarks, service marks, or product names of OpenBKN, except as
-   required by Section 2 above or for the reasonable and customary use
-   in describing the origin of the Licensed Modules.
-
-6. Effect of Apache License.
-
-   Except as expressly modified or supplemented by the Additional
-   Conditions above, all other rights granted and conditions imposed by
-   the Apache License, Version 2.0 (including its disclaimers of
-   warranty and limitations of liability) continue to apply to the
-   Licensed Modules. Nothing in the Additional Conditions shall be
-   construed as restricting the rights of any party under the Apache
-   License, Version 2.0 with respect to code that is not part of the
-   Licensed Modules.
-
-7. Termination.
-
-   OpenBKN may terminate the copyright, patent, and other permissions
-   granted by OpenBKN under this license for the Licensed Modules if
-   you violate the Additional Conditions above. If a violation is
-   capable of cure, OpenBKN will provide written notice and at least
-   30 days to cure the violation before termination takes effect.
-   Intentional circumvention, license sharing, or continued operation
-   of an unauthorized hosted or multi-tenant service may result in
-   immediate termination without a cure period. To continue after
-   termination, you must bring your use into compliance, obtain written
-   authorization from OpenBKN, or cease using the Licensed Modules.
-
-   Nothing in this Section terminates or restricts rights independently
-   granted by upstream or other contributors under the Apache License,
-   Version 2.0, or another applicable license.
-
-================================================================
-COMMERCIAL LICENSING
-================================================================
-
-For commercial licensing inquiries (including access to Commercial
-Entitlements, authorization to operate Restricted Hosted Services or
-multi-tenant environments, or other uses requiring a commercial
-license), contact: community@openbkn.ai
-
-================================================================
-DISCLAIMER
-================================================================
-
-THE LICENSED MODULES ARE PROVIDED ON AN "AS IS" BASIS, WITHOUT
-WARRANTIES OR CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, TO THE
-FULLEST EXTENT PERMITTED BY APPLICABLE LAW, AS SET OUT IN THE APACHE
-LICENSE, VERSION 2.0.
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.

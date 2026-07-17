@@ -1,5 +1,5 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
-// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+// Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 import type { RequestContext } from "../types.js";
 /**
@@ -10,7 +10,7 @@ import { HttpError } from "../utils/errors.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
-import { applyTls } from "./tls.js";
+import { tlsFetch } from "./tls.js";
 
 const BASE = "/api/agent-operator-integration/v1";
 
@@ -20,14 +20,13 @@ export async function registerSkillZip(
   bytes: Uint8Array,
   opts: { filename?: string; source?: string; extendInfo?: unknown } = {},
 ): Promise<unknown> {
-  applyTls(ctx);
   const form = new FormData();
   form.set("file_type", "zip");
   form.set("file", new Blob([bytes]), opts.filename ?? "skill.zip");
   if (opts.source) form.set("source", opts.source);
   if (opts.extendInfo) form.set("extend_info", JSON.stringify(opts.extendInfo));
   const res = await authFetch(ctx, () =>
-    fetch(`${ctx.baseUrl}${BASE}/skills`, {
+    tlsFetch(ctx.insecure, `${ctx.baseUrl}${BASE}/skills`, {
       method: "POST",
       headers: buildHeaders(ctx),
       body: form,
@@ -45,12 +44,11 @@ export async function updateSkillPackageZip(
   bytes: Uint8Array,
   filename = "skill.zip",
 ): Promise<unknown> {
-  applyTls(ctx);
   const form = new FormData();
   form.set("file_type", "zip");
   form.set("file", new Blob([bytes]), filename);
   const res = await authFetch(ctx, () =>
-    fetch(`${ctx.baseUrl}${BASE}/skills/${encodeURIComponent(skillId)}/package`, {
+    tlsFetch(ctx.insecure, `${ctx.baseUrl}${BASE}/skills/${encodeURIComponent(skillId)}/package`, {
       method: "PUT",
       headers: buildHeaders(ctx),
       body: form,
@@ -63,9 +61,8 @@ export async function updateSkillPackageZip(
 
 /** Download a skill as a zip archive (raw bytes). */
 export async function downloadSkill(ctx: RequestContext, skillId: string): Promise<Uint8Array> {
-  applyTls(ctx);
   const res = await authFetch(ctx, () =>
-    fetch(`${ctx.baseUrl}${BASE}/skills/${encodeURIComponent(skillId)}/download`, {
+    tlsFetch(ctx.insecure, `${ctx.baseUrl}${BASE}/skills/${encodeURIComponent(skillId)}/download`, {
       headers: buildHeaders(ctx),
     }),
   );

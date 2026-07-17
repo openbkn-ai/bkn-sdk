@@ -1,5 +1,5 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
-// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+// Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 /**
  * bkn-safe admin API (`/api/safe/v1/admin/*`, token-gated; the gateway-exposed
@@ -33,11 +33,6 @@ export function listUsersSafe(
   return request(ctx, `${ADMIN}/users`, {
     query: { search: opts.search || undefined, offset: opts.offset, limit: opts.limit },
   });
-}
-
-/** GET /admin/users?account= — exact login lookup ({users:[u]|[]}). */
-export function findUserByAccountSafe(ctx: RequestContext, account: string): Promise<unknown> {
-  return request(ctx, `${ADMIN}/users`, { query: { account } });
 }
 
 /** GET /admin/users/:id — detail (incl. roles + departments). */
@@ -113,6 +108,25 @@ export async function setUserPasswordSafe(
   await request(ctx, `${ADMIN}/users/${encodeURIComponent(userId)}/password`, {
     method: "PUT",
     body: { password },
+  });
+  return { ok: true };
+}
+
+/**
+ * POST /api/safe/v1/auth/change-password — self-service change. Outside
+ * `/admin` and unauthenticated by design (it's a pre-login credential change),
+ * so it spells out its own path. Plaintext over TLS. 204 on success; 401 wrong
+ * account/old password; 400 new == old.
+ */
+export async function changePasswordSafe(
+  ctx: RequestContext,
+  account: string,
+  oldPassword: string,
+  newPassword: string,
+): Promise<{ ok: true }> {
+  await request(ctx, "/api/safe/v1/auth/change-password", {
+    method: "POST",
+    body: { account, old_password: oldPassword, new_password: newPassword },
   });
   return { ok: true };
 }

@@ -123,7 +123,57 @@ describe("auth store round-trip", () => {
     expect(auth.status().userId).toBe("u-2");
   });
 
+  /**
+   * `auth whoami --user X` is how someone checks which identity `--user X`
+   * picks, so these must answer about X, not about the active user. They read
+   * the store directly rather than through resolveContext, which is exactly how
+   * they came to ignore the flag.
+   */
+  it("status / whoami / token follow --user instead of the active user", () => {
+    auth.attachToken("https://demo.example.com", jwt({ sub: "u-1", preferred_username: "alice" }));
+    const bobToken = jwt({ sub: "u-2", preferred_username: "bob" });
+    auth.attachToken("https://demo.example.com", bobToken); // bob is now active
+    const aliceToken = auth.currentToken({ user: "alice" });
+
+    expect(auth.status().username).toBe("bob");
+    expect(auth.status({ user: "alice" }).username).toBe("alice");
+    expect(auth.whoami().sub).toBe("u-2");
+    expect(auth.whoami({ user: "alice" }).sub).toBe("u-1");
+    expect(auth.currentToken()).toBe(bobToken);
+    expect(aliceToken).not.toBe(bobToken);
+    // Reading as alice must not promote her to active.
+    expect(auth.status().username).toBe("bob");
+  });
+
+  it("--user rejects an unknown user rather than answering about another", () => {
+    auth.attachToken("https://demo.example.com", jwt({ sub: "u-1", preferred_username: "alice" }));
+    expect(() => auth.status({ user: "nobody" })).toThrow(/No saved user/);
+    expect(() => auth.whoami({ user: "nobody" })).toThrow(/No saved user/);
+    expect(() => auth.currentToken({ user: "nobody" })).toThrow(/No saved user/);
+  });
+
   it("use without saved creds throws", () => {
     expect(() => auth.use("https://unknown.example.com")).toThrow();
+  });
+
+  // The JWT is never signature-checked, so `sub` is attacker-supplied and lands
+  // in a filesystem path. Left unconstrained, `auth login --token <hostile>`
+  // writes token.json outside the store — including over another platform's
+  // saved credentials, which silently repoints that platform at the attacker.
+  it.each([
+    ["../../../../escaped", "traversal"],
+    ["../../aHR0cHM6Ly9wcm9k/users/default", "another platform's token"],
+    ["..", "parent"],
+    ["a/b", "separator"],
+    ["a\\b", "windows separator"],
+  ])("refuses to store a token whose sub is %j (%s)", (sub) => {
+    expect(() => auth.attachToken("https://demo.example.com", jwt({ sub }))).toThrow(
+      /not a usable user id/,
+    );
+  });
+
+  it("stores a token whose sub is an ordinary opaque id", () => {
+    const sub = "8f14e45f-ceea-467a-9575-4b0b6f3b1a2c";
+    expect(auth.attachToken("https://demo.example.com", jwt({ sub })).userId).toBe(sub);
   });
 });

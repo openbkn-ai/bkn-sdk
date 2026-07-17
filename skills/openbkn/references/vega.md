@@ -8,7 +8,7 @@
 | `connector-type list` / `connector-type get <type>` | Available connector types. |
 | `sql --query "<sql>"` / `sql -d <json>` | Run SQL (MySQL/MariaDB/PostgreSQL) or OpenSearch DSL directly against a data source. Table = `{{<resource-id>}}`; `--resource-type` optional. See [§ vega sql](#vega-sql--run-sql--dsl-against-a-data-source). |
 | `resource …` | Vega-backend resources (mirror of top-level `resource`). |
-| `dataset build <resource-id> --mode batch\|streaming [--embedding-fields a,b] [--build-key-fields k] [--embedding-model <id>] [--model-dimensions <n>] [--wait]` | Create an index BuildTask. **Index build lives on the resource (one resource = one table); there is no KN-level build.** `batch` requires `--build-key-fields` (else `400 build_key_fields is required for batch mode`). |
+| `dataset build <resource-id> --mode batch\|streaming [--embedding-fields a,b] [--build-key-fields k] [--embedding-model <id>] [--fulltext-fields a,b] [--fulltext-analyzer <n>] [--execute-type incremental\|full] [--wait] [--timeout <s>]` | Create an index BuildTask. **Index build lives on the resource (one resource = one table); there is no KN-level build.** `batch` requires `--build-key-fields` (else `400 build_key_fields is required for batch mode`). |
 | `dataset build-status <resource-id> <task-id>` | BuildTask state + progress. |
 
 ## `vega sql` — run SQL / DSL against a data source

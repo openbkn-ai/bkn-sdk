@@ -1,5 +1,5 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
-// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+// Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 /** Trace resource surface (data fetch + symbolic/rubric diagnose + eval-set). */
 import { fetchAgentInfo, sendChat } from "../api/agent-chat.js";

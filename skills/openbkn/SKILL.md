@@ -42,7 +42,7 @@ openbkn [--base-url <url>] [--token <tok>] [--user <id|name>] \
 ```
 
 - 默认输出为**人类可读表格**；`--json`（或 `--compact`）输出可被脚本解析的精确 JSON。
-- `-k/--insecure` 关闭 TLS 校验（自签名平台）；脚本里刷新 token 可能也需 `NODE_TLS_REJECT_UNAUTHORIZED=0`。
+- `-k/--insecure` 关闭 TLS 校验（自签名平台），**每条命令都要带** —— 登录时带过不会被记住，token 刷新也走同一个开关，无需 `NODE_TLS_REJECT_UNAUTHORIZED`。
 - `-bd <domain>` 覆盖 `x-business-domain`（默认 `bd_public`）。
 - **以实时 `--help` 为准。** `openbkn --help` 看分组命令地图，`openbkn <group> <sub> --help` 看确切参数。**不要猜参数**。
 
@@ -52,20 +52,21 @@ openbkn [--base-url <url>] [--token <tok>] [--user <id|name>] \
 1. 全局 `--token` + `--base-url`（或环境 `BKN_BASE_URL` / 活跃平台）→ 一次性 stateless，不读写 `~/.bkn/`。
 2. 环境 `BKN_TOKEN` + `BKN_BASE_URL` → 静态 token。
 3. `~/.bkn/` 凭据（`openbkn auth login` 写入）→ 推荐；多用户分层。
-4. 全局 `--user` / `BKN_PROFILE` → 指定用户/配置档。
+4. 全局 `--user <id|name>`（或 `BKN_USER`）→ 在该平台已存的多个用户里指定本次用哪个；仅本次生效，不改活跃用户。`BKN_PROFILE` → 切换整个配置档。
 
 ```bash
 openbkn auth login <url> --token "$TOKEN"      # 附加已有 token（CI/headless）
-openbkn auth login <url> -u <user> -p <pwd>    # headless OAuth 密码登录（RSA 加密）
-openbkn auth login <url>                        # 浏览器 PKCE（本地回调）
-openbkn auth status | whoami | token | list | use <url> | switch <url> <user-id> | logout
+openbkn auth login <url> -u <user> -p <pwd>    # headless 凭据登录（device-code，无浏览器）
+openbkn auth login <url>                        # 打开浏览器批准 device code
+openbkn auth login <url> --device               # 只打印 URL+code，在任意机器批准
+openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | logout
 ```
 
 ## 命令组总览
 
 | 命令组 | 说明 | 常用命令 |
 |--------|------|---------|
-| `auth` | 认证 / 会话 / 多用户 | `login`（token / `-u -p` OAuth / 浏览器）、`status`/`whoami`/`token`/`list`/`use`/`switch`/`users`/`export`、`change-password` |
+| `auth` | 认证 / 会话 / 多用户 | `login`（`--token` / `-u -p` / 浏览器 / `--device`，均走 device-code）、`status`/`whoami`/`token`/`list`/`use`/`switch`/`users`/`export`、`change-password` |
 | `config` | 平台 CLI 配置 | `config show` / `config set <key> <value>` |
 | `appkey` | 用户自助签发的 AppKey（`bak_` 长期凭据，仅 Context Loader 可用） | `list`、`create --name <s> [--expire-days <n> \| --expires-at <rfc3339> \| --never-expire]`（明文 `key` **只返回一次**）、`regenerate <id>`（轮换：同 id 出新 key，旧 key 立即失效）、`revoke <id>`、`admin list [--owner-id]`/`admin revoke <id>` |
 | `bkn` | 知识网络 + Schema + 查询 + 本地包 | `list`/`get`/`search`/`stats`/`export`、`object-type/relation-type/action-type list/get/create/update/delete`、`action-type query/execute/inputs`、`metric …`、`concept-group …`、`action-log/action-schedule/job …`、`subgraph`、`relation-type-paths`、`resources`、`push <dir>`/`pull <kn> [dir]`、`validate <dir>`、`create-from-catalog <catalog> --name …`、`create-from-csv <catalog> --files <glob> --name …`（`--build`、`--pk-map t:col`） |

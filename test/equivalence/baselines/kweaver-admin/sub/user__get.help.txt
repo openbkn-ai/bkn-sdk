@@ -1,9 +1,0 @@
-Usage: kweaver-admin user get [options] <id>
-
-Get user by id
-
-Arguments:
-  id          User id
-
-Options:
-  -h, --help  display help for command

@@ -77,17 +77,15 @@ Importing the package has no side effects; `createClient` resolves config explic
 ```bash
 npm install
 npm run lint     # biome + tsc --noEmit
-npm test         # vitest (unit; equivalence suite gated by BKN_EQUIV_LIVE)
+npm test         # vitest (unit)
 npm run build    # tsup → dist/ (library + `openbkn` bin)
 ```
 
 ## Help system
 
 Every command, subcommand, and sub-subcommand ships a grouped `--help` that
-lists its flags and arguments, so the tree is discoverable end to end. Golden
-`--help` baselines and a full-depth self-consistency test live in
-`test/equivalence/` (every node exists and its `--help` covers its flags +
-arguments). Run live with `BKN_EQUIV_LIVE=1`.
+lists its flags and arguments, so the tree is discoverable end to end.
+`openbkn help all` dumps the full per-action signature list.
 
 ## Agent skill
 
@@ -123,8 +121,5 @@ to live `openbkn <group> <sub> --help` for exact flags.
 
 ## License
 
-BKN SDK is part of the OpenBKN project and is licensed under the **OpenBKN
-License** — a modified version of the Apache License, Version 2.0, with
-additional conditions. See the complete [OpenBKN License](LICENSE) and
-[NOTICE](NOTICE). Versions previously distributed under Apache-2.0 remain
-available under that license.
+BKN SDK is part of the OpenBKN project and is licensed under the
+**Apache License, Version 2.0**. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

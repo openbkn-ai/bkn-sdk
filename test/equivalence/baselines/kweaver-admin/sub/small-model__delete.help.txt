@@ -1,9 +1,0 @@
-Usage: kweaver-admin small-model delete [options] <modelId...>
-
-Delete small model(s)
-
-Arguments:
-  modelId     Model ids
-
-Options:
-  -h, --help  display help for command

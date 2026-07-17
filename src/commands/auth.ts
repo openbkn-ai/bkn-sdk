@@ -1,18 +1,11 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
-// Licensed under the OpenBKN License. See the LICENSE file in the project root.
+// Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 /** `openbkn auth …` — login / session / token (store-backed). */
 import { Command } from "commander";
-import { changePasswordSafe } from "../api/admin.js";
-import { getUserSafe } from "../api/safe.js";
+import { changePasswordSafe, getUserSafe } from "../api/safe.js";
 import { decodeJwt } from "../auth/jwt.js";
-import {
-  credentialDeviceLogin,
-  deviceLogin,
-  fetchAuthStatus,
-  isHeadless,
-  openBrowser,
-} from "../auth/oauth.js";
+import { credentialDeviceLogin, deviceLogin, isHeadless, openBrowser } from "../auth/oauth.js";
 import { resolveContext } from "../config/resolve.js";
 import { group } from "../help/grouped-help.js";
 import * as auth from "../resources/auth.js";
@@ -66,11 +59,7 @@ export function registerAuthLeaves(cmd: Command): void {
     .option("-u, --username <name>", "username for password signin")
     .option("-p, --password <pwd>", "password for password signin")
     .option("--token <token>", "provide a token directly (CI / headless)")
-    .option("--client-id <id>", "use a fixed OAuth2 client id (skip dynamic registration)")
-    .option("--client-secret <secret>", "OAuth2 client secret (omit for public/PKCE)")
-    .option("--port <n>", "loopback redirect port for the auth_code flow", (v) =>
-      Number.parseInt(v, 10),
-    )
+    .option("--client-id <id>", "OAuth2 client id to authenticate as")
     .option("--device", "headless device-code login (RFC 8628) — no callback server, no password")
     .option("--audience <aud>", "device-code token audience", "bkn-safe")
     .option(
@@ -79,48 +68,20 @@ export function registerAuthLeaves(cmd: Command): void {
       (v) => Number.parseInt(v, 10),
       120,
     )
-    // Legacy ISF sign-in flags — accepted for compatibility, ignored by the
-    // bkn-safe device-code flow.
-    .option("--no-browser", "(legacy) print the URL instead of opening a browser")
-    .option("--product <name>", "(legacy) ISF OAuth product query")
-    .option("--signin-public-key-file <path>", "(legacy) RSA public key for ISF /oauth2/signin")
-    .option("--no-auth", "register the platform with no authentication (no bkn-safe)")
+    .option("--no-browser", "print the URL instead of opening a browser")
     .action(async (url: string, opts, cmd: Command) => {
       const g = cmd.optsWithGlobals();
-      if (g.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
       const out = outputOptions(cmd);
-      const report = (r: {
-        baseUrl?: string;
-        userId?: string;
-        username?: string;
-        noAuth?: boolean;
-      }) => {
+      const report = (r: { baseUrl?: string; userId?: string; username?: string }) => {
         if (out.json || out.compact) {
           printJson({ loggedIn: true, ...r }, out);
-        } else if (r.noAuth) {
-          process.stdout.write(`Registered ${r.baseUrl ?? url} (no authentication)\n`);
         } else {
           process.stdout.write(`Logged in to ${r.baseUrl ?? url} as ${r.username ?? r.userId}\n`);
         }
       };
       const token = opts.token ?? g.token;
       if (token) {
-        report(auth.attachToken(url, token, { insecure: g.insecure }));
-        return;
-      }
-      // Explicit no-auth (open platform / no bkn-safe): store a tokenless session.
-      if (opts.auth === false) {
-        report(auth.attachNoAuth(url, { insecure: g.insecure }));
-        return;
-      }
-      // Auto-detect: the platform's install-status.json declares whether auth is
-      // on. Disabled → register a tokenless session (no point in credentials).
-      const authStatus = await fetchAuthStatus(url);
-      if (authStatus && !authStatus.enabled) {
-        process.stderr.write(
-          `Platform auth is disabled (stack: ${authStatus.stack ?? "none"}) — registering without auth.\n`,
-        );
-        report(auth.attachNoAuth(url, { insecure: g.insecure }));
+        report(auth.attachToken(url, token));
         return;
       }
       // All flows ride the device_code grant (the only seeded user client):
@@ -138,6 +99,7 @@ export function registerAuthLeaves(cmd: Command): void {
             clientId: opts.clientId,
             audience: opts.audience,
             timeoutMs: opts.timeout * 1000,
+            insecure: g.insecure,
           });
         } else {
           // Open the browser unless asked not to (--device / --no-browser) or
@@ -149,6 +111,7 @@ export function registerAuthLeaves(cmd: Command): void {
             clientId: opts.clientId,
             audience: opts.audience,
             timeoutMs: opts.timeout * 1000,
+            insecure: g.insecure,
             onPrompt: ({ userCode, verificationUri, verificationUriComplete }) => {
               const target = verificationUriComplete ?? verificationUri;
               process.stderr.write(
@@ -163,11 +126,11 @@ export function registerAuthLeaves(cmd: Command): void {
         }
       } catch (e) {
         // No device-auth endpoint → the platform has no auth stack (no bkn-safe).
-        // Register a tokenless session instead of failing.
+        // Unauthenticated sessions are not supported: the platform needs bkn-safe.
         if (e instanceof Error && /Device auth failed \(404\)/.test(e.message)) {
-          process.stderr.write("No auth endpoint found — registering platform without auth.\n");
-          report(auth.attachNoAuth(url, { insecure: g.insecure }));
-          return;
+          throw new InputError(
+            `No auth endpoint on ${url} — the platform has no bkn-safe auth stack. Deploy bkn-safe, or log in elsewhere and pass the token with \`--token\`.`,
+          );
         }
         throw e;
       }
@@ -185,7 +148,6 @@ export function registerAuthLeaves(cmd: Command): void {
         auth.attachToken(url, tokens.accessToken, {
           refreshToken: tokens.refreshToken,
           idToken: tokens.idToken,
-          insecure: g.insecure,
           username: account,
         }),
       );
@@ -194,7 +156,9 @@ export function registerAuthLeaves(cmd: Command): void {
   cmd
     .command("status")
     .description("Show base URL and whether a token is configured")
-    .action((_opts, cmd: Command) => printJson(auth.status(), outputOptions(cmd)));
+    .action((_opts, cmd: Command) =>
+      printJson(auth.status({ user: cmd.optsWithGlobals().user }), outputOptions(cmd)),
+    );
 
   cmd
     .command("token")
@@ -202,8 +166,10 @@ export function registerAuthLeaves(cmd: Command): void {
     .option("--no-refresh", "print the stored token as-is, without refreshing")
     .action(async (opts, cmd: Command) => {
       const g = cmd.optsWithGlobals();
-      if (g.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-      const token = opts.refresh === false ? auth.currentToken() : await auth.currentTokenFresh();
+      const token =
+        opts.refresh === false
+          ? auth.currentToken({ user: g.user })
+          : await auth.currentTokenFresh({ insecure: g.insecure, user: g.user });
       process.stdout.write(`${token}\n`);
     });
 
@@ -213,8 +179,7 @@ export function registerAuthLeaves(cmd: Command): void {
     .option("--no-lookup", "skip the backend identity fallback (eacp/user/get)")
     .action(async (_url: string | undefined, opts, cmd: Command) => {
       const g = cmd.optsWithGlobals();
-      if (g.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-      const me = auth.whoami();
+      const me = auth.whoami({ user: g.user });
       // The device-flow id_token carries only `sub` (a UUID), so the token
       // alone can't say *who* you are. Resolve the account name from the
       // backend (needs admin; best-effort — skipped with --no-lookup).
@@ -223,7 +188,7 @@ export function registerAuthLeaves(cmd: Command): void {
           const u = (await getUserSafe(
             {
               baseUrl: me.baseUrl,
-              token: auth.currentToken(),
+              token: auth.currentToken({ user: g.user }),
               businessDomain: DEFAULT_BUSINESS_DOMAIN,
               insecure: Boolean(g.insecure),
             },
@@ -329,10 +294,8 @@ export function registerAuthLeaves(cmd: Command): void {
     .option("-a, --account <name>", "account / login name (the login column, e.g. admin)")
     .option("--old-password <pwd>", "current password")
     .option("--new-password <pwd>", "new password")
-    .option("--public-key-file <path>", "(legacy) RSA public key for ISF password encryption")
     .action(async (url: string | undefined, opts, cmd: Command) => {
       const g = cmd.optsWithGlobals();
-      if (g.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
       const ctx = resolveContext({
         baseUrl: url ?? g.baseUrl,
         token: g.token,
