@@ -59,11 +59,7 @@ export function registerAuthLeaves(cmd: Command): void {
     .option("-u, --username <name>", "username for password signin")
     .option("-p, --password <pwd>", "password for password signin")
     .option("--token <token>", "provide a token directly (CI / headless)")
-    .option("--client-id <id>", "use a fixed OAuth2 client id (skip dynamic registration)")
-    .option("--client-secret <secret>", "OAuth2 client secret (omit for public/PKCE)")
-    .option("--port <n>", "loopback redirect port for the auth_code flow", (v) =>
-      Number.parseInt(v, 10),
-    )
+    .option("--client-id <id>", "OAuth2 client id to authenticate as")
     .option("--device", "headless device-code login (RFC 8628) — no callback server, no password")
     .option("--audience <aud>", "device-code token audience", "bkn-safe")
     .option(
