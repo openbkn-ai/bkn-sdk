@@ -71,16 +71,14 @@ import 本包无副作用；`createClient` 显式解析配置。
 ```bash
 npm install
 npm run lint     # biome + tsc --noEmit
-npm test         # vitest（单测；等价套件由 BKN_EQUIV_LIVE 控制）
+npm test         # vitest（单测）
 npm run build    # tsup → dist/（库 + openbkn bin）
 ```
 
 ## 帮助系统
 
 每个命令、子命令、孙命令都带分组 `--help`，列出各自的参数与位置参数，
-整棵命令树可端到端发现。全深度 `--help` 黄金基线与自洽性测试见
-`test/equivalence/`（每个节点都存在，其 `--help` 覆盖自身的参数与位置参数；
-用 `BKN_EQUIV_LIVE=1` 真机跑）。
+整棵命令树可端到端发现。`openbkn help all` 输出全深度的逐动作签名清单。
 
 ## 许可证
 

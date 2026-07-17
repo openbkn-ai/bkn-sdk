@@ -12,7 +12,7 @@ export interface OutputOptions {
 }
 
 /**
- * Primary output sink. With `--json`/`--compact` (the equivalence path) it
+ * Primary output sink. With `--json`/`--compact` it
  * prints JSON. Otherwise it renders a human table when the payload is a list of
  * objects (unwrapping common envelopes like `entries`/`data`/`cases`), falling
  * back to pretty JSON for single objects / scalars.

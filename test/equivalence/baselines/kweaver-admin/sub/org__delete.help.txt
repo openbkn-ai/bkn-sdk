@@ -1,9 +1,0 @@
-Usage: kweaver-admin org delete [options] <id>
-
-Remove a department (management API)
-
-Arguments:
-  id          Department id
-
-Options:
-  -h, --help  display help for command

@@ -6,9 +6,8 @@ BKN SDK is part of the OpenBKN project.
 ================================================================
 1. BKN SDK (Apache License 2.0)
 ================================================================
-BKN SDK is independently developed by OpenBKN, does not contain
-upstream kweaver-ai/kweaver-core code, is copyright OpenBKN, and is
-licensed under the Apache License, Version 2.0.
+BKN SDK is independently developed by OpenBKN, is copyright OpenBKN,
+and is licensed under the Apache License, Version 2.0.
 
   Full license text:              LICENSE
   Apache License, Version 2.0:    http://www.apache.org/licenses/LICENSE-2.0

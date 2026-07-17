@@ -1,6 +1,0 @@
-Usage: kweaver-admin auth logout [options]
-
-Remove stored token for current platform
-
-Options:
-  -h, --help  display help for command

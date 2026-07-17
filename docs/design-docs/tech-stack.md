@@ -8,7 +8,7 @@ tools; this records what the rewrite picks and why. Update here if a choice chan
 | Concern | Choice | Why |
 | ------- | ------ | --- |
 | Language | TypeScript (ESM), Node ≥ 22 | Both legacy repos are TS; ≥22 (the legacy SDK's floor) for stable native fetch / test runner |
-| CLI framework | **commander** | Mature, 0 runtime deps, clean command tree, biggest ecosystem; equivalence-friendly (the legacy operator CLI uses it). Needs a custom grouped-help renderer (see below) |
+| CLI framework | **commander** | Mature, 0 runtime deps, clean command tree, biggest ecosystem. Needs a custom grouped-help renderer (see below) |
 | Interactive prompts | **@clack/prompts** | Pretty modern prompts for login / business-domain selection. Replaces `ink`/`inquirer` — lighter, no TUI |
 | Pretty output | **chalk** + **cli-table3** | Color + aligned tables for human output |
 | Validation | **zod** | Parse at IO boundaries (argv, HTTP responses); already used by the legacy SDK |
@@ -19,7 +19,7 @@ tools; this records what the rewrite picks and why. Update here if a choice chan
 | Package manager | **npm**, single package | Simplest; matches the agreed Library+CLI single-package shape (monorepo rejected) |
 | Publish | npm scope `@openbkn` | Per project requirement |
 
-## Grouped help renderer (equivalence-critical)
+## Grouped help renderer
 
 The legacy help is **not** commander's default flat list — it groups
 commands under section headers (`AUTHENTICATION & CONFIG`, `DECISION AGENT`,
@@ -32,14 +32,14 @@ override commander's help via `Command.configureHelp()` / a custom `formatHelp`:
 - **Applies at every level**: the same formatter groups a command's own subcommands too (e.g. `openbkn agent --help` → DISCOVERY / CRUD / RUNTIME; `openbkn bkn --help` → LIFECYCLE / SCHEMA / …), matching legacy depth-1 group help.
 - Keep `openbkn help all` = full per-action signature dump (migration fallback).
 
-This is one small shared formatter module, not per-command help strings. Equivalence is enforced full-depth (154 SDK + 43 admin paths) by the equivalence test.
+This is one small shared formatter module, not per-command help strings. It applies at every depth of the command tree.
 
 ## Rejected / out of scope
 
 - **ink / react** — dropped. No complex chat TUI is needed; `agent chat` streams plain text. Cuts a heavy dep tree and keeps the SDK light to import.
 - **inquirer** — `@clack/prompts` is lighter and prettier for the few interactive flows.
 - **yargs** — would minimize user-side migration but forces rewriting the admin tree; commander chosen instead.
-- **citty / cac** — leaner/more-modern CLI parsers, but smaller ecosystems and more migration risk against the equivalence target; commander's maturity wins here.
+- **citty / cac** — leaner/more-modern CLI parsers, but smaller ecosystems and more migration risk; commander's maturity wins here.
 - **oclif** — plugin framework built for large multi-CLI suites; overkill for one lean single-package SDK.
 - **pnpm / workspace monorepo** — single package is enough; no multi-package split.
 - **ESLint + Prettier** — heavier config than Biome with no existing setup to preserve.

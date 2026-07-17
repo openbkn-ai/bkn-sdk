@@ -1,20 +1,19 @@
 # CLI command design
 
-The `openbkn` CLI is a single command tree that **merges** two legacy CLIs:
-a user/agent CLI + an operator CLI. Built on `commander`,
-with `chalk` + `cli-table3` for pretty output — no TUI. The tree must stay **equivalent** to the legacy
-CLIs — see [../../test/equivalence/command-map.md](../../test/equivalence/command-map.md) for the full mapping and drop list, enforced by [../../test/equivalence/help.test.ts](../../test/equivalence/help.test.ts).
+The `openbkn` CLI is a single command tree covering both sides of the platform:
+a user/agent surface + an operator surface (nested under `admin`). Built on
+`commander`, with `chalk` + `cli-table3` for pretty output — no TUI.
 
 ## Command tree (merged, target)
 
 ```text
 openbkn
-  # auth & config (unified across both legacy CLIs)
+  # auth & config
   auth      login | logout | status | whoami | list | use | switch | users | token | change-password | export | delete
   config    show | set | set-bd | list-bd
   call      (curl)  curl-style passthrough with auto-injected auth headers
 
-  # knowledge networks  (kept as `bkn` — identical to the legacy `bkn` group)
+  # knowledge networks
   # NOTE: no `build` here — KN-level build removed; index build = `vega dataset build`
   bkn       list | get | create | create-from-catalog | create-from-csv | update | delete
             | stats | export | validate | push | pull | search | subgraph | resources
@@ -48,14 +47,13 @@ openbkn
   role      list | get | members | add-member | remove-member
   audit     list
 
-  help      [all]   # `help all` dumps full per-action signatures (migration aid)
+  help      [all]   # `help all` dumps full per-action signatures
 ```
 
-## Root help layout (equivalence target)
+## Root help layout
 
-`openbkn --help` must reproduce the legacy grouped layout, not commander's flat
-default. Section order and command grouping (legacy + the new `OPERATOR` group
-for merged admin commands):
+`openbkn --help` uses a grouped layout, not commander's flat default. Section
+order and command grouping:
 
 ```text
 openbkn — operate the BKN platform from the CLI
@@ -68,7 +66,7 @@ DECISION AGENT            agent · toolbox · tool
 AI DATA PLATFORM          bkn · resource (res) · dataflow · vega · context (context-loader)
 TRACE AI                  trace
 MODELS & SKILLS           model · skill
-OPERATOR                  org · user · role · audit          # merged from the operator CLI
+OPERATOR                  org · user · role · audit
 FOUNDATION                explore · help
 
 FLAGS        --base-url · --token · --user · --json/--compact · -bd · --insecure
@@ -80,30 +78,27 @@ Implemented as one shared grouped-help formatter over commander
 (`configureHelp`/`formatHelp`) — see [tech-stack.md](tech-stack.md). `openbkn help all`
 keeps the full per-action signature dump.
 
-### Equivalence is full-depth
+### Help is full-depth
 
-Parity is **recursive** — not just the top level. Every legacy command,
-subcommand, and sub-subcommand must exist in `openbkn` with equivalent help:
+Grouped help is **recursive** — not just the top level. Every command,
+subcommand, and sub-subcommand carries its own:
 
 - top: `openbkn --help`
 - group: `openbkn agent --help`, `openbkn bkn --help` …
 - leaf: `openbkn agent chat --help`, `openbkn bkn object-type --help`
 - deep leaf: `openbkn bkn object-type query --help`, `openbkn bkn metric dry-run --help`
 
-The legacy tree is **154 SDK paths** (from `help all`) + **43 operator-CLI
-depth-2 paths**, enforced by [../../test/equivalence/help.test.ts](../../test/equivalence/help.test.ts).
 The same grouped formatter applies at every level: a command's own help groups
-its subcommands the way legacy does (e.g. `agent` → DISCOVERY / CRUD / RUNTIME;
+its subcommands by role (e.g. `agent` → DISCOVERY / CRUD / RUNTIME;
 `bkn` → LIFECYCLE / LOCAL DIRECTORY / SCHEMA / INSTANCES / EXECUTION). One
 formatter reads a `group` tag off each command — no per-command help strings.
 
 ## Binary name
 
-The binary is **`openbkn`** (npm package `@openbkn/bkn-sdk`). Subcommand names
-are kept **identical** to the legacy CLIs — including the knowledge-network
-command `bkn` (`openbkn bkn list`, not a renamed `kn`). Naming `openbkn`
-distinct from its `bkn` subcommand avoids any `bkn bkn` doubling while keeping
-full command-tree equivalence. Aliases preserved: `res`, `context`, `curl`.
+The binary is **`openbkn`** (npm package `@openbkn/bkn-sdk`). The
+knowledge-network subcommand is `bkn` (`openbkn bkn list`, not a renamed `kn`);
+naming the binary `openbkn` — distinct from its `bkn` subcommand — avoids any
+`bkn bkn` doubling. Aliases: `res`, `context`, `curl`.
 
 ## Global flags
 
@@ -112,7 +107,7 @@ full command-tree equivalence. Aliases preserved: `res`, `context`, `curl`.
 | `--base-url <url>` | Platform base URL | `BKN_BASE_URL` |
 | `--token <v>` | Access token (read-only mode if set) | `BKN_TOKEN` |
 | `--user <id\|name>` | Use specific user credentials | `BKN_USER` |
-| `--json` / `--compact` | Machine-readable output (legacy `--pretty`/`--compact`/`--json` reconciled here) | — |
+| `--json` / `--compact` | Machine-readable output | — |
 | `-bd, --biz-domain <s>` | Business domain | — |
 | `--insecure, -k` | Skip TLS verification (dev only) | — |
 
@@ -125,5 +120,5 @@ full command-tree equivalence. Aliases preserved: `res`, `context`, `curl`.
 
 ## Open questions
 
-- Canonical JSON flag spelling (`--json` vs `--pretty`/`--compact`) — pick one, alias the rest, document in the command map.
+- Canonical JSON flag spelling (`--json` vs `--pretty`/`--compact`) — pick one, alias the rest.
 - Whether `explore` (local web UI) fits the backend-only product scope or should be dropped.
