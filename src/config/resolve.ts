@@ -26,7 +26,10 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
     throw new InputError("No access token. Set BKN_TOKEN or run `openbkn auth login`.");
   }
 
-  const insecure = opts.insecure ?? stored?.tlsInsecure ?? false;
+  // Skipping certificate verification is asked for per invocation, never
+  // inherited: a stored flag would silently keep TLS off for every later call
+  // — and for a library consumer, one they never made.
+  const insecure = opts.insecure ?? false;
   // Auto-refresh only for stored credentials with a refresh token (not --token/env).
   const refresh =
     !explicit && stored?.refreshToken

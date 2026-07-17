@@ -75,7 +75,6 @@ export function registerAuthLeaves(cmd: Command): void {
     .option("--no-browser", "print the URL instead of opening a browser")
     .action(async (url: string, opts, cmd: Command) => {
       const g = cmd.optsWithGlobals();
-      if (g.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
       const out = outputOptions(cmd);
       const report = (r: { baseUrl?: string; userId?: string; username?: string }) => {
         if (out.json || out.compact) {
@@ -86,7 +85,7 @@ export function registerAuthLeaves(cmd: Command): void {
       };
       const token = opts.token ?? g.token;
       if (token) {
-        report(auth.attachToken(url, token, { insecure: g.insecure }));
+        report(auth.attachToken(url, token));
         return;
       }
       // All flows ride the device_code grant (the only seeded user client):
@@ -104,6 +103,7 @@ export function registerAuthLeaves(cmd: Command): void {
             clientId: opts.clientId,
             audience: opts.audience,
             timeoutMs: opts.timeout * 1000,
+            insecure: g.insecure,
           });
         } else {
           // Open the browser unless asked not to (--device / --no-browser) or
@@ -115,6 +115,7 @@ export function registerAuthLeaves(cmd: Command): void {
             clientId: opts.clientId,
             audience: opts.audience,
             timeoutMs: opts.timeout * 1000,
+            insecure: g.insecure,
             onPrompt: ({ userCode, verificationUri, verificationUriComplete }) => {
               const target = verificationUriComplete ?? verificationUri;
               process.stderr.write(
@@ -151,7 +152,6 @@ export function registerAuthLeaves(cmd: Command): void {
         auth.attachToken(url, tokens.accessToken, {
           refreshToken: tokens.refreshToken,
           idToken: tokens.idToken,
-          insecure: g.insecure,
           username: account,
         }),
       );
@@ -168,8 +168,10 @@ export function registerAuthLeaves(cmd: Command): void {
     .option("--no-refresh", "print the stored token as-is, without refreshing")
     .action(async (opts, cmd: Command) => {
       const g = cmd.optsWithGlobals();
-      if (g.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-      const token = opts.refresh === false ? auth.currentToken() : await auth.currentTokenFresh();
+      const token =
+        opts.refresh === false
+          ? auth.currentToken()
+          : await auth.currentTokenFresh({ insecure: g.insecure });
       process.stdout.write(`${token}\n`);
     });
 
@@ -179,7 +181,6 @@ export function registerAuthLeaves(cmd: Command): void {
     .option("--no-lookup", "skip the backend identity fallback (eacp/user/get)")
     .action(async (_url: string | undefined, opts, cmd: Command) => {
       const g = cmd.optsWithGlobals();
-      if (g.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
       const me = auth.whoami();
       // The device-flow id_token carries only `sub` (a UUID), so the token
       // alone can't say *who* you are. Resolve the account name from the
@@ -297,7 +298,6 @@ export function registerAuthLeaves(cmd: Command): void {
     .option("--new-password <pwd>", "new password")
     .action(async (url: string | undefined, opts, cmd: Command) => {
       const g = cmd.optsWithGlobals();
-      if (g.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
       const ctx = resolveContext({
         baseUrl: url ?? g.baseUrl,
         token: g.token,

@@ -14,7 +14,7 @@ import { HttpError } from "../utils/errors.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
-import { applyTls } from "./tls.js";
+import { tlsFetch } from "./tls.js";
 
 const FACTORY = "/api/agent-factory";
 
@@ -114,7 +114,6 @@ export async function sendChat(
   query: string,
   opts: SendChatOptions = {},
 ): Promise<ChatResult> {
-  applyTls(ctx);
   const body: Record<string, unknown> = {
     agent_id: info.id,
     agent_key: info.key,
@@ -125,7 +124,7 @@ export async function sendChat(
   if (opts.conversationId) body.conversation_id = opts.conversationId;
 
   const res = await authFetch(ctx, () =>
-    fetch(`${ctx.baseUrl}${FACTORY}/v1/app/${info.key}/chat/completion`, {
+    tlsFetch(ctx.insecure, `${ctx.baseUrl}${FACTORY}/v1/app/${info.key}/chat/completion`, {
       method: "POST",
       headers: {
         ...buildHeaders(ctx),

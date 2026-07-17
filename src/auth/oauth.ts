@@ -15,6 +15,7 @@
  * Returns a token triple; the command persists it.
  */
 import { spawn } from "node:child_process";
+import { tlsFetch } from "../api/tls.js";
 import { InputError } from "../utils/errors.js";
 
 export interface OAuthTokens {
@@ -97,9 +98,10 @@ export async function refreshAccessToken(
   baseUrl: string,
   refreshToken: string,
   clientId = "openbkn-sdk",
+  insecure?: boolean,
 ): Promise<OAuthTokens> {
   const base = normalizeBaseUrl(baseUrl);
-  const res = await fetch(`${base}/oauth2/token`, {
+  const res = await tlsFetch(insecure, `${base}/oauth2/token`, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -139,6 +141,8 @@ export interface DeviceLoginOptions {
   audience?: string;
   /** Cap the poll wait (ms); defaults to the device code's `expires_in`. */
   timeoutMs?: number;
+  /** Skip TLS verification for this login only (`--insecure` / `-k`). */
+  insecure?: boolean;
   onPrompt?: (info: DevicePrompt) => void;
 }
 
@@ -167,10 +171,11 @@ async function requestDeviceCode(
   clientId: string,
   scope: string,
   audience?: string,
+  insecure?: boolean,
 ): Promise<DeviceAuthResponse> {
   const params: Record<string, string> = { client_id: clientId, scope };
   if (audience) params.audience = audience;
-  const res = await fetch(`${base}/oauth2/device/auth`, form(params));
+  const res = await tlsFetch(insecure, `${base}/oauth2/device/auth`, form(params));
   if (!res.ok) {
     throw new Error(`Device auth failed (${res.status}): ${(await res.text()) || res.statusText}`);
   }
@@ -190,12 +195,14 @@ async function pollDeviceToken(
   clientId: string,
   intervalMs: number,
   windowMs: number,
+  insecure?: boolean,
 ): Promise<OAuthTokens> {
   let interval = intervalMs;
   const deadline = Date.now() + windowMs;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, interval));
-    const tokRes = await fetch(
+    const tokRes = await tlsFetch(
+      insecure,
       `${base}/oauth2/token`,
       form({ grant_type: DEVICE_GRANT, device_code: deviceCode, client_id: clientId }),
     );
@@ -225,7 +232,13 @@ export async function deviceLogin(
 ): Promise<OAuthTokens> {
   const base = normalizeBaseUrl(baseUrl);
   const clientId = opts.clientId ?? DEFAULT_DEVICE_CLIENT_ID;
-  const da = await requestDeviceCode(base, clientId, opts.scope ?? DEVICE_SCOPE, opts.audience);
+  const da = await requestDeviceCode(
+    base,
+    clientId,
+    opts.scope ?? DEVICE_SCOPE,
+    opts.audience,
+    opts.insecure,
+  );
   // Hydra may advertise an internal host (e.g. its container name) in the
   // verification URIs; present them on the base URL the user actually reached.
   opts.onPrompt?.({
@@ -236,7 +249,14 @@ export async function deviceLogin(
       : undefined,
   });
   const windowMs = Math.min(opts.timeoutMs ?? Number.POSITIVE_INFINITY, da.expires_in * 1000);
-  return pollDeviceToken(base, da.device_code, clientId, (da.interval ?? 5) * 1000, windowMs);
+  return pollDeviceToken(
+    base,
+    da.device_code,
+    clientId,
+    (da.interval ?? 5) * 1000,
+    windowMs,
+    opts.insecure,
+  );
 }
 
 /** Re-host a URL onto the base origin, keeping its path + query. */
@@ -265,11 +285,17 @@ export async function credentialDeviceLogin(
 ): Promise<OAuthTokens> {
   const base = normalizeBaseUrl(baseUrl);
   const clientId = opts.clientId ?? DEFAULT_DEVICE_CLIENT_ID;
-  const da = await requestDeviceCode(base, clientId, opts.scope ?? DEVICE_SCOPE, opts.audience);
+  const da = await requestDeviceCode(
+    base,
+    clientId,
+    opts.scope ?? DEVICE_SCOPE,
+    opts.audience,
+    opts.insecure,
+  );
 
   let jar = "";
   const hop = async (url: string, init?: RequestInit) => {
-    const r = await fetch(url, {
+    const r = await tlsFetch(opts.insecure, url, {
       method: init?.method ?? "GET",
       headers: { Cookie: jar, Accept: "text/html,*/*;q=0.8", ...(init?.headers ?? {}) },
       body: init?.body,
@@ -312,5 +338,12 @@ export async function credentialDeviceLogin(
 
   // Approval submitted — poll the device token.
   const windowMs = Math.min(opts.timeoutMs ?? Number.POSITIVE_INFINITY, da.expires_in * 1000);
-  return pollDeviceToken(base, da.device_code, clientId, (da.interval ?? 5) * 1000, windowMs);
+  return pollDeviceToken(
+    base,
+    da.device_code,
+    clientId,
+    (da.interval ?? 5) * 1000,
+    windowMs,
+    opts.insecure,
+  );
 }

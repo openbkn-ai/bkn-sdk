@@ -47,7 +47,7 @@ function usernameOf(token: TokenConfig | undefined): string | undefined {
 export function attachToken(
   baseUrl: string,
   accessToken: string,
-  opts: { refreshToken?: string; idToken?: string; insecure?: boolean; username?: string } = {},
+  opts: { refreshToken?: string; idToken?: string; username?: string } = {},
 ): { baseUrl: string; userId: string; username?: string } {
   const url = normalize(baseUrl);
   const token: TokenConfig = {
@@ -55,7 +55,6 @@ export function attachToken(
     accessToken,
     refreshToken: opts.refreshToken,
     idToken: opts.idToken,
-    tlsInsecure: opts.insecure,
     // Prefer the account the user typed (-u); device tokens carry no username.
     username: opts.username ?? decodeJwt(opts.idToken ?? accessToken)?.preferred_username,
   };
@@ -98,7 +97,7 @@ export function currentToken(): string {
  * refresh on a 401 (see api/http.ts); this covers the `auth token` getter,
  * whose output is copied out and used elsewhere where no 401 retry can help.
  */
-export async function currentTokenFresh(): Promise<string> {
+export async function currentTokenFresh(opts: { insecure?: boolean } = {}): Promise<string> {
   const baseUrl = activePlatform();
   const token = baseUrl ? readToken(baseUrl) : undefined;
   if (!baseUrl || !token) {
@@ -113,7 +112,7 @@ export async function currentTokenFresh(): Promise<string> {
   const needsRefresh = decodable ? isExpired(claims) : true;
   if (token.refreshToken && needsRefresh) {
     try {
-      const t = await refreshAccessToken(baseUrl, token.refreshToken);
+      const t = await refreshAccessToken(baseUrl, token.refreshToken, undefined, opts.insecure);
       writeToken(baseUrl, {
         ...token,
         accessToken: t.accessToken,

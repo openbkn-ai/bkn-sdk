@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import type { RequestContext } from "../types.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
-import { applyTls } from "./tls.js";
+import { tlsFetch } from "./tls.js";
 
 export interface RawCallOptions {
   method?: string;
@@ -58,7 +58,6 @@ export async function rawCall(
   path: string,
   opts: RawCallOptions = {},
 ): Promise<RawCallResult> {
-  applyTls(ctx);
   const url = resolveUrl(ctx, path);
   const extra: Record<string, string> = {};
   for (const h of opts.header ?? []) {
@@ -94,7 +93,12 @@ export async function rawCall(
     // retries — matches the SDK request path so `call`/`curl` self-heals on an
     // expired token instead of surfacing "token is invalid".
     const res = await authFetch(ctx, () =>
-      fetch(url, { method, headers: headersFor(), body, signal: controller.signal }),
+      tlsFetch(ctx.insecure, url, {
+        method,
+        headers: headersFor(),
+        body,
+        signal: controller.signal,
+      }),
     );
     return { status: res.status, statusText: res.statusText, body: await res.text() };
   } finally {

@@ -11,7 +11,7 @@ import type { RequestContext } from "../types.js";
 import { HttpError } from "../utils/errors.js";
 import { authFetch } from "./auth-fetch.js";
 import { request } from "./http.js";
-import { applyTls } from "./tls.js";
+import { tlsFetch } from "./tls.js";
 
 const MCP_PATH = "/api/agent-retrieval/v1/mcp";
 const PROTOCOL = "2024-11-05";
@@ -71,9 +71,8 @@ async function post(
   sessionId: string | undefined,
   body: unknown,
 ) {
-  applyTls(ctx);
   const res = await authFetch(ctx, () =>
-    fetch(mcpUrl(ctx), {
+    tlsFetch(ctx.insecure, mcpUrl(ctx), {
       method: "POST",
       headers: headers(ctx, knId, sessionId),
       body: JSON.stringify(body),

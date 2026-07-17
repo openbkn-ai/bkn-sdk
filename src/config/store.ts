@@ -34,8 +34,6 @@ export interface TokenConfig {
   refreshToken?: string;
   idToken?: string;
   expiresAt?: string;
-  /** Skip TLS verification for this platform (saved by `auth login -k`). */
-  tlsInsecure?: boolean;
   /** Login name persisted at login time (fallback when JWT lacks claims). */
   username?: string;
   /** Human-readable name from userinfo. */

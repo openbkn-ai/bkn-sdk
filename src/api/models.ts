@@ -10,7 +10,7 @@ import { HttpError } from "../utils/errors.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
-import { applyTls } from "./tls.js";
+import { tlsFetch } from "./tls.js";
 
 const MANAGER = "/api/mf-model-manager/v1";
 const API = "/api/mf-model-api/v1";
@@ -83,9 +83,8 @@ export async function chatCompletionsStream(
   messages: ChatMessage[],
   onDelta: (text: string) => void,
 ): Promise<string> {
-  applyTls(ctx);
   const res = await authFetch(ctx, () =>
-    fetch(`${ctx.baseUrl}${API}/chat/completions`, {
+    tlsFetch(ctx.insecure, `${ctx.baseUrl}${API}/chat/completions`, {
       method: "POST",
       headers: {
         ...buildHeaders(ctx),

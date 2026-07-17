@@ -9,7 +9,7 @@ import { refreshAccessToken } from "../auth/oauth.js";
 import type { RequestContext } from "../types.js";
 import { HttpError } from "../utils/errors.js";
 import { buildHeaders } from "./headers.js";
-import { applyTls } from "./tls.js";
+import { tlsFetch } from "./tls.js";
 
 export interface RequestInitEx {
   method?: string;
@@ -38,13 +38,12 @@ export async function request<T = unknown>(
     }
   }
 
-  applyTls(ctx);
   const hasBody = init.body !== undefined;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), init.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
   const send = () =>
-    fetch(url, {
+    tlsFetch(ctx.insecure, url, {
       method: init.method ?? (hasBody ? "POST" : "GET"),
       headers: buildHeaders(ctx, {
         ...(hasBody ? { "content-type": "application/json" } : {}),
@@ -84,7 +83,12 @@ function hintFor(ctx: RequestContext, status: number): string | undefined {
 export async function tryRefresh(ctx: RequestContext): Promise<boolean> {
   if (!ctx.refresh) return false;
   try {
-    const t = await refreshAccessToken(ctx.baseUrl, ctx.refresh.refreshToken, ctx.refresh.clientId);
+    const t = await refreshAccessToken(
+      ctx.baseUrl,
+      ctx.refresh.refreshToken,
+      ctx.refresh.clientId,
+      ctx.insecure,
+    );
     ctx.token = t.accessToken;
     if (t.refreshToken) ctx.refresh.refreshToken = t.refreshToken;
     ctx.refresh.persist(t);
