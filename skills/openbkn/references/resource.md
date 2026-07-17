@@ -2,8 +2,8 @@
 
 | Command | Notes |
 |---------|-------|
-| `list [--datasource <catalog>] [--category table] [--limit]` | Browse. |
-| `find <name> [--datasource <c>] [--exact]` | Search by name. |
+| `list [--catalog-id <c>] [--category table] [--limit]` | Browse. `--datasource-id` is an alias of `--catalog-id`; `--type` of `--category`. |
+| `find <name> [--catalog-id <c>] [--exact]` | Search by name. |
 | `get <id>` / `query <id> [--limit] [--offset]` / `delete <id>` | Detail / data rows / delete. |
 
 For BKN object-type binding use `data_source: { type: "resource", id }`.

@@ -1,8 +1,9 @@
 # context — MCP retrieval (agent-retrieval)
 
 Layered retrieval over the agent-retrieval MCP endpoint. `<kn-id>` is the first
-positional arg on KN-scoped commands (or the global `-k`/`--kn-id`); the MCP
-endpoint is derived as `<base-url>/api/agent-retrieval/v1/mcp`.
+positional arg on KN-scoped commands — there is no `--kn-id` flag, and the global
+`-k` means `--insecure`, not the KN. The MCP endpoint is derived as
+`<base-url>/api/agent-retrieval/v1/mcp`.
 
 ## Discover first
 
@@ -18,7 +19,7 @@ argument names. Anything below is the common shape; verify against `info`.
 
 ```bash
 # discover → call
-openbkn context info -k
+openbkn context info
 openbkn context tool-call <kn> <tool-name> --args '{"k":"v"}'
 openbkn context tool-call <kn> <tool-name> --arg k=v --arg n=10 --arg list='["a","b"]'
 #   --arg repeats; each value is parsed as JSON (number/bool/array), else a string
