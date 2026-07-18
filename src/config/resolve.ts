@@ -48,10 +48,12 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
     throw new InputError("No access token. Set BKN_TOKEN or run `openbkn auth login`.");
   }
 
-  // Skipping certificate verification is asked for per invocation, never
-  // inherited: a stored flag would silently keep TLS off for every later call
-  // — and for a library consumer, one they never made.
-  const insecure = opts.insecure ?? false;
+  // A `-k` login is remembered per platform so a self-signed host needn't
+  // repeat it. This is safe now only because the opt-out rides a per-request
+  // undici dispatcher (api/tls.ts): it skips verification for *this platform's*
+  // requests, never by flipping the process-global TLS setting. So the blast
+  // radius is this one self-signed host, not a library consumer's whole process.
+  const insecure = opts.insecure ?? stored?.tlsInsecure ?? false;
   // Auto-refresh only for stored credentials with a refresh token (not --token/env).
   const refresh =
     !explicit && stored?.refreshToken

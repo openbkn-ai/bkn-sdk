@@ -38,6 +38,14 @@ export interface TokenConfig {
   username?: string;
   /** Human-readable name from userinfo. */
   displayName?: string;
+  /**
+   * Skip TLS verification for this platform (saved by `auth login -k`), so a
+   * self-signed platform needn't repeat `-k` on every command. The opt-out is
+   * applied per request via an undici dispatcher (see api/tls.ts) and is scoped
+   * to this platform's requests — it never touches the global TLS setting or a
+   * library consumer's unrelated traffic.
+   */
+  tlsInsecure?: boolean;
 }
 
 /** Per-platform, per-user non-auth settings. */

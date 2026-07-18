@@ -49,7 +49,7 @@ function usernameOf(token: TokenConfig | undefined): string | undefined {
 export function attachToken(
   baseUrl: string,
   accessToken: string,
-  opts: { refreshToken?: string; idToken?: string; username?: string } = {},
+  opts: { refreshToken?: string; idToken?: string; username?: string; insecure?: boolean } = {},
 ): { baseUrl: string; userId: string; username?: string } {
   const url = normalize(baseUrl);
   const token: TokenConfig = {
@@ -57,6 +57,8 @@ export function attachToken(
     accessToken,
     refreshToken: opts.refreshToken,
     idToken: opts.idToken,
+    // Remember `-k` so a self-signed platform needn't repeat it every command.
+    tlsInsecure: opts.insecure ? true : undefined,
     // Prefer the account the user typed (-u); device tokens carry no username.
     username: opts.username ?? decodeJwt(opts.idToken ?? accessToken)?.preferred_username,
   };

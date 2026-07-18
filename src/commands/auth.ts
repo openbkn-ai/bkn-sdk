@@ -81,7 +81,7 @@ export function registerAuthLeaves(cmd: Command): void {
       };
       const token = opts.token ?? g.token;
       if (token) {
-        report(auth.attachToken(url, token));
+        report(auth.attachToken(url, token, { insecure: g.insecure }));
         return;
       }
       // All flows ride the device_code grant (the only seeded user client):
@@ -149,6 +149,7 @@ export function registerAuthLeaves(cmd: Command): void {
           refreshToken: tokens.refreshToken,
           idToken: tokens.idToken,
           username: account,
+          insecure: g.insecure,
         }),
       );
     });

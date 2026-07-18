@@ -87,28 +87,43 @@ describe.skipIf(!hasOpenssl)("tlsFetch", () => {
 });
 
 describe("resolveContext + insecure", () => {
-  it("never inherits a TLS opt-out from the token store", async () => {
+  /**
+   * A `-k` login is remembered per platform so a self-signed host needn't
+   * repeat it — but only because the opt-out is applied per request (a stored
+   * flag never flips the process-global TLS setting), so its reach is that one
+   * platform, not a library consumer's unrelated traffic.
+   */
+  it("inherits a stored TLS opt-out for that platform, and only that platform", async () => {
     const { mkdtempSync } = await import("node:fs");
     const dir = mkdtempSync(join(tmpdir(), "bkn-tls-cfg-"));
-    const base = "https://self-signed.example";
-    const key = Buffer.from(base).toString("base64url");
-    const userDir = join(dir, "platforms", key, "users", "u1");
-    mkdirSync(userDir, { recursive: true });
-    // A pre-0.1.1 store: `auth login -k` persisted the opt-out here.
-    writeFileSync(
-      join(userDir, "token.json"),
-      JSON.stringify({ baseUrl: base, accessToken: "AT", tlsInsecure: true }),
-    );
+    const insecureBase = "https://self-signed.example";
+    const otherBase = "https://normal.example";
+    const seed = (base: string, extra: Record<string, unknown>) => {
+      const key = Buffer.from(base).toString("base64url");
+      const userDir = join(dir, "platforms", key, "users", "u1");
+      mkdirSync(userDir, { recursive: true });
+      writeFileSync(
+        join(userDir, "token.json"),
+        JSON.stringify({ baseUrl: base, accessToken: "AT", ...extra }),
+      );
+    };
+    seed(insecureBase, { tlsInsecure: true });
+    seed(otherBase, {});
     writeFileSync(
       join(dir, "state.json"),
-      JSON.stringify({ currentPlatform: base, activeUsers: { [base]: "u1" } }),
+      JSON.stringify({
+        currentPlatform: insecureBase,
+        activeUsers: { [insecureBase]: "u1", [otherBase]: "u1" },
+      }),
     );
     const saved = process.env.BKN_CONFIG_DIR;
     process.env.BKN_CONFIG_DIR = dir;
     try {
       const { resolveContext } = await import("../../src/config/resolve.js");
-      expect(resolveContext({}).insecure).toBe(false);
-      expect(resolveContext({ insecure: true }).insecure).toBe(true);
+      expect(resolveContext({ baseUrl: insecureBase }).insecure).toBe(true);
+      expect(resolveContext({ baseUrl: otherBase }).insecure).toBe(false);
+      // The stored flag stays a preference, not a lock: this call didn't ask.
+      expect(process.env.NODE_TLS_REJECT_UNAUTHORIZED).toBeUndefined();
     } finally {
       if (saved === undefined) delete process.env.BKN_CONFIG_DIR;
       else process.env.BKN_CONFIG_DIR = saved;
