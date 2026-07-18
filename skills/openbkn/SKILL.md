@@ -42,7 +42,7 @@ openbkn [--base-url <url>] [--token <tok>] [--user <id|name>] \
 ```
 
 - 默认输出为**人类可读表格**；`--json`（或 `--compact`）输出可被脚本解析的精确 JSON。
-- `-k/--insecure` 关闭 TLS 校验（自签名平台），**每条命令都要带** —— 登录时带过不会被记住，token 刷新也走同一个开关，无需 `NODE_TLS_REJECT_UNAUTHORIZED`。
+- `-k/--insecure` 关闭 TLS 校验（自签名平台）。`auth login -k` 会按平台记住，之后该平台的命令无需再带；免校验只作用于该平台的请求，不碰进程全局，无需 `NODE_TLS_REJECT_UNAUTHORIZED`。
 - `-bd <domain>` 覆盖 `x-business-domain`（默认 `bd_public`）。
 - **以实时 `--help` 为准。** `openbkn --help` 看分组命令地图，`openbkn <group> <sub> --help` 看确切参数。**不要猜参数**。
 

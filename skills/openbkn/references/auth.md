@@ -21,9 +21,9 @@ is no dynamic client registration, no loopback callback, and no client secret.
 
 Gotchas:
 
-- **Self-signed platform → pass `-k` on every command.** It is deliberately not
-  remembered: a stored TLS opt-out would keep certificate checking off for every
-  later call, silently.
+- **Self-signed platform → `auth login -k <url>`.** It's remembered per platform,
+  so later commands need no `-k`. The opt-out is scoped to that platform's
+  requests — it never touches the process-global TLS setting.
 - Opaque Ory access tokens aren't JWTs — `whoami` reads the id_token.
 - A platform with no bkn-safe auth stack cannot be registered; there is no
   unauthenticated mode. Issue a token elsewhere and attach it with `--token`.
