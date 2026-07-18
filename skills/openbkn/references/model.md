@@ -8,7 +8,7 @@
 | `small add --name --type --api-model --api-url --api-key --embedding-dim --max-tokens --batch-size` | Small-model register. |
 | `llm|small edit <modelid> …` / `delete <modelid…>` / `test <modelid>` | Update / delete / connectivity test. |
 | `llm chat <model> -m "…" [--stream]` | OpenAI-compatible chat. `<model>` = model **name** or numeric **id** (an id is resolved to its name first). `--stream` = SSE token stream. |
-| `small embeddings <id> -i a,b` / `rerank <id> -q <q> -d a,b` | Embedding / rerank. |
+| `small embeddings <model> -i a,b` / `rerank <model> -q <q> -d a,b` | Embedding / rerank. `<model>` = the model **name** (`model_name`), NOT the numeric id — a numeric id currently 400s (`ModelFactory.ExternalSmallModel.*`). Unlike `llm chat`, these do not yet resolve id→name. Find the name via `small list`. Tracked for a fix. |
 | `llm set-default <id>` / `llm unset-default <id>` | Set / clear the system default LLM (admin). The `default` flag also shows on each `llm list` row. |
 | `small set-default <id>` / `small unset-default <id>` | Set / clear the system default small model (type inferred from the model; admin). |
 | `small get-default [--type embedding\|reranker]` | Show the current default small model for a type (`{}` = none set). |
