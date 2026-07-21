@@ -67,13 +67,13 @@ No BKN Trace event envelope is emitted by SDK/CLI in phase one. Fixture validati
 | --- | --- | --- | --- |
 | unit | `test/unit/trace-context.test.ts` | generated request id, valid traceparent propagation, baggage filtering | pass |
 | unit | `test/unit/headers.test.ts` | auth header safety plus generated trace headers | pass |
-| contract fixture | `bkn-docs/docs/foundry/bkn-trace/examples/openbkn-modules/sdk-cli/fixtures/positive.json` | request id injection shape | pass |
-| contract fixture | `bkn-docs/docs/foundry/bkn-trace/examples/openbkn-modules/sdk-cli/fixtures/propagation.json` | outbound context propagation shape | pass |
-| contract fixture | `bkn-docs/docs/foundry/bkn-trace/examples/openbkn-modules/sdk-cli/fixtures/sampling.json` | validation failure forced-sampled shape | pass |
-| contract fixture | `bkn-docs/docs/foundry/bkn-trace/examples/openbkn-modules/sdk-cli/fixtures/negative_baggage.json` | forbidden baggage key rejection | fail |
+| contract fixture | `fixtures/bkn-trace/positive.json` | request id injection shape | pass |
+| contract fixture | `fixtures/bkn-trace/propagation.json` | outbound context propagation shape | pass |
+| contract fixture | `fixtures/bkn-trace/sampling.json` | validation failure forced-sampled shape | pass |
+| contract fixture | `fixtures/bkn-trace/negative_baggage.json` | forbidden baggage key rejection | fail |
 
 ## Known Gaps
 
-- SDK/CLI does not yet expose `openbkn trace contract validate`; bkn-docs currently provides the executable validator.
+- SDK/CLI exposes `openbkn trace validate-fixture`; bkn-docs remains the source of the shared fixture contract and Python reference validator.
 - SDK/CLI does not yet emit local BKN Trace event envelopes.
 - Raw call explicit headers can intentionally override generated trace context; this is preserved for operator debugging.

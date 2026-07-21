@@ -1,0 +1,51 @@
+{
+  "bkn.trace.schema.version": "1.0.0",
+  "fixture_id": "sdk_cli_sampling_validation_failure",
+  "fixture_type": "sampling",
+  "scenario": "sdk_cli_fixture_validation_failure_forced_sampled",
+  "expected_result": "pass",
+  "trace": {
+    "trace_id": "75030000000000000000000000000003",
+    "bkn.request.id": "req_sdk_cli_0003",
+    "traceparent": "00-75030000000000000000000000000003-7503000000000001-01",
+    "sampling.decision": "forced_sampled"
+  },
+  "spans": [
+    {
+      "span_id": "7503000000000001",
+      "parent_span_id": null,
+      "name": "bkn-cli.command",
+      "kind": "internal",
+      "bkn.module.name": "sdk-cli",
+      "bkn.operation.name": "cli.trace.validate_fixture",
+      "bkn.status": "error",
+      "bkn.timestamp": "2026-07-21T06:42:00.000000000Z",
+      "duration_ms": 17,
+      "error.category": "validation",
+      "error.code": "BKN_TRACE_FIXTURE_INVALID",
+      "error.retryable": false
+    }
+  ],
+  "logs": [
+    {
+      "level": "error",
+      "message": "fixture validation failed",
+      "trace_id": "75030000000000000000000000000003",
+      "span_id": "7503000000000001",
+      "bkn.request.id": "req_sdk_cli_0003",
+      "bkn.module.name": "sdk-cli",
+      "bkn.operation.name": "cli.trace.validate_fixture",
+      "bkn.status": "error",
+      "bkn.timestamp": "2026-07-21T06:42:00.017000000Z",
+      "bkn.trace.schema.version": "1.0.0",
+      "error.category": "validation",
+      "error.code": "BKN_TRACE_FIXTURE_INVALID",
+      "error.retryable": false
+    }
+  ],
+  "events": [],
+  "baggage": {
+    "bkn.account.type": "user",
+    "bkn.runtime.env": "test"
+  }
+}
