@@ -5,6 +5,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { Command } from "commander";
 import { renderReportMarkdown } from "../bkn-trace/diagnose.js";
+import { validateFixturePath } from "../bkn-trace/fixture-validate.js";
 import { validateSchemaFile } from "../bkn-trace/schema-validate.js";
 import { group } from "../help/grouped-help.js";
 import { printJson } from "../utils/output.js";
@@ -104,6 +105,15 @@ export function traceCommand(): Command {
       const result = validateSchemaFile(file, opts.kind);
       printJson(result, outputOptions(cmd));
       if (!result.valid) process.exitCode = 1;
+    });
+
+  cmd
+    .command("validate-fixture <path>")
+    .description("Validate BKN Trace phase-one fixture JSON files")
+    .action(async (path: string, _opts, cmd: Command) => {
+      const result = validateFixturePath(path);
+      printJson(result, outputOptions(cmd));
+      if (!result.ok) process.exitCode = 1;
     });
 
   return group(cmd, "TRACE AI");
