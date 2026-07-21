@@ -1,0 +1,79 @@
+# bkn-sdk / openbkn CLI Trace Contract
+
+> Status: phase-one module contract  
+> Contract version: `bkn.trace.schema.version=1.0.0`  
+> Reference: `bkn-docs/docs/foundry/bkn-trace/design/阶段一：OpenBKN 可观测记录规范与 Trace Context 基线.md`
+
+## Module
+
+- module name: `sdk-cli`
+- owner: OpenBKN SDK
+- service identity: SDK / CLI caller
+- runtime: TypeScript / Node.js
+- repository path: `bkn-sdk`
+- contract version: `1.0.0`
+
+## Entry Operations
+
+| operation | trigger | required context | emitted spans | emitted events |
+| --- | --- | --- | --- | --- |
+| `sdk.request` | SDK consumer calls an OpenBKN API | optional caller trace context | none in phase one | none in phase one |
+| `sdk.openbkn.call` | SDK HTTP request to OpenBKN | `traceparent`, `bkn-request-id` | none in phase one | none in phase one |
+| `cli.command` | `openbkn` command invocation | optional caller trace context | none in phase one | none in phase one |
+| `cli.trace.validate_fixture` | fixture validation command or equivalent | local request context | none in phase one | validation result output |
+
+## Inbound Context
+
+- accepted options: `ClientOptions.trace.requestId`, `ClientOptions.trace.traceparent`, `ClientOptions.trace.baggage`
+- request id parsing: valid `req_<id>` is preserved; invalid or missing values generate `req_<uuid>`
+- traceparent parsing: valid W3C version `00` is preserved; invalid, all-zero trace id, or all-zero span id generate a new internal traceparent
+- baggage policy: allowlist-only; only `bkn.account.type` and `bkn.runtime.env` propagate
+
+## Outbound Calls
+
+| target | protocol | propagated fields | baggage policy | timeout | retry |
+| --- | --- | --- | --- | --- | --- |
+| OpenBKN APIs | HTTP | `traceparent`, `bkn-request-id`, `x-request-id` | allowlist-only baggage | existing request timeout | existing refresh/retry policy |
+| Raw call passthrough | HTTP | generated context plus explicit caller headers | allowlist-only generated baggage; caller extra headers can override deliberately | `RawCallOptions.timeoutMs` | existing refresh/retry policy |
+
+## Logs
+
+SDK/CLI phase one does not add persistent logs by default. If commands emit diagnostic output, they must not include token, authorization, cookie, full prompt, full SQL, full request body, full response body, or PII.
+
+## Spans
+
+SDK/CLI does not start OpenTelemetry spans in phase one. It injects trace context into outbound HTTP requests so server-side spans, logs, and events can join by `trace_id` and `bkn.request.id`.
+
+## Events
+
+No BKN Trace event envelope is emitted by SDK/CLI in phase one. Fixture validation output acts as the local contract proof until the SDK exposes `openbkn trace contract validate`.
+
+## Sensitive Data Rules
+
+- never log: token, authorization, cookie, full local config, full request body, full response body, prompt, SQL, PII
+- hash only: future prompt, SQL, tool args, tool result
+- controlled reference: future large object and evidence refs
+- baggage allowlist: `bkn.account.type`, `bkn.runtime.env`
+
+## Sampling
+
+- default: generated traceparent uses sampled flag `01`
+- forced sampling: command failures and validation failures should be treated as forced-sampled by downstream trace collectors when available
+- not sampled behavior: request id still propagates
+
+## Fixtures And Tests
+
+| fixture or test | path | purpose | expected result |
+| --- | --- | --- | --- |
+| unit | `test/unit/trace-context.test.ts` | generated request id, valid traceparent propagation, baggage filtering | pass |
+| unit | `test/unit/headers.test.ts` | auth header safety plus generated trace headers | pass |
+| contract fixture | `bkn-docs/docs/foundry/bkn-trace/examples/openbkn-modules/sdk-cli/fixtures/positive.json` | request id injection shape | pass |
+| contract fixture | `bkn-docs/docs/foundry/bkn-trace/examples/openbkn-modules/sdk-cli/fixtures/propagation.json` | outbound context propagation shape | pass |
+| contract fixture | `bkn-docs/docs/foundry/bkn-trace/examples/openbkn-modules/sdk-cli/fixtures/sampling.json` | validation failure forced-sampled shape | pass |
+| contract fixture | `bkn-docs/docs/foundry/bkn-trace/examples/openbkn-modules/sdk-cli/fixtures/negative_baggage.json` | forbidden baggage key rejection | fail |
+
+## Known Gaps
+
+- SDK/CLI does not yet expose `openbkn trace contract validate`; bkn-docs currently provides the executable validator.
+- SDK/CLI does not yet emit local BKN Trace event envelopes.
+- Raw call explicit headers can intentionally override generated trace context; this is preserved for operator debugging.
