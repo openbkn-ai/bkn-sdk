@@ -58,6 +58,7 @@ Dependency direction is one-way: `commands → resources → api → auth/config
 - Default list `limit` = **30**; query/preview `limit` = **50**; `--limit` always overrides.
 - Global `--json` for machine-readable output where supported.
 - This is a **rewrite**, not a port: reference the legacy user/agent-SDK and operator-CLI predecessors, but slim and unify — do not copy verbatim. Python SDK is dropped.
+- Branch names must use a valid type prefix and at most two path segments after it: `<type>/<description>`, `<type>/<issue-number>-<description>`, or `<type>/<module>/<description>`; segments start with lowercase letters or digits and may contain `-`, `.`, or `_`.
 
 ## Domains
 
