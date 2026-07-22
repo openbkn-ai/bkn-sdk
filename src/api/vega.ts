@@ -308,7 +308,8 @@ export function listCatalogResources(
     query: {
       catalog_id: id,
       category: category || undefined,
-      limit: limit !== undefined && limit !== 0 ? limit : undefined,
+      // limit=-1 (NO_LIMIT) fetches all; NaN / 0 fall back to the backend default.
+      limit: Number.isFinite(limit) && (limit! > 0 || limit === -1) ? limit : undefined,
       offset: offset || undefined,
     },
   });

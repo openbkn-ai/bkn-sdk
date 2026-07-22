@@ -100,7 +100,7 @@ export function toolCommand(): Command {
     .description("List tools in a toolbox")
     .requiredOption("--toolbox <box-id>", "toolbox id")
     .option("--limit <n>", "page size (backend default 10, max 100)", int)
-    .option("--page <n>", "page (1-based)", int, 1)
+    .option("--page <n>", "page (1-based; backend default 1)", int)
     .option("--all", "return every tool, ignoring page size")
     .action(async (opts, cmd: Command) => {
       printJson(

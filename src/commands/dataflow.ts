@@ -25,7 +25,7 @@ export function dataflowCommand(): Command {
     .description("List run records for one dataflow")
     .option("--since <date>", "filter runs since a date")
     .option("--limit <n>", "page size (backend default 20)", int)
-    .option("--page <n>", "page (0-based)", int, 0)
+    .option("--page <n>", "page (0-based; backend default 0)", int)
     .action(async (dagId: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).dataflows.runs(dagId, {

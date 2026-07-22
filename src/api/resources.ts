@@ -84,7 +84,13 @@ export function listResources(
       category: opts.category || undefined,
       status: opts.status || undefined,
       database: opts.database || undefined,
-      limit: opts.limit && opts.limit > 0 ? opts.limit : undefined,
+      // Same `/resources` endpoint as `catalogResources`: limit=-1 (NO_LIMIT)
+      // fetches every row; any other non-positive/invalid value falls back to
+      // the backend default.
+      limit:
+        Number.isFinite(opts.limit) && (opts.limit! > 0 || opts.limit === -1)
+          ? opts.limit
+          : undefined,
       offset: opts.offset,
       sort: opts.sort,
       direction: opts.direction,

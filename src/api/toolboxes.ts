@@ -117,7 +117,7 @@ export function listTools(
   return request(ctx, `${PATH}/${encodeURIComponent(boxId)}/tools/list`, {
     query: {
       page: opts.page,
-      page_size: opts.pageSize,
+      page_size: Number.isFinite(opts.pageSize) && opts.pageSize! > 0 ? opts.pageSize : undefined,
       all: opts.all ? "true" : undefined,
     },
   });

@@ -62,6 +62,18 @@ describe("listResources", () => {
     expect(url.searchParams.get("sort")).toBe("name");
     expect(url.searchParams.get("direction")).toBe("asc");
   });
+
+  it("forwards limit=-1 (NO_LIMIT) to fetch every row", async () => {
+    const f = mockFetch();
+    await listResources(ctx, { datasourceId: "ds-1", limit: -1 });
+    expect(new URL(firstCall(f)[0]).searchParams.get("limit")).toBe("-1");
+  });
+
+  it("drops non-finite / zero limit so the backend default applies", async () => {
+    const f = mockFetch();
+    await listResources(ctx, { limit: Number.NaN });
+    expect(new URL(firstCall(f)[0]).searchParams.has("limit")).toBe(false);
+  });
 });
 
 describe("updateResource/configureResourceIndex", () => {

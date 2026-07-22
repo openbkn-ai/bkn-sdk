@@ -61,6 +61,12 @@ describe("vega uses the vega-backend base path", () => {
     expect(u.searchParams.get("offset")).toBe("40");
   });
 
+  it("catalogResources drops a NaN limit (never sends limit=NaN)", async () => {
+    const f = mockFetch();
+    await listCatalogResources(ctx, "c-1", undefined, Number.NaN);
+    expect(new URL(firstCall(f)[0]).searchParams.has("limit")).toBe(false);
+  });
+
   it("catalogHealthStatus joins ids", async () => {
     const f = mockFetch();
     await catalogHealthStatus(ctx, ["a", "b"]);
