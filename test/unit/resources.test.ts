@@ -133,13 +133,26 @@ describe("updateResource/configureResourceIndex", () => {
 });
 
 describe("queryResource", () => {
-  it("POSTs to /data with paging body", async () => {
+  it("POSTs to /data with the paging contract and GET override", async () => {
     const f = mockFetch();
     await queryResource(ctx, "r-1", { limit: 5, offset: 2, needTotal: true });
     const call = firstCall(f);
     expect(new URL(call[0]).pathname).toBe("/api/vega-backend/v1/resources/r-1/data");
     expect(call[1].method).toBe("POST");
-    expect(JSON.parse(call[1].body as string)).toEqual({ limit: 5, offset: 2, need_total: true });
+    expect(new Headers(call[1].headers).get("X-HTTP-Method-Override")).toBe("GET");
+    expect(JSON.parse(call[1].body as string)).toEqual({
+      paging: { mode: "single", limit: 5, offset: 2 },
+      need_total: true,
+    });
+  });
+
+  it("sends only the opaque cursor for a resource-data continuation", async () => {
+    const f = mockFetch();
+    await queryResource(ctx, "r-1", { cursor: "cursor-1" });
+    expect(JSON.parse(firstCall(f)[1].body as string)).toEqual({
+      paging: { cursor: "cursor-1" },
+      need_total: false,
+    });
   });
 });
 

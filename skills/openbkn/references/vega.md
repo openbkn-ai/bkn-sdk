@@ -6,16 +6,16 @@
 | `catalog resources <id> [--category table]` | Resources under a catalog. |
 | `catalog health <ids...>` | Health-status for one or more catalogs. |
 | `connector-type list` / `connector-type get <type>` | Available connector types. |
-| `sql --query "<sql>"` / `sql -d <json>` | Run SQL (MySQL/MariaDB/PostgreSQL) or OpenSearch DSL directly against a data source. Table = `{{<resource-id>}}`; `--resource-type` optional. See [§ vega sql](#vega-sql--run-sql--dsl-against-a-data-source). |
+| `sql --query "<sql>"` / `sql -d <json>` | Run SQL or OpenSearch DSL directly against a data source. SQL uses a `{{<resource-id>}}` table placeholder; DSL identifies its resource with top-level `resource_id`. See [§ vega sql](#vega-sql--run-sql--dsl-against-a-data-source). |
 | `resource …` | Vega-backend resources (mirror of top-level `resource`). |
 | `dataset build <resource-id> --mode batch\|streaming [--embedding-fields a,b] [--build-key-fields k] [--embedding-model <id>] [--fulltext-fields a,b] [--fulltext-analyzer <n>] [--execute-type incremental\|full] [--wait] [--timeout <s>]` | Create an index BuildTask. **Index build lives on the resource (one resource = one table); there is no KN-level build.** `batch` requires `--build-key-fields` (else `400 build_key_fields is required for batch mode`). |
 | `dataset build-status <resource-id> <task-id>` | BuildTask state + progress. |
 
 ## `vega sql` — run SQL / DSL against a data source
 
-`POST /api/vega-backend/v1/resources/query`. vega-backend connects **directly**
-to the data source (no Trino): SQL on MySQL/MariaDB/PostgreSQL, DSL on
-OpenSearch. Dialect translation is done server-side with sqlglot.
+`POST /api/vega-backend/v1/resources/query`. The query body declares its
+representation with `query_format` and its input syntax with `input_dialect`;
+the backend resolves the actual data source through the referenced Resource.
 
 ### The placeholder rule (most important)
 
@@ -37,39 +37,43 @@ connector that isn't configured. **Always use the placeholder.**
 ### Usage
 
 ```bash
-# Simple — only --query is required; resource_type is inferred from the placeholder
+# SQL; query_format=sql is added by the CLI. input_dialect defaults to postgres.
 openbkn vega sql --query "SELECT * FROM {{d7nicrcjto2s73d9g67g}} LIMIT 10"
 
-# With a WHERE / projection (standard SQL, the source's dialect)
-openbkn vega sql --query "SELECT id, name FROM {{<res-id>}} WHERE status = 'active' ORDER BY id DESC LIMIT 50"
+# First cursor page. Use a deterministic ORDER BY with a unique tiebreaker.
+openbkn vega sql --input-dialect mysql --paging-mode cursor --limit 500 \
+  --query "SELECT id, name FROM {{<res-id>}} ORDER BY id"
 
-# Override the inferred type, larger stream batch
-openbkn vega sql --resource-type postgresql --stream-size 5000 \
-  --query "SELECT count(*) FROM {{<res-id>}}"
+# Cursor continuation — send no initial-query options.
+openbkn vega sql --cursor "<paging.next_cursor>"
 
-# OpenSearch DSL — query is a JSON object, not a SQL string → use --data
-openbkn vega sql -d '{"query":{"match":{"name":"web-pod"}},"resource_type":"opensearch"}'
+# OpenSearch DSL — query is a JSON object; a top-level resource_id is required.
+openbkn vega sql -d '{"query":{"resource_id":"<res-id>","query":{"match":{"name":"web-pod"}}},"query_format":"dsl","input_dialect":"opensearch","paging":{"mode":"single","limit":50}}'
 
-# Advanced — full body (any field below)
-openbkn vega sql -d '{"query":"SELECT ...","stream_size":1000,"query_timeout":120}'
+# Advanced SQL body with total count and timeout.
+openbkn vega sql -d '{"query":"SELECT ... FROM {{<res-id>}}","query_format":"sql","input_dialect":"postgres","paging":{"mode":"single","limit":1000},"query_timeout_sec":120,"need_total":true}'
 ```
 
 ### Parameters
 
 | Flag / field | Required | Default | Notes |
 | --- | :---: | --- | --- |
-| `--query` / body `query` | ✅ (unless `-d` carries it) | — | SQL string, **or** an OpenSearch DSL object (object → must use `-d`). Reference the table as `{{<resource-id>}}`. |
-| `--resource-type` / `resource_type` | optional | inferred from the placeholder's catalog connector | One of `vega connector-type list` (e.g. `mysql`, `mariadb`, `postgresql`, `opensearch`). Pass only to override. |
-| `--stream-size` / `stream_size` | optional | server default (≈10000) | Streaming batch size, 100–10000. |
-| `--query-timeout` / `query_timeout` | optional | 60 | Seconds, 1–3600. |
-| `query_id` (body only) | optional | — | Cursor session id for paged streaming. |
-| `-d` / `--data` | — | — | Full JSON body. **Wins over** `--query`/`--resource-type`/etc. when both given. |
+| `--query` / body `query` | ✅ for first page | — | SQL string or an OpenSearch DSL object. SQL references tables as `{{<resource-id>}}`; DSL includes top-level `resource_id`. |
+| body `query_format` | ✅ for first page | — | `sql` or `dsl`; the CLI sets `sql` for `--query`. |
+| `--input-dialect` / `input_dialect` | SQL optional; DSL required | SQL: `postgres` | SQL supports `postgres`, `mysql`, `trino`, or `duckdb`; DSL must be `opensearch`. |
+| `--paging-mode`, `--limit`, `--offset`, `--keep-alive-sec` / `paging` | optional | `single`, limit 20 server-side | `cursor` requires `limit`; keep-alive is 60–3600 seconds. |
+| `--cursor` / `paging.cursor` | continuation only | — | Opaque cursor from `paging.next_cursor`; no initial-query fields may accompany it. |
+| `--query-timeout-sec` / `query_timeout_sec` | optional | 60 | Seconds, 1–3600; initial request only. |
+| `--need-total` / `need_total` | optional | false | Include complete total count; frozen by the initial cursor request. |
+| `-d` / `--data` | — | — | Full JSON body. Wins over the individual CLI query flags when both are given. |
 
 ### Gotchas
 
-- **Always `LIMIT`** large tables — results stream back in full otherwise.
-- SQL dialect is the **source's** (MySQL vs PostgreSQL quoting/functions differ);
-  sqlglot translates common forms but not everything.
+- Use `paging.limit` to bound every query. For cursor paging, include a stable,
+  unique SQL ORDER BY tiebreaker to avoid duplicate or missing rows if source
+  data changes.
+- For OpenSearch cursor paging, the DSL must include a non-empty `sort`; the
+  server owns `search_after` state inside the opaque cursor.
 - The data source must already be a registered **Catalog + Resource** (see
   below) — `vega sql` queries an existing resource, it doesn't create one.
 - `connector config is incomplete` → missing/incorrect `{{<resource-id>}}`

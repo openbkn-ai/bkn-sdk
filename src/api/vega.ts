@@ -139,23 +139,48 @@ export function stopBuildTask(ctx: RequestContext, taskId: string): Promise<unkn
   });
 }
 
-export interface SqlQueryRequest {
-  /** SQL string (MySQL/MariaDB/PostgreSQL) or an OpenSearch DSL object. */
-  query: string | Record<string, unknown>;
-  /** Query mode. `stream` uses cursor-style paging through `query_id`. */
-  query_type?: "standard" | "stream";
-  /**
-   * Source type (mysql | mariadb | postgresql | opensearch …). Required by the
-   * current vega-backend raw query handler.
-   */
-  resource_type: string;
-  /** Streaming batch size (100–10000, default server-side). */
-  stream_size?: number;
-  /** Query timeout in seconds (1–3600). */
-  query_timeout?: number;
-  /** Cursor session id for paged streaming. */
-  query_id?: string;
+export type QueryPagingMode = "single" | "cursor";
+
+/** Paging options for an initial Vega raw query. */
+export interface RawQueryPaging {
+  mode?: QueryPagingMode;
+  offset?: number;
+  limit?: number;
+  keep_alive_sec?: number;
 }
+
+/** Opaque cursor continuation. No initial-query fields may accompany it. */
+export interface RawQueryContinuationRequest {
+  paging: { cursor: string };
+  /** Accepted by the API but cannot override the value frozen on the first page. */
+  need_total?: boolean;
+}
+
+interface RawQueryInitialBase {
+  paging?: RawQueryPaging;
+  /** Per-page timeout in seconds (1–3600); defaults to 60 server-side. */
+  query_timeout_sec?: number;
+  need_total?: boolean;
+}
+
+export interface SqlRawQueryRequest extends RawQueryInitialBase {
+  query: string;
+  query_format: "sql";
+  /** SQL input dialect; defaults to postgres server-side. */
+  input_dialect?: "postgres" | "mysql" | "trino" | "duckdb";
+}
+
+export interface DslRawQueryRequest extends RawQueryInitialBase {
+  query: Record<string, unknown>;
+  query_format: "dsl";
+  input_dialect: "opensearch";
+}
+
+/** Request contract for POST /resources/query. */
+export type RawQueryRequest = SqlRawQueryRequest | DslRawQueryRequest | RawQueryContinuationRequest;
+
+/** @deprecated Use RawQueryRequest. */
+export type SqlQueryRequest = RawQueryRequest;
 
 /**
  * Run SQL (or an OpenSearch DSL) directly against a data source. vega-backend
@@ -163,7 +188,7 @@ export interface SqlQueryRequest {
  * the SQL with a `{{<resource-id>}}` placeholder so the backend knows which
  * connector to use. `POST /api/vega-backend/v1/resources/query`.
  */
-export function runSql(ctx: RequestContext, body: SqlQueryRequest): Promise<unknown> {
+export function runSql(ctx: RequestContext, body: RawQueryRequest): Promise<unknown> {
   return request(ctx, `${VEGA_BASE}/resources/query`, { method: "POST", body });
 }
 
