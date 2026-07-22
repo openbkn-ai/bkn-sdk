@@ -8,7 +8,7 @@ import {
   type DeleteBuildTasksOptions,
   type ListBuildTasksOptions,
   type ListCatalogsOptions,
-  type SqlQueryRequest,
+  type RawQueryRequest,
   catalogHealthStatus,
   createBuildTask,
   createCatalog,
@@ -55,7 +55,7 @@ export function vega(ctx: RequestContext) {
     connectorType: (type: string) => getConnectorType(ctx, type),
 
     /** Run SQL / OpenSearch DSL directly against a data source. */
-    sql: (body: SqlQueryRequest) => runSql(ctx, body),
+    sql: (body: RawQueryRequest) => runSql(ctx, body),
 
     /** Build a resource's index. With `wait`, polls until terminal. */
     build: async (

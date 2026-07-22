@@ -86,11 +86,17 @@ export function resourceCommand(): Command {
     .description("Fetch data rows from a resource")
     .option("--limit <n>", "row limit", int, DEFAULT_QUERY_LIMIT)
     .option("--offset <n>", "row offset", int, 0)
+    .option("--paging-mode <mode>", "paging mode: single | cursor")
+    .option("--keep-alive-sec <s>", "cursor keep-alive in seconds (60–3600)", int)
+    .option("--cursor <cursor>", "opaque cursor returned by the previous page")
     .option("--need-total", "include total count")
     .action(async (id: string, opts, cmd: Command) => {
       const data = await clientFrom(cmd).resource.query(id, {
         limit: opts.limit,
         offset: opts.offset,
+        pagingMode: opts.pagingMode,
+        keepAliveSec: opts.keepAliveSec,
+        cursor: opts.cursor,
         needTotal: opts.needTotal,
       });
       printJson(data, outputOptions(cmd));

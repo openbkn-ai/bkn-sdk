@@ -36,6 +36,12 @@ export type {
   BuildMode,
   BuildTask,
   CreateBuildTaskRequest,
+  DslRawQueryRequest,
+  QueryPagingMode,
+  RawQueryContinuationRequest,
+  RawQueryPaging,
+  RawQueryRequest,
+  SqlRawQueryRequest,
 } from "./api/vega.js";
 
 // Low-level escape hatch for endpoints not yet wrapped.

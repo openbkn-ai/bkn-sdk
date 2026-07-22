@@ -289,6 +289,10 @@ export interface QueryResourceOptions {
   limit?: number;
   offset?: number;
   needTotal?: boolean;
+  pagingMode?: "single" | "cursor";
+  keepAliveSec?: number;
+  /** Opaque cursor returned by the preceding resource data page. */
+  cursor?: string;
 }
 
 export function queryResource(
@@ -296,12 +300,23 @@ export function queryResource(
   id: string,
   opts: QueryResourceOptions = {},
 ): Promise<unknown> {
+  const body = opts.cursor
+    ? {
+        paging: { cursor: opts.cursor },
+        need_total: opts.needTotal ?? false,
+      }
+    : {
+        paging: {
+          mode: opts.pagingMode ?? "single",
+          limit: opts.limit ?? 50,
+          offset: opts.offset ?? 0,
+          ...(opts.keepAliveSec !== undefined ? { keep_alive_sec: opts.keepAliveSec } : {}),
+        },
+        need_total: opts.needTotal ?? false,
+      };
   return request(ctx, `${BASE}/${encodeURIComponent(id)}/data`, {
     method: "POST",
-    body: {
-      limit: opts.limit ?? 50,
-      offset: opts.offset ?? 0,
-      need_total: opts.needTotal ?? false,
-    },
+    headers: { "X-HTTP-Method-Override": "GET" },
+    body,
   });
 }

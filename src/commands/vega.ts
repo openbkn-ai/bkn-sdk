@@ -3,7 +3,7 @@
 
 /** `openbkn vega …` — Catalog reads + index BuildTask. */
 import { Command } from "commander";
-import type { SqlQueryRequest } from "../api/vega.js";
+import type { RawQueryRequest } from "../api/vega.js";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
@@ -204,36 +204,68 @@ export function vegaCommand(): Command {
   vega
     .command("sql")
     .description("Run SQL / OpenSearch DSL directly against a vega-backend data source")
-    .requiredOption("--resource-type <type>", "source type (mysql | postgresql | opensearch | …)")
-    .option("--query-type <type>", "query mode: standard | stream")
     .option(
       "--query <sql>",
       "SQL string; reference a resource with a {{<resource-id>}} placeholder",
     )
-    .option("--stream-size <n>", "streaming batch size (100–10000)", int)
-    .option("--query-timeout <s>", "query timeout in seconds (1–3600)", int)
+    .option("--input-dialect <dialect>", "SQL input dialect: postgres | mysql | trino | duckdb")
+    .option("--paging-mode <mode>", "paging mode: single | cursor")
+    .option("--limit <n>", "page size (cursor mode requires it)", int)
+    .option("--offset <n>", "first-page offset", int)
+    .option("--keep-alive-sec <s>", "cursor keep-alive in seconds (60–3600)", int)
+    .option("--cursor <cursor>", "opaque cursor returned by the previous page")
+    .option("--need-total", "include the complete total count")
+    .option("--query-timeout-sec <s>", "query timeout in seconds (1–3600)", int)
     .option(
       "-d, --data <json>",
-      "full request body as JSON (advanced; wins over --query/--resource-type)",
+      "full request body as JSON (advanced; wins over individual query flags)",
     )
     .action(async (opts, cmd: Command) => {
-      let body: SqlQueryRequest;
+      let body: RawQueryRequest;
       if (opts.data) {
         try {
-          body = JSON.parse(opts.data);
+          body = JSON.parse(opts.data) as RawQueryRequest;
         } catch {
           throw new InputError("--data must be valid JSON");
         }
-      } else {
-        if (!opts.query) {
-          throw new InputError("Provide --query (and optionally --resource-type), or --data.");
+      } else if (opts.cursor) {
+        if (
+          opts.query ||
+          opts.inputDialect ||
+          opts.pagingMode ||
+          opts.limit !== undefined ||
+          opts.offset !== undefined ||
+          opts.keepAliveSec !== undefined ||
+          opts.queryTimeoutSec !== undefined
+        ) {
+          throw new InputError("--cursor cannot be combined with initial-query options");
         }
         body = {
+          paging: { cursor: opts.cursor },
+          ...(opts.needTotal ? { need_total: true } : {}),
+        };
+      } else {
+        if (!opts.query) {
+          throw new InputError("Provide --query, --cursor, or --data.");
+        }
+        if (opts.pagingMode === "cursor" && opts.limit === undefined) {
+          throw new InputError("--limit is required when --paging-mode cursor");
+        }
+        const paging = {
+          ...(opts.pagingMode ? { mode: opts.pagingMode } : {}),
+          ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
+          ...(opts.offset !== undefined ? { offset: opts.offset } : {}),
+          ...(opts.keepAliveSec !== undefined ? { keep_alive_sec: opts.keepAliveSec } : {}),
+        };
+        body = {
           query: opts.query,
-          resource_type: opts.resourceType,
-          ...(opts.queryType ? { query_type: opts.queryType } : {}),
-          ...(opts.streamSize !== undefined ? { stream_size: opts.streamSize } : {}),
-          ...(opts.queryTimeout !== undefined ? { query_timeout: opts.queryTimeout } : {}),
+          query_format: "sql",
+          ...(opts.inputDialect ? { input_dialect: opts.inputDialect } : {}),
+          ...(Object.keys(paging).length ? { paging } : {}),
+          ...(opts.needTotal ? { need_total: true } : {}),
+          ...(opts.queryTimeoutSec !== undefined
+            ? { query_timeout_sec: opts.queryTimeoutSec }
+            : {}),
         };
       }
       printJson(await clientFrom(cmd).vega.sql(body), outputOptions(cmd));

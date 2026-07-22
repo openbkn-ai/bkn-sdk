@@ -167,20 +167,36 @@ describe("createBuildTask", () => {
 });
 
 describe("runSql", () => {
-  it("POSTs query + resource_type to /resources/query", async () => {
+  it("POSTs an initial SQL query using the raw-query contract", async () => {
     const f = mockFetch({ rows: [] });
     await runSql(ctx, {
       query: "SELECT * FROM {{r-1}} LIMIT 5",
-      resource_type: "mysql",
-      stream_size: 1000,
+      query_format: "sql",
+      input_dialect: "mysql",
+      paging: { mode: "cursor", limit: 1000, keep_alive_sec: 300 },
+      query_timeout_sec: 60,
+      need_total: true,
     });
     const call = firstCall(f);
     expect(new URL(call[0]).pathname).toBe("/api/vega-backend/v1/resources/query");
     expect(call[1].method).toBe("POST");
     const body = JSON.parse(call[1].body as string);
     expect(body.query).toBe("SELECT * FROM {{r-1}} LIMIT 5");
-    expect(body.resource_type).toBe("mysql");
-    expect(body.stream_size).toBe(1000);
+    expect(body).toEqual({
+      query: "SELECT * FROM {{r-1}} LIMIT 5",
+      query_format: "sql",
+      input_dialect: "mysql",
+      paging: { mode: "cursor", limit: 1000, keep_alive_sec: 300 },
+      query_timeout_sec: 60,
+      need_total: true,
+    });
+  });
+
+  it("POSTs only the opaque cursor for a continuation", async () => {
+    const f = mockFetch({ rows: [] });
+    await runSql(ctx, { paging: { cursor: "cursor-1" }, need_total: true });
+    const body = JSON.parse(firstCall(f)[1].body as string);
+    expect(body).toEqual({ paging: { cursor: "cursor-1" }, need_total: true });
   });
 });
 
