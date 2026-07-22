@@ -99,8 +99,18 @@ export function toolCommand(): Command {
     .command("list")
     .description("List tools in a toolbox")
     .requiredOption("--toolbox <box-id>", "toolbox id")
+    .option("--limit <n>", "page size (backend default 10, max 100)", int)
+    .option("--page <n>", "page (1-based)", int, 1)
+    .option("--all", "return every tool, ignoring page size")
     .action(async (opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).toolboxes.tools(opts.toolbox), outputOptions(cmd));
+      printJson(
+        await clientFrom(cmd).toolboxes.tools(opts.toolbox, {
+          page: opts.page,
+          pageSize: opts.limit,
+          all: opts.all,
+        }),
+        outputOptions(cmd),
+      );
     });
 
   cmd

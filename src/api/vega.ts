@@ -297,11 +297,20 @@ export function listCatalogResources(
   ctx: RequestContext,
   id: string,
   category?: string,
+  limit?: number,
+  offset?: number,
 ): Promise<unknown> {
   // The backend has no `/catalogs/:id/resources` route — resources are listed
-  // via `/resources?catalog_id=…` (same endpoint as `resource list`).
+  // via `/resources?catalog_id=…` (same endpoint as `resource list`). Without an
+  // explicit `limit` the backend defaults to DEFAULT_LIMIT=20 (range [1,1000]);
+  // pass limit=-1 (NO_LIMIT) to fetch every resource.
   return request(ctx, `${VEGA_BASE}/resources`, {
-    query: { catalog_id: id, category: category || undefined },
+    query: {
+      catalog_id: id,
+      category: category || undefined,
+      limit: limit !== undefined && limit !== 0 ? limit : undefined,
+      offset: offset || undefined,
+    },
   });
 }
 

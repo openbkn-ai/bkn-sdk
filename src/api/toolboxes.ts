@@ -101,9 +101,26 @@ export function listToolboxes(
   });
 }
 
-/** List tools inside a toolbox. */
-export function listTools(ctx: RequestContext, boxId: string): Promise<unknown> {
-  return request(ctx, `${PATH}/${encodeURIComponent(boxId)}/tools/list`);
+export interface ListToolsOptions {
+  page?: number;
+  pageSize?: number;
+  all?: boolean;
+}
+
+/** List tools inside a toolbox. Backend defaults to page_size=10 (max 100); pass
+ *  `all: true` to return every tool regardless of page size. */
+export function listTools(
+  ctx: RequestContext,
+  boxId: string,
+  opts: ListToolsOptions = {},
+): Promise<unknown> {
+  return request(ctx, `${PATH}/${encodeURIComponent(boxId)}/tools/list`, {
+    query: {
+      page: opts.page,
+      page_size: opts.pageSize,
+      all: opts.all ? "true" : undefined,
+    },
+  });
 }
 
 export interface CreateToolboxOptions {

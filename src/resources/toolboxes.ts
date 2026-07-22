@@ -8,6 +8,7 @@ import {
   type CreateToolboxOptions,
   type ImpexType,
   type ListToolboxesOptions,
+  type ListToolsOptions,
   type ToolInvokeEnvelope,
   createToolbox,
   debugTool,
@@ -26,7 +27,7 @@ import type { RequestContext } from "../types.js";
 export function toolboxes(ctx: RequestContext) {
   return {
     list: (opts?: ListToolboxesOptions) => listToolboxes(ctx, opts),
-    tools: (boxId: string) => listTools(ctx, boxId),
+    tools: (boxId: string, opts?: ListToolsOptions) => listTools(ctx, boxId, opts),
     create: (opts: CreateToolboxOptions) => createToolbox(ctx, opts),
     delete: (boxId: string) => deleteToolbox(ctx, boxId),
     publish: (boxId: string) => setToolboxStatus(ctx, boxId, "published"),

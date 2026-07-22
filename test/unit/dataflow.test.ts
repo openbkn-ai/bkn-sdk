@@ -35,7 +35,18 @@ describe("dataflow read endpoints (automation v2)", () => {
   it("runs hits /dag/{id}/results", async () => {
     const f = mockFetch();
     await listDataflowRuns(ctx, "dag 1");
-    expect(url(f).pathname).toBe("/api/automation/v2/dag/dag%201/results");
+    const u = url(f);
+    expect(u.pathname).toBe("/api/automation/v2/dag/dag%201/results");
+    // No explicit limit → backend default (20) applies.
+    expect(u.searchParams.has("limit")).toBe(false);
+  });
+
+  it("runs forwards page/limit to page past the default 20", async () => {
+    const f = mockFetch();
+    await listDataflowRuns(ctx, "d1", { page: 2, limit: 100 });
+    const u = url(f);
+    expect(u.searchParams.get("page")).toBe("2");
+    expect(u.searchParams.get("limit")).toBe("100");
   });
 
   it("logs hits /dag/{id}/result/{instance} with paging", async () => {
