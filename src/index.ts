@@ -31,6 +31,13 @@ export { vega } from "./resources/vega.js";
 // Auth is store-backed (pre-token), so it is a standalone namespace.
 export * as auth from "./resources/auth.js";
 
+export type {
+  EvidenceEvent,
+  EvidenceIngestRequest,
+  EvidenceIngestResponse,
+  EvidenceTraceContext,
+} from "./api/trace.js";
+
 // Vega build types are part of the public contract.
 export type {
   BuildMode,
