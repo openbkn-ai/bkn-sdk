@@ -1,0 +1,46 @@
+{
+  "bkn.trace.schema.version": "1.0.0",
+  "fixture_id": "sdk_cli_positive_request_injection",
+  "fixture_type": "positive",
+  "scenario": "sdk_cli_injects_request_context",
+  "expected_result": "pass",
+  "trace": {
+    "trace_id": "75010000000000000000000000000001",
+    "bkn.request.id": "req_sdk_cli_0001",
+    "traceparent": "00-75010000000000000000000000000001-7501000000000001-01",
+    "sampling.decision": "sampled"
+  },
+  "spans": [
+    {
+      "span_id": "7501000000000001",
+      "parent_span_id": null,
+      "name": "bkn-cli.command",
+      "kind": "internal",
+      "bkn.module.name": "sdk-cli",
+      "bkn.operation.name": "cli.command",
+      "bkn.status": "ok",
+      "bkn.timestamp": "2026-07-21T06:40:00.000000000Z",
+      "duration_ms": 29
+    }
+  ],
+  "logs": [
+    {
+      "level": "info",
+      "message": "cli command completed",
+      "trace_id": "75010000000000000000000000000001",
+      "span_id": "7501000000000001",
+      "bkn.request.id": "req_sdk_cli_0001",
+      "bkn.module.name": "sdk-cli",
+      "bkn.operation.name": "cli.command",
+      "bkn.status": "ok",
+      "bkn.timestamp": "2026-07-21T06:40:00.029000000Z",
+      "bkn.trace.schema.version": "1.0.0",
+      "command.name": "trace.validate_fixture"
+    }
+  ],
+  "events": [],
+  "baggage": {
+    "bkn.account.type": "user",
+    "bkn.runtime.env": "test"
+  }
+}

@@ -1,11 +1,7 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
-/**
- * Resolve a full RequestContext from explicit options → env → store.
- * Order: caller options win, then env vars, then the active platform/user
- * in `~/.bkn/`.
- */
+import { createTraceContext } from "../trace-context.js";
 import { type ClientOptions, DEFAULT_BUSINESS_DOMAIN, type RequestContext } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import {
@@ -16,6 +12,12 @@ import {
   usersOfPlatform,
   writeToken,
 } from "./store.js";
+
+/**
+ * Resolve a full RequestContext from explicit options → env → store.
+ * Order: caller options win, then env vars, then the active platform/user
+ * in `~/.bkn/`.
+ */
 
 /** Resolve `--user` to a user id, or explain what is saved instead. */
 function resolveUserId(baseUrl: string, userOrName: string): string {
@@ -84,6 +86,7 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
       readPlatformConfig(normalized).businessDomain ??
       DEFAULT_BUSINESS_DOMAIN,
     insecure,
+    trace: createTraceContext(opts.trace),
     ...(refresh ? { refresh } : {}),
   };
 }

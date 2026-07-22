@@ -13,6 +13,8 @@ export interface ClientOptions {
   businessDomain?: string;
   /** Skip TLS verification (dev / self-signed only). */
   insecure?: boolean;
+  /** Optional BKN Trace phase-one context for request correlation. */
+  trace?: TraceContextOptions;
 }
 
 /** Fully resolved request context — every field is known. */
@@ -27,6 +29,8 @@ export interface RequestContext {
   token: string;
   businessDomain: string;
   insecure: boolean;
+  /** Stable per-client BKN Trace context propagated on outbound requests. */
+  trace?: TraceContext;
   /**
    * Stored-credential refresh: on a 401, swap the refresh token for a fresh
    * access token, persist it, and retry once. Absent for explicit `--token`/env.
@@ -36,6 +40,21 @@ export interface RequestContext {
     clientId?: string;
     persist: (tokens: RefreshableTokens) => void;
   };
+}
+
+export interface TraceContextOptions {
+  /** OpenBKN request id. Generated as `req_<uuid>` when omitted or invalid. */
+  requestId?: string;
+  /** W3C Trace Context header. Generated when omitted or invalid. */
+  traceparent?: string;
+  /** Baggage values are allowlisted before propagation. */
+  baggage?: Record<string, string>;
+}
+
+export interface TraceContext {
+  requestId: string;
+  traceparent: string;
+  baggage?: Record<string, string>;
 }
 
 export const DEFAULT_BUSINESS_DOMAIN = "bd_public";

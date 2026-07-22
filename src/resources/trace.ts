@@ -20,6 +20,7 @@ import {
   buildCasesFromQueries,
   runEvalSet,
 } from "../bkn-trace/eval-set.js";
+import { validateFixturePath } from "../bkn-trace/fixture-validate.js";
 import type { RequestContext } from "../types.js";
 
 async function semanticJudge(
@@ -127,6 +128,8 @@ export function trace(ctx: RequestContext) {
     },
     /** Build eval cases from a loosely-shaped queries object/array. */
     evalSetBuild: (raw: unknown): EvalCase[] => buildCasesFromQueries(raw),
+    /** Validate BKN Trace phase-one fixture files or directories. */
+    validateFixture: (path: string) => validateFixturePath(path),
     /**
      * Run an eval set against an agent: each case's query is sent to the agent,
      * the resulting trace is fetched, and assertions are checked. `llm` enables
