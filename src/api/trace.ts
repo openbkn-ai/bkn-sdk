@@ -11,6 +11,7 @@ import type { RequestContext } from "../types.js";
 import { request } from "./http.js";
 
 const SEARCH = "/api/agent-observability/v1/traces/_search";
+const EVIDENCE_EVENTS = "/api/agent-observability/v1/evidence/events";
 
 interface SearchHits {
   hits?: { hits?: Array<{ _source?: Record<string, unknown> }> };
@@ -28,6 +29,46 @@ export interface RawSpan {
   status?: { code?: string };
   attributes?: Record<string, unknown>;
   events?: Array<{ name?: string; time?: string; attributes?: Record<string, unknown> }>;
+}
+
+export interface EvidenceTraceContext {
+  trace_id: string;
+  traceparent: string;
+  "bkn.request.id": string;
+  "bkn.tenant.id"?: string;
+  business_domain?: string;
+  "bkn.account.id": string;
+  "bkn.account.type": string;
+}
+
+export interface EvidenceEvent {
+  event_id: string;
+  event_type: string;
+  "bkn.trace.schema.version": string;
+  observed_at: string;
+  emitted_at: string;
+  producer_module: string;
+  trace_id: string;
+  span_id: string;
+  "bkn.request.id": string;
+  "bkn.operation.name": string;
+  payload: Record<string, unknown>;
+}
+
+export interface EvidenceIngestRequest {
+  "bkn.trace.schema.version": "2.0.0";
+  trace: EvidenceTraceContext;
+  events: EvidenceEvent[];
+}
+
+export interface EvidenceIngestResponse {
+  trace_id: string;
+  "bkn.request.id": string;
+  "bkn.trace.schema.version": string;
+  accepted_event_count: number;
+  claim_count: number;
+  evidence_ref_count: number;
+  business_ref_count: number;
 }
 
 function isoToNanos(iso: string): string | undefined {
@@ -90,6 +131,14 @@ export async function getRawSpansByConversation(
 /** Raw OpenSearch-style trace search (body passthrough). */
 export function traceSearch(ctx: RequestContext, body: unknown): Promise<unknown> {
   return request(ctx, SEARCH, { method: "POST", body });
+}
+
+/** Submit BKN Trace phase-two claim/evidence/business events. */
+export function emitEvidenceEvents(
+  ctx: RequestContext,
+  body: EvidenceIngestRequest,
+): Promise<EvidenceIngestResponse> {
+  return request<EvidenceIngestResponse>(ctx, EVIDENCE_EVENTS, { method: "POST", body });
 }
 
 /**

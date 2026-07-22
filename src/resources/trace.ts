@@ -3,7 +3,13 @@
 
 /** Trace resource surface (data fetch + symbolic/rubric diagnose + eval-set). */
 import { fetchAgentInfo, sendChat } from "../api/agent-chat.js";
-import { getRawSpansByConversation, getSpansByConversation, traceSearch } from "../api/trace.js";
+import {
+  type EvidenceIngestRequest,
+  emitEvidenceEvents,
+  getRawSpansByConversation,
+  getSpansByConversation,
+  traceSearch,
+} from "../api/trace.js";
 import { claudeAvailable, judgeJson } from "../bkn-trace/claude-judge.js";
 import {
   BUILTIN_RULES,
@@ -85,6 +91,8 @@ export function trace(ctx: RequestContext) {
   return {
     /** Raw trace search (OpenSearch-style body). */
     search: (body: unknown) => traceSearch(ctx, body),
+    /** Submit BKN Trace phase-two claim/evidence/business events. */
+    emitEvidenceEvents: (body: EvidenceIngestRequest) => emitEvidenceEvents(ctx, body),
     /** All span source docs for a conversation. */
     spans: (conversationId: string, opts?: { maxTraceIds?: number; maxSpans?: number }) =>
       getSpansByConversation(ctx, conversationId, opts),

@@ -116,5 +116,16 @@ export function traceCommand(): Command {
       if (!result.ok) process.exitCode = 1;
     });
 
+  const evidence = cmd
+    .command("evidence")
+    .description("Submit BKN Trace phase-two evidence events");
+  evidence
+    .command("emit <file>")
+    .description("Submit a phase-two evidence event batch JSON file")
+    .action(async (file: string, _opts, cmd: Command) => {
+      const body = JSON.parse(readFileSync(file, "utf8"));
+      printJson(await clientFrom(cmd).trace.emitEvidenceEvents(body), outputOptions(cmd));
+    });
+
   return group(cmd, "TRACE AI");
 }

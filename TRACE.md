@@ -1,8 +1,8 @@
 # bkn-sdk / openbkn CLI Trace Contract
 
-> Status: phase-one module contract  
-> Contract version: `bkn.trace.schema.version=1.0.0`  
-> Reference: `bkn-docs/docs/foundry/bkn-trace/design/阶段一：OpenBKN 可观测记录规范与 Trace Context 基线.md`
+> Status: phase-two helper baseline  
+> Contract version: `bkn.trace.schema.version=1.0.0` for phase-one fixture validation; `2.0.0` for evidence event emission  
+> Reference: `bkn-docs/docs/foundry/bkn-trace/design/阶段一：OpenBKN 可观测记录规范与 Trace Context 基线.md`, `bkn-docs/docs/foundry/bkn-trace/design/阶段二：证据引用采集与 BKN Trace 核心能力开发计划.md`
 
 ## Module
 
@@ -11,7 +11,7 @@
 - service identity: SDK / CLI caller
 - runtime: TypeScript / Node.js
 - repository path: `bkn-sdk`
-- contract version: `1.0.0`
+- contract version: `1.0.0` for trace context / fixture validation, `2.0.0` for evidence ingestion
 
 ## Entry Operations
 
@@ -21,6 +21,7 @@
 | `sdk.openbkn.call` | SDK HTTP request to OpenBKN | `traceparent`, `bkn-request-id` | none in phase one | none in phase one |
 | `cli.command` | `openbkn` command invocation | optional caller trace context | none in phase one | none in phase one |
 | `cli.trace.validate_fixture` | fixture validation command or equivalent | local request context | none in phase one | validation result output |
+| `cli.trace.evidence.emit` | `openbkn trace evidence emit <file>` | evidence batch trace context | none | server-side `claim.created` / `evidence.refs.created` / `business.refs.resolved` ingestion |
 
 ## Inbound Context
 
@@ -34,6 +35,7 @@
 | target | protocol | propagated fields | baggage policy | timeout | retry |
 | --- | --- | --- | --- | --- | --- |
 | OpenBKN APIs | HTTP | `traceparent`, `bkn-request-id`, `x-request-id` | allowlist-only baggage | existing request timeout | existing refresh/retry policy |
+| BKN Trace evidence ingestion | HTTP | `traceparent`, `bkn-request-id`, `x-request-id`; evidence batch carries its own `trace` and `events` | allowlist-only baggage | existing request timeout | existing refresh/retry policy |
 | Raw call passthrough | HTTP | generated context plus explicit caller headers | allowlist-only generated baggage; caller extra headers can override deliberately | `RawCallOptions.timeoutMs` | existing refresh/retry policy |
 
 ## Logs
@@ -46,7 +48,12 @@ SDK/CLI does not start OpenTelemetry spans in phase one. It injects trace contex
 
 ## Events
 
-No BKN Trace event envelope is emitted by SDK/CLI in phase one. Fixture validation output acts as the local contract proof until the SDK exposes `openbkn trace contract validate`.
+SDK/CLI now exposes a phase-two submit helper for event batches:
+
+- SDK: `client.trace.emitEvidenceEvents(body)`
+- CLI: `openbkn trace evidence emit <file>`
+
+The SDK does not synthesize evidence events automatically. Callers must provide a `2.0.0` batch containing `trace` and `events`, and the server validates `claim.created`, `evidence.refs.created`, and `business.refs.resolved`.
 
 ## Sensitive Data Rules
 
@@ -66,6 +73,7 @@ No BKN Trace event envelope is emitted by SDK/CLI in phase one. Fixture validati
 | fixture or test | path | purpose | expected result |
 | --- | --- | --- | --- |
 | unit | `test/unit/trace-context.test.ts` | generated request id, valid traceparent propagation, baggage filtering | pass |
+| unit | `test/unit/trace.test.ts` | phase-two evidence emit endpoint path, method, body, response | pass |
 | unit | `test/unit/headers.test.ts` | auth header safety plus generated trace headers | pass |
 | contract fixture | `fixtures/bkn-trace/positive.json` | request id injection shape | pass |
 | contract fixture | `fixtures/bkn-trace/propagation.json` | outbound context propagation shape | pass |
@@ -75,5 +83,5 @@ No BKN Trace event envelope is emitted by SDK/CLI in phase one. Fixture validati
 ## Known Gaps
 
 - SDK/CLI exposes `openbkn trace validate-fixture`; bkn-docs remains the source of the shared fixture contract and Python reference validator.
-- SDK/CLI does not yet emit local BKN Trace event envelopes.
+- SDK/CLI can submit phase-two evidence event batches, but does not yet generate claim/evidence/business events automatically from ordinary SDK calls.
 - Raw call explicit headers can intentionally override generated trace context; this is preserved for operator debugging.
