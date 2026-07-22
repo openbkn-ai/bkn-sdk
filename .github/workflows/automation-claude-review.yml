@@ -1,0 +1,115 @@
+name: Claude Code Review
+
+# 由 Claude 对 PR 做代码评审：开启、重开、从 draft 转 ready，以及每次推送新提交时各跑一次。
+#
+# 覆盖每次推送而非只审首版，是因为评审之后追加的提交往往是「按意见快速改一下」，
+# 恰恰最容易引入新问题；只审首版会让这部分完全不过审。
+# 连续推送的浪费由下面的 concurrency 收敛：新一次运行会取消尚未完成的上一次。
+#
+# 需要对任意 PR 重新评审时，手动触发 workflow_dispatch 并填 PR 编号。
+#
+# 只对代码路径生效。纯文档改动（*.md）不进评审，既省额度也避免噪声。
+# 注意：GitHub Actions 不允许同一事件同时使用 paths 与 paths-ignore，因此这里
+# 只写 include 列表——未列出的路径自动跳过——并用 ! 前缀排除列表内的文档文件。
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+    paths:
+      - 'src/**'
+      - 'test/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'tsconfig.json'
+      - '!**/*.md'
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: true
+        type: string
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # fork 发起的 PR 拿不到 secrets，直接跳过避免红叉
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    env:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # pull_request 事件下 checkout 会自动落到 PR 的 merge ref；
+          # workflow_dispatch 下只会拿到默认分支，需要下一步显式切到 PR 分支，
+          # 因此这里放开深度以便 gh pr checkout 能建立分支。
+          fetch-depth: ${{ github.event_name == 'workflow_dispatch' && 0 || 1 }}
+
+      - name: Checkout PR branch (manual trigger)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh pr checkout "$PR_NUMBER"
+          echo "已切到 PR #$PR_NUMBER: $(git rev-parse --abbrev-ref HEAD) @ $(git rev-parse --short HEAD)"
+
+      - name: Claude review
+        if: env.CLAUDE_CODE_OAUTH_TOKEN != ''
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # track_progress 只支持 pull_request / issues / issue_comment /
+          # pull_request_review(_comment) 事件，在 workflow_dispatch 下会直接
+          # 报错退出——手动触发那条路径因此从未可用。按事件类型开关。
+          track_progress: ${{ github.event_name != 'workflow_dispatch' }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ env.PR_NUMBER }}
+
+            对这个 PR 做代码评审。仓库是 openbkn 平台的 TypeScript SDK 与 CLI
+            （bin: openbkn），Node 22 + commander + undici + zod，用 biome + tsc
+            做静态检查、vitest 跑单测。分层：src/api（HTTP 端点）→ src/resources
+            （客户端封装）→ src/commands（CLI 子命令）。
+
+            重点关注（按优先级）：
+
+            1. **正确性** — 逻辑错误、边界条件、错误处理缺失。特别注意 query 参数
+               序列化：0 / NaN / undefined 的处理是否一致（默认值不该发到后端，
+               但 0 或 -1 之类的有效值必须发出）。
+            2. **API 契约** — 端点路径、参数名（snake_case vs camelCase）、编码
+               （encodeURIComponent）是否与后端一致；分页语义（page 0-based /
+               1-based / offset）是否与该后端匹配并在 --help 里说清。
+            3. **安全** — 凭据硬编码、鉴权 token 泄露到日志、私钥自依赖。
+            4. **测试** — 新增逻辑是否有 vitest 覆盖，测试是否断言真实行为
+               （请求 URL / query / body），而非只跑通。
+
+            评审要求：
+            - 用中文。
+            - 具体问题用 inline comment 贴到对应行，说明「问题是什么 + 怎么改」。
+            - 顶层 comment 只写整体判断和阻塞项清单，不要复述 diff。
+            - 不确定的推测标注为「待确认」，不要当成缺陷断言。
+            - 没问题就说没问题，不要为了凑数提格式化/命名类的琐碎意见
+              （biome 已覆盖格式）。
+
+          # 大 PR 只给 gh pr diff 不够：Claude 需要进文件看上下文、比对 commit，
+          # 会伸手 Read/Grep/git diff 等工具。补齐只读检视工具并放宽轮次上限，
+          # 避免评审因 permission denial 撞满轮次、评论冻在「进行中」。
+          claude_args: |
+            --model claude-opus-4-8
+            --max-turns 60
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Read,Grep,Glob,LS,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
+
+      - name: Warn when credential missing
+        if: env.CLAUDE_CODE_OAUTH_TOKEN == ''
+        run: |
+          echo "::warning::Secret CLAUDE_CODE_OAUTH_TOKEN not set — skipping Claude review."
