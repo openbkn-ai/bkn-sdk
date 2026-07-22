@@ -49,6 +49,22 @@ describe("vega uses the vega-backend base path", () => {
     expect(u.pathname).toBe("/api/vega-backend/v1/resources");
     expect(u.searchParams.get("catalog_id")).toBe("c-1");
     expect(u.searchParams.get("category")).toBe("table");
+    // No explicit limit → backend applies its own default (DEFAULT_LIMIT=20).
+    expect(u.searchParams.has("limit")).toBe(false);
+  });
+
+  it("catalogResources forwards limit/offset (limit=-1 fetches all)", async () => {
+    const f = mockFetch();
+    await listCatalogResources(ctx, "c-1", undefined, -1, 40);
+    const u = new URL(firstCall(f)[0]);
+    expect(u.searchParams.get("limit")).toBe("-1");
+    expect(u.searchParams.get("offset")).toBe("40");
+  });
+
+  it("catalogResources drops a NaN limit (never sends limit=NaN)", async () => {
+    const f = mockFetch();
+    await listCatalogResources(ctx, "c-1", undefined, Number.NaN);
+    expect(new URL(firstCall(f)[0]).searchParams.has("limit")).toBe(false);
   });
 
   it("catalogHealthStatus joins ids", async () => {

@@ -2,7 +2,7 @@
 
 | Command | Notes |
 |---------|-------|
-| `list` / `runs <dagId> [--since]` / `logs <dagId> <instanceId>` | DAGs / run history / step logs. |
+| `list` / `runs <dagId> [--since] [--limit n] [--page n]` / `logs <dagId> <instanceId>` | DAGs / run history / step logs. `runs` backend defaults to 20; pass `--limit` to page further. |
 | `run <dagId> --url <remote> --name <file>` | Trigger with a remote file. |
 | `create --body <json>` | Create a DAG from a full document (title + steps required). |
 | `templates` | List bundled dataset/bkn/dataflow templates. |

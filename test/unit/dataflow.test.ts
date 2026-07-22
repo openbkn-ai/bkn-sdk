@@ -35,7 +35,25 @@ describe("dataflow read endpoints (automation v2)", () => {
   it("runs hits /dag/{id}/results", async () => {
     const f = mockFetch();
     await listDataflowRuns(ctx, "dag 1");
-    expect(url(f).pathname).toBe("/api/automation/v2/dag/dag%201/results");
+    const u = url(f);
+    expect(u.pathname).toBe("/api/automation/v2/dag/dag%201/results");
+    // No explicit limit/page → backend defaults (limit=20, page=0) apply.
+    expect(u.searchParams.has("limit")).toBe(false);
+    expect(u.searchParams.has("page")).toBe(false);
+  });
+
+  it("runs drops a NaN limit (never sends limit=NaN)", async () => {
+    const f = mockFetch();
+    await listDataflowRuns(ctx, "d1", { limit: Number.NaN });
+    expect(url(f).searchParams.has("limit")).toBe(false);
+  });
+
+  it("runs forwards page/limit to page past the default 20", async () => {
+    const f = mockFetch();
+    await listDataflowRuns(ctx, "d1", { page: 2, limit: 100 });
+    const u = url(f);
+    expect(u.searchParams.get("page")).toBe("2");
+    expect(u.searchParams.get("limit")).toBe("100");
   });
 
   it("logs hits /dag/{id}/result/{instance} with paging", async () => {

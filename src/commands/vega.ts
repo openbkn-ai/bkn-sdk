@@ -72,8 +72,13 @@ export function vegaCommand(): Command {
     .command("resources <id>")
     .description("List resources under a catalog")
     .option("--category <c>", "filter by category (e.g. table)")
+    .option("--limit <n>", "page size (backend default 20, max 1000; -1 = all)", int)
+    .option("--offset <n>", "page offset", int, 0)
     .action(async (id: string, opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).vega.catalogResources(id, opts.category), outputOptions(cmd));
+      printJson(
+        await clientFrom(cmd).vega.catalogResources(id, opts.category, opts.limit, opts.offset),
+        outputOptions(cmd),
+      );
     });
   catalog
     .command("health <ids...>")

@@ -3,7 +3,7 @@
 | Command | Notes |
 |---------|-------|
 | `catalog list [--limit] [--offset]` / `catalog get <id>` | Catalogs. |
-| `catalog resources <id> [--category table]` | Resources under a catalog. |
+| `catalog resources <id> [--category table] [--limit n] [--offset n]` | Resources under a catalog. Backend defaults to 20; `--limit -1` fetches all. |
 | `catalog health <ids...>` | Health-status for one or more catalogs. |
 | `connector-type list` / `connector-type get <type>` | Available connector types. |
 | `sql --query "<sql>"` / `sql -d <json>` | Run SQL or OpenSearch DSL directly against a data source. SQL uses a `{{<resource-id>}}` table placeholder; DSL identifies its resource with top-level `resource_id`. See [§ vega sql](#vega-sql--run-sql--dsl-against-a-data-source). |

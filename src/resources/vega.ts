@@ -49,7 +49,8 @@ export function vega(ctx: RequestContext) {
     deleteCatalog: (id: string) => deleteCatalog(ctx, id),
     testCatalogConnection: (id: string) => testCatalogConnection(ctx, id),
     discoverCatalog: (id: string, wait = false) => discoverCatalog(ctx, id, wait),
-    catalogResources: (id: string, category?: string) => listCatalogResources(ctx, id, category),
+    catalogResources: (id: string, category?: string, limit?: number, offset?: number) =>
+      listCatalogResources(ctx, id, category, limit, offset),
     catalogHealth: (ids: string[]) => catalogHealthStatus(ctx, ids),
     connectorTypes: () => listConnectorTypes(ctx),
     connectorType: (type: string) => getConnectorType(ctx, type),

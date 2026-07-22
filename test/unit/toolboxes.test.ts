@@ -34,6 +34,25 @@ describe("toolbox endpoints (tool-box)", () => {
   it("tools list hits /tool-box/{id}/tools/list", async () => {
     const f = mockFetch();
     await listTools(ctx, "box 1");
-    expect(url(f).pathname).toBe("/api/agent-operator-integration/v1/tool-box/box%201/tools/list");
+    const u = url(f);
+    expect(u.pathname).toBe("/api/agent-operator-integration/v1/tool-box/box%201/tools/list");
+    // No explicit page/page_size → backend defaults (page=1, page_size=10) apply.
+    expect(u.searchParams.has("page")).toBe(false);
+    expect(u.searchParams.has("page_size")).toBe(false);
+    expect(u.searchParams.has("all")).toBe(false);
+  });
+
+  it("tools list drops a NaN/zero page_size (never sends page_size=NaN)", async () => {
+    const f = mockFetch();
+    await listTools(ctx, "b1", { pageSize: Number.NaN });
+    expect(url(f).searchParams.has("page_size")).toBe(false);
+  });
+
+  it("tools list forwards all=true to bypass the default page size", async () => {
+    const f = mockFetch();
+    await listTools(ctx, "b1", { all: true, pageSize: 50 });
+    const u = url(f);
+    expect(u.searchParams.get("all")).toBe("true");
+    expect(u.searchParams.get("page_size")).toBe("50");
   });
 });

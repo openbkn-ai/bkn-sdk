@@ -72,6 +72,8 @@ export async function executeDataflow(
 
 export interface ListRunsOptions {
   since?: string;
+  page?: number;
+  limit?: number;
 }
 
 export function listDataflowRuns(
@@ -79,8 +81,14 @@ export function listDataflowRuns(
   dagId: string,
   opts: ListRunsOptions = {},
 ): Promise<unknown> {
+  // Backend (listDagInstanceV2) defaults to limit=20 when unset; pass an explicit
+  // limit to page past the first 20 runs.
   return request(ctx, `${BASE}/dag/${encodeURIComponent(dagId)}/results`, {
-    query: { since: opts.since || undefined },
+    query: {
+      since: opts.since || undefined,
+      page: opts.page,
+      limit: opts.limit && opts.limit > 0 ? opts.limit : undefined,
+    },
   });
 }
 
