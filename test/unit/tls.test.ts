@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createServer as createHttpServer } from "node:http";
 import { createServer } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -83,6 +84,55 @@ describe.skipIf(!hasOpenssl)("tlsFetch", () => {
     expect(process.env.NODE_TLS_REJECT_UNAUTHORIZED).toBeUndefined();
     await expect(tlsFetch(false, url)).rejects.toThrow();
     await expect(fetch(url)).rejects.toThrow();
+  });
+});
+
+/**
+ * Every upload in the SDK builds a body with the platform's global `FormData`.
+ * Undici brand-checks a body against *its own* `FormData`, so an insecure
+ * request used to fall through to the string branch: `text/plain` carrying the
+ * literal "[object FormData]", and a backend that answers "request Content-Type
+ * isn't multipart/form-data". Plain HTTP is enough to see the body — the
+ * dispatcher only changes certificate handling.
+ */
+describe("tlsFetch + multipart", () => {
+  let httpServer: ReturnType<typeof createHttpServer>;
+  let seen: { contentType?: string; body: string };
+  let httpUrl: string;
+
+  beforeAll(async () => {
+    seen = { body: "" };
+    httpServer = createHttpServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (c: Buffer) => chunks.push(c));
+      req.on("end", () => {
+        seen = {
+          contentType: req.headers["content-type"],
+          body: Buffer.concat(chunks).toString("utf8"),
+        };
+        res.end('{"ok":true}');
+      });
+    });
+    await new Promise<void>((r) => httpServer.listen(0, "127.0.0.1", r));
+    const addr = httpServer.address();
+    httpUrl = `http://127.0.0.1:${typeof addr === "object" && addr ? addr.port : 0}/`;
+  });
+  afterAll(() => httpServer?.close());
+
+  const upload = () => {
+    const form = new FormData();
+    form.append("file", new Blob([new Uint8Array([1, 2, 3, 4])]), "bkn.tar");
+    return form;
+  };
+
+  it.each([
+    ["secure", false],
+    ["insecure", true],
+  ])("sends a real multipart body on the %s path", async (_label, insecure) => {
+    await tlsFetch(insecure, httpUrl, { method: "POST", body: upload() });
+    expect(seen.contentType).toMatch(/^multipart\/form-data; boundary=/);
+    expect(seen.body).toContain('name="file"; filename="bkn.tar"');
+    expect(seen.body).not.toContain("[object FormData]");
   });
 });
 
