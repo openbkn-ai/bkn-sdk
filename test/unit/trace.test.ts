@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { emitEvidenceEvents, getSpansByConversation, traceSearch } from "../../src/api/trace.js";
+import {
+  emitEvidenceEvents,
+  getBusinessGraph,
+  getEvidenceChain,
+  getSnapshotPreview,
+  getSpansByConversation,
+  getTraceGraph,
+  traceSearch,
+} from "../../src/api/trace.js";
 import type { RequestContext } from "../../src/types.js";
 
 const ctx: RequestContext = {
@@ -88,6 +96,71 @@ describe("emitEvidenceEvents", () => {
     expect(c[1].method).toBe("POST");
     expect(JSON.parse(c[1].body as string).events[0].event_type).toBe("claim.created");
     expect(result.accepted_event_count).toBe(1);
+  });
+});
+
+describe("typed BKN Trace graph APIs", () => {
+  it("GETs trace graph by trace id", async () => {
+    const f = mockFetchSeq([{ trace_id: "trace_1", status: "ok", data: { nodes: [], edges: [] } }]);
+    const result = await getTraceGraph(ctx, "trace_1");
+    const c = calls(f)[0];
+    if (!c) throw new Error("no call");
+    expect(new URL(c[0]).pathname).toBe("/api/agent-observability/v1/traces/trace_1/trace-graph");
+    expect(c[1].method).toBe("GET");
+    expect(result.trace_id).toBe("trace_1");
+  });
+
+  it("GETs evidence chain and business graph with optional limit", async () => {
+    const f = mockFetchSeq([
+      { trace_id: "trace_1", data: { claims: [], evidence_refs: [], business_refs: [] } },
+      { trace_id: "trace_1", data: { nodes: [], edges: [] } },
+    ]);
+    await getEvidenceChain(ctx, "trace_1", { limit: 50 });
+    await getBusinessGraph(ctx, "trace_1", { limit: 50 });
+    const [evidenceCall, graphCall] = calls(f);
+    if (!evidenceCall || !graphCall) throw new Error("missing calls");
+    const evidenceURL = new URL(evidenceCall[0]);
+    const graphURL = new URL(graphCall[0]);
+    expect(evidenceURL.pathname).toBe("/api/agent-observability/v1/traces/trace_1/evidence-chain");
+    expect(evidenceURL.searchParams.get("limit")).toBe("50");
+    expect(graphURL.pathname).toBe("/api/agent-observability/v1/traces/trace_1/business-graph");
+    expect(graphURL.searchParams.get("limit")).toBe("50");
+  });
+
+  it("GETs request scoped evidence chain and snapshot preview", async () => {
+    const f = mockFetchSeq([
+      { "bkn.request.id": "req_1", data: { claims: [], evidence_refs: [], business_refs: [] } },
+      { "bkn.request.id": "req_1", data: { nodes: [], edges: [] } },
+      { "bkn.request.id": "req_1", snapshot_ref: { mode: "preview" }, manifest: {} },
+    ]);
+    await getEvidenceChain(ctx, { requestId: "req_1" });
+    await getBusinessGraph(ctx, { requestId: "req_1" });
+    await getSnapshotPreview(ctx, { requestId: "req_1" });
+    const [evidenceCall, graphCall, snapshotCall] = calls(f);
+    if (!evidenceCall || !graphCall || !snapshotCall) throw new Error("missing calls");
+    const evidenceURL = new URL(evidenceCall[0]);
+    const graphURL = new URL(graphCall[0]);
+    const snapshotURL = new URL(snapshotCall[0]);
+    expect(evidenceURL.pathname).toBe("/api/agent-observability/v1/traces/by-request");
+    expect(evidenceURL.searchParams.get("request_id")).toBe("req_1");
+    expect(graphURL.pathname).toBe("/api/agent-observability/v1/traces/by-request/business-graph");
+    expect(graphURL.searchParams.get("request_id")).toBe("req_1");
+    expect(snapshotURL.pathname).toBe(
+      "/api/agent-observability/v1/traces/by-request/snapshot-preview",
+    );
+    expect(snapshotURL.searchParams.get("request_id")).toBe("req_1");
+  });
+
+  it("does not serialize a NaN limit", async () => {
+    const f = mockFetchSeq([
+      { trace_id: "trace_1", data: { claims: [], evidence_refs: [], business_refs: [] } },
+    ]);
+
+    await getEvidenceChain(ctx, "trace_1", { limit: Number.NaN });
+
+    const c = calls(f)[0];
+    if (!c) throw new Error("no call");
+    expect(new URL(c[0]).searchParams.has("limit")).toBe(false);
   });
 });
 

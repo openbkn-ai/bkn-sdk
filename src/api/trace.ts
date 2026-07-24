@@ -12,6 +12,7 @@ import { request } from "./http.js";
 
 const SEARCH = "/api/agent-observability/v1/traces/_search";
 const EVIDENCE_EVENTS = "/api/agent-observability/v1/evidence/events";
+const TRACES = "/api/agent-observability/v1/traces";
 
 interface SearchHits {
   hits?: { hits?: Array<{ _source?: Record<string, unknown> }> };
@@ -69,6 +70,101 @@ export interface EvidenceIngestResponse {
   claim_count: number;
   evidence_ref_count: number;
   business_ref_count: number;
+}
+
+export interface VisibilitySummary {
+  authorized_ref_count: number;
+  redacted_ref_count: number;
+  hidden_ref_count: number;
+  omitted_ref_count: number;
+  unresolved_ref_count: number;
+  unauthorized_ref_count?: number;
+}
+
+export interface GraphPage {
+  node_count: number;
+  edge_count: number;
+  truncated?: boolean;
+  next_cursor?: string | null;
+}
+
+export interface TraceGraphNode {
+  span_id: string;
+  parent_span_id?: string;
+  name: string;
+  kind: string;
+  service_name?: string;
+  status: string;
+  error_message?: string;
+  start_nano: number;
+  end_nano: number;
+  duration_nano: number;
+}
+
+export interface TraceGraphEdge {
+  id: string;
+  parent_span_id: string;
+  child_span_id: string;
+  edge_type: string;
+}
+
+export interface TraceGraphResponse {
+  trace_id: string;
+  status: string;
+  duration_nano: number;
+  partial: boolean;
+  partial_reason: string[];
+  page: GraphPage;
+  data: {
+    nodes: TraceGraphNode[];
+    edges: TraceGraphEdge[];
+  };
+}
+
+export interface EvidenceChainResponse {
+  trace_id: string;
+  "bkn.request.id": string;
+  partial: boolean;
+  partial_reason: string[];
+  visibility_summary: VisibilitySummary;
+  page: GraphPage;
+  data: {
+    claims: Array<Record<string, unknown>>;
+    evidence_refs: Array<Record<string, unknown>>;
+    business_refs: Array<Record<string, unknown>>;
+  };
+}
+
+export interface BusinessGraphResponse {
+  trace_id: string;
+  "bkn.request.id": string;
+  partial: boolean;
+  partial_reason: string[];
+  visibility_summary: VisibilitySummary;
+  page: GraphPage;
+  data: {
+    nodes: Array<Record<string, unknown>>;
+    edges: Array<Record<string, unknown>>;
+  };
+}
+
+export interface SnapshotPreviewResponse {
+  trace_id: string;
+  "bkn.request.id": string;
+  partial: boolean;
+  partial_reason: string[];
+  visibility_summary: VisibilitySummary;
+  snapshot_ref: {
+    snapshot_id: string;
+    mode: "preview" | string;
+    uri?: string;
+  };
+  manifest: Record<string, unknown>;
+}
+
+export type TraceScope = string | { traceId: string } | { requestId: string };
+export interface TraceQueryOptions {
+  limit?: number;
 }
 
 function isoToNanos(iso: string): string | undefined {
@@ -141,6 +237,43 @@ export function emitEvidenceEvents(
   return request<EvidenceIngestResponse>(ctx, EVIDENCE_EVENTS, { method: "POST", body });
 }
 
+export function getTraceGraph(ctx: RequestContext, traceId: string): Promise<TraceGraphResponse> {
+  return request<TraceGraphResponse>(ctx, `${TRACES}/${encodeURIComponent(traceId)}/trace-graph`);
+}
+
+export function getEvidenceChain(
+  ctx: RequestContext,
+  scope: TraceScope,
+  opts: TraceQueryOptions = {},
+): Promise<EvidenceChainResponse> {
+  const target = traceTarget(scope, "evidence-chain");
+  return request<EvidenceChainResponse>(ctx, target.path, {
+    query: queryWithLimit(target.query, opts),
+  });
+}
+
+export function getBusinessGraph(
+  ctx: RequestContext,
+  scope: TraceScope,
+  opts: TraceQueryOptions = {},
+): Promise<BusinessGraphResponse> {
+  const target = traceTarget(scope, "business-graph");
+  return request<BusinessGraphResponse>(ctx, target.path, {
+    query: queryWithLimit(target.query, opts),
+  });
+}
+
+export function getSnapshotPreview(
+  ctx: RequestContext,
+  scope: TraceScope,
+  opts: TraceQueryOptions = {},
+): Promise<SnapshotPreviewResponse> {
+  const target = traceTarget(scope, "snapshot-preview");
+  return request<SnapshotPreviewResponse>(ctx, target.path, {
+    query: queryWithLimit(target.query, opts),
+  });
+}
+
 /**
  * Fetch all span `_source` docs for a conversation.
  * Hop 1: aggregate trace ids for the conversation. Hop 2: fetch their spans.
@@ -180,4 +313,29 @@ export async function getSpansByConversation(
       },
     })) ?? {};
   return (spans.hits?.hits ?? []).map((h) => h._source ?? {});
+}
+
+function traceTarget(
+  scope: TraceScope,
+  subresource: "evidence-chain" | "business-graph" | "snapshot-preview",
+): { path: string; query?: Record<string, string> } {
+  if (typeof scope === "string") {
+    return { path: `${TRACES}/${encodeURIComponent(scope)}/${subresource}` };
+  }
+  if ("traceId" in scope) {
+    return { path: `${TRACES}/${encodeURIComponent(scope.traceId)}/${subresource}` };
+  }
+  const requestPath =
+    subresource === "evidence-chain"
+      ? `${TRACES}/by-request`
+      : `${TRACES}/by-request/${subresource}`;
+  return { path: requestPath, query: { request_id: scope.requestId } };
+}
+
+function queryWithLimit(
+  query: Record<string, string> | undefined,
+  opts: TraceQueryOptions,
+): Record<string, string | number> | undefined {
+  if (opts.limit === undefined || !Number.isFinite(opts.limit)) return query;
+  return { ...(query ?? {}), limit: opts.limit };
 }

@@ -32,10 +32,20 @@ export { vega } from "./resources/vega.js";
 export * as auth from "./resources/auth.js";
 
 export type {
+  BusinessGraphResponse,
   EvidenceEvent,
+  EvidenceChainResponse,
   EvidenceIngestRequest,
   EvidenceIngestResponse,
   EvidenceTraceContext,
+  GraphPage,
+  SnapshotPreviewResponse,
+  TraceGraphEdge,
+  TraceGraphNode,
+  TraceQueryOptions,
+  TraceGraphResponse,
+  TraceScope,
+  VisibilitySummary,
 } from "./api/trace.js";
 
 // Vega build types are part of the public contract.

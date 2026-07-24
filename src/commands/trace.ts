@@ -8,6 +8,7 @@ import { renderReportMarkdown } from "../bkn-trace/diagnose.js";
 import { validateFixturePath } from "../bkn-trace/fixture-validate.js";
 import { validateSchemaFile } from "../bkn-trace/schema-validate.js";
 import { group } from "../help/grouped-help.js";
+import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, outputOptions, readBody } from "./_shared.js";
 
@@ -15,6 +16,55 @@ export function traceCommand(): Command {
   const cmd = new Command("trace").description(
     "BKN Trace — fetch spans, diagnose (symbolic + LLM rubric), scan, eval-set, schema validate",
   );
+
+  cmd
+    .command("graph <trace-id>")
+    .description("Fetch normalized trace graph by trace id")
+    .action(async (traceId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).trace.graph(traceId), outputOptions(cmd));
+    });
+
+  cmd
+    .command("evidence-chain [trace-id]")
+    .description("Fetch BKN Trace evidence chain by trace id or --request-id")
+    .option("--request-id <id>", "BKN request id scope")
+    .option("--limit <n>", "maximum evidence trace batches", (v) => Number.parseInt(v, 10))
+    .action(async (traceId: string | undefined, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).trace.evidenceChain(traceScope(traceId, opts.requestId), {
+          limit: opts.limit,
+        }),
+        outputOptions(cmd),
+      );
+    });
+
+  cmd
+    .command("business-graph [trace-id]")
+    .description("Fetch BKN Trace business semantic graph by trace id or --request-id")
+    .option("--request-id <id>", "BKN request id scope")
+    .option("--limit <n>", "maximum evidence trace batches", (v) => Number.parseInt(v, 10))
+    .action(async (traceId: string | undefined, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).trace.businessGraph(traceScope(traceId, opts.requestId), {
+          limit: opts.limit,
+        }),
+        outputOptions(cmd),
+      );
+    });
+
+  cmd
+    .command("snapshot-preview [trace-id]")
+    .description("Fetch metadata-only evidence snapshot preview by trace id or --request-id")
+    .option("--request-id <id>", "BKN request id scope")
+    .option("--limit <n>", "maximum evidence trace batches", (v) => Number.parseInt(v, 10))
+    .action(async (traceId: string | undefined, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).trace.snapshotPreview(traceScope(traceId, opts.requestId), {
+          limit: opts.limit,
+        }),
+        outputOptions(cmd),
+      );
+    });
 
   cmd
     .command("get <conversation-id>")
@@ -128,4 +178,13 @@ export function traceCommand(): Command {
     });
 
   return group(cmd, "TRACE AI");
+}
+
+function traceScope(traceId: string | undefined, requestId: string | undefined) {
+  if (traceId && requestId) {
+    throw new InputError("Provide either trace id or --request-id, not both.");
+  }
+  if (requestId) return { requestId };
+  if (traceId) return traceId;
+  throw new InputError("Provide a trace id or --request-id.");
 }
