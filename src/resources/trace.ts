@@ -5,9 +5,15 @@
 import { fetchAgentInfo, sendChat } from "../api/agent-chat.js";
 import {
   type EvidenceIngestRequest,
+  type TraceQueryOptions,
+  type TraceScope,
   emitEvidenceEvents,
+  getBusinessGraph,
+  getEvidenceChain,
   getRawSpansByConversation,
+  getSnapshotPreview,
   getSpansByConversation,
+  getTraceGraph,
   traceSearch,
 } from "../api/trace.js";
 import { claudeAvailable, judgeJson } from "../bkn-trace/claude-judge.js";
@@ -93,6 +99,17 @@ export function trace(ctx: RequestContext) {
     search: (body: unknown) => traceSearch(ctx, body),
     /** Submit BKN Trace phase-two claim/evidence/business events. */
     emitEvidenceEvents: (body: EvidenceIngestRequest) => emitEvidenceEvents(ctx, body),
+    /** Normalized trace tree/status graph by trace id. */
+    graph: (traceId: string) => getTraceGraph(ctx, traceId),
+    /** Claim -> evidence/business refs graph by trace id or BKN request id. */
+    evidenceChain: (scope: TraceScope, opts?: TraceQueryOptions) =>
+      getEvidenceChain(ctx, scope, opts),
+    /** Business semantic graph by trace id or BKN request id. */
+    businessGraph: (scope: TraceScope, opts?: TraceQueryOptions) =>
+      getBusinessGraph(ctx, scope, opts),
+    /** Metadata-only evidence snapshot preview by trace id or BKN request id. */
+    snapshotPreview: (scope: TraceScope, opts?: TraceQueryOptions) =>
+      getSnapshotPreview(ctx, scope, opts),
     /** All span source docs for a conversation. */
     spans: (conversationId: string, opts?: { maxTraceIds?: number; maxSpans?: number }) =>
       getSpansByConversation(ctx, conversationId, opts),
