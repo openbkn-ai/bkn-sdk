@@ -336,6 +336,6 @@ function queryWithLimit(
   query: Record<string, string> | undefined,
   opts: TraceQueryOptions,
 ): Record<string, string | number> | undefined {
-  if (opts.limit === undefined) return query;
+  if (opts.limit === undefined || !Number.isFinite(opts.limit)) return query;
   return { ...(query ?? {}), limit: opts.limit };
 }
