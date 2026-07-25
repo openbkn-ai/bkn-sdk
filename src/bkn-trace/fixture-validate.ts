@@ -4,7 +4,8 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const CONTRACT_VERSION = "1.0.0";
+const CONTRACT_VERSIONS = new Set(["1.0.0", "2.0.0", "2.1.0"]);
+const BUSINESS_CONTRACT_VERSION = "2.1.0";
 const TRACEPARENT_RE = /^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$/;
 const REQUEST_ID_RE = /^req_[0-9A-Za-z_.-]+$/;
 const RFC3339_NANO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
@@ -51,6 +52,169 @@ const SENSITIVE_PATTERNS = [
   /https?:\/\/[^\s"']+/i,
   /[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/,
 ];
+const BUSINESS_EVENT_TYPES = new Set([
+  "agent.interaction.started",
+  "retrieval.completed",
+  "knowledge.read.observed",
+  "data.query.observed",
+  "model.call.observed",
+  "tool.called",
+  "tool.result.observed",
+  "claim.created",
+  "evidence.refs.created",
+  "business.refs.resolved",
+  "action.recommended",
+  "action.approval_requested",
+  "action.approved",
+  "action.rejected",
+  "action.executed",
+  "action.result_recorded",
+]);
+const CLAIM_EVENT_TYPES = new Set([
+  "claim.created",
+  "evidence.refs.created",
+  "business.refs.resolved",
+  "action.recommended",
+  "action.approval_requested",
+  "action.approved",
+  "action.rejected",
+  "action.executed",
+  "action.result_recorded",
+]);
+const ACTION_TRANSITIONS: Record<string, Set<string>> = {
+  recommended: new Set(["approval_requested"]),
+  approval_requested: new Set(["approved", "rejected"]),
+  approved: new Set(["executed"]),
+  executed: new Set(["result_recorded"]),
+  rejected: new Set(),
+  result_recorded: new Set(),
+};
+const ACTION_STATE_BY_EVENT: Record<string, string> = {
+  "action.recommended": "recommended",
+  "action.approval_requested": "approval_requested",
+  "action.approved": "approved",
+  "action.rejected": "rejected",
+  "action.executed": "executed",
+  "action.result_recorded": "result_recorded",
+};
+interface FixtureActionState {
+  state: string;
+  claimID: string;
+  operationID: string;
+  lastEventID: string;
+}
+const EVENT_PAYLOAD_FIELDS: Record<string, Set<string>> = {
+  "agent.interaction.started": new Set(["intent_hash", "mode", "agent_id", "app_ref"]),
+  "retrieval.completed": new Set([
+    "query_hash",
+    "candidate_count",
+    "truncated",
+    "version_status",
+    "source_refs",
+  ]),
+  "knowledge.read.observed": new Set([
+    "kn_id",
+    "read_kind",
+    "version_status",
+    "schema_version",
+    "business_refs",
+  ]),
+  "data.query.observed": new Set([
+    "query_hash",
+    "query_type",
+    "row_count",
+    "truncated",
+    "as_of",
+    "version_status",
+    "resource_refs",
+    "field_refs",
+  ]),
+  "model.call.observed": new Set([
+    "model_name",
+    "model_provider",
+    "status",
+    "input_token_count",
+    "output_token_count",
+    "prompt_hash",
+    "output_hash",
+    "error_category",
+    "error_hash",
+  ]),
+  "tool.called": new Set(["tool_id", "tool_name", "args_hash", "visibility", "version_status"]),
+  "tool.result.observed": new Set([
+    "tool_id",
+    "tool_name",
+    "status",
+    "result_hash",
+    "result_length",
+    "result_count",
+    "error_hash",
+    "error_category",
+    "visibility",
+    "version_status",
+  ]),
+  "claim.created": new Set([
+    "claim_id",
+    "claim_type",
+    "claim_hash",
+    "source_event_ids",
+    "operation_ids",
+    "visibility",
+    "version_status",
+  ]),
+  "evidence.refs.created": new Set(["claim_id", "evidence_refs"]),
+  "business.refs.resolved": new Set(["claim_id", "resolver_status", "business_refs"]),
+  "action.recommended": new Set([
+    "action_instance_id",
+    "action_type",
+    "target_refs",
+    "reason_hash",
+    "status",
+  ]),
+  "action.approval_requested": new Set(["action_instance_id", "policy_ref", "status"]),
+  "action.approved": new Set(["action_instance_id", "actor_ref", "policy_decision_ref", "status"]),
+  "action.rejected": new Set(["action_instance_id", "actor_ref", "policy_decision_ref", "status"]),
+  "action.executed": new Set([
+    "action_instance_id",
+    "invocation_ref",
+    "tool_ref",
+    "status",
+    "error_category",
+    "error_hash",
+  ]),
+  "action.result_recorded": new Set([
+    "action_instance_id",
+    "result_hash",
+    "artifact_ref",
+    "task_ref",
+    "status",
+  ]),
+};
+const REFERENCE_FIELDS = new Set([
+  "ref_id",
+  "ref_type",
+  "source_system",
+  "validity",
+  "version_status",
+  "visibility",
+  "summary_hash",
+]);
+const FORBIDDEN_RAW_KEYS = new Set([
+  "authorization",
+  "cookie",
+  "access_token",
+  "refresh_token",
+  "id_token",
+  "api_key",
+  "password",
+  "private_key",
+  "prompt",
+  "user_question",
+  "approval_comment",
+  "sql",
+  "query_params",
+  "rows",
+]);
 
 export interface FixtureValidationError {
   code: string;
@@ -131,8 +295,27 @@ function checkSensitive(value: unknown, path: string, errors: FixtureValidationE
     return;
   }
   if (value && typeof value === "object") {
-    for (const [key, child] of Object.entries(value))
+    for (const [key, child] of Object.entries(value)) {
+      if (FORBIDDEN_RAW_KEYS.has(key.toLowerCase())) {
+        errors.push(
+          err(
+            "BKN_TRACE_SENSITIVE_VALUE_LEAKED",
+            `${path}.${key}`,
+            "raw sensitive field is forbidden",
+          ),
+        );
+      }
+      if (
+        key.endsWith("_hash") &&
+        child !== "" &&
+        (typeof child !== "string" || !/^sha256:[0-9a-f]{64}$/.test(child))
+      ) {
+        errors.push(
+          err("BKN_TRACE_REQUIRED_FIELD_MISSING", `${path}.${key}`, `${key} must be a sha256 hash`),
+        );
+      }
       checkSensitive(child, `${path}.${key}`, errors);
+    }
     return;
   }
   if (typeof value !== "string") return;
@@ -162,7 +345,7 @@ export function validateFixture(data: unknown): FixtureValidationResult {
         "missing contract version",
       ),
     );
-  } else if (contractVersion !== CONTRACT_VERSION) {
+  } else if (!CONTRACT_VERSIONS.has(contractVersion)) {
     errors.push(
       err(
         "BKN_TRACE_SCHEMA_VERSION_UNSUPPORTED",
@@ -233,8 +416,14 @@ export function validateFixture(data: unknown): FixtureValidationResult {
   });
 
   const events = Array.isArray(root.events) ? root.events : [];
+  const eventIds = new Set<string>();
+  const knownEventIds = new Set<string>();
+  const knownOperationIds = new Set<string>();
+  const knownClaimIds = new Set<string>();
+  const actionStates = new Map<string, FixtureActionState>();
   events.forEach((item, index) => {
     const event = asRecord(item);
+    const eventPath = `$.events[${index}]`;
     checkRequired(event, REQUIRED_EVENT_FIELDS, `$.events[${index}]`, errors);
     checkTimestamp(event.observed_at, `$.events[${index}].observed_at`, errors);
     checkTimestamp(event.emitted_at, `$.events[${index}].emitted_at`, errors);
@@ -248,7 +437,42 @@ export function validateFixture(data: unknown): FixtureValidationResult {
         err("BKN_TRACE_JOIN_FAILED", `$.events[${index}].span_id`, "event span_id not found"),
       );
     }
+    if (typeof event.event_id === "string") {
+      if (eventIds.has(event.event_id)) {
+        errors.push(
+          err("BKN_TRACE_EVENT_ID_CONFLICT", `${eventPath}.event_id`, "duplicate event_id"),
+        );
+      }
+      eventIds.add(event.event_id);
+    }
+    if (contractVersion !== BUSINESS_CONTRACT_VERSION) return;
+    if (event["bkn.trace.schema.version"] !== contractVersion) {
+      errors.push(
+        err(
+          "BKN_TRACE_SCHEMA_VERSION_UNSUPPORTED",
+          `${eventPath}.bkn.trace.schema.version`,
+          "event contract version must match the fixture envelope",
+        ),
+      );
+    }
+    validateBusinessEvent(
+      event,
+      eventPath,
+      knownEventIds,
+      knownOperationIds,
+      knownClaimIds,
+      actionStates,
+      errors,
+    );
+    if (typeof event.event_id === "string") knownEventIds.add(event.event_id);
+    if (typeof event.operation_id === "string") knownOperationIds.add(event.operation_id);
+    if (event.event_type === "claim.created" && typeof event.claim_id === "string") {
+      knownClaimIds.add(event.claim_id);
+    }
   });
+  if (contractVersion !== "1.0.0" && events.length === 0) {
+    errors.push(err("BKN_TRACE_REQUIRED_FIELD_MISSING", "$.events", "at least one event required"));
+  }
 
   const baggage = asRecord(root.baggage);
   for (const key of Object.keys(baggage)) {
@@ -278,6 +502,302 @@ export function validateFixture(data: unknown): FixtureValidationResult {
     expectedResult,
     expectationMatched: expectedResult === null ? result === "pass" : expectedResult === result,
   };
+}
+
+function validateBusinessEvent(
+  event: Record<string, unknown>,
+  path: string,
+  knownEventIds: Set<string>,
+  knownOperationIds: Set<string>,
+  knownClaimIds: Set<string>,
+  actionStates: Map<string, FixtureActionState>,
+  errors: FixtureValidationError[],
+): void {
+  const eventType = typeof event.event_type === "string" ? event.event_type : "";
+  if (!BUSINESS_EVENT_TYPES.has(eventType)) {
+    errors.push(
+      err(
+        "BKN_TRACE_EVENT_TYPE_UNSUPPORTED",
+        `${path}.event_type`,
+        `unsupported event ${eventType}`,
+      ),
+    );
+    return;
+  }
+  checkRequired(event, ["interaction_id"], path, errors);
+  if (eventType !== "agent.interaction.started" && eventType !== "claim.created") {
+    checkRequired(event, ["operation_id"], path, errors);
+  }
+  if (eventType !== "agent.interaction.started") {
+    checkRequired(event, ["causation_event_id"], path, errors);
+    if (
+      typeof event.causation_event_id === "string" &&
+      !knownEventIds.has(event.causation_event_id)
+    ) {
+      errors.push(
+        err(
+          "BKN_TRACE_CAUSATION_INVALID",
+          `${path}.causation_event_id`,
+          "causation_event_id must reference an earlier event",
+        ),
+      );
+    }
+  }
+  if (CLAIM_EVENT_TYPES.has(eventType)) {
+    checkRequired(event, ["claim_id"], path, errors);
+    if (
+      eventType !== "claim.created" &&
+      typeof event.claim_id === "string" &&
+      !knownClaimIds.has(event.claim_id)
+    ) {
+      errors.push(
+        err(
+          "BKN_TRACE_UNKNOWN_CLAIM_ID",
+          `${path}.claim_id`,
+          "event must reference an earlier claim",
+        ),
+      );
+    }
+  }
+  const payload = asRecord(event.payload);
+  checkAllowedKeys(
+    payload,
+    EVENT_PAYLOAD_FIELDS[eventType] ?? new Set(),
+    `${path}.payload`,
+    errors,
+  );
+  if (eventType === "agent.interaction.started") {
+    checkRequired(payload, ["intent_hash", "mode"], `${path}.payload`, errors);
+    checkOneOf(payload, ["agent_id", "app_ref"], `${path}.payload`, errors);
+  }
+  if (eventType === "retrieval.completed") {
+    checkRequired(
+      payload,
+      ["query_hash", "candidate_count", "truncated"],
+      `${path}.payload`,
+      errors,
+    );
+  }
+  if (eventType === "knowledge.read.observed") {
+    checkRequired(payload, ["kn_id", "read_kind", "version_status"], `${path}.payload`, errors);
+  }
+  if (eventType === "data.query.observed") {
+    checkRequired(payload, ["query_hash", "query_type", "row_count"], `${path}.payload`, errors);
+  }
+  if (eventType === "model.call.observed") {
+    checkRequired(
+      payload,
+      [
+        "model_name",
+        "model_provider",
+        "status",
+        "input_token_count",
+        "output_token_count",
+        "prompt_hash",
+        "output_hash",
+      ],
+      `${path}.payload`,
+      errors,
+    );
+    if (payload.status === "error") {
+      checkRequired(payload, ["error_category", "error_hash"], `${path}.payload`, errors);
+    }
+  }
+  if (eventType === "claim.created") {
+    checkRequired(
+      payload,
+      [
+        "claim_id",
+        "claim_type",
+        "claim_hash",
+        "source_event_ids",
+        "operation_ids",
+        "visibility",
+        "version_status",
+      ],
+      `${path}.payload`,
+      errors,
+    );
+    checkNonEmptyArray(payload, "source_event_ids", `${path}.payload`, errors);
+    checkNonEmptyArray(payload, "operation_ids", `${path}.payload`, errors);
+    checkKnownArray(payload, "source_event_ids", knownEventIds, `${path}.payload`, errors);
+    checkKnownArray(payload, "operation_ids", knownOperationIds, `${path}.payload`, errors);
+  }
+  if (eventType === "evidence.refs.created") {
+    checkReferenceList(payload, "evidence_refs", `${path}.payload`, errors);
+  }
+  if (eventType === "business.refs.resolved") {
+    checkRequired(payload, ["resolver_status"], `${path}.payload`, errors);
+    checkReferenceList(
+      payload,
+      "business_refs",
+      `${path}.payload`,
+      errors,
+      payload.resolver_status === "unresolved",
+    );
+  }
+  const actionState = ACTION_STATE_BY_EVENT[eventType];
+  if (!actionState) return;
+  checkRequired(payload, ["action_instance_id", "status"], `${path}.payload`, errors);
+  const fixedStatus: Record<string, string> = {
+    "action.recommended": "recommended",
+    "action.approval_requested": "approval_requested",
+    "action.approved": "approved",
+    "action.rejected": "rejected",
+  };
+  if (fixedStatus[eventType] && payload.status !== fixedStatus[eventType]) {
+    errors.push(
+      err(
+        "BKN_TRACE_ACTION_TRANSITION_INVALID",
+        `${path}.payload.status`,
+        `${eventType} requires status=${fixedStatus[eventType]}`,
+      ),
+    );
+  }
+  if (eventType === "action.recommended") {
+    checkRequired(
+      payload,
+      ["action_type", "target_refs", "reason_hash"],
+      `${path}.payload`,
+      errors,
+    );
+    checkNonEmptyArray(payload, "target_refs", `${path}.payload`, errors);
+  }
+  if (eventType === "action.approval_requested") {
+    checkRequired(payload, ["policy_ref"], `${path}.payload`, errors);
+  }
+  if (eventType === "action.approved" || eventType === "action.rejected") {
+    checkRequired(payload, ["actor_ref", "policy_decision_ref"], `${path}.payload`, errors);
+  }
+  if (eventType === "action.executed") {
+    checkOneOf(payload, ["invocation_ref", "tool_ref"], `${path}.payload`, errors);
+    if (payload.status === "error") {
+      checkRequired(payload, ["error_category", "error_hash"], `${path}.payload`, errors);
+    }
+  }
+  if (eventType === "action.result_recorded") {
+    checkRequired(payload, ["result_hash"], `${path}.payload`, errors);
+    checkOneOf(payload, ["artifact_ref", "task_ref"], `${path}.payload`, errors);
+  }
+  const actionID = typeof payload.action_instance_id === "string" ? payload.action_instance_id : "";
+  if (!actionID) return;
+  const claimID = typeof event.claim_id === "string" ? event.claim_id : "";
+  const operationID = typeof event.operation_id === "string" ? event.operation_id : "";
+  const previous = actionStates.get(actionID);
+  if (
+    (!previous && actionState !== "recommended") ||
+    (previous &&
+      (!ACTION_TRANSITIONS[previous.state]?.has(actionState) ||
+        event.causation_event_id !== previous.lastEventID ||
+        claimID !== previous.claimID ||
+        operationID !== previous.operationID))
+  ) {
+    errors.push(
+      err(
+        "BKN_TRACE_ACTION_TRANSITION_INVALID",
+        `${path}.event_type`,
+        `invalid action transition ${previous?.state ?? "<none>"} -> ${actionState}`,
+      ),
+    );
+    return;
+  }
+  actionStates.set(actionID, {
+    state: actionState,
+    claimID,
+    operationID,
+    lastEventID: String(event.event_id ?? ""),
+  });
+}
+
+function checkOneOf(
+  payload: Record<string, unknown>,
+  fields: string[],
+  path: string,
+  errors: FixtureValidationError[],
+): void {
+  if (fields.some((field) => typeof payload[field] === "string" && payload[field] !== "")) return;
+  errors.push(
+    err(
+      "BKN_TRACE_REQUIRED_FIELD_MISSING",
+      `${path}.${fields[0]}`,
+      `one of ${fields.join(" or ")} is required`,
+    ),
+  );
+}
+
+function checkNonEmptyArray(
+  payload: Record<string, unknown>,
+  field: string,
+  path: string,
+  errors: FixtureValidationError[],
+): void {
+  if (Array.isArray(payload[field]) && payload[field].length > 0) return;
+  errors.push(
+    err(
+      "BKN_TRACE_REQUIRED_FIELD_MISSING",
+      `${path}.${field}`,
+      `${field} must be a non-empty array`,
+    ),
+  );
+}
+
+function checkReferenceList(
+  payload: Record<string, unknown>,
+  field: string,
+  path: string,
+  errors: FixtureValidationError[],
+  allowEmpty = false,
+): void {
+  if (!allowEmpty) checkNonEmptyArray(payload, field, path, errors);
+  const refs = Array.isArray(payload[field]) ? payload[field] : [];
+  refs.forEach((value, index) => {
+    const ref = asRecord(value);
+    checkRequired(
+      ref,
+      ["ref_id", "ref_type", "source_system", "validity", "version_status", "visibility"],
+      `${path}.${field}[${index}]`,
+      errors,
+    );
+    checkAllowedKeys(ref, REFERENCE_FIELDS, `${path}.${field}[${index}]`, errors);
+  });
+}
+
+function checkKnownArray(
+  payload: Record<string, unknown>,
+  field: string,
+  known: Set<string>,
+  path: string,
+  errors: FixtureValidationError[],
+): void {
+  if (!Array.isArray(payload[field])) return;
+  for (const value of payload[field]) {
+    if (typeof value === "string" && known.has(value)) continue;
+    errors.push(
+      err(
+        "BKN_TRACE_CAUSATION_INVALID",
+        `${path}.${field}`,
+        `${field} must reference earlier events or operations`,
+      ),
+    );
+  }
+}
+
+function checkAllowedKeys(
+  value: Record<string, unknown>,
+  allowed: Set<string>,
+  path: string,
+  errors: FixtureValidationError[],
+): void {
+  for (const key of Object.keys(value)) {
+    if (allowed.has(key)) continue;
+    errors.push(
+      err(
+        "BKN_TRACE_EVENT_PAYLOAD_FIELD_UNSUPPORTED",
+        `${path}.${key}`,
+        `payload field ${key} is not registered for this event`,
+      ),
+    );
+  }
 }
 
 export function validateFixturePath(path: string): FixturePathValidationResult {

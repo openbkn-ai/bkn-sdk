@@ -33,6 +33,7 @@ import {
   runEvalSet,
 } from "../bkn-trace/eval-set.js";
 import { validateFixturePath } from "../bkn-trace/fixture-validate.js";
+import { TraceSession, type TraceSessionOptions } from "../trace-session.js";
 import type { RequestContext } from "../types.js";
 
 async function semanticJudge(
@@ -99,6 +100,9 @@ export function trace(ctx: RequestContext) {
     search: (body: unknown) => traceSearch(ctx, body),
     /** Submit BKN Trace phase-two claim/evidence/business events. */
     emitEvidenceEvents: (body: EvidenceIngestRequest) => emitEvidenceEvents(ctx, body),
+    /** Create a typed BKN Trace 2.1 session for an Agent or AI application. */
+    createSession: (options: Omit<TraceSessionOptions, "emit">) =>
+      new TraceSession({ ...options, emit: (body) => emitEvidenceEvents(ctx, body) }),
     /** Normalized trace tree/status graph by trace id. */
     graph: (traceId: string) => getTraceGraph(ctx, traceId),
     /** Claim -> evidence/business refs graph by trace id or BKN request id. */

@@ -8,6 +8,7 @@ import {
   getTraceGraph,
   traceSearch,
 } from "../../src/api/trace.js";
+import { trace } from "../../src/resources/trace.js";
 import type { RequestContext } from "../../src/types.js";
 
 const ctx: RequestContext = {
@@ -96,6 +97,50 @@ describe("emitEvidenceEvents", () => {
     expect(c[1].method).toBe("POST");
     expect(JSON.parse(c[1].body as string).events[0].event_type).toBe("claim.created");
     expect(result.accepted_event_count).toBe(1);
+  });
+});
+
+describe("trace resource session", () => {
+  it("binds TraceSession.flush to the evidence ingestion endpoint", async () => {
+    const f = mockFetchSeq([
+      {
+        trace_id: "8c0d0000000000000000000000000001",
+        "bkn.request.id": "req_session_resource_001",
+        "bkn.trace.schema.version": "2.1.0",
+        accepted_event_count: 1,
+        claim_count: 0,
+        evidence_ref_count: 0,
+        business_ref_count: 0,
+      },
+    ]);
+    const session = trace(ctx).createSession({
+      trace: {
+        trace_id: "8c0d0000000000000000000000000001",
+        traceparent: "00-8c0d0000000000000000000000000001-1f12000000000001-01",
+        "bkn.request.id": "req_session_resource_001",
+        business_domain: "bd_test",
+        "bkn.account.id": "acct_demo",
+        "bkn.account.type": "app",
+      },
+      producerModule: "third-party-agent",
+      spanId: "1f12000000000001",
+      interactionId: "interaction_1",
+      idFactory: () => "event_1",
+      now: () => "2026-07-25T12:00:00.000Z",
+    });
+    session.startInteraction({
+      operationName: "agent.run",
+      intentHash: `sha256:${"1".repeat(64)}`,
+      mode: "task",
+      appRef: "app:sdk-test",
+    });
+
+    await session.flush();
+
+    const c = calls(f)[0];
+    if (!c) throw new Error("no call");
+    expect(new URL(c[0]).pathname).toBe("/api/agent-observability/v1/evidence/events");
+    expect(JSON.parse(c[1].body as string)["bkn.trace.schema.version"]).toBe("2.1.0");
   });
 });
 

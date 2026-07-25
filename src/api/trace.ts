@@ -42,9 +42,27 @@ export interface EvidenceTraceContext {
   "bkn.account.type": string;
 }
 
+export type BusinessEvidenceEventType =
+  | "agent.interaction.started"
+  | "retrieval.completed"
+  | "knowledge.read.observed"
+  | "data.query.observed"
+  | "model.call.observed"
+  | "tool.called"
+  | "tool.result.observed"
+  | "claim.created"
+  | "evidence.refs.created"
+  | "business.refs.resolved"
+  | "action.recommended"
+  | "action.approval_requested"
+  | "action.approved"
+  | "action.rejected"
+  | "action.executed"
+  | "action.result_recorded";
+
 export interface EvidenceEvent {
   event_id: string;
-  event_type: string;
+  event_type: BusinessEvidenceEventType | (string & {});
   "bkn.trace.schema.version": string;
   observed_at: string;
   emitted_at: string;
@@ -53,11 +71,16 @@ export interface EvidenceEvent {
   span_id: string;
   "bkn.request.id": string;
   "bkn.operation.name": string;
+  interaction_id?: string;
+  operation_id?: string;
+  causation_event_id?: string;
+  claim_id?: string;
+  attempt?: number;
   payload: Record<string, unknown>;
 }
 
 export interface EvidenceIngestRequest {
-  "bkn.trace.schema.version": "2.0.0";
+  "bkn.trace.schema.version": "2.0.0" | "2.1.0";
   trace: EvidenceTraceContext;
   events: EvidenceEvent[];
 }

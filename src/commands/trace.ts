@@ -159,7 +159,7 @@ export function traceCommand(): Command {
 
   cmd
     .command("validate-fixture <path>")
-    .description("Validate BKN Trace phase-one fixture JSON files")
+    .description("Validate BKN Trace 1.0/2.0/2.1 fixture JSON files")
     .action(async (path: string, _opts, cmd: Command) => {
       const result = validateFixturePath(path);
       printJson(result, outputOptions(cmd));
@@ -168,10 +168,10 @@ export function traceCommand(): Command {
 
   const evidence = cmd
     .command("evidence")
-    .description("Submit BKN Trace phase-two evidence events");
+    .description("Submit BKN Trace 2.x business evidence events");
   evidence
     .command("emit <file>")
-    .description("Submit a phase-two evidence event batch JSON file")
+    .description("Submit a BKN Trace 2.0/2.1 event batch JSON file")
     .action(async (file: string, _opts, cmd: Command) => {
       const body = JSON.parse(readFileSync(file, "utf8"));
       printJson(await clientFrom(cmd).trace.emitEvidenceEvents(body), outputOptions(cmd));
