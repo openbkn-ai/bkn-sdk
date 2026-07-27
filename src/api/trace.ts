@@ -12,6 +12,8 @@ import { request } from "./http.js";
 
 const SEARCH = "/api/agent-observability/v1/traces/_search";
 const EVIDENCE_EVENTS = "/api/agent-observability/v1/evidence/events";
+const EVIDENCE_ARTIFACTS = "/api/agent-observability/v1/evidence/artifacts";
+const REQUESTS = "/api/agent-observability/v1/requests";
 const TRACES = "/api/agent-observability/v1/traces";
 
 interface SearchHits {
@@ -36,6 +38,7 @@ export interface EvidenceTraceContext {
   trace_id: string;
   traceparent: string;
   "bkn.request.id": string;
+  "bkn.conversation.id"?: string;
   "bkn.tenant.id"?: string;
   business_domain?: string;
   "bkn.account.id": string;
@@ -47,6 +50,7 @@ export type BusinessEvidenceEventType =
   | "retrieval.completed"
   | "knowledge.read.observed"
   | "data.query.observed"
+  | "logic.execution.observed"
   | "model.call.observed"
   | "tool.called"
   | "tool.result.observed"
@@ -80,9 +84,117 @@ export interface EvidenceEvent {
 }
 
 export interface EvidenceIngestRequest {
-  "bkn.trace.schema.version": "2.0.0" | "2.1.0";
+  "bkn.trace.schema.version": "2.0.0" | "2.1.0" | "2.2.0";
   trace: EvidenceTraceContext;
   events: EvidenceEvent[];
+}
+
+export type EvidenceArtifactType =
+  | "action_input"
+  | "action_result"
+  | "data_result"
+  | "logic_execution"
+  | "query"
+  | "question"
+  | "result";
+
+export interface EvidenceArtifact {
+  artifact_id: string;
+  artifact_type: EvidenceArtifactType;
+  "bkn.request.id": string;
+  trace_id?: string;
+  interaction_id?: string;
+  operation_id?: string;
+  claim_id?: string;
+  source_ref?: string;
+  business_refs?: string[];
+  content_type: string;
+  schema_version: "2.2.0";
+  observed_at: string;
+  as_of?: string;
+  source_version?: string;
+  content_hash: string;
+  content?: unknown;
+  snapshot_ref?: string;
+  "bkn.tenant.id"?: string;
+  business_domain?: string;
+  "bkn.account.id": string;
+  "bkn.account.type": string;
+  initiator?: string;
+  agent_or_app?: string;
+}
+
+export interface EvidenceArtifactIngestResponse {
+  artifact_id: string;
+  artifact_type: EvidenceArtifactType;
+  "bkn.request.id": string;
+  trace_id?: string;
+  content_hash: string;
+  created: boolean;
+}
+
+export interface ActionSummary {
+  recommended: number;
+  approved: number;
+  executed: number;
+  completed: number;
+  last_status?: string;
+}
+
+export interface RequestSummary {
+  request_id: string;
+  started_at?: string;
+  completed_at?: string;
+  initiator?: string;
+  agent_or_app?: string;
+  business_domain?: string;
+  knowledge_networks?: string[];
+  question_preview?: string;
+  result_preview?: string;
+  status: string;
+  evidence_completeness: string;
+  partial_reasons?: string[];
+  business_refs?: string[];
+  action_summary: Partial<ActionSummary>;
+  trace_count: number;
+  duration_ms?: number;
+  error_summary?: string;
+}
+
+export interface TraceExecutionSummary {
+  trace_id: string;
+  request_id: string;
+  started_at?: string;
+  completed_at?: string;
+  agent_or_app?: string;
+  business_domain?: string;
+  root_operation?: string;
+  status: string;
+  span_count: number;
+  duration_ms?: number;
+  error_summary?: string;
+}
+
+export interface SummaryPage<T> {
+  entries: T[];
+  total: number;
+  next_cursor?: string | null;
+  truncated: boolean;
+  partial: boolean;
+  partial_reasons?: string[];
+}
+
+export interface RequestSummaryQuery {
+  limit?: number;
+  cursor?: string;
+  from?: string;
+  to?: string;
+  status?: string;
+  agentOrApp?: string;
+  businessDomain?: string;
+  knowledgeNetwork?: string;
+  evidenceCompleteness?: string;
+  keyword?: string;
 }
 
 export interface EvidenceIngestResponse {
@@ -260,6 +372,51 @@ export function emitEvidenceEvents(
   return request<EvidenceIngestResponse>(ctx, EVIDENCE_EVENTS, { method: "POST", body });
 }
 
+/** Store authorized BKN Trace 2.2 business content separately from core events. */
+export function emitEvidenceArtifact(
+  ctx: RequestContext,
+  body: EvidenceArtifact,
+): Promise<EvidenceArtifactIngestResponse> {
+  return request<EvidenceArtifactIngestResponse>(ctx, EVIDENCE_ARTIFACTS, {
+    method: "POST",
+    body,
+  });
+}
+
+/** Read one authorized BKN Trace 2.2 artifact by opaque id. */
+export function getEvidenceArtifact(
+  ctx: RequestContext,
+  artifactId: string,
+): Promise<EvidenceArtifact> {
+  return request<EvidenceArtifact>(ctx, `${EVIDENCE_ARTIFACTS}/${encodeURIComponent(artifactId)}`);
+}
+
+/** List product-facing business request summaries. */
+export function listRequestSummaries(
+  ctx: RequestContext,
+  query: RequestSummaryQuery = {},
+): Promise<SummaryPage<RequestSummary>> {
+  return request<SummaryPage<RequestSummary>>(ctx, REQUESTS, {
+    query: summaryQuery(query),
+  });
+}
+
+export function getRequestSummary(ctx: RequestContext, requestId: string): Promise<RequestSummary> {
+  return request<RequestSummary>(ctx, `${REQUESTS}/${encodeURIComponent(requestId)}`);
+}
+
+export function getRequestTraces(
+  ctx: RequestContext,
+  requestId: string,
+  query: Pick<RequestSummaryQuery, "cursor" | "limit"> = {},
+): Promise<SummaryPage<TraceExecutionSummary>> {
+  return request<SummaryPage<TraceExecutionSummary>>(
+    ctx,
+    `${REQUESTS}/${encodeURIComponent(requestId)}/traces`,
+    { query: summaryQuery(query) },
+  );
+}
+
 export function getTraceGraph(ctx: RequestContext, traceId: string): Promise<TraceGraphResponse> {
   return request<TraceGraphResponse>(ctx, `${TRACES}/${encodeURIComponent(traceId)}/trace-graph`);
 }
@@ -361,4 +518,21 @@ function queryWithLimit(
 ): Record<string, string | number> | undefined {
   if (opts.limit === undefined || !Number.isFinite(opts.limit)) return query;
   return { ...(query ?? {}), limit: opts.limit };
+}
+
+function summaryQuery(query: RequestSummaryQuery): Record<string, string | number> | undefined {
+  const result: Record<string, string | number> = {};
+  if (query.limit !== undefined && Number.isFinite(query.limit)) result.limit = query.limit;
+  if (query.cursor) result.cursor = query.cursor;
+  if (query.from) result.from = query.from;
+  if (query.to) result.to = query.to;
+  if (query.status) result.status = query.status;
+  if (query.agentOrApp) result.agent_or_app = query.agentOrApp;
+  if (query.businessDomain) result.business_domain = query.businessDomain;
+  if (query.knowledgeNetwork) result.knowledge_network = query.knowledgeNetwork;
+  if (query.evidenceCompleteness) {
+    result.evidence_completeness = query.evidenceCompleteness;
+  }
+  if (query.keyword) result.keyword = query.keyword;
+  return Object.keys(result).length ? result : undefined;
 }

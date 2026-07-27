@@ -49,15 +49,23 @@ export { vega } from "./resources/vega.js";
 export * as auth from "./resources/auth.js";
 
 export type {
+  ActionSummary,
   BusinessEvidenceEventType,
   BusinessGraphResponse,
+  EvidenceArtifact,
+  EvidenceArtifactIngestResponse,
+  EvidenceArtifactType,
   EvidenceEvent,
   EvidenceChainResponse,
   EvidenceIngestRequest,
   EvidenceIngestResponse,
   EvidenceTraceContext,
   GraphPage,
+  RequestSummary,
+  RequestSummaryQuery,
   SnapshotPreviewResponse,
+  SummaryPage,
+  TraceExecutionSummary,
   TraceGraphEdge,
   TraceGraphNode,
   TraceQueryOptions,

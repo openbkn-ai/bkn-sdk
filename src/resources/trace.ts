@@ -4,16 +4,23 @@
 /** Trace resource surface (data fetch + symbolic/rubric diagnose + eval-set). */
 import { fetchAgentInfo, sendChat } from "../api/agent-chat.js";
 import {
+  type EvidenceArtifact,
   type EvidenceIngestRequest,
+  type RequestSummaryQuery,
   type TraceQueryOptions,
   type TraceScope,
+  emitEvidenceArtifact,
   emitEvidenceEvents,
   getBusinessGraph,
+  getEvidenceArtifact,
   getEvidenceChain,
   getRawSpansByConversation,
+  getRequestSummary,
+  getRequestTraces,
   getSnapshotPreview,
   getSpansByConversation,
   getTraceGraph,
+  listRequestSummaries,
   traceSearch,
 } from "../api/trace.js";
 import { claudeAvailable, judgeJson } from "../bkn-trace/claude-judge.js";
@@ -100,6 +107,17 @@ export function trace(ctx: RequestContext) {
     search: (body: unknown) => traceSearch(ctx, body),
     /** Submit BKN Trace phase-two claim/evidence/business events. */
     emitEvidenceEvents: (body: EvidenceIngestRequest) => emitEvidenceEvents(ctx, body),
+    /** Store one authorized BKN Trace 2.2 business-content artifact. */
+    emitArtifact: (body: EvidenceArtifact) => emitEvidenceArtifact(ctx, body),
+    /** Read one authorized BKN Trace 2.2 business-content artifact. */
+    artifact: (artifactId: string) => getEvidenceArtifact(ctx, artifactId),
+    /** Product-facing business request list and request-to-trace drilldown. */
+    requests: {
+      get: (requestId: string) => getRequestSummary(ctx, requestId),
+      list: (query?: RequestSummaryQuery) => listRequestSummaries(ctx, query),
+      traces: (requestId: string, query?: Pick<RequestSummaryQuery, "cursor" | "limit">) =>
+        getRequestTraces(ctx, requestId, query),
+    },
     /** Create a typed BKN Trace 2.1 session for an Agent or AI application. */
     createSession: (options: Omit<TraceSessionOptions, "emit">) =>
       new TraceSession({ ...options, emit: (body) => emitEvidenceEvents(ctx, body) }),

@@ -7,7 +7,7 @@ import { rawCall } from "../api/call.js";
 import { resolveContext } from "../config/resolve.js";
 import { group } from "../help/grouped-help.js";
 import { printJson } from "../utils/output.js";
-import { outputOptions } from "./_shared.js";
+import { outputOptions, traceOptionsFrom } from "./_shared.js";
 
 function collect(value: string, prev: string[]): string[] {
   prev.push(value);
@@ -32,12 +32,14 @@ export function callCommand(): Command {
     .option("-v, --verbose", "print request line to stderr")
     .action(async (url: string, opts, cmd: Command) => {
       const g = cmd.optsWithGlobals();
+      const trace = traceOptionsFrom(g);
       const ctx = resolveContext({
         baseUrl: g.baseUrl,
         token: g.token,
         user: g.user,
         businessDomain: g.bizDomain,
         insecure: g.insecure,
+        ...(trace ? { trace } : {}),
       });
       const res = await rawCall(ctx, url, {
         method: opts.request,

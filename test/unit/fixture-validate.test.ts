@@ -365,7 +365,7 @@ describe("validateFixturePath", () => {
       payload: {
         action_instance_id: "action_1",
         action_type: "create_monitor",
-        target_refs: ["object:material:M-1001"],
+        target_refs: ["object:supplychain:material"],
         reason_hash: `sha256:${"4".repeat(64)}`,
         status: "recommended",
       },
@@ -428,6 +428,37 @@ describe("validateFixturePath", () => {
     expect(result.ok).toBe(true);
     expect(result.results[0]?.errors).toContainEqual(
       expect.objectContaining({ code: "BKN_TRACE_ACTION_TRANSITION_INVALID" }),
+    );
+  });
+
+  it("rejects ambiguous short business references", () => {
+    const fixture = businessFixture([
+      businessEvent("business.refs.resolved", {
+        claim_id: "claim_1",
+        payload: {
+          claim_id: "claim_1",
+          resolver_status: "resolved",
+          business_refs: [
+            {
+              ref_id: "object:customer",
+              ref_type: "object",
+              source_system: "bkn",
+              validity: "available",
+              version_status: "versioned",
+              visibility: "visible",
+            },
+          ],
+        },
+      }),
+    ]);
+    fixture.fixture_type = "negative";
+    fixture.expected_result = "fail";
+
+    const result = validateFixturePath(writeFixture("short-ref-negative.json", fixture));
+
+    expect(result.ok).toBe(true);
+    expect(result.results[0]?.errors).toContainEqual(
+      expect.objectContaining({ code: "BKN_TRACE_REFERENCE_ID_INVALID" }),
     );
   });
 });

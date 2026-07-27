@@ -662,6 +662,7 @@ function validateBusinessEvent(
       errors,
     );
     checkNonEmptyArray(payload, "target_refs", `${path}.payload`, errors);
+    checkQualifiedStringRefs(payload, "target_refs", `${path}.payload`, errors);
   }
   if (eventType === "action.approval_requested") {
     checkRequired(payload, ["policy_ref"], `${path}.payload`, errors);
@@ -759,7 +760,46 @@ function checkReferenceList(
       errors,
     );
     checkAllowedKeys(ref, REFERENCE_FIELDS, `${path}.${field}[${index}]`, errors);
+    if (typeof ref.ref_id === "string" && !isQualifiedReference(ref.ref_id)) {
+      errors.push(
+        err(
+          "BKN_TRACE_REFERENCE_ID_INVALID",
+          `${path}.${field}[${index}].ref_id`,
+          "business reference id must include its knowledge-network or resource scope",
+        ),
+      );
+    }
   });
+}
+
+function checkQualifiedStringRefs(
+  payload: Record<string, unknown>,
+  field: string,
+  path: string,
+  errors: FixtureValidationError[],
+): void {
+  const refs = Array.isArray(payload[field]) ? payload[field] : [];
+  refs.forEach((value, index) => {
+    if (typeof value !== "string" || isQualifiedReference(value)) return;
+    errors.push(
+      err(
+        "BKN_TRACE_REFERENCE_ID_INVALID",
+        `${path}.${field}[${index}]`,
+        "business reference id must include its knowledge-network or resource scope",
+      ),
+    );
+  });
+}
+
+function isQualifiedReference(value: string): boolean {
+  const parts = value.trim().split(":");
+  if (parts.some((part) => part.length === 0)) return false;
+  if (["kn", "resource"].includes(parts[0] ?? "")) return parts.length === 2;
+  if (["object", "relation", "action_type", "metric", "field"].includes(parts[0] ?? "")) {
+    return parts.length === 3;
+  }
+  if (parts[0] === "property") return parts.length === 4;
+  return true;
 }
 
 function checkKnownArray(

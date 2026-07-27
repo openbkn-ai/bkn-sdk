@@ -52,6 +52,128 @@ function session(overrides: Partial<ConstructorParameters<typeof TraceSession>[0
 }
 
 describe("TraceSession", () => {
+  it("preserves a caller-owned conversation across the evidence interaction", async () => {
+    const { value, emit } = session({ conversationId: "conversation_supply_chain" });
+    value.startInteraction({
+      operationName: "agent.run",
+      intentHash: `sha256:${"1".repeat(64)}`,
+      mode: "task",
+      agentId: "agent_1",
+    });
+
+    await value.flush();
+
+    expect(emit.mock.calls[0]?.[0].trace["bkn.conversation.id"]).toBe("conversation_supply_chain");
+  });
+
+  it("builds a 2.2 session only from already-persisted artifact references", async () => {
+    const { value, emit } = session({ contractVersion: "2.2.0" });
+
+    expect(() =>
+      value.startInteraction({
+        operationName: "agent.run",
+        intentHash: `sha256:${"1".repeat(64)}`,
+        mode: "task",
+        agentId: "agent_1",
+      }),
+    ).toThrow(/question_artifact_ref/);
+
+    const interaction = value.startInteraction({
+      operationName: "agent.run",
+      intentHash: `sha256:${"1".repeat(64)}`,
+      mode: "task",
+      agentId: "agent_1",
+      questionArtifactRef: "artifact:art_question_001",
+    });
+    const data = value.observeOperation("data.query.observed", {
+      operationName: "data.query",
+      causationEventId: interaction.event_id,
+      payload: {
+        query_artifact_ref: "artifact:art_query_001",
+        query_hash: `sha256:${"2".repeat(64)}`,
+        query_type: "aggregate",
+        result_artifact_ref: "artifact:art_data_result_001",
+        row_count: 2,
+      },
+    });
+    value.createClaim({
+      operationName: "agent.claim.create",
+      causationEventId: data.event_id,
+      claimId: "claim_1",
+      claimType: "answer",
+      claimHash: `sha256:${"3".repeat(64)}`,
+      operationIds: [data.operation_id as string],
+      resultArtifactRef: "artifact:art_result_001",
+      sourceEventIds: [data.event_id],
+    });
+
+    await value.flush();
+
+    const request = emit.mock.calls[0]?.[0];
+    expect(request?.["bkn.trace.schema.version"]).toBe("2.2.0");
+    expect(request?.events[0]?.payload.question_artifact_ref).toBe("artifact:art_question_001");
+    expect(request?.events.at(-1)?.payload.result_artifact_ref).toBe("artifact:art_result_001");
+  });
+
+  it("records a 2.2 action result using only its persisted result artifact", () => {
+    const { value } = session({ contractVersion: "2.2.0" });
+    const interaction = value.startInteraction({
+      operationName: "agent.run",
+      intentHash: `sha256:${"1".repeat(64)}`,
+      mode: "task",
+      agentId: "agent_1",
+      questionArtifactRef: "artifact:art_question_001",
+    });
+    const data = value.observeOperation("data.query.observed", {
+      operationName: "data.query",
+      causationEventId: interaction.event_id,
+      payload: {
+        query_artifact_ref: "artifact:art_query_001",
+        query_hash: `sha256:${"2".repeat(64)}`,
+        query_type: "aggregate",
+        result_artifact_ref: "artifact:art_data_result_001",
+        row_count: 1,
+      },
+    });
+    value.createClaim({
+      operationName: "agent.claim.create",
+      causationEventId: data.event_id,
+      claimId: "claim_1",
+      claimType: "recommendation",
+      claimHash: `sha256:${"3".repeat(64)}`,
+      operationIds: [data.operation_id as string],
+      resultArtifactRef: "artifact:art_result_001",
+      sourceEventIds: [data.event_id],
+    });
+    const action = value.recommendAction({
+      operationName: "action.recommend",
+      claimId: "claim_1",
+      actionType: "create_forecast_monitor",
+      targetRefs: ["object:supplychain:material"],
+      reasonHash: `sha256:${"4".repeat(64)}`,
+      inputArtifactRef: "artifact:art_action_input_001",
+    });
+    value.requestActionApproval(action, { policyRef: "policy:e2e" });
+    value.approveAction(action, {
+      actorRef: "account:account_1",
+      policyDecisionRef: "decision:allow",
+    });
+    value.executeAction(action, { status: "ok", invocationRef: "tool:monitor" });
+
+    const result = value.recordActionResult(action, {
+      status: "created",
+      resultHash: `sha256:${"5".repeat(64)}`,
+      resultArtifactRef: "artifact:art_action_result_001",
+    });
+
+    expect(result.payload).toMatchObject({
+      result_artifact_ref: "artifact:art_action_result_001",
+      status: "created",
+    });
+    expect(result.payload).not.toHaveProperty("artifact_ref");
+    expect(result.payload).not.toHaveProperty("task_ref");
+  });
+
   it("builds a causal interaction, operation, and claim without raw JSON", async () => {
     const { value, emit } = session();
     const interaction = value.startInteraction({
@@ -211,7 +333,7 @@ describe("TraceSession", () => {
       resolverStatus: "resolved",
       refs: [
         {
-          refId: "object:material:M-1001",
+          refId: "object:supplychain:material",
           refType: "object",
           sourceSystem: "bkn",
           validity: "available",
@@ -225,7 +347,7 @@ describe("TraceSession", () => {
     expect(business.event_type).toBe("business.refs.resolved");
     expect(business.causation_event_id).toBe(evidence.event_id);
     expect(business.payload.business_refs).toEqual([
-      expect.objectContaining({ ref_id: "object:material:M-1001", ref_type: "object" }),
+      expect.objectContaining({ ref_id: "object:supplychain:material", ref_type: "object" }),
     ]);
   });
 
@@ -383,7 +505,7 @@ describe("TraceSession", () => {
       operationName: "action.recommend",
       claimId: "claim_1",
       actionType: "create_forecast_monitor",
-      targetRefs: ["object:material:M-1001"],
+      targetRefs: ["object:supplychain:material"],
       reasonHash: `sha256:${"4".repeat(64)}`,
     });
 
@@ -456,5 +578,57 @@ describe("TraceSession", () => {
     expect(() =>
       value.executeAction(action, { status: "ok", invocationRef: "tool:monitor" }),
     ).toThrow(/approval/i);
+  });
+
+  it("rejects ambiguous short business and action references", () => {
+    const { value } = session();
+    const interaction = value.startInteraction({
+      operationName: "agent.run",
+      intentHash: `sha256:${"1".repeat(64)}`,
+      mode: "task",
+      agentId: "agent_1",
+    });
+    const data = value.observeOperation("data.query.observed", {
+      operationName: "data.query",
+      causationEventId: interaction.event_id,
+      payload: { query_hash: `sha256:${"2".repeat(64)}`, query_type: "aggregate", row_count: 1 },
+    });
+    value.createClaim({
+      operationName: "agent.claim.create",
+      causationEventId: data.event_id,
+      claimId: "claim_1",
+      claimType: "recommendation",
+      claimHash: `sha256:${"3".repeat(64)}`,
+      sourceEventIds: [data.event_id],
+      operationIds: [data.operation_id as string],
+    });
+
+    expect(() =>
+      value.resolveBusinessRefs({
+        operationName: "agent.business.resolve",
+        claimId: "claim_1",
+        resolverStatus: "resolved",
+        refs: [
+          {
+            refId: "object:customer",
+            refType: "object",
+            sourceSystem: "bkn",
+            validity: "available",
+            versionStatus: "versioned",
+            visibility: "visible",
+          },
+        ],
+      }),
+    ).toThrow(/knowledge-network or resource scope/i);
+
+    expect(() =>
+      value.recommendAction({
+        operationName: "action.recommend",
+        claimId: "claim_1",
+        actionType: "create_monitor",
+        targetRefs: ["object:customer"],
+        reasonHash: `sha256:${"4".repeat(64)}`,
+      }),
+    ).toThrow(/knowledge-network or resource scope/i);
   });
 });

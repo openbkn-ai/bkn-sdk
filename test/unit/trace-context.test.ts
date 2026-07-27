@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildHeaders } from "../../src/api/headers.js";
+import { traceOptionsFrom } from "../../src/commands/_shared.js";
 import { resolveContext } from "../../src/config/resolve.js";
 import type { RequestContext } from "../../src/types.js";
 
@@ -58,5 +59,66 @@ describe("resolveContext trace defaults", () => {
     expect(resolved.trace?.traceparent).toBe(
       "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01",
     );
+  });
+});
+
+describe("caller-owned conversation and interaction ids", () => {
+  it("propagates explicitly supplied ids as headers", () => {
+    const resolved = resolveContext({
+      baseUrl: "https://demo.example.com",
+      token: "SECRET",
+      trace: {
+        conversationId: "agent:thread_supply_chain",
+        interactionId: "int_supply_chain_001",
+      },
+    } as Parameters<typeof resolveContext>[0]);
+
+    const headers = buildHeaders(resolved);
+    expect(headers["bkn-conversation-id"]).toBe("agent:thread_supply_chain");
+    expect(headers["bkn-interaction-id"]).toBe("int_supply_chain_001");
+  });
+
+  it("does not generate grouping ids when the caller supplies none", () => {
+    const resolved = resolveContext({
+      baseUrl: "https://demo.example.com",
+      token: "SECRET",
+    });
+    const headers = buildHeaders(resolved);
+    expect(headers).not.toHaveProperty("bkn-conversation-id");
+    expect(headers).not.toHaveProperty("bkn-interaction-id");
+  });
+
+  it("drops malformed grouping ids without rejecting the request", () => {
+    const resolved = resolveContext({
+      baseUrl: "https://demo.example.com",
+      token: "SECRET",
+      trace: {
+        conversationId: "bad id with spaces",
+        interactionId: "x".repeat(129),
+      },
+    } as Parameters<typeof resolveContext>[0]);
+
+    const headers = buildHeaders(resolved);
+    expect(headers).not.toHaveProperty("bkn-conversation-id");
+    expect(headers).not.toHaveProperty("bkn-interaction-id");
+  });
+
+  it("keeps CLI env fallback out of long-lived SDK clients", () => {
+    vi.stubEnv("BKN_CONVERSATION_ID", "cli:conversation_1");
+    vi.stubEnv("BKN_INTERACTION_ID", "cli:interaction_1");
+    try {
+      const resolved = resolveContext({
+        baseUrl: "https://demo.example.com",
+        token: "SECRET",
+      });
+      expect(resolved.trace?.conversationId).toBeUndefined();
+      expect(resolved.trace?.interactionId).toBeUndefined();
+      expect(traceOptionsFrom({})).toEqual({
+        conversationId: "cli:conversation_1",
+        interactionId: "cli:interaction_1",
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

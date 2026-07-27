@@ -6,10 +6,15 @@ import type { TraceContext, TraceContextOptions } from "./types.js";
 
 const TRACEPARENT_RE = /^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$/;
 const REQUEST_ID_RE = /^req_[0-9A-Za-z_.-]+$/;
+const CORRELATION_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const ALLOWED_BAGGAGE = new Set(["bkn.account.type", "bkn.runtime.env"]);
 
 export function isValidRequestId(value: string | undefined): value is string {
   return typeof value === "string" && REQUEST_ID_RE.test(value);
+}
+
+export function isValidCorrelationId(value: string | undefined): value is string {
+  return typeof value === "string" && CORRELATION_ID_RE.test(value.trim());
 }
 
 export function isValidTraceparent(value: string | undefined): value is string {
@@ -24,9 +29,17 @@ export function createTraceContext(opts: TraceContextOptions = {}): TraceContext
   const requestId = isValidRequestId(opts.requestId) ? opts.requestId : `req_${randomUUID()}`;
   const traceparent = isValidTraceparent(opts.traceparent) ? opts.traceparent : newTraceparent();
   const baggage = filterBaggage(opts.baggage);
+  const conversationId = isValidCorrelationId(opts.conversationId)
+    ? opts.conversationId.trim()
+    : undefined;
+  const interactionId = isValidCorrelationId(opts.interactionId)
+    ? opts.interactionId.trim()
+    : undefined;
   return {
     requestId,
     traceparent,
+    ...(conversationId ? { conversationId } : {}),
+    ...(interactionId ? { interactionId } : {}),
     ...(Object.keys(baggage).length > 0 ? { baggage } : {}),
   };
 }

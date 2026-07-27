@@ -1,11 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  emitEvidenceArtifact,
   emitEvidenceEvents,
   getBusinessGraph,
+  getEvidenceArtifact,
   getEvidenceChain,
+  getRequestSummary,
+  getRequestTraces,
   getSnapshotPreview,
   getSpansByConversation,
   getTraceGraph,
+  listRequestSummaries,
   traceSearch,
 } from "../../src/api/trace.js";
 import { trace } from "../../src/resources/trace.js";
@@ -97,6 +102,101 @@ describe("emitEvidenceEvents", () => {
     expect(c[1].method).toBe("POST");
     expect(JSON.parse(c[1].body as string).events[0].event_type).toBe("claim.created");
     expect(result.accepted_event_count).toBe(1);
+  });
+});
+
+describe("BKN Trace 2.2 business runs and artifacts", () => {
+  it("writes an artifact and reads it back through authorized endpoints", async () => {
+    const artifact = {
+      artifact_id: "art_question_001",
+      artifact_type: "question" as const,
+      "bkn.request.id": "req_business_001",
+      trace_id: "11111111111111111111111111111111",
+      content_type: "application/json",
+      schema_version: "2.2.0" as const,
+      observed_at: "2026-07-27T09:00:00Z",
+      content_hash: `sha256:${"1".repeat(64)}`,
+      content: "客户 A 的风险为什么上升？",
+      business_domain: "customer-risk",
+      "bkn.account.id": "account_1",
+      "bkn.account.type": "app",
+    };
+    const f = mockFetchSeq([{ artifact_id: artifact.artifact_id, created: true }, artifact]);
+
+    await emitEvidenceArtifact(ctx, artifact);
+    const loaded = await getEvidenceArtifact(ctx, artifact.artifact_id);
+
+    const [writeCall, readCall] = calls(f);
+    if (!writeCall || !readCall) throw new Error("missing calls");
+    expect(new URL(writeCall[0]).pathname).toBe("/api/agent-observability/v1/evidence/artifacts");
+    expect(writeCall[1].method).toBe("POST");
+    expect(new URL(readCall[0]).pathname).toBe(
+      "/api/agent-observability/v1/evidence/artifacts/art_question_001",
+    );
+    expect(loaded.content).toBe("客户 A 的风险为什么上升？");
+  });
+
+  it("lists business requests and follows request-to-trace links", async () => {
+    const f = mockFetchSeq([
+      {
+        entries: [
+          {
+            request_id: "req_business_001",
+            status: "completed",
+            evidence_completeness: "complete",
+            action_summary: {},
+            trace_count: 1,
+          },
+        ],
+        total: 1,
+      },
+      {
+        request_id: "req_business_001",
+        status: "completed",
+        evidence_completeness: "complete",
+        action_summary: {},
+        trace_count: 1,
+      },
+      {
+        entries: [
+          {
+            trace_id: "trace_001",
+            request_id: "req_business_001",
+            status: "completed",
+            span_count: 7,
+          },
+        ],
+        total: 1,
+      },
+    ]);
+
+    const page = await listRequestSummaries(ctx, {
+      evidenceCompleteness: "complete",
+      keyword: "客户 A",
+      knowledgeNetwork: "customer-risk-network",
+      limit: 30,
+      status: "completed",
+    });
+    const summary = await getRequestSummary(ctx, "req_business_001");
+    const traces = await getRequestTraces(ctx, "req_business_001", { limit: 30 });
+
+    const [listCall, summaryCall, tracesCall] = calls(f);
+    if (!listCall || !summaryCall || !tracesCall) throw new Error("missing calls");
+    const listURL = new URL(listCall[0]);
+    expect(listURL.pathname).toBe("/api/agent-observability/v1/requests");
+    expect(listURL.searchParams.get("keyword")).toBe("客户 A");
+    expect(listURL.searchParams.get("status")).toBe("completed");
+    expect(listURL.searchParams.get("knowledge_network")).toBe("customer-risk-network");
+    expect(listURL.searchParams.get("evidence_completeness")).toBe("complete");
+    expect(new URL(summaryCall[0]).pathname).toBe(
+      "/api/agent-observability/v1/requests/req_business_001",
+    );
+    expect(new URL(tracesCall[0]).pathname).toBe(
+      "/api/agent-observability/v1/requests/req_business_001/traces",
+    );
+    expect(page.entries[0]?.request_id).toBe("req_business_001");
+    expect(summary.request_id).toBe("req_business_001");
+    expect(traces.entries[0]?.request_id).toBe("req_business_001");
   });
 });
 

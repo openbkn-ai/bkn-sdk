@@ -18,6 +18,8 @@ export interface TraceSessionOptions {
   producerModule: string;
   spanId: string;
   interactionId?: string;
+  conversationId?: string;
+  contractVersion?: "2.1.0" | "2.2.0";
   emit: EvidenceEmitter;
   idFactory?: IDFactory;
   now?: () => string;
@@ -27,6 +29,7 @@ interface InteractionBase {
   operationName: string;
   intentHash: string;
   mode: "chat" | "task" | "background";
+  questionArtifactRef?: string;
 }
 
 export type InteractionInput = InteractionBase &
@@ -56,6 +59,14 @@ export interface OperationEventPayloadMap {
     version_status?: string;
     resource_refs?: string[];
     field_refs?: string[];
+    query_artifact_ref?: string;
+    result_artifact_ref?: string;
+  };
+  "logic.execution.observed": {
+    logic_ref: string;
+    input_artifact_ref: string;
+    result_artifact_ref: string;
+    status: "ok" | "success" | "error";
   };
   "model.call.observed": {
     model_name: string;
@@ -105,6 +116,7 @@ export interface ClaimInput {
   claimHash: string;
   sourceEventIds: string[];
   operationIds: string[];
+  resultArtifactRef?: string;
   visibility?: string;
   versionStatus?: string;
 }
@@ -163,6 +175,8 @@ export interface RecommendActionInput {
   actionType: string;
   targetRefs: string[];
   reasonHash: string;
+  reasonArtifactRef?: string;
+  inputArtifactRef?: string;
   causationEventId?: string;
 }
 
@@ -178,13 +192,23 @@ export type ExecuteActionInput =
   | { status: "ok"; invocationRef: string }
   | { status: "error"; invocationRef: string; errorCategory: string; errorHash: string };
 
-export type ActionResultInput = { status: string; resultHash: string } & (
-  | { taskRef: string; artifactRef?: string }
-  | { taskRef?: string; artifactRef: string }
+export type ActionResultInput = {
+  status: string;
+  resultHash: string;
+} & (
+  | { resultArtifactRef: string; taskRef?: string; artifactRef?: never }
+  | { taskRef: string; artifactRef?: string; resultArtifactRef?: string }
+  | { taskRef?: string; artifactRef: string; resultArtifactRef?: string }
 );
 
 const PAYLOAD_FIELDS: Record<BusinessEvidenceEventType, Set<string>> = {
-  "agent.interaction.started": new Set(["intent_hash", "mode", "agent_id", "app_ref"]),
+  "agent.interaction.started": new Set([
+    "intent_hash",
+    "mode",
+    "agent_id",
+    "app_ref",
+    "question_artifact_ref",
+  ]),
   "retrieval.completed": new Set([
     "query_hash",
     "candidate_count",
@@ -208,6 +232,14 @@ const PAYLOAD_FIELDS: Record<BusinessEvidenceEventType, Set<string>> = {
     "version_status",
     "resource_refs",
     "field_refs",
+    "query_artifact_ref",
+    "result_artifact_ref",
+  ]),
+  "logic.execution.observed": new Set([
+    "logic_ref",
+    "input_artifact_ref",
+    "result_artifact_ref",
+    "status",
   ]),
   "model.call.observed": new Set([
     "model_name",
@@ -241,6 +273,7 @@ const PAYLOAD_FIELDS: Record<BusinessEvidenceEventType, Set<string>> = {
     "operation_ids",
     "visibility",
     "version_status",
+    "result_artifact_ref",
   ]),
   "evidence.refs.created": new Set(["claim_id", "evidence_refs"]),
   "business.refs.resolved": new Set(["claim_id", "resolver_status", "business_refs"]),
@@ -250,6 +283,8 @@ const PAYLOAD_FIELDS: Record<BusinessEvidenceEventType, Set<string>> = {
     "target_refs",
     "reason_hash",
     "status",
+    "reason_artifact_ref",
+    "input_artifact_ref",
   ]),
   "action.approval_requested": new Set(["action_instance_id", "policy_ref", "status"]),
   "action.approved": new Set(["action_instance_id", "actor_ref", "policy_decision_ref", "status"]),
@@ -267,6 +302,7 @@ const PAYLOAD_FIELDS: Record<BusinessEvidenceEventType, Set<string>> = {
     "result_hash",
     "task_ref",
     "artifact_ref",
+    "result_artifact_ref",
   ]),
 };
 
@@ -275,6 +311,7 @@ const REQUIRED_PAYLOAD_FIELDS: Partial<Record<BusinessEvidenceEventType, string[
   "retrieval.completed": ["query_hash", "candidate_count", "truncated"],
   "knowledge.read.observed": ["kn_id", "read_kind", "version_status"],
   "data.query.observed": ["query_hash", "query_type", "row_count"],
+  "logic.execution.observed": ["logic_ref", "input_artifact_ref", "result_artifact_ref", "status"],
   "model.call.observed": [
     "model_name",
     "model_provider",
@@ -361,6 +398,17 @@ function assertSessionOptions(options: TraceSessionOptions): void {
   if (!/^req_[0-9A-Za-z_.-]+$/.test(trace["bkn.request.id"])) {
     throw new Error("bkn.request.id must start with req_");
   }
+  const conversationId = options.conversationId ?? trace["bkn.conversation.id"];
+  if (conversationId && !/^[0-9A-Za-z_.:-]{1,128}$/.test(conversationId)) {
+    throw new Error("conversationId must be an opaque correlation identifier");
+  }
+  if (
+    options.conversationId &&
+    trace["bkn.conversation.id"] &&
+    options.conversationId !== trace["bkn.conversation.id"]
+  ) {
+    throw new Error("conversationId conflicts with trace bkn.conversation.id");
+  }
   if (!trace["bkn.tenant.id"] && !trace.business_domain) {
     throw new Error("trace requires bkn.tenant.id or business_domain");
   }
@@ -419,6 +467,9 @@ function assertSafePayload(
       throw new Error(`${eventType} payload requires non-empty ${key}`);
     }
   }
+  if (eventType === "action.recommended") {
+    for (const ref of payload.target_refs as string[]) assertQualifiedReference(ref);
+  }
   if (eventType === "evidence.refs.created") {
     assertRefs(payload.evidence_refs, false);
   }
@@ -426,8 +477,15 @@ function assertSafePayload(
     const unresolved = payload.resolver_status === "unresolved";
     assertRefs(payload.business_refs, unresolved);
   }
-  if (eventType === "action.result_recorded" && !payload.task_ref && !payload.artifact_ref) {
-    throw new Error("action.result_recorded requires task_ref or artifact_ref");
+  if (
+    eventType === "action.result_recorded" &&
+    !payload.task_ref &&
+    !payload.artifact_ref &&
+    !payload.result_artifact_ref
+  ) {
+    throw new Error(
+      "action.result_recorded requires task_ref, artifact_ref, or result_artifact_ref",
+    );
   }
   if (eventType === "action.executed" && payload.status === "error") {
     for (const key of ["error_category", "error_hash"]) {
@@ -468,6 +526,7 @@ function assertRefs(value: unknown, allowEmpty: boolean): void {
     ]) {
       if (!ref[key]) throw new Error(`reference requires ${key}`);
     }
+    assertQualifiedReference(String(ref.ref_id));
     assertEnum(ref, "validity", ["observed", "available", "unavailable", "expired", "partial"]);
     assertEnum(ref, "version_status", ["versioned", "unversioned", "not_auditable"]);
     assertEnum(ref, "visibility", [
@@ -478,6 +537,20 @@ function assertRefs(value: unknown, allowEmpty: boolean): void {
       "unresolved",
       "unauthorized",
     ]);
+  }
+}
+
+function assertQualifiedReference(value: string): void {
+  const parts = value.trim().split(":");
+  const namespace = parts[0] ?? "";
+  let valid = parts.every((part) => part.length > 0);
+  if (["kn", "resource"].includes(namespace)) valid = valid && parts.length === 2;
+  if (["object", "relation", "action_type", "metric", "field"].includes(namespace)) {
+    valid = valid && parts.length === 3;
+  }
+  if (namespace === "property") valid = valid && parts.length === 4;
+  if (!valid) {
+    throw new Error("business reference id must include its knowledge-network or resource scope");
   }
 }
 
@@ -513,6 +586,7 @@ export class TraceSession {
   private readonly producerModule: string;
   private readonly spanId: string;
   private readonly emit: EvidenceEmitter;
+  private readonly contractVersion: "2.1.0" | "2.2.0";
   private readonly idFactory: IDFactory;
   private readonly now: () => string;
   private readonly events: EvidenceEvent[] = [];
@@ -525,9 +599,13 @@ export class TraceSession {
   constructor(options: TraceSessionOptions) {
     assertSessionOptions(options);
     this.trace = clone(options.trace);
+    if (options.conversationId) {
+      this.trace["bkn.conversation.id"] = options.conversationId;
+    }
     this.producerModule = options.producerModule;
     this.spanId = options.spanId;
     this.emit = options.emit;
+    this.contractVersion = options.contractVersion ?? "2.1.0";
     this.idFactory = options.idFactory ?? randomUUID;
     this.now = options.now ?? defaultNow;
     this.interactionId = options.interactionId ?? this.idFactory();
@@ -541,6 +619,7 @@ export class TraceSession {
         mode: input.mode,
         ...(input.agentId ? { agent_id: input.agentId } : {}),
         ...(input.appRef ? { app_ref: input.appRef } : {}),
+        ...(input.questionArtifactRef ? { question_artifact_ref: input.questionArtifactRef } : {}),
       },
     });
   }
@@ -572,6 +651,7 @@ export class TraceSession {
         operation_ids: input.operationIds,
         visibility: input.visibility ?? "visible",
         version_status: input.versionStatus ?? "unversioned",
+        ...(input.resultArtifactRef ? { result_artifact_ref: input.resultArtifactRef } : {}),
       },
     });
     this.claimEventIDs.set(input.claimId, event.event_id);
@@ -650,6 +730,8 @@ export class TraceSession {
         action_type: input.actionType,
         target_refs: input.targetRefs,
         reason_hash: input.reasonHash,
+        ...(input.reasonArtifactRef ? { reason_artifact_ref: input.reasonArtifactRef } : {}),
+        ...(input.inputArtifactRef ? { input_artifact_ref: input.inputArtifactRef } : {}),
         status: "recommended",
       },
     });
@@ -752,6 +834,7 @@ export class TraceSession {
       status: input.status,
       ...(input.taskRef ? { task_ref: input.taskRef } : {}),
       ...(input.artifactRef ? { artifact_ref: input.artifactRef } : {}),
+      ...(input.resultArtifactRef ? { result_artifact_ref: input.resultArtifactRef } : {}),
     });
     internal.state = "result_recorded";
     internal.lastEventId = event.event_id;
@@ -798,6 +881,7 @@ export class TraceSession {
     },
   ): EvidenceEvent {
     assertSafePayload(eventType, input.payload);
+    this.assertContractPayload(eventType, input.payload);
     if (eventType !== "agent.interaction.started") {
       if (!input.causationEventId) throw new Error(`${eventType} requires causation_event_id`);
       if (!this.eventIDs.has(input.causationEventId)) {
@@ -817,7 +901,7 @@ export class TraceSession {
     const event: EvidenceEvent = {
       event_id: eventID,
       event_type: eventType,
-      "bkn.trace.schema.version": "2.1.0",
+      "bkn.trace.schema.version": this.contractVersion,
       observed_at: timestamp,
       emitted_at: timestamp,
       producer_module: this.producerModule,
@@ -843,13 +927,50 @@ export class TraceSession {
     const batch = this.events.filter((event) => requestedIDs.has(event.event_id));
     if (batch.length === 0) return undefined;
     const response = await this.emit({
-      "bkn.trace.schema.version": "2.1.0",
+      "bkn.trace.schema.version": this.contractVersion,
       trace: clone(this.trace),
       events: clone(batch),
     });
     const remaining = this.events.filter((event) => !requestedIDs.has(event.event_id));
     this.events.splice(0, this.events.length, ...remaining);
     return response;
+  }
+
+  private assertContractPayload(
+    eventType: BusinessEvidenceEventType,
+    payload: Record<string, unknown>,
+  ): void {
+    if (this.contractVersion !== "2.2.0") return;
+    const requiredArtifactFields: Partial<Record<BusinessEvidenceEventType, string[]>> = {
+      "agent.interaction.started": ["question_artifact_ref"],
+      "data.query.observed": ["query_artifact_ref", "result_artifact_ref"],
+      "logic.execution.observed": ["input_artifact_ref", "result_artifact_ref"],
+      "claim.created": ["result_artifact_ref"],
+      "action.recommended": ["input_artifact_ref"],
+      "action.result_recorded": ["result_artifact_ref"],
+    };
+    for (const field of requiredArtifactFields[eventType] ?? []) {
+      const value = payload[field];
+      if (
+        typeof value !== "string" ||
+        !/^artifact:[0-9A-Za-z][0-9A-Za-z_.:-]{0,127}$/.test(value)
+      ) {
+        throw new Error(`${eventType} payload requires valid ${field}`);
+      }
+    }
+    for (const [field, value] of Object.entries(payload)) {
+      if (field.endsWith("_artifact_ref") && value !== undefined) {
+        if (
+          typeof value !== "string" ||
+          !/^artifact:[0-9A-Za-z][0-9A-Za-z_.:-]{0,127}$/.test(value)
+        ) {
+          throw new Error(`${eventType} payload requires valid ${field}`);
+        }
+      }
+    }
+    if (eventType === "action.result_recorded" && payload.artifact_ref !== undefined) {
+      throw new Error("action.result_recorded 2.2 does not accept legacy artifact_ref");
+    }
   }
 
   private assertKnownRefs(values: string[], known: Set<string>, kind: string): void {

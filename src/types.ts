@@ -47,6 +47,10 @@ export interface TraceContextOptions {
   requestId?: string;
   /** W3C Trace Context header. Generated when omitted or invalid. */
   traceparent?: string;
+  /** Caller-owned business conversation id. The SDK never generates one. */
+  conversationId?: string;
+  /** Caller-owned id for one user question and its operations. The SDK never generates one. */
+  interactionId?: string;
   /** Baggage values are allowlisted before propagation. */
   baggage?: Record<string, string>;
 }
@@ -54,6 +58,8 @@ export interface TraceContextOptions {
 export interface TraceContext {
   requestId: string;
   traceparent: string;
+  conversationId?: string;
+  interactionId?: string;
   baggage?: Record<string, string>;
 }
 

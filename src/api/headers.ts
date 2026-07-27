@@ -22,6 +22,8 @@ export function buildHeaders(
           "bkn-request-id": ctx.trace.requestId,
           "x-request-id": ctx.trace.requestId,
           traceparent: ctx.trace.traceparent,
+          ...(ctx.trace.conversationId ? { "bkn-conversation-id": ctx.trace.conversationId } : {}),
+          ...(ctx.trace.interactionId ? { "bkn-interaction-id": ctx.trace.interactionId } : {}),
         }
       : {}),
     ...(baggage ? { baggage } : {}),
