@@ -6,16 +6,14 @@ import type { TraceContext, TraceContextOptions } from "./types.js";
 
 const TRACEPARENT_RE = /^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$/;
 const REQUEST_ID_RE = /^req_[0-9A-Za-z_.-]+$/;
-// Mirrors the server-side rule in context-loader: an issuer prefix such as
-// `agent:thread_x` is allowed, whitespace and over-long values are not.
 const CORRELATION_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const RFC3339_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
 const ALLOWED_BAGGAGE = new Set(["bkn.account.type", "bkn.runtime.env"]);
 
 export function isValidRequestId(value: string | undefined): value is string {
   return typeof value === "string" && REQUEST_ID_RE.test(value);
 }
 
-/** Conversation / interaction ids are caller-owned; the SDK only validates them. */
 export function isValidCorrelationId(value: string | undefined): value is string {
   return typeof value === "string" && CORRELATION_ID_RE.test(value.trim());
 }
@@ -32,22 +30,42 @@ export function createTraceContext(opts: TraceContextOptions = {}): TraceContext
   const requestId = isValidRequestId(opts.requestId) ? opts.requestId : `req_${randomUUID()}`;
   const traceparent = isValidTraceparent(opts.traceparent) ? opts.traceparent : newTraceparent();
   const baggage = filterBaggage(opts.baggage);
-  // Unlike requestId/traceparent these are never generated on the caller's
-  // behalf: a made-up id would look like a real grouping and cannot be told
-  // apart from one downstream.
   const conversationId = isValidCorrelationId(opts.conversationId)
     ? opts.conversationId.trim()
     : undefined;
   const interactionId = isValidCorrelationId(opts.interactionId)
     ? opts.interactionId.trim()
     : undefined;
+  const operationId = isValidCorrelationId(opts.operationId) ? opts.operationId.trim() : undefined;
+  const attempt =
+    Number.isInteger(opts.attempt) && (opts.attempt ?? 0) >= 1 && (opts.attempt ?? 0) <= 1000
+      ? opts.attempt
+      : undefined;
+  const observedAt = isValidObservedAt(opts.observedAt) ? opts.observedAt : undefined;
   return {
     requestId,
     traceparent,
     ...(conversationId ? { conversationId } : {}),
     ...(interactionId ? { interactionId } : {}),
+    ...(operationId ? { operationId } : {}),
+    ...(attempt ? { attempt } : {}),
+    ...(observedAt ? { observedAt } : {}),
     ...(Object.keys(baggage).length > 0 ? { baggage } : {}),
   };
+}
+
+/** Create one replay-stable context for a logical operation on a potentially long-lived client. */
+export function createOperationTraceContext(trace: TraceContext): TraceContext {
+  return {
+    ...trace,
+    operationId: trace.operationId ?? `op_${randomUUID()}`,
+    attempt: trace.attempt ?? 1,
+    observedAt: isValidObservedAt(trace.observedAt) ? trace.observedAt : new Date().toISOString(),
+  };
+}
+
+function isValidObservedAt(value: string | undefined): value is string {
+  return typeof value === "string" && RFC3339_RE.test(value) && !Number.isNaN(Date.parse(value));
 }
 
 export function filterBaggage(baggage: Record<string, string> | undefined): Record<string, string> {

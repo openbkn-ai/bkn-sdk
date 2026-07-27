@@ -1,13 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  emitEvidenceArtifact,
   emitEvidenceEvents,
   getBusinessGraph,
+  getEvidenceArtifact,
   getEvidenceChain,
+  getRequestSummary,
+  getRequestTraces,
   getSnapshotPreview,
   getSpansByConversation,
   getTraceGraph,
+  listRequestSummaries,
   traceSearch,
 } from "../../src/api/trace.js";
+import { trace } from "../../src/resources/trace.js";
 import type { RequestContext } from "../../src/types.js";
 
 const ctx: RequestContext = {
@@ -96,6 +102,232 @@ describe("emitEvidenceEvents", () => {
     expect(c[1].method).toBe("POST");
     expect(JSON.parse(c[1].body as string).events[0].event_type).toBe("claim.created");
     expect(result.accepted_event_count).toBe(1);
+  });
+});
+
+describe("BKN Trace 2.2 business runs and artifacts", () => {
+  it("sends the dedicated ingest token only to evidence write endpoints", async () => {
+    const ingestCtx = {
+      ...ctx,
+      evidenceIngestToken: "producer-ingest-token",
+    } as RequestContext;
+    const artifact = {
+      artifact_id: "art_auth_001",
+      artifact_type: "question" as const,
+      "bkn.request.id": "req_auth_001",
+      trace_id: "11111111111111111111111111111111",
+      content_type: "application/json",
+      schema_version: "2.2.0" as const,
+      observed_at: "2026-07-27T09:00:00Z",
+      content_hash: `sha256:${"1".repeat(64)}`,
+      content: "test",
+      business_domain: "bd_public",
+      "bkn.account.id": "account_1",
+      "bkn.account.type": "app",
+    };
+    const f = mockFetchSeq([{ artifact_id: artifact.artifact_id, created: true }, artifact]);
+
+    await emitEvidenceArtifact(ingestCtx, artifact);
+    await getEvidenceArtifact(ingestCtx, artifact.artifact_id);
+
+    const [writeCall, readCall] = calls(f);
+    if (!writeCall || !readCall) throw new Error("missing calls");
+    expect(new Headers(writeCall[1].headers).get("x-bkn-trace-ingest-token")).toBe(
+      "producer-ingest-token",
+    );
+    expect(writeCall[1].redirect).toBe("manual");
+    expect(new Headers(readCall[1].headers).get("x-bkn-trace-ingest-token")).toBeNull();
+    expect(readCall[1].redirect).toBeUndefined();
+  });
+
+  it("writes an artifact and reads it back through authorized endpoints", async () => {
+    const artifact = {
+      artifact_id: "art_question_001",
+      artifact_type: "question" as const,
+      "bkn.request.id": "req_business_001",
+      trace_id: "11111111111111111111111111111111",
+      content_type: "application/json",
+      schema_version: "2.2.0" as const,
+      observed_at: "2026-07-27T09:00:00Z",
+      content_hash: `sha256:${"1".repeat(64)}`,
+      content: "客户 A 的风险为什么上升？",
+      business_domain: "customer-risk",
+      "bkn.account.id": "account_1",
+      "bkn.account.type": "app",
+    };
+    const f = mockFetchSeq([{ artifact_id: artifact.artifact_id, created: true }, artifact]);
+
+    await emitEvidenceArtifact(ctx, artifact);
+    const loaded = await getEvidenceArtifact(ctx, artifact.artifact_id);
+
+    const [writeCall, readCall] = calls(f);
+    if (!writeCall || !readCall) throw new Error("missing calls");
+    expect(new URL(writeCall[0]).pathname).toBe("/api/agent-observability/v1/evidence/artifacts");
+    expect(writeCall[1].method).toBe("POST");
+    expect(new URL(readCall[0]).pathname).toBe(
+      "/api/agent-observability/v1/evidence/artifacts/art_question_001",
+    );
+    expect(loaded.content).toBe("客户 A 的风险为什么上升？");
+  });
+
+  it("lists business requests and follows request-to-trace links", async () => {
+    const f = mockFetchSeq([
+      {
+        entries: [
+          {
+            request_id: "req_business_001",
+            status: "completed",
+            evidence_completeness: "complete",
+            action_summary: {},
+            trace_count: 1,
+          },
+        ],
+        total: 1,
+      },
+      {
+        request_id: "req_business_001",
+        status: "completed",
+        evidence_completeness: "complete",
+        action_summary: {},
+        trace_count: 1,
+      },
+      {
+        entries: [
+          {
+            trace_id: "trace_001",
+            request_id: "req_business_001",
+            status: "completed",
+            span_count: 7,
+          },
+        ],
+        total: 1,
+      },
+    ]);
+
+    const page = await listRequestSummaries(ctx, {
+      evidenceCompleteness: "complete",
+      keyword: "客户 A",
+      knowledgeNetwork: "customer-risk-network",
+      limit: 30,
+      status: "completed",
+    });
+    const summary = await getRequestSummary(ctx, "req_business_001");
+    const traces = await getRequestTraces(ctx, "req_business_001", { limit: 30 });
+
+    const [listCall, summaryCall, tracesCall] = calls(f);
+    if (!listCall || !summaryCall || !tracesCall) throw new Error("missing calls");
+    const listURL = new URL(listCall[0]);
+    expect(listURL.pathname).toBe("/api/agent-observability/v1/requests");
+    expect(listURL.searchParams.get("keyword")).toBe("客户 A");
+    expect(listURL.searchParams.get("status")).toBe("completed");
+    expect(listURL.searchParams.get("knowledge_network")).toBe("customer-risk-network");
+    expect(listURL.searchParams.get("evidence_completeness")).toBe("complete");
+    expect(new URL(summaryCall[0]).pathname).toBe(
+      "/api/agent-observability/v1/requests/req_business_001",
+    );
+    expect(new URL(tracesCall[0]).pathname).toBe(
+      "/api/agent-observability/v1/requests/req_business_001/traces",
+    );
+    expect(page.entries[0]?.request_id).toBe("req_business_001");
+    expect(summary.request_id).toBe("req_business_001");
+    expect(traces.entries[0]?.request_id).toBe("req_business_001");
+  });
+
+  it("reads an interaction aggregate and filters requests by lifecycle ids", async () => {
+    const f = mockFetchSeq([
+      {
+        entries: [],
+        total: 0,
+      },
+      {
+        interaction_id: "interaction_june_forecast",
+        conversation_id: "conversation_supply_chain",
+        status: "completed",
+        requests: [
+          {
+            request_id: "req_schema",
+            conversation_id: "conversation_supply_chain",
+            interaction_id: "interaction_june_forecast",
+            status: "completed",
+            evidence_completeness: "complete",
+            action_summary: {},
+            trace_count: 1,
+          },
+        ],
+        traces: [
+          {
+            trace_id: "trace_schema",
+            request_id: "req_schema",
+            conversation_id: "conversation_supply_chain",
+            interaction_id: "interaction_june_forecast",
+            status: "completed",
+            span_count: 4,
+          },
+        ],
+      },
+    ]);
+
+    await listRequestSummaries(ctx, {
+      conversationId: "conversation_supply_chain",
+      interactionId: "interaction_june_forecast",
+    });
+    const interaction = await trace(ctx).interactions.get("interaction_june_forecast");
+
+    const [listCall, interactionCall] = calls(f);
+    if (!listCall || !interactionCall) throw new Error("missing calls");
+    const listURL = new URL(listCall[0]);
+    expect(listURL.searchParams.get("conversation_id")).toBe("conversation_supply_chain");
+    expect(listURL.searchParams.get("interaction_id")).toBe("interaction_june_forecast");
+    expect(new URL(interactionCall[0]).pathname).toBe(
+      "/api/agent-observability/v1/interactions/interaction_june_forecast",
+    );
+    expect(interaction.conversation_id).toBe("conversation_supply_chain");
+    expect(interaction.requests[0]?.interaction_id).toBe("interaction_june_forecast");
+    expect(interaction.traces[0]?.conversation_id).toBe("conversation_supply_chain");
+  });
+});
+
+describe("trace resource session", () => {
+  it("binds TraceSession.flush to the evidence ingestion endpoint", async () => {
+    const f = mockFetchSeq([
+      {
+        trace_id: "8c0d0000000000000000000000000001",
+        "bkn.request.id": "req_session_resource_001",
+        "bkn.trace.schema.version": "2.1.0",
+        accepted_event_count: 1,
+        claim_count: 0,
+        evidence_ref_count: 0,
+        business_ref_count: 0,
+      },
+    ]);
+    const session = trace(ctx).createSession({
+      trace: {
+        trace_id: "8c0d0000000000000000000000000001",
+        traceparent: "00-8c0d0000000000000000000000000001-1f12000000000001-01",
+        "bkn.request.id": "req_session_resource_001",
+        business_domain: "bd_test",
+        "bkn.account.id": "acct_demo",
+        "bkn.account.type": "app",
+      },
+      producerModule: "third-party-agent",
+      spanId: "1f12000000000001",
+      interactionId: "interaction_1",
+      idFactory: () => "event_1",
+      now: () => "2026-07-25T12:00:00.000Z",
+    });
+    session.startInteraction({
+      operationName: "agent.run",
+      intentHash: `sha256:${"1".repeat(64)}`,
+      mode: "task",
+      appRef: "app:sdk-test",
+    });
+
+    await session.flush();
+
+    const c = calls(f)[0];
+    if (!c) throw new Error("no call");
+    expect(new URL(c[0]).pathname).toBe("/api/agent-observability/v1/evidence/events");
+    expect(JSON.parse(c[1].body as string)["bkn.trace.schema.version"]).toBe("2.1.0");
   });
 });
 

@@ -14,6 +14,23 @@ export {
   DEFAULT_QUERY_LIMIT,
 } from "./types.js";
 export { HttpError, InputError } from "./utils/errors.js";
+export {
+  TraceSession,
+  type ActionHandle,
+  type ActionResultInput,
+  type BusinessRefInput,
+  type BusinessRefsInput,
+  type ClaimInput,
+  type EvidenceRefInput,
+  type EvidenceRefsInput,
+  type ExecuteActionInput,
+  type InteractionInput,
+  type OperationEventPayloadMap,
+  type OperationEventType,
+  type OperationInput,
+  type RecommendActionInput,
+  type TraceSessionOptions,
+} from "./trace-session.js";
 
 // Resource namespaces (advanced: use with a resolved RequestContext).
 export { admin } from "./resources/admin.js";
@@ -32,14 +49,24 @@ export { vega } from "./resources/vega.js";
 export * as auth from "./resources/auth.js";
 
 export type {
+  ActionSummary,
+  BusinessEvidenceEventType,
   BusinessGraphResponse,
+  EvidenceArtifact,
+  EvidenceArtifactIngestResponse,
+  EvidenceArtifactType,
   EvidenceEvent,
   EvidenceChainResponse,
   EvidenceIngestRequest,
   EvidenceIngestResponse,
   EvidenceTraceContext,
   GraphPage,
+  InteractionSummary,
+  RequestSummary,
+  RequestSummaryQuery,
   SnapshotPreviewResponse,
+  SummaryPage,
+  TraceExecutionSummary,
   TraceGraphEdge,
   TraceGraphNode,
   TraceQueryOptions,
