@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildHeaders } from "../../src/api/headers.js";
+import { traceOptionsFrom } from "../../src/commands/_shared.js";
 import { resolveContext } from "../../src/config/resolve.js";
 import type { RequestContext } from "../../src/types.js";
 
@@ -92,26 +93,44 @@ describe("conversation and interaction correlation ids", () => {
     expect(resolved.trace?.interactionId).toBeUndefined();
   });
 
-  it("falls back to env vars so consecutive CLI processes share one interaction", () => {
+  it("ignores env vars for library clients so a long-lived client cannot freeze one interaction", () => {
     vi.stubEnv("BKN_CONVERSATION_ID", "cli:conv_1");
     vi.stubEnv("BKN_INTERACTION_ID", "cli:itr_1");
     try {
       const resolved = resolveContext(base);
-      expect(resolved.trace?.conversationId).toBe("cli:conv_1");
-      expect(resolved.trace?.interactionId).toBe("cli:itr_1");
+      expect(resolved.trace?.conversationId).toBeUndefined();
+      expect(resolved.trace?.interactionId).toBeUndefined();
     } finally {
       vi.unstubAllEnvs();
     }
   });
 
-  it("lets an explicit option win over the env fallback", () => {
-    vi.stubEnv("BKN_INTERACTION_ID", "cli:itr_env");
+  it("reads env vars at the CLI layer so consecutive CLI processes share one interaction", () => {
+    vi.stubEnv("BKN_CONVERSATION_ID", "cli:conv_1");
+    vi.stubEnv("BKN_INTERACTION_ID", "cli:itr_1");
     try {
-      const resolved = resolveContext({ ...base, trace: { interactionId: "itr_explicit" } });
-      expect(resolved.trace?.interactionId).toBe("itr_explicit");
+      expect(traceOptionsFrom({})).toEqual({
+        conversationId: "cli:conv_1",
+        interactionId: "cli:itr_1",
+      });
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  it("lets a CLI flag win over the env fallback", () => {
+    vi.stubEnv("BKN_INTERACTION_ID", "cli:itr_env");
+    try {
+      expect(traceOptionsFrom({ interactionId: "itr_explicit" })?.interactionId).toBe(
+        "itr_explicit",
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("returns no trace options when neither flag nor env is set", () => {
+    expect(traceOptionsFrom({})).toBeUndefined();
   });
 
   it("keeps correlation ids out of baggage", () => {

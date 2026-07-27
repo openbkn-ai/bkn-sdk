@@ -86,14 +86,10 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
       readPlatformConfig(normalized).businessDomain ??
       DEFAULT_BUSINESS_DOMAIN,
     insecure,
-    trace: createTraceContext({
-      ...opts.trace,
-      // Env fallback exists because the CLI runs one process per call: the
-      // caller (a shell session, a skill script, an agent) is the only place
-      // that knows those calls belong to one round of analysis.
-      conversationId: opts.trace?.conversationId ?? process.env.BKN_CONVERSATION_ID,
-      interactionId: opts.trace?.interactionId ?? process.env.BKN_INTERACTION_ID,
-    }),
+    // Correlation ids come from `opts.trace` only. The CLI reads its flags and
+    // env vars in `commands/_shared.ts`; a library client must not inherit an
+    // ambient interaction id it would then freeze for its whole lifetime.
+    trace: createTraceContext(opts.trace),
     ...(refresh ? { refresh } : {}),
   };
 }

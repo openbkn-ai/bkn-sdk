@@ -10,13 +10,22 @@ import { InputError } from "../utils/errors.js";
 import type { OutputOptions } from "../utils/output.js";
 
 /**
- * Caller-supplied BKN Trace correlation ids from the global flags. Absent
- * values fall through to the env vars in `resolveContext`; neither layer
- * invents an id.
+ * Caller-supplied BKN Trace correlation ids: global flag, then env var.
+ *
+ * The env fallback lives here, in the CLI layer, and deliberately not in
+ * `resolveContext`: a CLI process is one call, so an exported id marks one
+ * round of analysis. A long-lived SDK client resolves its context once, so
+ * the same env read would pin every later request to one frozen interaction —
+ * the fake grouping this feature exists to avoid. Library callers pass the
+ * ids explicitly per client (or per call) instead.
  */
 export function traceOptionsFrom(o: Record<string, unknown>): TraceContextOptions | undefined {
-  const conversationId = typeof o.conversationId === "string" ? o.conversationId : undefined;
-  const interactionId = typeof o.interactionId === "string" ? o.interactionId : undefined;
+  const conversationId =
+    (typeof o.conversationId === "string" ? o.conversationId : undefined) ??
+    process.env.BKN_CONVERSATION_ID;
+  const interactionId =
+    (typeof o.interactionId === "string" ? o.interactionId : undefined) ??
+    process.env.BKN_INTERACTION_ID;
   if (!conversationId && !interactionId) return undefined;
   return {
     ...(conversationId ? { conversationId } : {}),
