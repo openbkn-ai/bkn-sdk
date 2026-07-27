@@ -7,6 +7,7 @@
  * notifications/initialized, then tools/call. Handles plain-JSON and
  * SSE (`data:`) response bodies. Per-process session cache (5 min TTL).
  */
+import { createOperationTraceContext } from "../trace-context.js";
 import type { RequestContext } from "../types.js";
 import { HttpError } from "../utils/errors.js";
 import { authFetch } from "./auth-fetch.js";
@@ -27,6 +28,10 @@ function nextId(): number {
 
 function mcpUrl(ctx: RequestContext): string {
   return `${ctx.baseUrl}${MCP_PATH}`;
+}
+
+function operationContext(ctx: RequestContext): RequestContext {
+  return ctx.trace ? { ...ctx, trace: createOperationTraceContext(ctx.trace) } : ctx;
 }
 
 /**
@@ -130,8 +135,9 @@ export async function callTool(
   name: string,
   args: Record<string, unknown>,
 ): Promise<unknown> {
-  const sessionId = await ensureSession(ctx, knId);
-  const { text } = await post(ctx, knId, sessionId, {
+  const operationCtx = operationContext(ctx);
+  const sessionId = await ensureSession(operationCtx, knId);
+  const { text } = await post(operationCtx, knId, sessionId, {
     jsonrpc: "2.0",
     method: "tools/call",
     params: { name, arguments: args },
@@ -147,8 +153,9 @@ export async function callMethod(
   method: string,
   params: Record<string, unknown> = {},
 ): Promise<unknown> {
-  const sessionId = await ensureSession(ctx, knId);
-  const { text } = await post(ctx, knId, sessionId, {
+  const operationCtx = operationContext(ctx);
+  const sessionId = await ensureSession(operationCtx, knId);
+  const { text } = await post(operationCtx, knId, sessionId, {
     jsonrpc: "2.0",
     method,
     params: Object.keys(params).length > 0 ? params : undefined,

@@ -36,25 +36,31 @@ export function createTraceContext(opts: TraceContextOptions = {}): TraceContext
   const interactionId = isValidCorrelationId(opts.interactionId)
     ? opts.interactionId.trim()
     : undefined;
-  const operationId = isValidCorrelationId(opts.operationId)
-    ? opts.operationId.trim()
-    : `op_${randomUUID()}`;
+  const operationId = isValidCorrelationId(opts.operationId) ? opts.operationId.trim() : undefined;
   const attempt =
     Number.isInteger(opts.attempt) && (opts.attempt ?? 0) >= 1 && (opts.attempt ?? 0) <= 1000
       ? opts.attempt
-      : 1;
-  const observedAt = isValidObservedAt(opts.observedAt)
-    ? opts.observedAt
-    : new Date().toISOString();
+      : undefined;
+  const observedAt = isValidObservedAt(opts.observedAt) ? opts.observedAt : undefined;
   return {
     requestId,
     traceparent,
     ...(conversationId ? { conversationId } : {}),
     ...(interactionId ? { interactionId } : {}),
-    operationId,
-    attempt,
-    observedAt,
+    ...(operationId ? { operationId } : {}),
+    ...(attempt ? { attempt } : {}),
+    ...(observedAt ? { observedAt } : {}),
     ...(Object.keys(baggage).length > 0 ? { baggage } : {}),
+  };
+}
+
+/** Create one replay-stable context for a logical operation on a potentially long-lived client. */
+export function createOperationTraceContext(trace: TraceContext): TraceContext {
+  return {
+    ...trace,
+    operationId: trace.operationId ?? `op_${randomUUID()}`,
+    attempt: trace.attempt ?? 1,
+    observedAt: isValidObservedAt(trace.observedAt) ? trace.observedAt : new Date().toISOString(),
   };
 }
 

@@ -135,7 +135,9 @@ describe("BKN Trace 2.2 business runs and artifacts", () => {
     expect(new Headers(writeCall[1].headers).get("x-bkn-trace-ingest-token")).toBe(
       "producer-ingest-token",
     );
+    expect(writeCall[1].redirect).toBe("manual");
     expect(new Headers(readCall[1].headers).get("x-bkn-trace-ingest-token")).toBeNull();
+    expect(readCall[1].redirect).toBeUndefined();
   });
 
   it("writes an artifact and reads it back through authorized endpoints", async () => {

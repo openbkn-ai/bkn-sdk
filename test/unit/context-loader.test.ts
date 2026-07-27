@@ -58,7 +58,10 @@ function toolCallHeaders(f: typeof fetch): Headers {
 }
 
 // A fresh kn per test avoids the module-level session cache masking the initialize POST.
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe("progressive KN detail (get_kn_detail)", () => {
   it("propagates the complete replay-stable business trace context to MCP calls", async () => {
@@ -76,6 +79,33 @@ describe("progressive KN detail (get_kn_detail)", () => {
     expect(headers.get("bkn-operation-id")).toBe("op_supplychain_schema_search");
     expect(headers.get("bkn-attempt")).toBe("1");
     expect(headers.get("bkn-event-observed-at")).toBe("2026-07-27T09:00:00.000Z");
+  });
+
+  it("generates fresh operation context for each call on a long-lived client", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-27T09:00:00.000Z"));
+    const f = mockMcp();
+    const longLivedCtx = {
+      ...ctx,
+      trace: {
+        requestId: ctx.trace?.requestId ?? "",
+        traceparent: ctx.trace?.traceparent ?? "",
+        conversationId: ctx.trace?.conversationId,
+        interactionId: ctx.trace?.interactionId,
+      },
+    };
+
+    await getKnDetail(longLivedCtx, "kn-long-lived-a");
+    vi.setSystemTime(new Date("2026-07-27T09:01:00.000Z"));
+    await getKnDetail(longLivedCtx, "kn-long-lived-b");
+
+    const headers = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls
+      .filter(([, init]) => JSON.parse(init.body as string).method === "tools/call")
+      .map(([, init]) => new Headers(init.headers));
+    expect(headers).toHaveLength(2);
+    expect(headers[0]?.get("bkn-operation-id")).not.toBe(headers[1]?.get("bkn-operation-id"));
+    expect(headers[0]?.get("bkn-event-observed-at")).toBe("2026-07-27T09:00:00.000Z");
+    expect(headers[1]?.get("bkn-event-observed-at")).toBe("2026-07-27T09:01:00.000Z");
   });
 
   it("defaults to no detail_level (server default = summary), asks for JSON", async () => {

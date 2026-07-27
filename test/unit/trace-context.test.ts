@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { buildHeaders } from "../../src/api/headers.js";
 import { traceOptionsFrom } from "../../src/commands/_shared.js";
 import { resolveContext } from "../../src/config/resolve.js";
+import { createOperationTraceContext } from "../../src/trace-context.js";
 import type { RequestContext } from "../../src/types.js";
 
 const ctx: RequestContext = {
@@ -43,12 +44,12 @@ describe("resolveContext trace defaults", () => {
     const resolved = resolveContext({ baseUrl: "https://demo.example.com", token: "SECRET" });
     expect(resolved.trace?.requestId).toMatch(/^req_[0-9A-Za-z_.-]+$/);
     expect(resolved.trace?.traceparent).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/);
-    expect(resolved.trace?.operationId).toMatch(/^op_[0-9a-f-]+$/);
-    expect(resolved.trace?.attempt).toBe(1);
-    expect(resolved.trace?.observedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    expect(resolved.trace?.operationId).toBeUndefined();
+    expect(resolved.trace?.attempt).toBeUndefined();
+    expect(resolved.trace?.observedAt).toBeUndefined();
     expect(buildHeaders(resolved)["bkn-request-id"]).toBe(resolved.trace?.requestId);
-    expect(buildHeaders(resolved)["bkn-operation-id"]).toBe(resolved.trace?.operationId);
-    expect(buildHeaders(resolved)["bkn-event-observed-at"]).toBe(resolved.trace?.observedAt);
+    expect(buildHeaders(resolved)).not.toHaveProperty("bkn-operation-id");
+    expect(buildHeaders(resolved)).not.toHaveProperty("bkn-event-observed-at");
   });
 
   it("accepts a caller supplied request id and valid traceparent", () => {
@@ -66,17 +67,22 @@ describe("resolveContext trace defaults", () => {
     );
   });
 
-  it("replaces a non-RFC3339 observed time and keeps the generated value stable", () => {
+  it("creates replay-stable operation context per logical call, not per client", () => {
     const resolved = resolveContext({
       baseUrl: "https://demo.example.com",
       token: "SECRET",
       trace: { observedAt: "July 27 2026 09:00:00 GMT" },
     });
-    const first = buildHeaders(resolved);
-    const replay = buildHeaders(resolved);
-    expect(first["bkn-event-observed-at"]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-    expect(replay["bkn-event-observed-at"]).toBe(first["bkn-event-observed-at"]);
-    expect(replay["bkn-operation-id"]).toBe(first["bkn-operation-id"]);
+    if (!resolved.trace) throw new Error("trace context missing");
+    const firstOperation = createOperationTraceContext(resolved.trace);
+    const replay = buildHeaders({ ...resolved, trace: firstOperation });
+    const secondOperation = createOperationTraceContext(resolved.trace);
+
+    expect(resolved.trace.observedAt).toBeUndefined();
+    expect(firstOperation.operationId).not.toBe(secondOperation.operationId);
+    expect(firstOperation.observedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    expect(replay["bkn-event-observed-at"]).toBe(firstOperation.observedAt);
+    expect(replay["bkn-operation-id"]).toBe(firstOperation.operationId);
   });
 });
 

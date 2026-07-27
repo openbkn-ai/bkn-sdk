@@ -391,6 +391,7 @@ export function emitEvidenceEvents(
     method: "POST",
     body,
     headers: evidenceWriteHeaders(ctx),
+    redirect: "manual",
   });
 }
 
@@ -403,6 +404,7 @@ export function emitEvidenceArtifact(
     method: "POST",
     body,
     headers: evidenceWriteHeaders(ctx),
+    redirect: "manual",
   });
 }
 

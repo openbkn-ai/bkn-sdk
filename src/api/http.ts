@@ -18,6 +18,8 @@ export interface RequestInitEx {
   /** Query params appended to the path. */
   query?: Record<string, string | number | boolean | Array<string | number | boolean> | undefined>;
   headers?: Record<string, string>;
+  /** Redirect policy; credential-bearing writes should use `manual`. */
+  redirect?: "follow" | "error" | "manual";
   /** Per-request timeout; defaults to 30s. */
   timeoutMs?: number;
 }
@@ -50,6 +52,7 @@ export async function request<T = unknown>(
         ...init.headers,
       }),
       body: hasBody ? JSON.stringify(init.body) : undefined,
+      redirect: init.redirect,
       signal: controller.signal,
     });
 
