@@ -40,6 +40,11 @@ program
   .option("--compact", "single-line JSON output")
   .option("--full", "human view: show all columns (default trims to the key ones)")
   .option("--biz-domain <s>", "business domain (alias: -bd)")
+  .option("--conversation-id <id>", "BKN Trace business conversation id (env: BKN_CONVERSATION_ID)")
+  .option(
+    "--interaction-id <id>",
+    "BKN Trace interaction id shared by one round of analysis (env: BKN_INTERACTION_ID)",
+  )
   .option("-k, --insecure", "skip TLS verification (dev / self-signed only)")
   .showHelpAfterError();
 

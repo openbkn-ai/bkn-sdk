@@ -47,6 +47,7 @@ openbkn admin role list
 openbkn call /api/ontology-manager/v1/knowledge-networks
 
 # 全局参数：--base-url --token --user --json/--compact -bd/--biz-domain -k/--insecure
+#           --conversation-id/--interaction-id（BKN Trace 关联，等价 env：BKN_CONVERSATION_ID/BKN_INTERACTION_ID）
 openbkn --help        # 分组命令树
 ```
 

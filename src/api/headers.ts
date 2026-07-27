@@ -22,6 +22,10 @@ export function buildHeaders(
           "bkn-request-id": ctx.trace.requestId,
           "x-request-id": ctx.trace.requestId,
           traceparent: ctx.trace.traceparent,
+          // Omitted when the caller supplied nothing, so the platform sees a
+          // plain single-request trace instead of a fabricated grouping.
+          ...(ctx.trace.conversationId ? { "bkn-conversation-id": ctx.trace.conversationId } : {}),
+          ...(ctx.trace.interactionId ? { "bkn-interaction-id": ctx.trace.interactionId } : {}),
         }
       : {}),
     ...(baggage ? { baggage } : {}),

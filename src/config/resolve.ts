@@ -86,6 +86,9 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
       readPlatformConfig(normalized).businessDomain ??
       DEFAULT_BUSINESS_DOMAIN,
     insecure,
+    // Correlation ids come from `opts.trace` only. The CLI reads its flags and
+    // env vars in `commands/_shared.ts`; a library client must not inherit an
+    // ambient interaction id it would then freeze for its whole lifetime.
     trace: createTraceContext(opts.trace),
     ...(refresh ? { refresh } : {}),
   };
