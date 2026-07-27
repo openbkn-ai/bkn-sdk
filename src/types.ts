@@ -55,11 +55,11 @@ export interface TraceContextOptions {
   conversationId?: string;
   /** Caller-owned id for one user question and its operations. The SDK never generates one. */
   interactionId?: string;
-  /** Replay-stable operation id. Generated once for the client request when omitted. */
+  /** Replay-stable operation id. Transports generate one per logical operation when omitted. */
   operationId?: string;
   /** Retry ordinal for the operation. Defaults to 1. */
   attempt?: number;
-  /** Producer observation time in RFC3339 format. Generated once when omitted. */
+  /** Producer observation time in RFC3339 format. Generated per logical operation when omitted. */
   observedAt?: string;
   /** Baggage values are allowlisted before propagation. */
   baggage?: Record<string, string>;

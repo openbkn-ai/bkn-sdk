@@ -27,7 +27,7 @@
 - `client.trace.emitEvidenceEvents(...)`：兼容底层 2.0/2.1/2.2 批次提交。
 - `client.trace.graph/evidenceChain/businessGraph/snapshotPreview`：查询展示所需数据。
 
-SDK 的所有出站实现必须复用统一 Trace header builder。Context Loader 的 MCP `initialize`、`notifications/initialized` 和 `tools/call` 与普通 REST 请求同样传播 `traceparent`、`bkn-request-id`、`x-request-id`、`bkn-operation-id`、`bkn-attempt`、`bkn-event-observed-at`，以及调用方显式提供的 conversation/interaction；MCP transport 不得因自行组装认证和 session header 而丢失业务关联上下文。operation 与 observed-at 在创建请求上下文时生成一次，重试必须保持稳定。
+SDK 的所有出站实现必须复用统一 Trace header builder。Context Loader 的 MCP `initialize`、`notifications/initialized` 和 `tools/call` 与普通 REST 请求同样传播 `traceparent`、`bkn-request-id`、`x-request-id`、`bkn-operation-id`、`bkn-attempt`、`bkn-event-observed-at`，以及调用方显式提供的 conversation/interaction；MCP transport 不得因自行组装认证和 session header 而丢失业务关联上下文。operation 与 observed-at 在每次逻辑调用开始时生成一次，该调用内的初始化和重试必须保持稳定；长生命周期 client 的不同调用不得复用自动生成值。
 
 ## 业务引用合同
 
