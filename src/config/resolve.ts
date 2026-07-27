@@ -86,7 +86,14 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
       readPlatformConfig(normalized).businessDomain ??
       DEFAULT_BUSINESS_DOMAIN,
     insecure,
-    trace: createTraceContext(opts.trace),
+    trace: createTraceContext({
+      ...opts.trace,
+      // Env fallback exists because the CLI runs one process per call: the
+      // caller (a shell session, a skill script, an agent) is the only place
+      // that knows those calls belong to one round of analysis.
+      conversationId: opts.trace?.conversationId ?? process.env.BKN_CONVERSATION_ID,
+      interactionId: opts.trace?.interactionId ?? process.env.BKN_INTERACTION_ID,
+    }),
     ...(refresh ? { refresh } : {}),
   };
 }

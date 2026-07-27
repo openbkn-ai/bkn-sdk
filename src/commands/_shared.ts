@@ -5,18 +5,36 @@
 import { readFileSync } from "node:fs";
 import type { Command } from "commander";
 import { type BknClient, createClient } from "../client.js";
+import type { TraceContextOptions } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import type { OutputOptions } from "../utils/output.js";
+
+/**
+ * Caller-supplied BKN Trace correlation ids from the global flags. Absent
+ * values fall through to the env vars in `resolveContext`; neither layer
+ * invents an id.
+ */
+export function traceOptionsFrom(o: Record<string, unknown>): TraceContextOptions | undefined {
+  const conversationId = typeof o.conversationId === "string" ? o.conversationId : undefined;
+  const interactionId = typeof o.interactionId === "string" ? o.interactionId : undefined;
+  if (!conversationId && !interactionId) return undefined;
+  return {
+    ...(conversationId ? { conversationId } : {}),
+    ...(interactionId ? { interactionId } : {}),
+  };
+}
 
 /** Build a client from a command's merged (global + local) options. */
 export function clientFrom(cmd: Command): BknClient {
   const o = cmd.optsWithGlobals();
+  const trace = traceOptionsFrom(o);
   return createClient({
     baseUrl: o.baseUrl,
     token: o.token,
     user: o.user,
     businessDomain: o.bizDomain,
     insecure: o.insecure,
+    ...(trace ? { trace } : {}),
   });
 }
 

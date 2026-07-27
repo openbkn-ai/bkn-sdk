@@ -25,16 +25,18 @@
 
 ## Inbound Context
 
-- accepted options: `ClientOptions.trace.requestId`, `ClientOptions.trace.traceparent`, `ClientOptions.trace.baggage`
+- accepted options: `ClientOptions.trace.requestId`, `ClientOptions.trace.traceparent`, `ClientOptions.trace.conversationId`, `ClientOptions.trace.interactionId`, `ClientOptions.trace.baggage`
 - request id parsing: valid `req_<id>` is preserved; invalid or missing values generate `req_<uuid>`
 - traceparent parsing: valid W3C version `00` is preserved; invalid, all-zero trace id, or all-zero span id generate a new internal traceparent
-- baggage policy: allowlist-only; only `bkn.account.type` and `bkn.runtime.env` propagate
+- conversation / interaction ids: caller-owned. Format `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`, issuer prefixes such as `agent:thread_x` allowed. Blank or malformed values are dropped without failing the request, and **nothing is generated in their place** — only the caller knows where a conversation or one round of analysis begins and ends, so a client-minted id would collapse unrelated rounds into one false grouping. Resolution order: explicit option, then `BKN_CONVERSATION_ID` / `BKN_INTERACTION_ID`, then absent.
+- CLI: `--conversation-id` / `--interaction-id` global flags map to the same options; the env vars exist because the CLI runs one process per call, so a shell session or skill script can mark several calls as one interaction.
+- baggage policy: allowlist-only; only `bkn.account.type` and `bkn.runtime.env` propagate. Correlation ids never enter baggage.
 
 ## Outbound Calls
 
 | target | protocol | propagated fields | baggage policy | timeout | retry |
 | --- | --- | --- | --- | --- | --- |
-| OpenBKN APIs | HTTP | `traceparent`, `bkn-request-id`, `x-request-id` | allowlist-only baggage | existing request timeout | existing refresh/retry policy |
+| OpenBKN APIs | HTTP | `traceparent`, `bkn-request-id`, `x-request-id`; `bkn-conversation-id` / `bkn-interaction-id` only when the caller supplied them | allowlist-only baggage | existing request timeout | existing refresh/retry policy |
 | BKN Trace evidence ingestion | HTTP | `traceparent`, `bkn-request-id`, `x-request-id`; evidence batch carries its own `trace` and `events` | allowlist-only baggage | existing request timeout | existing refresh/retry policy |
 | Raw call passthrough | HTTP | generated context plus explicit caller headers | allowlist-only generated baggage; caller extra headers can override deliberately | `RawCallOptions.timeoutMs` | existing refresh/retry policy |
 
