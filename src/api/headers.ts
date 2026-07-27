@@ -24,6 +24,9 @@ export function buildHeaders(
           traceparent: ctx.trace.traceparent,
           ...(ctx.trace.conversationId ? { "bkn-conversation-id": ctx.trace.conversationId } : {}),
           ...(ctx.trace.interactionId ? { "bkn-interaction-id": ctx.trace.interactionId } : {}),
+          ...(ctx.trace.operationId ? { "bkn-operation-id": ctx.trace.operationId } : {}),
+          ...(ctx.trace.attempt ? { "bkn-attempt": String(ctx.trace.attempt) } : {}),
+          ...(ctx.trace.observedAt ? { "bkn-event-observed-at": ctx.trace.observedAt } : {}),
         }
       : {}),
     ...(baggage ? { baggage } : {}),

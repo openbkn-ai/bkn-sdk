@@ -61,6 +61,7 @@ export type {
   EvidenceIngestResponse,
   EvidenceTraceContext,
   GraphPage,
+  InteractionSummary,
   RequestSummary,
   RequestSummaryQuery,
   SnapshotPreviewResponse,

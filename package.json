@@ -35,6 +35,7 @@
     "lint": "npm run check:deps && biome check . && tsc --noEmit",
     "format": "biome format --write .",
     "test": "vitest run",
+    "test:e2e:trace-business": "npm run build && node test/e2e/bkn-trace-business-interaction.mjs",
     "test:cover": "vitest run --coverage",
     "ci": "npm run lint && npm test",
     "prepublishOnly": "npm run ci && npm run build"

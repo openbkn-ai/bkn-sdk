@@ -13,6 +13,8 @@ export interface ClientOptions {
   businessDomain?: string;
   /** Skip TLS verification (dev / self-signed only). */
   insecure?: boolean;
+  /** Dedicated producer credential, sent only to BKN Trace evidence write endpoints. */
+  evidenceIngestToken?: string;
   /** Optional BKN Trace phase-one context for request correlation. */
   trace?: TraceContextOptions;
 }
@@ -29,6 +31,8 @@ export interface RequestContext {
   token: string;
   businessDomain: string;
   insecure: boolean;
+  /** Dedicated producer credential; never sent to read or non-Trace endpoints. */
+  evidenceIngestToken?: string;
   /** Stable per-client BKN Trace context propagated on outbound requests. */
   trace?: TraceContext;
   /**
@@ -51,6 +55,12 @@ export interface TraceContextOptions {
   conversationId?: string;
   /** Caller-owned id for one user question and its operations. The SDK never generates one. */
   interactionId?: string;
+  /** Replay-stable operation id. Generated once for the client request when omitted. */
+  operationId?: string;
+  /** Retry ordinal for the operation. Defaults to 1. */
+  attempt?: number;
+  /** Producer observation time in RFC3339 format. Generated once when omitted. */
+  observedAt?: string;
   /** Baggage values are allowlisted before propagation. */
   baggage?: Record<string, string>;
 }
@@ -60,6 +70,9 @@ export interface TraceContext {
   traceparent: string;
   conversationId?: string;
   interactionId?: string;
+  operationId?: string;
+  attempt?: number;
+  observedAt?: string;
   baggage?: Record<string, string>;
 }
 

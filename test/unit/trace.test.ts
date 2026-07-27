@@ -106,6 +106,38 @@ describe("emitEvidenceEvents", () => {
 });
 
 describe("BKN Trace 2.2 business runs and artifacts", () => {
+  it("sends the dedicated ingest token only to evidence write endpoints", async () => {
+    const ingestCtx = {
+      ...ctx,
+      evidenceIngestToken: "producer-ingest-token",
+    } as RequestContext;
+    const artifact = {
+      artifact_id: "art_auth_001",
+      artifact_type: "question" as const,
+      "bkn.request.id": "req_auth_001",
+      trace_id: "11111111111111111111111111111111",
+      content_type: "application/json",
+      schema_version: "2.2.0" as const,
+      observed_at: "2026-07-27T09:00:00Z",
+      content_hash: `sha256:${"1".repeat(64)}`,
+      content: "test",
+      business_domain: "bd_public",
+      "bkn.account.id": "account_1",
+      "bkn.account.type": "app",
+    };
+    const f = mockFetchSeq([{ artifact_id: artifact.artifact_id, created: true }, artifact]);
+
+    await emitEvidenceArtifact(ingestCtx, artifact);
+    await getEvidenceArtifact(ingestCtx, artifact.artifact_id);
+
+    const [writeCall, readCall] = calls(f);
+    if (!writeCall || !readCall) throw new Error("missing calls");
+    expect(new Headers(writeCall[1].headers).get("x-bkn-trace-ingest-token")).toBe(
+      "producer-ingest-token",
+    );
+    expect(new Headers(readCall[1].headers).get("x-bkn-trace-ingest-token")).toBeNull();
+  });
+
   it("writes an artifact and reads it back through authorized endpoints", async () => {
     const artifact = {
       artifact_id: "art_question_001",
@@ -197,6 +229,59 @@ describe("BKN Trace 2.2 business runs and artifacts", () => {
     expect(page.entries[0]?.request_id).toBe("req_business_001");
     expect(summary.request_id).toBe("req_business_001");
     expect(traces.entries[0]?.request_id).toBe("req_business_001");
+  });
+
+  it("reads an interaction aggregate and filters requests by lifecycle ids", async () => {
+    const f = mockFetchSeq([
+      {
+        entries: [],
+        total: 0,
+      },
+      {
+        interaction_id: "interaction_june_forecast",
+        conversation_id: "conversation_supply_chain",
+        status: "completed",
+        requests: [
+          {
+            request_id: "req_schema",
+            conversation_id: "conversation_supply_chain",
+            interaction_id: "interaction_june_forecast",
+            status: "completed",
+            evidence_completeness: "complete",
+            action_summary: {},
+            trace_count: 1,
+          },
+        ],
+        traces: [
+          {
+            trace_id: "trace_schema",
+            request_id: "req_schema",
+            conversation_id: "conversation_supply_chain",
+            interaction_id: "interaction_june_forecast",
+            status: "completed",
+            span_count: 4,
+          },
+        ],
+      },
+    ]);
+
+    await listRequestSummaries(ctx, {
+      conversationId: "conversation_supply_chain",
+      interactionId: "interaction_june_forecast",
+    });
+    const interaction = await trace(ctx).interactions.get("interaction_june_forecast");
+
+    const [listCall, interactionCall] = calls(f);
+    if (!listCall || !interactionCall) throw new Error("missing calls");
+    const listURL = new URL(listCall[0]);
+    expect(listURL.searchParams.get("conversation_id")).toBe("conversation_supply_chain");
+    expect(listURL.searchParams.get("interaction_id")).toBe("interaction_june_forecast");
+    expect(new URL(interactionCall[0]).pathname).toBe(
+      "/api/agent-observability/v1/interactions/interaction_june_forecast",
+    );
+    expect(interaction.conversation_id).toBe("conversation_supply_chain");
+    expect(interaction.requests[0]?.interaction_id).toBe("interaction_june_forecast");
+    expect(interaction.traces[0]?.conversation_id).toBe("conversation_supply_chain");
   });
 });
 

@@ -86,6 +86,12 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
       readPlatformConfig(normalized).businessDomain ??
       DEFAULT_BUSINESS_DOMAIN,
     insecure,
+    ...((opts.evidenceIngestToken ?? process.env.BKN_TRACE_EVIDENCE_INGEST_TOKEN)
+      ? {
+          evidenceIngestToken:
+            opts.evidenceIngestToken ?? process.env.BKN_TRACE_EVIDENCE_INGEST_TOKEN,
+        }
+      : {}),
     // Correlation ids come from `opts.trace` only. The CLI reads its flags and
     // env vars in `commands/_shared.ts`; a library client must not inherit an
     // ambient interaction id it would then freeze for its whole lifetime.

@@ -23,8 +23,11 @@
 - `TraceSession.flush()`：批量提交并支持失败重试。
 - `client.trace.emitArtifact/artifact`：写入和读取受权的用户问题、结果、查询、数据、逻辑和行动制品。
 - `client.trace.requests.list/get/traces`：查询业务运行列表、详情及其关联技术 Trace。
+- `client.trace.interactions.get`：聚合同一轮业务交互中的多个独立 request/trace。
 - `client.trace.emitEvidenceEvents(...)`：兼容底层 2.0/2.1/2.2 批次提交。
 - `client.trace.graph/evidenceChain/businessGraph/snapshotPreview`：查询展示所需数据。
+
+SDK 的所有出站实现必须复用统一 Trace header builder。Context Loader 的 MCP `initialize`、`notifications/initialized` 和 `tools/call` 与普通 REST 请求同样传播 `traceparent`、`bkn-request-id`、`x-request-id`、`bkn-operation-id`、`bkn-attempt`、`bkn-event-observed-at`，以及调用方显式提供的 conversation/interaction；MCP transport 不得因自行组装认证和 session header 而丢失业务关联上下文。operation 与 observed-at 在创建请求上下文时生成一次，重试必须保持稳定。
 
 ## 业务引用合同
 
@@ -54,4 +57,4 @@ field:<resource_id>:<field_id>
 
 ## 完成标准
 
-第三方 Agent 示例必须先持久化受权 Artifact，再由 2.2 事件引用这些制品，形成完整五层业务链并通过 contract validate。普通日志、Span 和核心事件不得包含凭据或未受控原文；真实 E2E 还必须由服务端业务运行查询结果和 Studio 正式菜单页面共同验收。
+第三方 Agent 示例必须先持久化受权 Artifact，再由 2.2 事件引用这些制品，形成完整五层业务链并通过 contract validate。真实验收运行 `npm run test:e2e:trace-business`：同一 interaction 内的 schema 检索、`run_sql` 和证据发布必须形成至少 3 个独立 request/trace，并能读取完整问题、查询、数据、逻辑和结果制品。普通日志、Span 和核心事件不得包含凭据或未受控原文；真实 E2E 还必须由服务端业务运行查询结果和 Studio 正式菜单页面共同验收。

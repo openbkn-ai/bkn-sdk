@@ -43,7 +43,12 @@ describe("resolveContext trace defaults", () => {
     const resolved = resolveContext({ baseUrl: "https://demo.example.com", token: "SECRET" });
     expect(resolved.trace?.requestId).toMatch(/^req_[0-9A-Za-z_.-]+$/);
     expect(resolved.trace?.traceparent).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/);
+    expect(resolved.trace?.operationId).toMatch(/^op_[0-9a-f-]+$/);
+    expect(resolved.trace?.attempt).toBe(1);
+    expect(resolved.trace?.observedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     expect(buildHeaders(resolved)["bkn-request-id"]).toBe(resolved.trace?.requestId);
+    expect(buildHeaders(resolved)["bkn-operation-id"]).toBe(resolved.trace?.operationId);
+    expect(buildHeaders(resolved)["bkn-event-observed-at"]).toBe(resolved.trace?.observedAt);
   });
 
   it("accepts a caller supplied request id and valid traceparent", () => {
@@ -59,6 +64,19 @@ describe("resolveContext trace defaults", () => {
     expect(resolved.trace?.traceparent).toBe(
       "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01",
     );
+  });
+
+  it("replaces a non-RFC3339 observed time and keeps the generated value stable", () => {
+    const resolved = resolveContext({
+      baseUrl: "https://demo.example.com",
+      token: "SECRET",
+      trace: { observedAt: "July 27 2026 09:00:00 GMT" },
+    });
+    const first = buildHeaders(resolved);
+    const replay = buildHeaders(resolved);
+    expect(first["bkn-event-observed-at"]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    expect(replay["bkn-event-observed-at"]).toBe(first["bkn-event-observed-at"]);
+    expect(replay["bkn-operation-id"]).toBe(first["bkn-operation-id"]);
   });
 });
 

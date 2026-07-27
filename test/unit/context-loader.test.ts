@@ -10,6 +10,15 @@ const ctx: RequestContext = {
   token: "t",
   businessDomain: "bd_public",
   insecure: false,
+  trace: {
+    requestId: "req_context_loader_001",
+    traceparent: "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
+    conversationId: "conversation_supply_chain",
+    interactionId: "interaction_june_forecast",
+    operationId: "op_supplychain_schema_search",
+    attempt: 1,
+    observedAt: "2026-07-27T09:00:00.000Z",
+  },
 };
 
 /** Mock the MCP endpoint: every POST returns a session id + a JSON-RPC result. */
@@ -39,10 +48,36 @@ function toolCallBody(f: typeof fetch): { name: string; arguments: Record<string
   throw new Error("no tools/call POST captured");
 }
 
+function toolCallHeaders(f: typeof fetch): Headers {
+  const calls = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls;
+  for (const [, init] of calls) {
+    const body = JSON.parse(init.body as string) as { method?: string };
+    if (body.method === "tools/call") return new Headers(init.headers);
+  }
+  throw new Error("no tools/call POST captured");
+}
+
 // A fresh kn per test avoids the module-level session cache masking the initialize POST.
 afterEach(() => vi.unstubAllGlobals());
 
 describe("progressive KN detail (get_kn_detail)", () => {
+  it("propagates the complete replay-stable business trace context to MCP calls", async () => {
+    const f = mockMcp();
+    await getKnDetail(ctx, "kn-trace-headers");
+
+    const headers = toolCallHeaders(f);
+    expect(headers.get("bkn-request-id")).toBe("req_context_loader_001");
+    expect(headers.get("x-request-id")).toBe("req_context_loader_001");
+    expect(headers.get("traceparent")).toBe(
+      "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
+    );
+    expect(headers.get("bkn-conversation-id")).toBe("conversation_supply_chain");
+    expect(headers.get("bkn-interaction-id")).toBe("interaction_june_forecast");
+    expect(headers.get("bkn-operation-id")).toBe("op_supplychain_schema_search");
+    expect(headers.get("bkn-attempt")).toBe("1");
+    expect(headers.get("bkn-event-observed-at")).toBe("2026-07-27T09:00:00.000Z");
+  });
+
   it("defaults to no detail_level (server default = summary), asks for JSON", async () => {
     const f = mockMcp();
     await getKnDetail(ctx, "kn-a");

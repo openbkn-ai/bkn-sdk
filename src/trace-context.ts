@@ -7,6 +7,7 @@ import type { TraceContext, TraceContextOptions } from "./types.js";
 const TRACEPARENT_RE = /^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$/;
 const REQUEST_ID_RE = /^req_[0-9A-Za-z_.-]+$/;
 const CORRELATION_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const RFC3339_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
 const ALLOWED_BAGGAGE = new Set(["bkn.account.type", "bkn.runtime.env"]);
 
 export function isValidRequestId(value: string | undefined): value is string {
@@ -35,13 +36,30 @@ export function createTraceContext(opts: TraceContextOptions = {}): TraceContext
   const interactionId = isValidCorrelationId(opts.interactionId)
     ? opts.interactionId.trim()
     : undefined;
+  const operationId = isValidCorrelationId(opts.operationId)
+    ? opts.operationId.trim()
+    : `op_${randomUUID()}`;
+  const attempt =
+    Number.isInteger(opts.attempt) && (opts.attempt ?? 0) >= 1 && (opts.attempt ?? 0) <= 1000
+      ? opts.attempt
+      : 1;
+  const observedAt = isValidObservedAt(opts.observedAt)
+    ? opts.observedAt
+    : new Date().toISOString();
   return {
     requestId,
     traceparent,
     ...(conversationId ? { conversationId } : {}),
     ...(interactionId ? { interactionId } : {}),
+    operationId,
+    attempt,
+    observedAt,
     ...(Object.keys(baggage).length > 0 ? { baggage } : {}),
   };
+}
+
+function isValidObservedAt(value: string | undefined): value is string {
+  return typeof value === "string" && RFC3339_RE.test(value) && !Number.isNaN(Date.parse(value));
 }
 
 export function filterBaggage(baggage: Record<string, string> | undefined): Record<string, string> {

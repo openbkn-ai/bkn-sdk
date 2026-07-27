@@ -10,6 +10,7 @@
 import type { RequestContext } from "../types.js";
 import { HttpError } from "../utils/errors.js";
 import { authFetch } from "./auth-fetch.js";
+import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
 import { tlsFetch } from "./tls.js";
 
@@ -39,15 +40,13 @@ export function mcpInfo(ctx: RequestContext): Promise<unknown> {
 }
 
 function headers(ctx: RequestContext, knId: string, sessionId?: string): Record<string, string> {
-  const h: Record<string, string> = {
+  return buildHeaders(ctx, {
     "content-type": "application/json",
     accept: "application/json, text/event-stream",
     "x-kn-id": knId,
     "mcp-protocol-version": PROTOCOL,
-    authorization: `Bearer ${ctx.token}`,
-  };
-  if (sessionId) h["mcp-session-id"] = sessionId;
-  return h;
+    ...(sessionId ? { "mcp-session-id": sessionId } : {}),
+  });
 }
 
 /** Parse a JSON-RPC response body that may be plain JSON or an SSE stream. */

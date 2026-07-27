@@ -14,6 +14,7 @@ const SEARCH = "/api/agent-observability/v1/traces/_search";
 const EVIDENCE_EVENTS = "/api/agent-observability/v1/evidence/events";
 const EVIDENCE_ARTIFACTS = "/api/agent-observability/v1/evidence/artifacts";
 const REQUESTS = "/api/agent-observability/v1/requests";
+const INTERACTIONS = "/api/agent-observability/v1/interactions";
 const TRACES = "/api/agent-observability/v1/traces";
 
 interface SearchHits {
@@ -143,6 +144,8 @@ export interface ActionSummary {
 
 export interface RequestSummary {
   request_id: string;
+  conversation_id?: string;
+  interaction_id?: string;
   started_at?: string;
   completed_at?: string;
   initiator?: string;
@@ -164,6 +167,8 @@ export interface RequestSummary {
 export interface TraceExecutionSummary {
   trace_id: string;
   request_id: string;
+  conversation_id?: string;
+  interaction_id?: string;
   started_at?: string;
   completed_at?: string;
   agent_or_app?: string;
@@ -192,9 +197,22 @@ export interface RequestSummaryQuery {
   status?: string;
   agentOrApp?: string;
   businessDomain?: string;
+  conversationId?: string;
+  interactionId?: string;
   knowledgeNetwork?: string;
   evidenceCompleteness?: string;
   keyword?: string;
+}
+
+export interface InteractionSummary {
+  interaction_id: string;
+  conversation_id?: string;
+  started_at?: string;
+  completed_at?: string;
+  status: string;
+  duration_ms?: number;
+  requests: RequestSummary[];
+  traces: TraceExecutionSummary[];
 }
 
 export interface EvidenceIngestResponse {
@@ -369,7 +387,11 @@ export function emitEvidenceEvents(
   ctx: RequestContext,
   body: EvidenceIngestRequest,
 ): Promise<EvidenceIngestResponse> {
-  return request<EvidenceIngestResponse>(ctx, EVIDENCE_EVENTS, { method: "POST", body });
+  return request<EvidenceIngestResponse>(ctx, EVIDENCE_EVENTS, {
+    method: "POST",
+    body,
+    headers: evidenceWriteHeaders(ctx),
+  });
 }
 
 /** Store authorized BKN Trace 2.2 business content separately from core events. */
@@ -380,7 +402,14 @@ export function emitEvidenceArtifact(
   return request<EvidenceArtifactIngestResponse>(ctx, EVIDENCE_ARTIFACTS, {
     method: "POST",
     body,
+    headers: evidenceWriteHeaders(ctx),
   });
+}
+
+function evidenceWriteHeaders(ctx: RequestContext): Record<string, string> | undefined {
+  return ctx.evidenceIngestToken
+    ? { "x-bkn-trace-ingest-token": ctx.evidenceIngestToken }
+    : undefined;
 }
 
 /** Read one authorized BKN Trace 2.2 artifact by opaque id. */
@@ -403,6 +432,13 @@ export function listRequestSummaries(
 
 export function getRequestSummary(ctx: RequestContext, requestId: string): Promise<RequestSummary> {
   return request<RequestSummary>(ctx, `${REQUESTS}/${encodeURIComponent(requestId)}`);
+}
+
+export function getInteractionSummary(
+  ctx: RequestContext,
+  interactionId: string,
+): Promise<InteractionSummary> {
+  return request<InteractionSummary>(ctx, `${INTERACTIONS}/${encodeURIComponent(interactionId)}`);
 }
 
 export function getRequestTraces(
@@ -529,6 +565,8 @@ function summaryQuery(query: RequestSummaryQuery): Record<string, string | numbe
   if (query.status) result.status = query.status;
   if (query.agentOrApp) result.agent_or_app = query.agentOrApp;
   if (query.businessDomain) result.business_domain = query.businessDomain;
+  if (query.conversationId) result.conversation_id = query.conversationId;
+  if (query.interactionId) result.interaction_id = query.interactionId;
   if (query.knowledgeNetwork) result.knowledge_network = query.knowledgeNetwork;
   if (query.evidenceCompleteness) {
     result.evidence_completeness = query.evidenceCompleteness;

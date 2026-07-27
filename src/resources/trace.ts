@@ -14,6 +14,7 @@ import {
   getBusinessGraph,
   getEvidenceArtifact,
   getEvidenceChain,
+  getInteractionSummary,
   getRawSpansByConversation,
   getRequestSummary,
   getRequestTraces,
@@ -117,6 +118,10 @@ export function trace(ctx: RequestContext) {
       list: (query?: RequestSummaryQuery) => listRequestSummaries(ctx, query),
       traces: (requestId: string, query?: Pick<RequestSummaryQuery, "cursor" | "limit">) =>
         getRequestTraces(ctx, requestId, query),
+    },
+    /** Aggregate all OpenBKN requests and traces for one caller-owned interaction. */
+    interactions: {
+      get: (interactionId: string) => getInteractionSummary(ctx, interactionId),
     },
     /** Create a typed BKN Trace 2.1 session for an Agent or AI application. */
     createSession: (options: Omit<TraceSessionOptions, "emit">) =>
