@@ -62,63 +62,86 @@ describe("resolveContext trace defaults", () => {
   });
 });
 
-describe("caller-owned conversation and interaction ids", () => {
-  it("propagates explicitly supplied ids as headers", () => {
-    const resolved = resolveContext({
-      baseUrl: "https://demo.example.com",
-      token: "SECRET",
-      trace: {
-        conversationId: "agent:thread_supply_chain",
-        interactionId: "int_supply_chain_001",
-      },
-    } as Parameters<typeof resolveContext>[0]);
+describe("conversation and interaction correlation ids", () => {
+  const base = { baseUrl: "https://demo.example.com", token: "SECRET" };
 
-    const headers = buildHeaders(resolved);
-    expect(headers["bkn-conversation-id"]).toBe("agent:thread_supply_chain");
-    expect(headers["bkn-interaction-id"]).toBe("int_supply_chain_001");
-  });
-
-  it("does not generate grouping ids when the caller supplies none", () => {
+  it("propagates caller supplied ids as headers", () => {
     const resolved = resolveContext({
-      baseUrl: "https://demo.example.com",
-      token: "SECRET",
+      ...base,
+      trace: { conversationId: "agent:thread_abc", interactionId: "itr_2026072701" },
     });
     const headers = buildHeaders(resolved);
-    expect(headers).not.toHaveProperty("bkn-conversation-id");
-    expect(headers).not.toHaveProperty("bkn-interaction-id");
+    expect(headers["bkn-conversation-id"]).toBe("agent:thread_abc");
+    expect(headers["bkn-interaction-id"]).toBe("itr_2026072701");
   });
 
-  it("drops malformed grouping ids without rejecting the request", () => {
-    const resolved = resolveContext({
-      baseUrl: "https://demo.example.com",
-      token: "SECRET",
-      trace: {
-        conversationId: "bad id with spaces",
-        interactionId: "x".repeat(129),
-      },
-    } as Parameters<typeof resolveContext>[0]);
-
+  it("never generates ids when the caller supplies none", () => {
+    const resolved = resolveContext(base);
+    expect(resolved.trace?.conversationId).toBeUndefined();
+    expect(resolved.trace?.interactionId).toBeUndefined();
     const headers = buildHeaders(resolved);
     expect(headers).not.toHaveProperty("bkn-conversation-id");
     expect(headers).not.toHaveProperty("bkn-interaction-id");
   });
 
-  it("keeps CLI env fallback out of long-lived SDK clients", () => {
-    vi.stubEnv("BKN_CONVERSATION_ID", "cli:conversation_1");
-    vi.stubEnv("BKN_INTERACTION_ID", "cli:interaction_1");
+  it("drops malformed ids instead of failing the request", () => {
+    const resolved = resolveContext({
+      ...base,
+      trace: { conversationId: "bad id with spaces", interactionId: "x".repeat(129) },
+    });
+    expect(resolved.trace?.conversationId).toBeUndefined();
+    expect(resolved.trace?.interactionId).toBeUndefined();
+  });
+
+  it("ignores env vars for library clients so a long-lived client cannot freeze one interaction", () => {
+    vi.stubEnv("BKN_CONVERSATION_ID", "cli:conv_1");
+    vi.stubEnv("BKN_INTERACTION_ID", "cli:itr_1");
     try {
-      const resolved = resolveContext({
-        baseUrl: "https://demo.example.com",
-        token: "SECRET",
-      });
+      const resolved = resolveContext(base);
       expect(resolved.trace?.conversationId).toBeUndefined();
       expect(resolved.trace?.interactionId).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("reads env vars at the CLI layer so consecutive CLI processes share one interaction", () => {
+    vi.stubEnv("BKN_CONVERSATION_ID", "cli:conv_1");
+    vi.stubEnv("BKN_INTERACTION_ID", "cli:itr_1");
+    try {
       expect(traceOptionsFrom({})).toEqual({
-        conversationId: "cli:conversation_1",
-        interactionId: "cli:interaction_1",
+        conversationId: "cli:conv_1",
+        interactionId: "cli:itr_1",
       });
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  it("lets a CLI flag win over the env fallback", () => {
+    vi.stubEnv("BKN_INTERACTION_ID", "cli:itr_env");
+    try {
+      expect(traceOptionsFrom({ interactionId: "itr_explicit" })?.interactionId).toBe(
+        "itr_explicit",
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("returns no trace options when neither flag nor env is set", () => {
+    expect(traceOptionsFrom({})).toBeUndefined();
+  });
+
+  it("keeps correlation ids out of baggage", () => {
+    const resolved = resolveContext({
+      ...base,
+      trace: {
+        conversationId: "agent:thread_abc",
+        interactionId: "itr_2026072701",
+        baggage: { "bkn.runtime.env": "test" },
+      },
+    });
+    expect(buildHeaders(resolved).baggage).toBe("bkn.runtime.env=test");
   });
 });

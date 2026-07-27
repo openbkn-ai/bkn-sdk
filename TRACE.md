@@ -13,14 +13,25 @@
 
 ## Trace Context
 
-调用方可通过 `ClientOptions.trace` 传入 `requestId`、`traceparent` 和 allowlist baggage。缺失或非法的 request id / W3C traceparent 会由 SDK 生成。所有 OpenBKN HTTP 请求传播：
+调用方可通过 `ClientOptions.trace` 传入 `requestId`、`traceparent`、`conversationId`、`interactionId` 和 allowlist baggage。缺失或非法的 request id / W3C traceparent 会由 SDK 生成。所有 OpenBKN HTTP 请求传播：
 
 - `traceparent`
 - `bkn-request-id`
 - `x-request-id`
+- 调用方显式提供时的 `bkn-conversation-id`、`bkn-interaction-id`
 - baggage allowlist：`bkn.account.type`、`bkn.runtime.env`
 
+conversation/interaction 是调用方拥有的生命周期标识，格式为 `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`。SDK 只校验和传播，缺失或非法时不生成替代值；普通长生命周期 SDK Client 也不读取环境变量，避免把后续所有请求冻结到同一交互。CLI 层按全局 `--conversation-id` / `--interaction-id` 参数优先、`BKN_CONVERSATION_ID` / `BKN_INTERACTION_ID` 环境变量次之解析，一次 CLI 进程只代表一次调用。
+
 SDK 当前不自行启动 OpenTelemetry span；服务端 span、日志和业务事件通过同一 `trace_id` 与 `bkn.request.id` 关联。
+
+### 出站传播
+
+| 目标 | 协议 | 传播字段 | 约束 |
+| --- | --- | --- | --- |
+| OpenBKN API | HTTP | `traceparent`、`bkn-request-id`、`x-request-id`，以及调用方提供的 conversation/interaction | baggage 只允许 `bkn.account.type`、`bkn.runtime.env` |
+| BKN Trace Evidence API | HTTP | 同上；事件批次另带自己的 `trace` 和 `events` | 不自动推断结论或业务引用 |
+| Raw call | HTTP | 生成上下文和调用方显式 headers | 显式 headers 可用于调试覆盖；不得记录凭据 |
 
 ## 业务事件
 
