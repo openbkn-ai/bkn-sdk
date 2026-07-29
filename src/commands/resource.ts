@@ -66,10 +66,12 @@ export function resourceCommand(): Command {
     .option("--exact", "exact name match")
     .option("--catalog-id <id>", "limit to a catalog")
     .option("--datasource-id <id>", "alias of --catalog-id")
+    .option("--limit <n>", "rows to scan before filtering", int, DEFAULT_LIST_LIMIT)
     .action(async (opts, cmd: Command) => {
       const data = await clientFrom(cmd).resource.find(opts.name, {
         exact: opts.exact,
         datasourceId: opts.catalogId ?? opts.datasourceId,
+        limit: opts.limit,
       });
       printJson(data, outputOptions(cmd));
     });

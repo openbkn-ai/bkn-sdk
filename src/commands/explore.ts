@@ -30,8 +30,6 @@ const ROUTES: Record<string, Handler> = {
   "POST /api/bkn/instances": (c, _q, b) =>
     c.kn.objectTypeQuery(str(b.knId), str(b.objectTypeId), b.body ?? {}),
   "POST /api/bkn/subgraph": (c, _q, b) => c.kn.subgraph(str(b.knId), b.body ?? b),
-  "POST /api/bkn/properties": (c, _q, b) =>
-    c.kn.objectTypeProperties(str(b.knId), str(b.objectTypeId)),
   "GET /api/vega/catalogs": (c) => c.vega.catalogs(),
   "GET /api/vega/catalog": (c, q) => c.vega.getCatalog(req(q, "catalogId")),
   "GET /api/vega/catalog-resources": (c, q) =>

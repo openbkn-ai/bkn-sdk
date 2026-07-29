@@ -276,6 +276,8 @@ export interface FindResourceOptions {
   datasourceId?: string;
   /** Exact name match instead of fuzzy. */
   exact?: boolean;
+  /** Rows to fetch before filtering; `-1` = all. Defaults to the list default. */
+  limit?: number;
 }
 
 /** Search resources by name (fuzzy by default; exact filters client-side). */
@@ -284,9 +286,11 @@ export async function findResource(
   name: string,
   opts: FindResourceOptions = {},
 ): Promise<unknown> {
-  const result = (await listResources(ctx, { name, datasourceId: opts.datasourceId })) as
-    | { entries?: Array<{ name?: string }> }
-    | Array<{ name?: string }>;
+  const result = (await listResources(ctx, {
+    name,
+    datasourceId: opts.datasourceId,
+    limit: opts.limit,
+  })) as { entries?: Array<{ name?: string }> } | Array<{ name?: string }>;
   const list = Array.isArray(result) ? result : (result.entries ?? []);
   return opts.exact ? list.filter((r) => r.name === name) : list;
 }

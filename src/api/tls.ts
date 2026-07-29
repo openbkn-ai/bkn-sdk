@@ -14,7 +14,7 @@
  * (version skew — `UND_ERR_INVALID_ARG`), so requests go through undici's own
  * `fetch`, which does.
  */
-import { Agent, fetch as undiciFetch } from "undici";
+import { Agent, FormData as UndiciFormData, fetch as undiciFetch } from "undici";
 
 type UndiciInit = NonNullable<Parameters<typeof undiciFetch>[1]>;
 
@@ -23,6 +23,35 @@ let insecureAgent: Agent | undefined;
 function insecureDispatcher(): Agent {
   insecureAgent ??= new Agent({ connect: { rejectUnauthorized: false } });
   return insecureAgent;
+}
+
+/**
+ * Undici brand-checks a request body against *its own* `FormData` class, and
+ * the callers here build multipart bodies with the platform's global one. An
+ * unconverted form falls through to undici's string branch: the request goes
+ * out as `text/plain` carrying the literal "[object FormData]", and every
+ * upload (`bkn push`, `tool upload`, `skill register`, …) fails with "request
+ * Content-Type isn't multipart/form-data". Rebuild it with undici's class.
+ *
+ * The reverse conversion is never needed: the global `fetch` sees only bodies
+ * built with the global `FormData`.
+ */
+function isFormData(body: unknown): body is FormData {
+  return (
+    typeof body === "object" &&
+    body !== null &&
+    (body as { [Symbol.toStringTag]?: string })[Symbol.toStringTag] === "FormData"
+  );
+}
+
+function toUndiciBody(body: RequestInit["body"]): UndiciInit["body"] {
+  if (body instanceof UndiciFormData || !isFormData(body)) return body as UndiciInit["body"];
+  const form = new UndiciFormData();
+  for (const [name, value] of body.entries()) {
+    if (typeof value === "string") form.append(name, value);
+    else form.append(name, value, value.name);
+  }
+  return form;
 }
 
 /**
@@ -42,6 +71,7 @@ export function tlsFetch(
   if (!insecure) return fetch(url, init);
   return undiciFetch(url, {
     ...(init as UndiciInit | undefined),
+    ...(init?.body === undefined || init?.body === null ? {} : { body: toUndiciBody(init.body) }),
     dispatcher: insecureDispatcher(),
   }) as unknown as Promise<Response>;
 }

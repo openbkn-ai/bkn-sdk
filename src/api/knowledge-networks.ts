@@ -91,10 +91,18 @@ export function updateKnowledgeNetwork(
   return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}`, { method: "PUT", body });
 }
 
+/**
+ * Reads that carry a JSON query body. The backend models them as GETs tunnelled
+ * over POST and rejects the request outright without the override header
+ * (`NullParameter.OverrideMethod`).
+ */
+const QUERY_OVER_POST = { "X-HTTP-Method-Override": "GET" } as const;
+
 /** Query a subgraph (ontology-query). Body is a JSON query passthrough. */
 export function querySubgraph(ctx: RequestContext, knId: string, body: unknown): Promise<unknown> {
   return request(ctx, `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/subgraph`, {
     method: "POST",
+    headers: QUERY_OVER_POST,
     body,
   });
 }
@@ -152,19 +160,7 @@ export function queryObjectTypeInstances(
   return request(
     ctx,
     `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/object-types/${encodeURIComponent(otId)}`,
-    { method: "POST", body },
-  );
-}
-
-/** Get an object type's (calculated) properties (ontology-query). */
-export function getObjectTypeProperties(
-  ctx: RequestContext,
-  knId: string,
-  otId: string,
-): Promise<unknown> {
-  return request(
-    ctx,
-    `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/object-types/${encodeURIComponent(otId)}/properties`,
+    { method: "POST", headers: QUERY_OVER_POST, body },
   );
 }
 

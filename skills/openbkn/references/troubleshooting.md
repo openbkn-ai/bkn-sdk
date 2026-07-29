@@ -7,4 +7,6 @@
 - **`discover only supports physical catalogs`** — `create-from-*` needs a physical (datasource-backed) catalog, not a logical one.
 - **`no such index ss4o_traces-…`** — the deploy's trace index isn't populated; `trace get`/`diagnose` have no data.
 - **EACP unreachable (`audit`, `change-password`)** — the eacp upstream is cluster-internal on some deploys.
+- **A bare nginx `404 Not Found` HTML page** — that service isn't installed on the deploy, so the command has nothing to talk to. `agent` (agent-factory) and `dataflow` (automation) are optional; the bkn-safe dev VM ships without them.
+- **`skill content` / `read-file` says `skill not found`** — the skill is still `unpublish`; run `skill set-status <id> published` first. The URLs they return point at the in-cluster MinIO host and only resolve from inside the cluster.
 - **Wide-table JSON truncation** — pass a small `--limit`/`condition` to `object-type query`.

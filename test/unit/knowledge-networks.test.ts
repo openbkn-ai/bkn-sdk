@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { relationTypePaths } from "../../src/api/bkn-backend.js";
 import {
   getKnowledgeNetwork,
   listKnowledgeNetworks,
   listObjectTypes,
   listRelationTypes,
+  queryObjectTypeInstances,
+  querySubgraph,
   semanticSearch,
 } from "../../src/api/knowledge-networks.js";
 import type { RequestContext } from "../../src/types.js";
@@ -102,6 +105,44 @@ describe("schema lists (ontology-manager)", () => {
     expect(new URL(firstCall(f)[0]).pathname).toBe(
       "/api/ontology-manager/v1/knowledge-networks/kn-1/relation-types",
     );
+  });
+});
+
+describe("reads tunnelled over POST", () => {
+  /** Header lookup that tolerates both a plain object and a Headers instance. */
+  function header(init: RequestInit, name: string): string | undefined {
+    const h = init.headers;
+    if (h instanceof Headers) return h.get(name) ?? undefined;
+    return (h as Record<string, string> | undefined)?.[name];
+  }
+
+  it("subgraph sends the GET override", async () => {
+    const f = mockFetch();
+    await querySubgraph(ctx, "kn-1", { source_object_type_id: "ot-1" });
+    const [url, init] = firstCall(f);
+    expect(new URL(url).pathname).toBe("/api/ontology-query/v1/knowledge-networks/kn-1/subgraph");
+    expect(init.method).toBe("POST");
+    expect(header(init, "X-HTTP-Method-Override")).toBe("GET");
+  });
+
+  it("object-type instance query sends the GET override", async () => {
+    const f = mockFetch();
+    await queryObjectTypeInstances(ctx, "kn-1", "ot-1", { limit: 1 });
+    const [url, init] = firstCall(f);
+    expect(new URL(url).pathname).toBe(
+      "/api/ontology-query/v1/knowledge-networks/kn-1/object-types/ot-1",
+    );
+    expect(header(init, "X-HTTP-Method-Override")).toBe("GET");
+  });
+
+  it("relation-type-paths sends the GET override", async () => {
+    const f = mockFetch();
+    await relationTypePaths(ctx, "kn-1", { source_object_type_id: "ot-1" });
+    const [url, init] = firstCall(f);
+    expect(new URL(url).pathname).toBe(
+      "/api/bkn-backend/v1/knowledge-networks/kn-1/relation-type-paths",
+    );
+    expect(header(init, "X-HTTP-Method-Override")).toBe("GET");
   });
 });
 

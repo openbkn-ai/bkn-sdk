@@ -75,4 +75,14 @@ describe("printJson output mode", () => {
     const out = capture(() => printJson([{ v: "x".repeat(100) }]));
     expect(out).toContain("…");
   });
+
+  it("renders an empty (204-style) response as valid JSON", () => {
+    const out = capture(() => printJson(undefined, { json: true }));
+    expect(out.trim()).toBe("null");
+    expect(() => JSON.parse(out)).not.toThrow();
+  });
+
+  it("renders an empty response readably in human mode", () => {
+    expect(capture(() => printJson(undefined)).trim()).toBe("(ok)");
+  });
 });

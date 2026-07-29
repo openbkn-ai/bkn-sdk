@@ -181,12 +181,9 @@ export function bknCommand(): Command {
         outputOptions(cmd),
       );
     });
-  objectType
-    ?.command("properties <kn-id> <ot-id>")
-    .description("Get an object type's calculated properties")
-    .action(async (knId: string, otId: string, _opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.objectTypeProperties(knId, otId), outputOptions(cmd));
-    });
+  // `object-type properties` is gone: the ontology-query route was removed.
+  // Computed/logic properties come from the MCP surface now
+  // (`openbkn context get-logic-properties`).
 
   bkn
     .command("create <name>")
@@ -441,31 +438,8 @@ export function bknCommand(): Command {
       printJson(await clientFrom(cmd).kn.actionScheduleDelete(knId, ids), outputOptions(cmd));
     });
 
-  const job = bkn.command("job").description("Build jobs — list/get/tasks");
-  job
-    .command("list <kn-id>")
-    .description("List jobs")
-    .action(async (knId: string, _o, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.jobs(knId), outputOptions(cmd));
-    });
-  job
-    .command("get <kn-id> <job-id>")
-    .description("Get a job")
-    .action(async (knId: string, jobId: string, _o, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.job(knId, jobId), outputOptions(cmd));
-    });
-  job
-    .command("tasks <kn-id> <job-id>")
-    .description("List a job's tasks")
-    .action(async (knId: string, jobId: string, _o, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.jobTasks(knId, jobId), outputOptions(cmd));
-    });
-  job
-    .command("delete <kn-id> <job-ids>")
-    .description("Delete job(s) (comma-joined ids)")
-    .action(async (knId: string, ids: string, _o, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.jobDelete(knId, ids), outputOptions(cmd));
-    });
+  // `bkn job …` is gone: the backend dropped KN-level build jobs, and index
+  // builds are Vega build tasks now (`openbkn vega dataset build*`).
 
   bkn
     .command("push <directory>")

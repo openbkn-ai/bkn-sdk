@@ -43,3 +43,6 @@ yarn-error.log*
 *.tgz
 
 .cursor/
+
+# Claude Code local worktrees
+.claude/
