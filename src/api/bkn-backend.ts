@@ -3,7 +3,7 @@
 
 import type { RequestContext } from "../types.js";
 /**
- * bkn-backend client (concept-groups, action-schedules, jobs). Read side.
+ * bkn-backend client (concept-groups, action-schedules). Read side.
  * Passed through as parsed JSON.
  */
 import { HttpError } from "../utils/errors.js";
@@ -69,13 +69,21 @@ export function listBknResources(ctx: RequestContext): Promise<unknown> {
   return request(ctx, "/api/bkn-backend/v1/resources");
 }
 
-/** Query relation-type paths between object types (POST, caller-supplied body). */
+/**
+ * Query relation-type paths between object types (POST, caller-supplied body).
+ * A read tunnelled over POST: without the override header the backend answers
+ * `InvalidParameter.OverrideMethod` before it looks at the body.
+ */
 export function relationTypePaths(
   ctx: RequestContext,
   knId: string,
   body: unknown,
 ): Promise<unknown> {
-  return request(ctx, knPath(knId, "relation-type-paths"), { method: "POST", body });
+  return request(ctx, knPath(knId, "relation-type-paths"), {
+    method: "POST",
+    headers: { "X-HTTP-Method-Override": "GET" },
+    body,
+  });
 }
 
 export function listConceptGroups(ctx: RequestContext, knId: string): Promise<unknown> {
@@ -183,17 +191,4 @@ export function deleteActionSchedules(
   ids: string,
 ): Promise<unknown> {
   return request(ctx, knPath(knId, `action-schedules/${ids}`), { method: "DELETE" });
-}
-
-export function listJobs(ctx: RequestContext, knId: string): Promise<unknown> {
-  return request(ctx, knPath(knId, "jobs"));
-}
-export function getJob(ctx: RequestContext, knId: string, jobId: string): Promise<unknown> {
-  return request(ctx, knPath(knId, `jobs/${encodeURIComponent(jobId)}`));
-}
-export function getJobTasks(ctx: RequestContext, knId: string, jobId: string): Promise<unknown> {
-  return request(ctx, knPath(knId, `jobs/${encodeURIComponent(jobId)}/tasks`));
-}
-export function deleteJobs(ctx: RequestContext, knId: string, ids: string): Promise<unknown> {
-  return request(ctx, knPath(knId, `jobs/${ids}`), { method: "DELETE" });
 }
