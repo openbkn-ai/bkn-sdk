@@ -19,7 +19,15 @@ export interface OutputOptions {
  */
 export function printJson(value: unknown, opts: OutputOptions = {}): void {
   if (opts.json || opts.compact) {
-    process.stdout.write(`${JSON.stringify(value, null, opts.compact ? 0 : 2)}\n`);
+    // Deletes and other 204-style writes resolve to `undefined`, which
+    // `JSON.stringify` renders as the literal `undefined` — not parseable by
+    // anything downstream. Emit `null` instead.
+    const json = JSON.stringify(value === undefined ? null : value, null, opts.compact ? 0 : 2);
+    process.stdout.write(`${json}\n`);
+    return;
+  }
+  if (value === undefined) {
+    process.stdout.write("(ok)\n");
     return;
   }
   const rows = toRows(value);
