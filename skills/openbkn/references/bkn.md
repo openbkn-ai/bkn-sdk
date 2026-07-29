@@ -4,7 +4,7 @@
 |------|----------|
 | KN | `list`, `get <kn> [--stats] [--export]`, `search <kn> <query> [--max-concepts]`, `stats <kn>`, `export <kn>`, `create`/`update`/`delete`, `subgraph <kn> --body`. |
 | Schema | `object-type|relation-type|action-type list/get/create/update/delete` (create/update take `--body`/`--body-file`); `action-type query/execute/inputs`. |
-| Metric / concept-group / schedules | `metric …`, `concept-group …`, `action-log …`, `action-schedule …`, `job …`. |
+| Metric / concept-group / schedules | `metric …`, `concept-group …`, `action-log …`, `action-schedule …`. (No KN-level build jobs — index builds are Vega build tasks, see [vega.md](vega.md).) |
 | Paths / resources | `relation-type-paths <kn> --body`, `resources`. |
 | Local package | `push <dir>` (tar → import) `[--build] [--embedding-model <id>]`, `pull <kn> [dir]` (export → extract), `validate <dir>` (offline structural check). |
 | Build a KN | `create-from-catalog <catalog> --name <n> [--tables a,b] [--pk-map t:col] [--build] [--embedding-fields t:col+col] [--embedding-model <id>]`; `create-from-csv <catalog> --files <glob> --name <n> [--table-prefix p] [--build] [--embedding-fields …]`. |
