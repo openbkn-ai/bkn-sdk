@@ -29,6 +29,60 @@ export const BuildTaskStatus = z.enum([
 ]);
 export type BuildTaskStatus = z.infer<typeof BuildTaskStatus>;
 
+export const CatalogHealthCheckScheduleMode = z.enum(["inherit", "enabled", "disabled"]);
+export type CatalogHealthCheckScheduleMode = z.infer<typeof CatalogHealthCheckScheduleMode>;
+
+export const CatalogHealthCheckStatus = z.enum([
+  "healthy",
+  "degraded",
+  "unhealthy",
+  "offline",
+  "unchecked",
+]);
+export type CatalogHealthCheckStatus = z.infer<typeof CatalogHealthCheckStatus>;
+
+export const CatalogHealthStatus = z
+  .object({
+    id: z.string(),
+    health_check_status: CatalogHealthCheckStatus,
+    last_check_time: z.number().optional(),
+    health_check_result: z.string().optional(),
+  })
+  .passthrough();
+export type CatalogHealthStatus = z.infer<typeof CatalogHealthStatus>;
+
+export type CatalogHealthCheckScheduleRequest =
+  | { mode: "enabled"; cronExpr: string }
+  | { mode: "inherit" | "disabled"; cronExpr?: never };
+
+export const CatalogHealthCheckSchedule = z
+  .object({
+    catalog_id: z.string(),
+    mode: CatalogHealthCheckScheduleMode,
+    cron_expr: z.string().optional(),
+    last_run: z.number(),
+    next_run: z.number(),
+  })
+  .passthrough();
+export type CatalogHealthCheckSchedule = z.infer<typeof CatalogHealthCheckSchedule>;
+
+export interface CatalogConnectionTestRequest {
+  connectorType: string;
+  connectorConfig: Record<string, unknown>;
+}
+
+export const CatalogConnectionTestResult = z
+  .object({
+    success: z.boolean(),
+    message: z.string().optional(),
+  })
+  .passthrough();
+export type CatalogConnectionTestResult = z.infer<typeof CatalogConnectionTestResult>;
+
+export interface CatalogWriteOptions {
+  allowUnhealthy?: boolean;
+}
+
 /** POST /build-tasks body. */
 export const CreateBuildTaskRequest = z.discriminatedUnion("mode", [
   z.object({
@@ -221,7 +275,7 @@ export interface ListCatalogsOptions {
   tag?: string;
   type?: "physical" | "logical" | string;
   enabled?: boolean;
-  healthCheckStatus?: string;
+  healthCheckStatus?: CatalogHealthCheckStatus;
   includeExtensions?: boolean;
   includeExtensionKeys?: string;
   extensionPairs?: Array<{ key: string; value: string }>;
@@ -262,50 +316,83 @@ export function getCatalog(ctx: RequestContext, id: string): Promise<unknown> {
 export interface CreateCatalogRequest {
   name: string;
   connectorType: string;
-  connectorConfig: unknown;
+  connectorConfig: Record<string, unknown>;
   tags?: string[];
   description?: string;
   enabled?: boolean;
   id?: string;
   internal?: boolean;
   extensions?: Record<string, string>;
+  healthCheckSchedule?: CatalogHealthCheckScheduleRequest | null;
+}
+
+/** Full PUT /catalogs/{id} body; the path id is injected by the API client. */
+export interface UpdateCatalogRequest {
+  name: string;
+  connectorType: string;
+  enabled: boolean;
+  connectorConfig?: Record<string, unknown>;
+  tags?: string[];
+  description?: string;
+  extensions?: Record<string, string>;
 }
 
 /** Create a Vega catalog (data source). Returns the created catalog (with its id). */
-export function createCatalog(ctx: RequestContext, req: CreateCatalogRequest): Promise<unknown> {
+export function createCatalog(
+  ctx: RequestContext,
+  req: CreateCatalogRequest,
+  opts: CatalogWriteOptions = {},
+): Promise<unknown> {
   return request(ctx, `${VEGA_BASE}/catalogs`, {
     method: "POST",
+    query: {
+      allow_unhealthy: opts.allowUnhealthy === undefined ? undefined : String(opts.allowUnhealthy),
+    },
     body: {
       ...(req.id ? { id: req.id } : {}),
       name: req.name,
       connector_type: req.connectorType,
       connector_config: req.connectorConfig,
-      ...(req.tags ? { tags: req.tags } : {}),
-      ...(req.description ? { description: req.description } : {}),
+      ...(req.tags !== undefined ? { tags: req.tags } : {}),
+      ...(req.description !== undefined ? { description: req.description } : {}),
       ...(req.enabled !== undefined ? { enabled: req.enabled } : {}),
       ...(req.internal !== undefined ? { internal: req.internal } : {}),
-      ...(req.extensions ? { extensions: req.extensions } : {}),
+      ...(req.extensions !== undefined ? { extensions: req.extensions } : {}),
+      ...(req.healthCheckSchedule !== undefined
+        ? {
+            health_check_schedule:
+              req.healthCheckSchedule === null
+                ? null
+                : mapCatalogHealthCheckScheduleRequest(req.healthCheckSchedule),
+          }
+        : {}),
     },
+    timeoutMs: 60_000,
   });
 }
 
 export function updateCatalog(
   ctx: RequestContext,
   id: string,
-  req: Partial<CreateCatalogRequest>,
+  req: UpdateCatalogRequest,
+  opts: CatalogWriteOptions = {},
 ): Promise<unknown> {
   return request(ctx, `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}`, {
     method: "PUT",
-    body: {
-      ...(req.id ? { id: req.id } : {}),
-      ...(req.name ? { name: req.name } : {}),
-      ...(req.connectorType ? { connector_type: req.connectorType } : {}),
-      ...(req.connectorConfig !== undefined ? { connector_config: req.connectorConfig } : {}),
-      ...(req.tags ? { tags: req.tags } : {}),
-      ...(req.description !== undefined ? { description: req.description } : {}),
-      ...(req.enabled !== undefined ? { enabled: req.enabled } : {}),
-      ...(req.extensions ? { extensions: req.extensions } : {}),
+    query: {
+      allow_unhealthy: opts.allowUnhealthy === undefined ? undefined : String(opts.allowUnhealthy),
     },
+    body: {
+      id,
+      name: req.name,
+      connector_type: req.connectorType,
+      enabled: req.enabled,
+      ...(req.connectorConfig !== undefined ? { connector_config: req.connectorConfig } : {}),
+      ...(req.tags !== undefined ? { tags: req.tags } : {}),
+      ...(req.description !== undefined ? { description: req.description } : {}),
+      ...(req.extensions !== undefined ? { extensions: req.extensions } : {}),
+    },
+    timeoutMs: 60_000,
   });
 }
 
@@ -324,10 +411,68 @@ export function deleteCatalog(ctx: RequestContext, id: string): Promise<unknown>
   return request(ctx, `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-export function testCatalogConnection(ctx: RequestContext, id: string): Promise<unknown> {
-  return request(ctx, `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}/test-connection`, {
+export async function testCatalogConnectionConfig(
+  ctx: RequestContext,
+  req: CatalogConnectionTestRequest,
+): Promise<CatalogConnectionTestResult> {
+  const result = await request<unknown>(ctx, `${VEGA_BASE}/catalogs/test-connection`, {
     method: "POST",
+    body: {
+      connector_type: req.connectorType,
+      connector_config: req.connectorConfig,
+    },
+    timeoutMs: 60_000,
   });
+  return CatalogConnectionTestResult.parse(result);
+}
+
+export async function testCatalogConnection(
+  ctx: RequestContext,
+  id: string,
+): Promise<CatalogConnectionTestResult> {
+  const result = await request<unknown>(
+    ctx,
+    `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}/test-connection`,
+    {
+      method: "POST",
+      timeoutMs: 60_000,
+    },
+  );
+  return CatalogConnectionTestResult.parse(result);
+}
+
+export async function getCatalogHealthCheckSchedule(
+  ctx: RequestContext,
+  id: string,
+): Promise<CatalogHealthCheckSchedule> {
+  const result = await request<unknown>(
+    ctx,
+    `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}/health-check-schedule`,
+  );
+  return CatalogHealthCheckSchedule.parse(result);
+}
+
+export async function updateCatalogHealthCheckSchedule(
+  ctx: RequestContext,
+  id: string,
+  req: CatalogHealthCheckScheduleRequest,
+): Promise<CatalogHealthCheckSchedule> {
+  const result = await request<unknown>(
+    ctx,
+    `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}/health-check-schedule`,
+    {
+      method: "PUT",
+      body: mapCatalogHealthCheckScheduleRequest(req),
+    },
+  );
+  return CatalogHealthCheckSchedule.parse(result);
+}
+
+function mapCatalogHealthCheckScheduleRequest(req: CatalogHealthCheckScheduleRequest) {
+  return {
+    mode: req.mode,
+    ...(req.mode === "enabled" ? { cron_expr: req.cronExpr } : {}),
+  };
 }
 
 /** Trigger a catalog metadata scan (discover). `wait=true` blocks until done. */
@@ -362,12 +507,16 @@ export function listCatalogResources(
   });
 }
 
-/** Health-status for one or more catalog ids (comma-joined in the path). */
-export function catalogHealthStatus(ctx: RequestContext, ids: string[]): Promise<unknown> {
-  return request(
+/** Fetch the latest health-check status for one catalog. */
+export async function catalogHealthStatus(
+  ctx: RequestContext,
+  id: string,
+): Promise<CatalogHealthStatus> {
+  const result = await request<unknown>(
     ctx,
-    `${VEGA_BASE}/catalogs/${ids.map(encodeURIComponent).join(",")}/health-status`,
+    `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}/health-status`,
   );
+  return CatalogHealthStatus.parse(result);
 }
 
 export function listConnectorTypes(ctx: RequestContext): Promise<unknown> {

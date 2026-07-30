@@ -117,7 +117,6 @@ const NOISE_COLS = new Set([
   "last_check_time",
   "last_discover_status",
   "health_check_result",
-  "health_check_enabled",
 ]);
 const isNoiseCol = (c: string) => NOISE_COLS.has(c) || /_time$/.test(c);
 
