@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  CreateBuildTaskRequest,
   catalogHealthStatus,
   createBuildTask,
   createCatalog,
   deleteBuildTasks,
+  getBuildTask,
   getCatalog,
   listBuildTasks,
   listCatalogResources,
@@ -117,11 +119,12 @@ describe("vega uses the vega-backend base path", () => {
 
 describe("createBuildTask", () => {
   it("POSTs to /build-tasks under vega-backend", async () => {
-    const f = mockFetch({ id: "t-1", resource_id: "r-1", mode: "batch" });
-    await createBuildTask(ctx, { resource_id: "r-1", mode: "batch" });
+    const f = mockFetch({ id: "t-1" });
+    const task = await createBuildTask(ctx, { resource_id: "r-1", mode: "batch" });
     const call = firstCall(f);
     expect(new URL(call[0]).pathname).toBe("/api/vega-backend/v1/build-tasks");
     expect(call[1].method).toBe("POST");
+    expect(task).toEqual({ id: "t-1" });
   });
 
   it("sends execute_type but no resource index fields in the task body", async () => {
@@ -135,6 +138,16 @@ describe("createBuildTask", () => {
     expect(body).toEqual({ resource_id: "r-1", mode: "batch", execute_type: "full" });
   });
 
+  it("rejects execute_type for streaming tasks before making a request", () => {
+    expect(
+      CreateBuildTaskRequest.safeParse({
+        resource_id: "r-1",
+        mode: "streaming",
+        execute_type: "full",
+      }).success,
+    ).toBe(false);
+  });
+
   it("lists build tasks with server-side filters", async () => {
     const f = mockFetch({ entries: [] });
     await listBuildTasks(ctx, {
@@ -143,7 +156,7 @@ describe("createBuildTask", () => {
       status: ["running", "init"],
       active: true,
       mode: "batch",
-      orderBy: "status",
+      orderBy: "updated_at",
       order: "asc",
       limit: 5,
       offset: 10,
@@ -155,10 +168,18 @@ describe("createBuildTask", () => {
     expect(u.searchParams.get("status")).toBe("running,init");
     expect(u.searchParams.get("active")).toBe("true");
     expect(u.searchParams.get("mode")).toBe("batch");
-    expect(u.searchParams.get("order_by")).toBe("status");
+    expect(u.searchParams.get("order_by")).toBe("updated_at");
     expect(u.searchParams.get("order")).toBe("asc");
     expect(u.searchParams.get("limit")).toBe("5");
     expect(u.searchParams.get("offset")).toBe("10");
+  });
+
+  it("exposes the persisted batch execute_type on task responses", async () => {
+    mockFetch({ id: "t-1", mode: "batch", execute_type: "incremental" });
+    await expect(getBuildTask(ctx, "t-1")).resolves.toMatchObject({
+      id: "t-1",
+      execute_type: "incremental",
+    });
   });
 
   it("starts, stops, and deletes build tasks", async () => {
