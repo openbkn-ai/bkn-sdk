@@ -377,9 +377,9 @@ export function vegaCommand(): Command {
     });
 
   dataset
-    .command("build-status <resource-id> <task-id>")
+    .command("build-status <task-id>")
     .description("Show a BuildTask's state and progress")
-    .action(async (_resourceId: string, taskId: string, _opts, cmd: Command) => {
+    .action(async (taskId: string, _opts, cmd: Command) => {
       const task = await clientFrom(cmd).vega.buildStatus(taskId);
       printJson(task, outputOptions(cmd));
     });
@@ -394,7 +394,7 @@ export function vegaCommand(): Command {
     .option("--status <status>", "comma-separated statuses")
     .option("--active", "only running/init tasks")
     .option("--mode <mode>", "filter by mode: batch | streaming")
-    .option("--order-by <field>", "default | created_at | updated_at | status | mode")
+    .option("--order-by <field>", "default | created_at | updated_at")
     .option("--order <dir>", "asc | desc")
     .action(async (opts, cmd: Command) => {
       printJson(
@@ -416,7 +416,7 @@ export function vegaCommand(): Command {
   dataset
     .command("build-start <task-id>")
     .description("Start a BuildTask")
-    .option("--reset", "restart from the beginning")
+    .option("--reset", "restart a full task from the beginning (ignored for incremental tasks)")
     .action(async (taskId: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).vega.startBuildTask(taskId, { reset: opts.reset }),

@@ -9,7 +9,7 @@
 | `sql --query "<sql>"` / `sql -d <json>` | Run SQL or OpenSearch DSL directly against a data source. SQL uses a `{{<resource-id>}}` table placeholder; DSL identifies its resource with top-level `resource_id`. See [§ vega sql](#vega-sql--run-sql--dsl-against-a-data-source). |
 | `resource …` | Vega-backend resources (mirror of top-level `resource`). |
 | `dataset build <resource-id> --mode batch\|streaming [--embedding-fields a,b] [--build-key-fields k] [--embedding-model <id>] [--fulltext-fields a,b] [--fulltext-analyzer <n>] [--execute-type incremental\|full] [--wait] [--timeout <s>]` | Create an index BuildTask. **Index build lives on the resource (one resource = one table); there is no KN-level build.** `batch` requires `--build-key-fields` (else `400 build_key_fields is required for batch mode`). |
-| `dataset build-status <resource-id> <task-id>` | BuildTask state + progress. |
+| `dataset build-status <task-id>` | BuildTask status + progress. |
 
 ## `vega sql` — run SQL / DSL against a data source
 

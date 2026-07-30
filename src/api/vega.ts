@@ -16,12 +16,33 @@ const VEGA_BASE = "/api/vega-backend/v1";
 export const BuildMode = z.enum(["batch", "streaming"]);
 export type BuildMode = z.infer<typeof BuildMode>;
 
+export const BuildTaskExecuteType = z.enum(["incremental", "full"]);
+export type BuildTaskExecuteType = z.infer<typeof BuildTaskExecuteType>;
+
+export const BuildTaskStatus = z.enum([
+  "init",
+  "running",
+  "stopping",
+  "stopped",
+  "completed",
+  "failed",
+]);
+export type BuildTaskStatus = z.infer<typeof BuildTaskStatus>;
+
 /** POST /build-tasks body. */
-export const CreateBuildTaskRequest = z.object({
-  resource_id: z.string().min(1),
-  mode: BuildMode,
-  execute_type: z.enum(["incremental", "full"]).optional(),
-});
+export const CreateBuildTaskRequest = z.discriminatedUnion("mode", [
+  z.object({
+    resource_id: z.string().min(1),
+    mode: z.literal("batch"),
+    execute_type: BuildTaskExecuteType.optional(),
+  }),
+  z.object({
+    resource_id: z.string().min(1),
+    mode: z.literal("streaming"),
+    // Streaming tasks do not have an execution type.
+    execute_type: z.never().optional(),
+  }),
+]);
 export type CreateBuildTaskRequest = z.infer<typeof CreateBuildTaskRequest>;
 
 // Lenient: create vs list vs status responses carry different subsets — `status`
@@ -31,13 +52,14 @@ export const BuildTask = z
     id: z.string(),
     resource_id: z.string().optional(),
     mode: BuildMode.optional(),
-    status: z.string().optional(),
+    status: BuildTaskStatus.optional(),
     state: z.string().optional(),
     total_count: z.number().optional(),
     synced_count: z.number().optional(),
     vectorized_count: z.number().optional(),
     index_config: z.unknown().optional(),
     catalog_id: z.string().optional(),
+    execute_type: BuildTaskExecuteType.optional(),
     index_health: z
       .object({
         embedding: z.string(),
@@ -70,10 +92,10 @@ export interface ListBuildTasksOptions {
   offset?: number;
   resourceId?: string;
   catalogId?: string;
-  status?: string | string[];
+  status?: BuildTaskStatus | BuildTaskStatus[];
   active?: boolean;
   mode?: BuildMode;
-  orderBy?: "default" | "created_at" | "updated_at" | "status" | "mode";
+  orderBy?: "default" | "created_at" | "updated_at";
   order?: "asc" | "desc";
 }
 
