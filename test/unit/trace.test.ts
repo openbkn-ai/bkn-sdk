@@ -5,6 +5,7 @@ import {
   getBusinessGraph,
   getEvidenceArtifact,
   getEvidenceChain,
+  getInteractionSummary,
   getRequestSummary,
   getRequestTraces,
   getSnapshotPreview,
@@ -271,7 +272,7 @@ describe("BKN Trace 2.2 business runs and artifacts", () => {
       conversationId: "conversation_supply_chain",
       interactionId: "interaction_june_forecast",
     });
-    const interaction = await trace(ctx).interactions.get("interaction_june_forecast");
+    const interaction = await getInteractionSummary(ctx, "interaction_june_forecast");
 
     const [listCall, interactionCall] = calls(f);
     if (!listCall || !interactionCall) throw new Error("missing calls");
@@ -287,47 +288,22 @@ describe("BKN Trace 2.2 business runs and artifacts", () => {
   });
 });
 
-describe("trace resource session", () => {
-  it("binds TraceSession.flush to the evidence ingestion endpoint", async () => {
-    const f = mockFetchSeq([
-      {
-        trace_id: "8c0d0000000000000000000000000001",
-        "bkn.request.id": "req_session_resource_001",
-        "bkn.trace.schema.version": "2.1.0",
-        accepted_event_count: 1,
-        claim_count: 0,
-        evidence_ref_count: 0,
-        business_ref_count: 0,
-      },
-    ]);
-    const session = trace(ctx).createSession({
-      trace: {
-        trace_id: "8c0d0000000000000000000000000001",
-        traceparent: "00-8c0d0000000000000000000000000001-1f12000000000001-01",
-        "bkn.request.id": "req_session_resource_001",
-        business_domain: "bd_test",
-        "bkn.account.id": "acct_demo",
-        "bkn.account.type": "app",
-      },
-      producerModule: "third-party-agent",
-      spanId: "1f12000000000001",
-      interactionId: "interaction_1",
-      idFactory: () => "event_1",
-      now: () => "2026-07-25T12:00:00.000Z",
-    });
-    session.startInteraction({
-      operationName: "agent.run",
-      intentHash: `sha256:${"1".repeat(64)}`,
-      mode: "task",
-      appRef: "app:sdk-test",
-    });
+describe("trace Community resource", () => {
+  it("exposes the 3.0 lifecycle API and managed interaction wrapper", () => {
+    const resource = trace(ctx);
 
-    await session.flush();
+    expect(resource.lifecycle.ensureConversation).toBeTypeOf("function");
+    expect(resource.lifecycle.getReceipt).toBeTypeOf("function");
+    expect(resource.withInteraction).toBeTypeOf("function");
+  });
 
-    const c = calls(f)[0];
-    if (!c) throw new Error("no call");
-    expect(new URL(c[0]).pathname).toBe("/api/agent-observability/v1/evidence/events");
-    expect(JSON.parse(c[1].body as string)["bkn.trace.schema.version"]).toBe("2.1.0");
+  it("does not distribute the legacy 2.x evidence writer through the Community resource", () => {
+    const resource = trace(ctx);
+
+    expect("createSession" in resource).toBe(false);
+    expect("emitEvidenceEvents" in resource).toBe(false);
+    expect("requests" in resource).toBe(false);
+    expect("interactions" in resource).toBe(false);
   });
 });
 
