@@ -79,13 +79,23 @@ export type {
 export type {
   BuildMode,
   BuildTask,
+  CatalogConnectionTestRequest,
+  CatalogConnectionTestResult,
+  CatalogHealthCheckSchedule,
+  CatalogHealthCheckScheduleMode,
+  CatalogHealthCheckScheduleRequest,
+  CatalogHealthCheckStatus,
+  CatalogHealthStatus,
+  CatalogWriteOptions,
   CreateBuildTaskRequest,
+  CreateCatalogRequest,
   DslRawQueryRequest,
   QueryPagingMode,
   RawQueryContinuationRequest,
   RawQueryPaging,
   RawQueryRequest,
   SqlRawQueryRequest,
+  UpdateCatalogRequest,
 } from "./api/vega.js";
 
 // Low-level escape hatch for endpoints not yet wrapped.

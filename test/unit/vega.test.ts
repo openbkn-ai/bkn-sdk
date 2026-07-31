@@ -7,6 +7,7 @@ import {
   deleteBuildTasks,
   getBuildTask,
   getCatalog,
+  getCatalogHealthCheckSchedule,
   listBuildTasks,
   listCatalogResources,
   listCatalogs,
@@ -14,6 +15,10 @@ import {
   runSql,
   startBuildTask,
   stopBuildTask,
+  testCatalogConnection,
+  testCatalogConnectionConfig,
+  updateCatalog,
+  updateCatalogHealthCheckSchedule,
 } from "../../src/api/vega.js";
 import type { RequestContext } from "../../src/types.js";
 
@@ -69,11 +74,19 @@ describe("vega uses the vega-backend base path", () => {
     expect(new URL(firstCall(f)[0]).searchParams.has("limit")).toBe(false);
   });
 
-  it("catalogHealthStatus joins ids", async () => {
-    const f = mockFetch();
-    await catalogHealthStatus(ctx, ["a", "b"]);
+  it("catalogHealthStatus gets and parses one catalog", async () => {
+    const f = mockFetch({
+      id: "a b",
+      health_check_status: "healthy",
+      last_check_time: 123,
+      health_check_result: "ok",
+    });
+    await expect(catalogHealthStatus(ctx, "a b")).resolves.toMatchObject({
+      id: "a b",
+      health_check_status: "healthy",
+    });
     expect(new URL(firstCall(f)[0]).pathname).toBe(
-      "/api/vega-backend/v1/catalogs/a,b/health-status",
+      "/api/vega-backend/v1/catalogs/a%20b/health-status",
     );
   });
 
@@ -250,5 +263,121 @@ describe("createCatalog", () => {
     const body = JSON.parse(call[1].body as string);
     expect(body.connector_type).toBe("mysql");
     expect(body.connector_config).toEqual({ host: "h" });
+  });
+
+  it("sends allow_unhealthy and an initial health-check schedule", async () => {
+    const f = mockFetch({ id: "c-9" });
+    await createCatalog(
+      ctx,
+      {
+        name: "my-cat",
+        connectorType: "mysql",
+        connectorConfig: { host: "h" },
+        healthCheckSchedule: { mode: "enabled", cronExpr: "0 */2 * * *" },
+      },
+      { allowUnhealthy: true },
+    );
+    const call = firstCall(f);
+    const url = new URL(call[0]);
+    expect(url.searchParams.get("allow_unhealthy")).toBe("true");
+    expect(JSON.parse(call[1].body as string).health_check_schedule).toEqual({
+      mode: "enabled",
+      cron_expr: "0 */2 * * *",
+    });
+  });
+});
+
+describe("updateCatalog", () => {
+  it("sends a full PUT body with the path id and allow_unhealthy", async () => {
+    const f = mockFetch();
+    await updateCatalog(
+      ctx,
+      "c-9",
+      {
+        name: "renamed",
+        connectorType: "mysql",
+        connectorConfig: { host: "new-host" },
+        enabled: false,
+        tags: [],
+        description: "",
+        extensions: {},
+      },
+      { allowUnhealthy: true },
+    );
+    const call = firstCall(f);
+    const url = new URL(call[0]);
+    expect(url.pathname).toBe("/api/vega-backend/v1/catalogs/c-9");
+    expect(url.searchParams.get("allow_unhealthy")).toBe("true");
+    expect(call[1].method).toBe("PUT");
+    expect(JSON.parse(call[1].body as string)).toEqual({
+      id: "c-9",
+      name: "renamed",
+      connector_type: "mysql",
+      connector_config: { host: "new-host" },
+      enabled: false,
+      tags: [],
+      description: "",
+      extensions: {},
+    });
+  });
+});
+
+describe("catalog connection tests", () => {
+  it("preflights an unpersisted connector configuration", async () => {
+    const f = mockFetch({ success: true, message: "connected" });
+    await expect(
+      testCatalogConnectionConfig(ctx, {
+        connectorType: "postgresql",
+        connectorConfig: { host: "db.example.com" },
+      }),
+    ).resolves.toEqual({ success: true, message: "connected" });
+    const call = firstCall(f);
+    expect(new URL(call[0]).pathname).toBe("/api/vega-backend/v1/catalogs/test-connection");
+    expect(JSON.parse(call[1].body as string)).toEqual({
+      connector_type: "postgresql",
+      connector_config: { host: "db.example.com" },
+    });
+  });
+
+  it("returns a persisted catalog's business failure result", async () => {
+    const f = mockFetch({ success: false, message: "connection refused" });
+    await expect(testCatalogConnection(ctx, "c 9")).resolves.toEqual({
+      success: false,
+      message: "connection refused",
+    });
+    expect(new URL(firstCall(f)[0]).pathname).toBe(
+      "/api/vega-backend/v1/catalogs/c%209/test-connection",
+    );
+  });
+
+  it("rejects a malformed connection-test response", async () => {
+    mockFetch({ message: "missing success" });
+    await expect(testCatalogConnection(ctx, "c-9")).rejects.toThrow();
+  });
+});
+
+describe("catalog health-check schedule", () => {
+  const response = {
+    catalog_id: "c-9",
+    mode: "enabled",
+    cron_expr: "0 */2 * * *",
+    last_run: 100,
+    next_run: 200,
+  };
+
+  it("gets and parses the dedicated schedule", async () => {
+    const f = mockFetch(response);
+    await expect(getCatalogHealthCheckSchedule(ctx, "c-9")).resolves.toEqual(response);
+    expect(new URL(firstCall(f)[0]).pathname).toBe(
+      "/api/vega-backend/v1/catalogs/c-9/health-check-schedule",
+    );
+  });
+
+  it("updates the schedule without sending cron outside enabled mode", async () => {
+    const f = mockFetch({ ...response, mode: "disabled", next_run: 0 });
+    await updateCatalogHealthCheckSchedule(ctx, "c-9", { mode: "disabled" });
+    const call = firstCall(f);
+    expect(call[1].method).toBe("PUT");
+    expect(JSON.parse(call[1].body as string)).toEqual({ mode: "disabled" });
   });
 });
