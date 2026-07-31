@@ -80,7 +80,6 @@ export interface ManagedConversation {
 
 export interface ConversationPage {
   entries: ManagedConversation[];
-  next_cursor?: string;
 }
 
 export interface ListConversationsQuery {
@@ -371,7 +370,9 @@ export function traceLifecycleApi(ctx: RequestContext): TraceLifecycleApi {
   return {
     listConversations: (query = {}) => {
       const params = new URLSearchParams();
-      if (query.limit !== undefined) params.set("limit", String(query.limit));
+      if (query.limit !== undefined && Number.isFinite(query.limit)) {
+        params.set("limit", String(query.limit));
+      }
       const suffix = params.size > 0 ? `?${params.toString()}` : "";
       return get(`/conversations${suffix}`);
     },

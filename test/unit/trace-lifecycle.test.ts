@@ -44,7 +44,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("traceLifecycleApi conversations", () => {
   it("lists authorized conversations with the registered limit query", async () => {
-    const fetchMock = mockFetch([{ entries: [], next_cursor: "" }]);
+    const fetchMock = mockFetch([{ entries: [] }]);
 
     await traceLifecycleApi(ctx).listConversations({ limit: 30 });
 
@@ -54,6 +54,16 @@ describe("traceLifecycleApi conversations", () => {
     expect(url.pathname).toBe("/api/agent-observability/v1/conversations");
     expect(url.searchParams.get("limit")).toBe("30");
     expect(call[1].method).toBe("GET");
+  });
+
+  it("does not serialize a non-finite conversation limit", async () => {
+    const fetchMock = mockFetch([{ entries: [] }]);
+
+    await traceLifecycleApi(ctx).listConversations({ limit: Number.NaN });
+
+    const call = calls(fetchMock)[0];
+    if (!call) throw new Error("missing lifecycle call");
+    expect(new URL(call[0]).search).toBe("");
   });
 
   it("uses the registered conversation lifecycle paths and exact wire bodies", async () => {
