@@ -218,16 +218,16 @@ describe("BKN Trace 2.2 business runs and artifacts", () => {
     const [listCall, summaryCall, tracesCall] = calls(f);
     if (!listCall || !summaryCall || !tracesCall) throw new Error("missing calls");
     const listURL = new URL(listCall[0]);
-    expect(listURL.pathname).toBe("/api/agent-observability/v1/requests");
+    expect(listURL.pathname).toBe("/api/agent-observability/v1/business-provenance/requests");
     expect(listURL.searchParams.get("keyword")).toBe("客户 A");
     expect(listURL.searchParams.get("status")).toBe("completed");
     expect(listURL.searchParams.get("knowledge_network")).toBe("customer-risk-network");
     expect(listURL.searchParams.get("evidence_completeness")).toBe("complete");
     expect(new URL(summaryCall[0]).pathname).toBe(
-      "/api/agent-observability/v1/requests/req_business_001",
+      "/api/agent-observability/v1/business-provenance/requests/req_business_001",
     );
     expect(new URL(tracesCall[0]).pathname).toBe(
-      "/api/agent-observability/v1/requests/req_business_001/traces",
+      "/api/agent-observability/v1/business-provenance/requests/req_business_001/traces",
     );
     expect(page.entries[0]?.request_id).toBe("req_business_001");
     expect(summary.request_id).toBe("req_business_001");
@@ -280,7 +280,7 @@ describe("BKN Trace 2.2 business runs and artifacts", () => {
     expect(listURL.searchParams.get("conversation_id")).toBe("conversation_supply_chain");
     expect(listURL.searchParams.get("interaction_id")).toBe("interaction_june_forecast");
     expect(new URL(interactionCall[0]).pathname).toBe(
-      "/api/agent-observability/v1/interactions/interaction_june_forecast",
+      "/api/agent-observability/v1/business-provenance/interactions/interaction_june_forecast",
     );
     expect(interaction.conversation_id).toBe("conversation_supply_chain");
     expect(interaction.requests[0]?.interaction_id).toBe("interaction_june_forecast");

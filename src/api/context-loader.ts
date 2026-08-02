@@ -14,6 +14,7 @@ import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
 import { tlsFetch } from "./tls.js";
+import type { OperationReceipt } from "./trace-lifecycle.js";
 
 const MCP_PATH = "/api/agent-retrieval/v1/mcp";
 const PROTOCOL = "2024-11-05";
@@ -111,21 +112,44 @@ async function ensureSession(ctx: RequestContext, knId: string): Promise<string>
   return sessionId;
 }
 
-/** Unwrap a JSON-RPC result, decoding the MCP content[].text JSON payload. */
-function unwrap(parsed: unknown): unknown {
+export interface ManagedToolResult<T = unknown> {
+  value: T;
+  receipt: OperationReceipt;
+}
+
+interface UnwrappedToolResult {
+  value: unknown;
+  receipt?: OperationReceipt;
+}
+
+/** Unwrap a JSON-RPC result without discarding its trusted lifecycle receipt. */
+function unwrapToolResult(parsed: unknown): UnwrappedToolResult {
   const rpc = parsed as { result?: unknown; error?: { message: string } };
   if (rpc.error) throw new Error(`Context-loader error: ${rpc.error.message}`);
   const result = rpc.result as Record<string, unknown> | undefined;
-  if (result === undefined) return parsed;
+  if (result === undefined) return { value: parsed };
+  const structuredContent = result.structuredContent;
+  const receipt = (structuredContent as { bkn_receipt?: OperationReceipt } | undefined)
+    ?.bkn_receipt;
   const content = result.content;
+  if (result.isError === true) {
+    const message =
+      Array.isArray(content) && content[0] && typeof content[0].text === "string"
+        ? content[0].text
+        : "tool call failed";
+    throw new Error(`Context-loader error: ${message}`);
+  }
   if (Array.isArray(content) && content[0] && typeof content[0].text === "string") {
     try {
-      return JSON.parse(content[0].text);
+      return { value: JSON.parse(content[0].text), receipt };
     } catch {
-      return { raw: content[0].text };
+      if (structuredContent !== undefined) {
+        return { value: structuredContent, receipt };
+      }
+      return { value: { raw: content[0].text }, receipt };
     }
   }
-  return result;
+  return { value: result, receipt };
 }
 
 /** Call any MCP tool by name. */
@@ -143,7 +167,29 @@ export async function callTool(
     params: { name, arguments: args },
     id: nextId(),
   });
-  return unwrap(parseBody(text));
+  return unwrapToolResult(parseBody(text)).value;
+}
+
+/** Call a lifecycle-managed MCP tool and retain the trusted operation receipt. */
+export async function callManagedTool<T = unknown>(
+  ctx: RequestContext,
+  knId: string,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<ManagedToolResult<T>> {
+  const operationCtx = operationContext(ctx);
+  const sessionId = await ensureSession(operationCtx, knId);
+  const { text } = await post(operationCtx, knId, sessionId, {
+    jsonrpc: "2.0",
+    method: "tools/call",
+    params: { name, arguments: args },
+    id: nextId(),
+  });
+  const result = unwrapToolResult(parseBody(text));
+  if (!result.receipt) {
+    throw new Error("Context-loader managed tool response did not include bkn_receipt");
+  }
+  return { value: result.value as T, receipt: result.receipt };
 }
 
 /** Call a generic MCP method (tools/list, resources/list, ...). */
