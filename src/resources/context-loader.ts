@@ -5,6 +5,7 @@
 import {
   type DetailLevel,
   type SearchSchemaOptions,
+  callManagedTool,
   callMethod,
   callTool,
   findSkills,
@@ -42,6 +43,8 @@ export function context(ctx: RequestContext) {
     tools: (knId: string) => listTools(ctx, knId),
     toolCall: (knId: string, name: string, args: Record<string, unknown>) =>
       callTool(ctx, knId, name, args),
+    managedToolCall: <T = unknown>(knId: string, name: string, args: Record<string, unknown>) =>
+      callManagedTool<T>(ctx, knId, name, args),
     // Generic MCP method passthrough — covers methods not yet wrapped, so the
     // surface doesn't have to grow every time the server adds one.
     callMethod: (knId: string, method: string, params?: Record<string, unknown>) =>

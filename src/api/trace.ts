@@ -13,8 +13,9 @@ import { request } from "./http.js";
 const SEARCH = "/api/agent-observability/v1/traces/_search";
 const EVIDENCE_EVENTS = "/api/agent-observability/v1/evidence/events";
 const EVIDENCE_ARTIFACTS = "/api/agent-observability/v1/evidence/artifacts";
-const REQUESTS = "/api/agent-observability/v1/requests";
-const INTERACTIONS = "/api/agent-observability/v1/interactions";
+const BUSINESS_PROVENANCE = "/api/agent-observability/v1/business-provenance";
+const REQUESTS = `${BUSINESS_PROVENANCE}/requests`;
+const INTERACTIONS = `${BUSINESS_PROVENANCE}/interactions`;
 const TRACES = "/api/agent-observability/v1/traces";
 
 interface SearchHits {

@@ -2,7 +2,13 @@
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getKnDetail, getObjectTypes, getRelationTypes } from "../../src/api/context-loader.js";
+import {
+  callManagedTool,
+  callTool,
+  getKnDetail,
+  getObjectTypes,
+  getRelationTypes,
+} from "../../src/api/context-loader.js";
 import type { RequestContext } from "../../src/types.js";
 
 const ctx: RequestContext = {
@@ -139,5 +145,151 @@ describe("drill-down (get_object_types / get_relation_types)", () => {
     const p = toolCallBody(f);
     expect(p.name).toBe("get_relation_types");
     expect(p.arguments.ids).toEqual(["rel_a"]);
+  });
+});
+
+describe("managed MCP tool calls", () => {
+  it("returns structured lifecycle output when the text content is descriptive", async () => {
+    const conversation = {
+      conversation_id: "conversation_supply_chain",
+      external_conversation_key: "cursor-supply-chain",
+      status: "active",
+    };
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        content: [{ type: "text", text: "managed lifecycle state updated" }],
+        structuredContent: conversation,
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(body, { status: 200, headers: { "mcp-session-id": "lifecycle-s1" } }),
+      ),
+    );
+
+    await expect(
+      callTool(ctx, "kn-lifecycle", "bkn_create_conversation", {
+        external_conversation_key: "cursor-supply-chain",
+      }),
+    ).resolves.toEqual(conversation);
+  });
+
+  it("rejects MCP tool errors instead of returning them as business values", async () => {
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: "conversation_required: call bkn_create_conversation first",
+          },
+        ],
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () => new Response(body, { status: 200, headers: { "mcp-session-id": "error-s1" } }),
+      ),
+    );
+
+    await expect(
+      callManagedTool(ctx, "kn-error", "search_schema", {
+        query: "6月份需求预测",
+      }),
+    ).rejects.toThrow(
+      "Context-loader error: conversation_required: call bkn_create_conversation first",
+    );
+  });
+
+  it("rejects managed tool responses without a trusted operation receipt", async () => {
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        content: [{ type: "text", text: JSON.stringify({ concepts: ["forecast"] }) }],
+        structuredContent: {},
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(body, { status: 200, headers: { "mcp-session-id": "missing-receipt-s1" } }),
+      ),
+    );
+
+    await expect(
+      callManagedTool(ctx, "kn-managed", "search_schema", {
+        query: "6月份需求预测",
+      }),
+    ).rejects.toThrow("Context-loader managed tool response did not include bkn_receipt");
+  });
+
+  it("returns the business value together with the trusted operation receipt", async () => {
+    const receipt = {
+      receipt_id: "receipt-1",
+      schema_version: "3.0.0",
+      conversation_id: "conversation_supply_chain",
+      interaction_id: "interaction_june_forecast",
+      operation_id: "operation-1",
+      attempt: 1,
+      operation_key: "search-schema",
+      tool_name: "search_schema",
+      normalized_input_hash: "sha256:input",
+      receipt_status: "completed",
+      evidence_durability: "pending",
+      required: true,
+      request_id: "request-1",
+      trace_id: "1234567890abcdef1234567890abcdef",
+      causation_event_ids: [],
+      observed_evidence_refs: [],
+      business_refs: [],
+      artifact_refs: [],
+      partial_reasons: [],
+      row_version: 2,
+      issued_at: "2026-08-02T06:00:00Z",
+      payload_hash: "sha256:payload",
+      owner: {
+        tenant_id: "tenant-1",
+        business_domain_id: "bd_public",
+        application_principal_id: "openbkn-sdk",
+        effective_subject_type: "user",
+        effective_subject_id: "user-1",
+      },
+    };
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        content: [{ type: "text", text: JSON.stringify({ concepts: ["forecast"] }) }],
+        structuredContent: { bkn_receipt: receipt },
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(body, { status: 200, headers: { "mcp-session-id": "managed-s1" } }),
+      ),
+    );
+
+    const result = await callManagedTool(ctx, "kn-managed", "search_schema", {
+      query: "6月份需求预测",
+      bkn_context: {
+        conversation_id: "conversation_supply_chain",
+        interaction_id: "interaction_june_forecast",
+        operation_key: "search-schema",
+      },
+    });
+
+    expect(result.value).toEqual({ concepts: ["forecast"] });
+    expect(result.receipt).toEqual(receipt);
   });
 });
