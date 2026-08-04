@@ -404,7 +404,7 @@ export function searchMetrics(ctx: RequestContext, knId: string, body: unknown):
   });
 }
 export function validateMetric(ctx: RequestContext, knId: string, body: unknown): Promise<unknown> {
-  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/validate`, {
+  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/validation`, {
     method: "POST",
     body,
   });
