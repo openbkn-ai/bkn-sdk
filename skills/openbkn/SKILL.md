@@ -7,7 +7,8 @@ description: >-
   索引构建任务、Context Loader（MCP 检索）、Decision Agent（CRUD、流式对话、
   会话、挂载技能）、模型工厂（大模型/小模型 CRUD、OpenAI 兼容对话/embedding/
   rerank）、Skill 注册（zip 注册/下载/安装 + 生命周期）、Toolbox/Tool（上传、
-  导入导出、调用）、Dataflow 文档流程（+模板）、BKN Trace（拉取 spans、用符号
+  导入导出、调用）、Dataflow 文档流程（+模板）、BKN Trace（第三方 Agent 受管
+  Conversation / Interaction / Operation、拉取 spans、用符号
   规则 + LLM rubric 判定诊断一条 trace、scan、eval-set 构建/测试、schema 校验）、
   以及运营面（`openbkn admin`：组织/用户/角色 CRUD、审计、模型管理）与认证
   （token + OAuth 密码/浏览器）。
@@ -25,6 +26,16 @@ argument-hint: [自然语言指令]
 
 BKN 平台的统一命令行工具 —— 一个二进制，运维面收进 `openbkn admin` 子命令。
 纯后端，无 Web UI。
+
+## 第三方 Agent 业务问答硬门禁
+
+- **业务问答必须受管**：每轮先调用 `bkn_start_interaction`；首轮可声明 `agent_name`，后续轮次复用上一轮返回的 `conversation_id` 且不得变更名称。
+- **只用权威 ID**：业务工具逐字使用 start 返回的 `conversation_id` 和 `interaction_id`，不得虚构、猜测或沿用示例值。
+- **业务调用保持受管**：只通过携带上述 ID 的 Context Loader 工具访问 OpenBKN，Operation、重试和证据闭包由平台管理。
+- **提交本轮结果**：回答生成后调用 `bkn_finish_interaction`；它只提交当前 Interaction 的结果，不关闭 Conversation。
+- **错误即停止**：返回原始错误并遵循 `required_action`，不得降级到 CLI、Vega、ontology-query 或无受管上下文的调用。
+
+详细合同见 [context.md](references/context.md)。
 
 ## 安装
 
@@ -72,7 +83,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 | `bkn` | 知识网络 + Schema + 查询 + 本地包 | `list`/`get`/`search`/`stats`/`export`、`object-type/relation-type/action-type list/get/create/update/delete`、`action-type query/execute/inputs`、`metric …`、`concept-group …`、`action-log/action-schedule …`、`subgraph`、`relation-type-paths`、`resources`、`push <dir>`/`pull <kn> [dir]`、`validate <dir>`、`create-from-catalog <catalog> --name …`、`create-from-csv <catalog> --files <glob> --name …`（`--build`、`--pk-map t:col`） |
 | `resource` | Vega-backend 资源 | `list`/`get`/`find --name`/`query`/`delete` |
 | `vega` | Catalog + 索引构建 + SQL | `catalog list/get`、`catalog resources`、`connector-types`、`sql --resource-type <t> --query "<sql>"`（直连 MySQL/PG/OpenSearch，SQL 用 `{{resource-id}}` 占位）、`build`（索引 BuildTask）+ 状态 |
-| `context` | MCP 检索 | `info`（全局 tool 目录，无需 KN）、`search-schema`、`query-object-instance`、`find-skills`、`kn-detail <kn> [--detail-level summary\|full]`（渐进式：先 summary 骨架）、`object-types <kn> <ids...>`/`relation-types <kn> <ids...>`（下钻，未匹配走 `missing`）、`tools <kn>`、`tool-call <name> [--arg k=v]`、`call-method <method>`、`resources/templates/prompts`、`query-instance-subgraph`/`get-logic-properties`/`get-action-info`；新工具用 `info`/`tools` 发现 + `tool-call` 调用，无需改 CLI |
+| `context` | MCP 检索 | 业务对话通过 MCP 工具 `bkn_start_interaction` / `bkn_finish_interaction` 管理；CLI 沿用 `tool-call` 透传，不另设生命周期命令 |
 | `agent` | **[已废弃]** Decision Agent（agent-factory，逐步淘汰，勿用于新集成） | `list`/`personal-list`/`template-list`/`get`/`create`/`update`/`delete`/`publish`、`chat <id> -m "…" [--stream]`、`sessions`、`history`、`trace`、`skill list/add/remove`（运行会向 stderr 打废弃警告） |
 | `model` | 模型工厂 | `llm/small list/get/add/edit/delete/test`、`llm chat <name\|id> -m "…" [--stream]`（id 自动解析成 name）、`small embeddings/rerank <name>`（只收 name，填数字 id 会 400；与 chat 不同，暂不解析 id）、`llm set-default/unset-default <id>`、`small set-default/unset-default <id>`、`small get-default [--type embedding\|reranker]` |
 | `skill` | Skill 注册/市场/生命周期 | `list`/`market`/`get`/`content`/`read-file`/`history`/`set-status`、`register <dir>`/`download`/`install`、`update-metadata`/`update-package`、`republish`/`publish-history` |

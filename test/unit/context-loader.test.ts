@@ -42,12 +42,20 @@ function mockMcp(): typeof fetch {
 }
 
 /** The `tools/call` request body among all the MCP POSTs (skips initialize etc.). */
-function toolCallBody(f: typeof fetch): { name: string; arguments: Record<string, unknown> } {
+function toolCallBody(f: typeof fetch): {
+  name: string;
+  arguments: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
+} {
   const calls = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls;
   for (const [, init] of calls) {
     const b = JSON.parse(init.body as string) as {
       method?: string;
-      params?: { name: string; arguments: Record<string, unknown> };
+      params?: {
+        name: string;
+        arguments: Record<string, unknown>;
+        _meta?: Record<string, unknown>;
+      };
     };
     if (b.method === "tools/call" && b.params) return b.params;
   }
@@ -149,18 +157,50 @@ describe("drill-down (get_object_types / get_relation_types)", () => {
 });
 
 describe("managed MCP tool calls", () => {
-  it("returns structured lifecycle output when the text content is descriptive", async () => {
-    const conversation = {
+  it("sends host lifecycle hints as MCP metadata, never as model tool arguments", async () => {
+    const f = mockMcp();
+
+    await callTool(
+      ctx,
+      "kn-host-hints",
+      "bkn_start_interaction",
+      { question: "查询供应链库存" },
+      {
+        hostConversationKey: "cursor-chat-42",
+        clientInvocationId: "cursor-turn-7",
+      },
+    );
+
+    const params = toolCallBody(f);
+    expect(params.arguments).toEqual({ question: "查询供应链库存" });
+    expect(params._meta).toEqual({
+      "openbkn.ai/host-conversation-key": "cursor-chat-42",
+      "openbkn.ai/client-invocation-id": "cursor-turn-7",
+    });
+  });
+
+  it("omits MCP metadata when the host does not provide lifecycle hints", async () => {
+    const f = mockMcp();
+
+    await callTool(ctx, "kn-no-host-hints", "bkn_start_interaction", {
+      question: "查询供应链库存",
+    });
+
+    expect(toolCallBody(f)._meta).toBeUndefined();
+  });
+
+  it("returns structured start output when the text content is descriptive", async () => {
+    const interaction = {
       conversation_id: "conversation_supply_chain",
-      external_conversation_key: "cursor-supply-chain",
-      status: "active",
+      interaction_id: "interaction_supply_chain",
+      execution_status: "active",
     };
     const body = JSON.stringify({
       jsonrpc: "2.0",
       id: 1,
       result: {
         content: [{ type: "text", text: "managed lifecycle state updated" }],
-        structuredContent: conversation,
+        structuredContent: interaction,
       },
     });
     vi.stubGlobal(
@@ -172,10 +212,10 @@ describe("managed MCP tool calls", () => {
     );
 
     await expect(
-      callTool(ctx, "kn-lifecycle", "bkn_create_conversation", {
-        external_conversation_key: "cursor-supply-chain",
+      callTool(ctx, "kn-lifecycle", "bkn_start_interaction", {
+        question: "查询供应链库存",
       }),
-    ).resolves.toEqual(conversation);
+    ).resolves.toEqual(interaction);
   });
 
   it("rejects MCP tool errors instead of returning them as business values", async () => {
@@ -187,7 +227,7 @@ describe("managed MCP tool calls", () => {
         content: [
           {
             type: "text",
-            text: "conversation_required: call bkn_create_conversation first",
+            text: "conversation_required: call bkn_start_interaction first",
           },
         ],
       },
@@ -204,7 +244,7 @@ describe("managed MCP tool calls", () => {
         query: "6月份需求预测",
       }),
     ).rejects.toThrow(
-      "Context-loader error: conversation_required: call bkn_create_conversation first",
+      "Context-loader error: conversation_required: call bkn_start_interaction first",
     );
   });
 

@@ -67,6 +67,7 @@ export interface LifecycleOwner {
 
 export interface ManagedConversation {
   conversation_id: string;
+  agent_name?: string;
   owner: LifecycleOwner;
   external_conversation_key: string;
   generation: number;
@@ -255,6 +256,7 @@ export interface CloseConversationInput {
 
 export interface StartInteractionInput {
   idempotency_key: string;
+  agent_name?: string;
   lease_seconds?: number;
 }
 
