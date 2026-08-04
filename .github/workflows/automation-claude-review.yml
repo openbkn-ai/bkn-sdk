@@ -145,12 +145,49 @@ jobs:
             - 没问题就说没问题，不要为了凑数提格式化/命名类的琐碎意见
               （biome 已覆盖格式）。
 
+            评审的对象是**改动带来的整体影响**，不是这份 diff 的文本。diff 只是入口，
+            每一处改动都要先回答：谁在依赖它、它原本承诺了什么、改完之后这些承诺是否
+            仍然成立。至少覆盖下面四个面，逐个用 `git grep` / 读源码确认，而不是推测：
+
+            - **三层之间的连带影响**：src/api、src/resources、src/commands 是同一条链，
+              改任一层都要把上下游一起读——端点签名变了，封装层与 CLI 子命令的传参、
+              默认值、错误处理是否同步跟上。
+            - **对外契约**：CLI 的子命令名、flag、输出格式（尤其 `--json`）与 SDK 导出的
+              符号，都是用户脚本直接依赖的东西。改名、删除、默认值调整属于破坏性变更，
+              要确认 package.json 的 exports/bin、README 与 `--help` 文本同步，并说明
+              存量用户的脚本会不会挂。
+            - **后端契约**：端点路径、参数名（snake_case vs camelCase）、分页语义、
+              鉴权头。SDK 这侧改了，要确认后端确实如此，而不是凭猜测对齐；同一端点的
+              其它调用点一并 `git grep`，别只改一处留下不一致。
+            - **测试与类型**：改动是否让既有 vitest 断言失去意义（例如断言的仍是旧
+              URL，却因 mock 宽松而照样通过）；zod schema 放宽或收紧后，原本合法的
+              响应会不会被判成非法。
+
+            顶层结论里要点明这次改动的影响范围（波及哪些子命令、端点、存量用户脚本），
+            而不只是逐行问题清单。
+
+            以下三类改动，只读 diff 必然看不出问题，必须走出 diff 去核源码：
+
+            - **整份新增或整体重写的文件**（lock 文件、生成的类型、各种快照产物）：
+              不要只读新文件本身。必须 `git show <ref>:<上一版本的同名文件>` 取出前一版
+              逐行比对，确认差异只有本次改动应有的那几处。整份替换最容易夹带无关漂移，
+              而这些在 diff 里全是 `+`，读不出来。
+            - **字段 / 参数 / flag 的改名或删除**：定义其语义的地方通常不在 diff 里。
+              除了 `git grep` 旧名确认无残留（含 README、示例、测试），还要确认新逻辑
+              没有把原本合法的取值判成非法、把可选参数当成必填。
+            - **被删掉的代码**：先问它在维护什么不变量、当初为什么要写。删掉一个分支
+              等于不再保证那个不变量，必须确认对应的输入形态确实已经不存在，而不是
+              「当前主路径不会产生」——用户手上的旧脚本仍会产生。
+
             这次可能是复评（作者推了新提交或回复了评论）。先把现状摸清再下结论：
             - `gh pr view "$PR_NUMBER" --json reviewDecision,reviewRequests,comments`
               以及 `gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER/comments"`
               读回你之前留下的 inline 评论与其下的回复，弄清哪些「待确认」项
               PR 发起者已经回应、哪些还悬着。
             - `gh pr checks "$PR_NUMBER"` 看必需检查当前状态。
+            - 复评不等于只核这份待确认清单。上一轮漏掉的问题按定义不在清单里，因此
+              仍要按上面「必须走出 diff」三条重新过一遍全量改动，尤其是首轮之后
+              新增的文件。只核清单会让每一轮都收敛在已知项上，漏报永远补不回来。
 
             按下面的优先级落成一次 PR review（不是普通评论），三选一：
 
@@ -175,10 +212,10 @@ jobs:
           # 会伸手 Read/Grep/git diff 等工具。补齐只读检视工具与 PR review/checks/api
           # 并放宽轮次上限，避免评审因 permission denial 撞满轮次、评论冻在「进行中」。
           claude_args: |
-            --model claude-opus-4-8
-            --effort high
+            --model claude-opus-5
+            --effort xhigh
             --max-turns 60
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Read,Grep,Glob,LS,Bash(gh pr comment:*),Bash(gh pr review:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr checks:*),Bash(gh api:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Read,Grep,Glob,LS,Bash(gh pr comment:*),Bash(gh pr review:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr checks:*),Bash(gh api:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git grep:*)"
 
       - name: Warn when credential missing
         if: env.CLAUDE_CODE_OAUTH_TOKEN == ''
