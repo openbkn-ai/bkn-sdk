@@ -117,6 +117,12 @@ export interface ManagedToolResult<T = unknown> {
   receipt: OperationReceipt;
 }
 
+/** Adapter-owned MCP metadata for lifecycle-safe host retries. */
+export interface ToolCallOptions {
+  hostConversationKey?: string;
+  clientInvocationId?: string;
+}
+
 interface UnwrappedToolResult {
   value: unknown;
   receipt?: OperationReceipt;
@@ -152,19 +158,40 @@ function unwrapToolResult(parsed: unknown): UnwrappedToolResult {
   return { value: result, receipt };
 }
 
+function toolCallParams(
+  name: string,
+  args: Record<string, unknown>,
+  options?: ToolCallOptions,
+): Record<string, unknown> {
+  const meta = {
+    ...(options?.hostConversationKey
+      ? { "openbkn.ai/host-conversation-key": options.hostConversationKey }
+      : {}),
+    ...(options?.clientInvocationId
+      ? { "openbkn.ai/client-invocation-id": options.clientInvocationId }
+      : {}),
+  };
+  return {
+    name,
+    arguments: args,
+    ...(Object.keys(meta).length > 0 ? { _meta: meta } : {}),
+  };
+}
+
 /** Call any MCP tool by name. */
 export async function callTool(
   ctx: RequestContext,
   knId: string,
   name: string,
   args: Record<string, unknown>,
+  options?: ToolCallOptions,
 ): Promise<unknown> {
   const operationCtx = operationContext(ctx);
   const sessionId = await ensureSession(operationCtx, knId);
   const { text } = await post(operationCtx, knId, sessionId, {
     jsonrpc: "2.0",
     method: "tools/call",
-    params: { name, arguments: args },
+    params: toolCallParams(name, args, options),
     id: nextId(),
   });
   return unwrapToolResult(parseBody(text)).value;
@@ -176,13 +203,14 @@ export async function callManagedTool<T = unknown>(
   knId: string,
   name: string,
   args: Record<string, unknown>,
+  options?: ToolCallOptions,
 ): Promise<ManagedToolResult<T>> {
   const operationCtx = operationContext(ctx);
   const sessionId = await ensureSession(operationCtx, knId);
   const { text } = await post(operationCtx, knId, sessionId, {
     jsonrpc: "2.0",
     method: "tools/call",
-    params: { name, arguments: args },
+    params: toolCallParams(name, args, options),
     id: nextId(),
   });
   const result = unwrapToolResult(parseBody(text));

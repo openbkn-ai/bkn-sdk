@@ -5,6 +5,97 @@ positional arg on KN-scoped commands — there is no `--kn-id` flag, and the glo
 `-k` means `--insecure`, not the KN. The MCP endpoint is derived as
 `<base-url>/api/agent-retrieval/v1/mcp`.
 
+## Managed business conversation (required)
+
+For a third-party Agent such as Cursor, one Agent chat is one BKN Trace
+Conversation, one user question is one Interaction, and every OpenBKN business
+tool call is one Operation. Do not call a business tool outside this lifecycle.
+
+1. For the first business question in a chat, call `bkn_start_interaction` with
+   the complete `question`, optional display-only `agent_name`, and no
+   `conversation_id`. Context Loader creates or
+   resolves the managed Conversation internally and returns the authoritative
+   `conversation_id` and `interaction_id`. The name is fixed for that
+   Conversation; later turns omit it or repeat the same value.
+2. For every later question in the same chat, call `bkn_start_interaction` with
+   the complete question and the previously returned `conversation_id`. Retain
+   both returned IDs exactly as provided. A Conversation may stay active across
+   turns, reconnects, and days.
+3. Call each business tool with:
+
+   ```json
+   {
+     "bkn_context": {
+       "conversation_id": "conv_...",
+       "interaction_id": "int_..."
+     }
+   }
+   ```
+
+   Do not add guessed operation or business-reference fields. Context Loader
+   observes the selected knowledge network, schema and data resources from the
+   authoritative request and response, and returns the authoritative
+   `bkn_receipt`.
+4. After forming the final answer, call `bkn_finish_interaction` with the
+   `interaction_id`, `outcome: "completed"`, and the exact final answer. This
+   submits the current Interaction result; it does not close the Conversation.
+   Use `failed`, `cancelled`, or `handed_off` with a reason when applicable.
+   OpenBKN manages leases, idempotency, Operation/Receipt closure, and the
+   result Artifact.
+5. Do not start the next Interaction until the current one is terminal. Do not
+   use raw `openbkn call`, direct ontology-query, or direct Vega calls as a
+   substitute for managed Context Loader tools when business provenance is
+   required.
+
+Tool input schemas returned by MCP are authoritative. When a lifecycle call is
+rejected, stop before any business query, surface the original error, and follow
+its `required_action`. Never invent IDs, retry the business operation blindly,
+or silently fall back to raw CLI, ontology-query, or Vega calls; those paths
+cannot produce a complete managed business conversation.
+
+The MCP connection itself must carry a trusted tenant and business domain. For
+an AppKey-based local Cursor connection, configure both `Authorization` and the
+authorized `x-business-domain` header. A missing domain is an authorization
+configuration error, not a reason to bypass the managed lifecycle.
+
+A host adapter may attach an opaque host conversation key and a per-call client
+invocation ID using `X-OpenBKN-Host-Conversation-Key` /
+`X-OpenBKN-Client-Invocation-Id`, or the corresponding
+`openbkn.ai/host-conversation-key` / `openbkn.ai/client-invocation-id` MCP
+metadata. These are adapter hints for continuity and retry idempotency inside the already
+authenticated owner scope; they are not model arguments and never establish
+tenant, user, application, business-domain, or data permissions. A generic MCP
+client needs only to retain and reuse the returned `conversation_id`. MCP
+transport session IDs are not business Conversation IDs.
+
+The TypeScript SDK exposes these hints as an optional fourth argument to
+`context.toolCall` / `context.managedToolCall`; the SDK writes them to MCP
+`_meta`, never to the model-visible tool arguments:
+
+```ts
+await client.context.toolCall(
+  knId,
+  "bkn_start_interaction",
+  {
+    question,
+    ...(conversationId ? { conversation_id: conversationId } : { agent_name: agentName }),
+  },
+  {
+    hostConversationKey: hostChatId,
+    clientInvocationId: hostTurnId,
+  },
+);
+```
+
+Reuse `clientInvocationId` only when retrying the same start call. Generate a
+new value for the next user turn.
+
+Do not fabricate internal headers such as `bkn-event-observed-at`. Third-party
+Agents propagate only the two returned IDs; host adapters may supply their
+opaque continuity hints outside the model-visible schema. Trusted OpenBKN
+services derive operation identity, concurrency, closure, and lifecycle
+timestamps from Core resources.
+
 ## Discover first
 
 | Command | Notes |

@@ -104,6 +104,7 @@ export function traceCommand(): Command {
     .command("start <conversation-id>")
     .description("Start one managed interaction")
     .requiredOption("--idempotency-key <key>", "stable idempotency key")
+    .option("--agent-name <name>", "conversation-level Agent display name")
     .option("--lease-seconds <n>", "interaction lease duration", (value) =>
       Number.parseInt(value, 10),
     )
@@ -111,6 +112,7 @@ export function traceCommand(): Command {
       printJson(
         await clientFrom(cmd).trace.lifecycle.startInteraction(conversationId, {
           idempotency_key: opts.idempotencyKey,
+          agent_name: opts.agentName,
           lease_seconds: opts.leaseSeconds,
         }),
         outputOptions(cmd),

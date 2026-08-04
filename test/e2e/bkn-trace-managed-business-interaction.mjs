@@ -1,19 +1,15 @@
 #!/usr/bin/env node
 
-import { randomBytes } from "node:crypto";
 import { createClient } from "../../dist/index.js";
 
 const baseUrl = process.env.BKN_BASE_URL ?? "http://localhost";
 const businessDomain = process.env.BKN_BUSINESS_DOMAIN ?? "bd_public";
 const knId = process.env.BKN_KN_ID ?? "supplychain_hd0202";
-const runId = randomBytes(8).toString("hex");
+const agentName = process.env.BKN_AGENT_NAME ?? "供应链分析助手";
 const client = createClient({ baseUrl, businessDomain });
+const hostConversationKey = `sdk-e2e:${Date.now()}`;
 
-const conversation = await client.context.toolCall(knId, "bkn_create_conversation", {
-  external_conversation_key: `sdk-supply-chain-${runId}`,
-  idempotency_key: `create-${runId}`,
-});
-assertString(conversation?.conversation_id, "conversation_id");
+let conversationId;
 
 const juneQuestion = "6月份有哪些需求预测单，列出来，需求总量是多少？";
 const june = await runInteraction({
@@ -52,20 +48,86 @@ const comparison = await runInteraction({
   },
 });
 
-const interactions = [june, comparison];
+const salesOrders = await runSalesOrderInteraction();
+
+const interactions = [june, comparison, salesOrders];
 const operations = interactions.flatMap((item) => item.operations);
-if (interactions.length !== 2 || operations.length < 4) {
+if (interactions.length !== 3 || operations.length < 7) {
   throw new Error(
     `invalid provenance hierarchy: interactions=${interactions.length}, operations=${operations.length}`,
   );
+}
+
+async function runSalesOrderInteraction() {
+  const question = "迄今为止有多少销售订单，分别属于哪些产品？";
+  const interaction = await startInteraction("sales-orders", question);
+  assertString(interaction?.interaction_id, "interaction_id");
+  rememberConversation(interaction);
+
+  const schemaCall = await managedOperation(
+    interaction.interaction_id,
+    "sales-orders:schema",
+    "search_schema",
+    {
+      query: "销售订单 产品 签约数量",
+      response_format: "json",
+      include_columns: true,
+      max_concepts: 20,
+      bkn_context: businessContext(interaction.interaction_id),
+    },
+  );
+  const binding = extractSalesOrderBinding(schemaCall.value);
+  const rejectedCall = await managedRejectedOperation(
+    interaction.interaction_id,
+    "sales-orders:read-only-rejection",
+    "run_sql",
+    {
+      sql: "DELETE FROM forbidden",
+      response_format: "json",
+      bkn_context: businessContext(interaction.interaction_id),
+    },
+  );
+  const dataCall = await managedOperation(
+    interaction.interaction_id,
+    "sales-orders:data",
+    "run_sql",
+    {
+      sql: buildSalesOrderSql(binding),
+      response_format: "json",
+      bkn_context: businessContext(interaction.interaction_id),
+    },
+  );
+  const rows = extractRows(dataCall.value);
+  const orderCount = rows.reduce((sum, row) => sum + Number(row.order_count ?? 0), 0);
+  const signingQuantity = rows.reduce((sum, row) => sum + Number(row.signing_quantity ?? 0), 0);
+  if (rows.length !== 10 || orderCount !== 1_441 || signingQuantity !== 15_991) {
+    throw new Error(
+      `unexpected sales order result: products=${rows.length}, orders=${orderCount}, quantity=${signingQuantity}`,
+    );
+  }
+  const answer = `共有 ${orderCount} 张销售订单，涉及 ${rows.length} 个产品，签约数量合计 ${signingQuantity}。`;
+  const receipts = [schemaCall.receipt, rejectedCall.receipt, dataCall.receipt];
+  const completed = await client.context.toolCall(knId, "bkn_finish_interaction", {
+    interaction_id: interaction.interaction_id,
+    outcome: "completed",
+    answer,
+  });
+  return {
+    interaction_id: interaction.interaction_id,
+    question,
+    answer,
+    execution_status: completed.execution_status,
+    evidence_status: completed.evidence_status,
+    operations: summarizeReceipts(receipts),
+  };
 }
 
 console.log(
   JSON.stringify(
     {
       passed: true,
-      conversation_id: conversation.conversation_id,
-      expected_view_counts: { conversations: 1, interactions: 2, openbkn_calls: operations.length },
+      conversation_id: conversationId,
+      expected_view_counts: { conversations: 1, interactions: 3, openbkn_calls: operations.length },
       interactions,
     },
     null,
@@ -74,48 +136,37 @@ console.log(
 );
 
 async function runInteraction({ key, question, start, end, answerFor }) {
-  const interaction = await client.context.toolCall(knId, "bkn_start_interaction", {
-    conversation_id: conversation.conversation_id,
-    idempotency_key: `interaction-${key}-${runId}`,
-    question,
-  });
+  const interaction = await startInteraction(key, question);
   assertString(interaction?.interaction_id, "interaction_id");
-  assertString(interaction?.lease_token, "lease_token");
+  rememberConversation(interaction);
 
-  const schemaCall = await operationClient().context.managedToolCall(knId, "search_schema", {
-    query: question,
-    response_format: "json",
-    include_columns: true,
-    max_concepts: 20,
-    bkn_context: businessContext(interaction.interaction_id, `${key}-schema-search`),
-  });
+  const schemaCall = await managedOperation(
+    interaction.interaction_id,
+    `${key}:schema`,
+    "search_schema",
+    {
+      query: question,
+      response_format: "json",
+      include_columns: true,
+      max_concepts: 20,
+      bkn_context: businessContext(interaction.interaction_id),
+    },
+  );
   const binding = extractForecastBinding(schemaCall.value);
-  const dataCall = await operationClient().context.managedToolCall(knId, "run_sql", {
+  const dataCall = await managedOperation(interaction.interaction_id, `${key}:data`, "run_sql", {
     sql: buildForecastSql(binding, start, end),
     response_format: "json",
-    bkn_context: businessContext(interaction.interaction_id, `${key}-forecast-query`),
+    bkn_context: businessContext(interaction.interaction_id),
   });
   const rows = extractRows(dataCall.value);
   if (rows.length === 0) throw new Error(`run_sql returned no rows for ${key}`);
 
   const answer = answerFor(rows, binding);
   const receipts = [schemaCall.receipt, dataCall.receipt];
-  const completed = await client.context.toolCall(knId, "bkn_complete_interaction", {
+  const completed = await client.context.toolCall(knId, "bkn_finish_interaction", {
     interaction_id: interaction.interaction_id,
-    terminal_idempotency_key: `complete-${key}-${runId}`,
-    lease_token: interaction.lease_token,
-    lease_epoch: interaction.lease_epoch,
-    completion_manifest_version: "3.0.0",
-    completion_reason: "answered",
+    outcome: "completed",
     answer,
-    expected_operations: receipts.map((receipt) => ({
-      operation_id: receipt.operation_id,
-      required: true,
-    })),
-    expected_receipts: receipts.map((receipt) => ({
-      receipt_id: receipt.receipt_id,
-      required: true,
-    })),
   });
   return {
     interaction_id: interaction.interaction_id,
@@ -123,29 +174,82 @@ async function runInteraction({ key, question, start, end, answerFor }) {
     answer,
     execution_status: completed.execution_status,
     evidence_status: completed.evidence_status,
-    operations: receipts.map((receipt) => ({
-      operation_id: receipt.operation_id,
-      operation_key: receipt.operation_key,
-      tool_name: receipt.tool_name,
-      receipt_id: receipt.receipt_id,
-      trace_id: receipt.trace_id,
-      request_id: receipt.request_id,
-      evidence_durability: receipt.evidence_durability,
-      business_refs: receipt.business_refs,
-    })),
+    operations: summarizeReceipts(receipts),
   };
+}
+
+function summarizeReceipts(receipts) {
+  return receipts.map((receipt) => ({
+    operation_id: receipt.operation_id,
+    operation_key: receipt.operation_key,
+    tool_name: receipt.tool_name,
+    receipt_id: receipt.receipt_id,
+    trace_id: receipt.trace_id,
+    request_id: receipt.request_id,
+    evidence_durability: receipt.evidence_durability,
+    business_refs: receipt.business_refs,
+  }));
 }
 
 function operationClient() {
   return createClient({ baseUrl, businessDomain });
 }
 
-function businessContext(interactionId, operationKey) {
+function managedOperation(interactionId, invocationSuffix, toolName, args) {
+  return operationClient().context.managedToolCall(knId, toolName, args, {
+    clientInvocationId: `operation:${interactionId}:${invocationSuffix}`,
+  });
+}
+
+async function managedRejectedOperation(interactionId, invocationSuffix, toolName, args) {
+  const result = await operationClient().context.callMethod(knId, "tools/call", {
+    name: toolName,
+    arguments: args,
+    _meta: {
+      "openbkn.ai/client-invocation-id": `operation:${interactionId}:${invocationSuffix}`,
+    },
+  });
+  if (result?.isError !== true) {
+    throw new Error(`${toolName} rejection scenario unexpectedly succeeded`);
+  }
+  const receipt = result?.structuredContent?.bkn_receipt;
+  if (receipt?.receipt_status !== "failed") {
+    throw new Error(`${toolName} rejection scenario did not return a failed durable receipt`);
+  }
+  return { value: result, receipt };
+}
+
+function businessContext(interactionId) {
   return {
-    conversation_id: conversation.conversation_id,
+    conversation_id: conversationId,
     interaction_id: interactionId,
-    operation_key: operationKey,
   };
+}
+
+function rememberConversation(interaction) {
+  assertString(interaction?.conversation_id, "conversation_id");
+  if (conversationId && conversationId !== interaction.conversation_id) {
+    throw new Error(
+      `conversation changed across turns: ${conversationId} != ${interaction.conversation_id}`,
+    );
+  }
+  conversationId = interaction.conversation_id;
+}
+
+function startInteraction(key, question) {
+  return client.context.toolCall(
+    knId,
+    "bkn_start_interaction",
+    {
+      ...(conversationId ? { conversation_id: conversationId } : {}),
+      ...(!conversationId ? { agent_name: agentName } : {}),
+      question,
+    },
+    {
+      hostConversationKey,
+      clientInvocationId: `interaction:${key}`,
+    },
+  );
 }
 
 function extractForecastBinding(value) {
@@ -187,7 +291,50 @@ function extractForecastBinding(value) {
   const product = propertyBinding(selected.properties, ["product_code", "material_number"]);
   const order = propertyBinding(selected.properties, ["confirmed_order", "billno", "id"]);
   if (!resourceId) throw new Error("forecast schema binding is missing its data resource");
-  return { resourceId, month, demand, product, order };
+  return {
+    resourceId,
+    month,
+    demand,
+    product,
+    order,
+  };
+}
+
+function extractSalesOrderBinding(value) {
+  let selected;
+  walk(value, (item) => {
+    if (
+      !selected &&
+      `${item.concept_id ?? ""} ${item.concept_name ?? ""}`.match(/salesorder|销售订单/i) &&
+      Array.isArray(item.data_properties) &&
+      item.data_source
+    ) {
+      selected = item;
+    }
+  });
+  if (!selected) throw new Error("search_schema did not return the sales order binding");
+  const resourceId = selected.data_source.id ?? selected.data_source.resource_id;
+  if (!resourceId) throw new Error("sales order schema binding is missing its data resource");
+  return {
+    resourceId,
+    productCode: propertyBinding(selected.data_properties, ["product_code"]),
+    productName: propertyBinding(selected.data_properties, ["product_name"]),
+    signingQuantity: propertyBinding(selected.data_properties, ["signing_quantity"]),
+  };
+}
+
+function buildSalesOrderSql(binding) {
+  const productCode = quoteIdentifier(binding.productCode.column);
+  const productName = quoteIdentifier(binding.productName.column);
+  const signingQuantity = quoteIdentifier(binding.signingQuantity.column);
+  return [
+    `SELECT ${productCode}, MAX(${productName}) AS product_name,`,
+    "COUNT(*) AS order_count,",
+    `SUM(CAST(${signingQuantity} AS DOUBLE)) AS signing_quantity`,
+    `FROM {{.${binding.resourceId}}}`,
+    `GROUP BY ${productCode}`,
+    "ORDER BY signing_quantity DESC",
+  ].join(" ");
 }
 
 function hasProperty(properties, logicalNames) {

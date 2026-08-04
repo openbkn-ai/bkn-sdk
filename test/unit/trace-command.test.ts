@@ -41,6 +41,14 @@ describe("trace lifecycle CLI contract", () => {
         .find((child) => child.name() === "interactions")
         ?.commands.map((c) => c.name()),
     ).toEqual(expect.arrayContaining(["start", "get", "complete", "fail", "cancel", "handoff"]));
+    const start = command.commands
+      .find((child) => child.name() === "interactions")
+      ?.commands.find((child) => child.name() === "start");
+    expect(start?.options.map((option) => option.long)).toEqual([
+      "--idempotency-key",
+      "--agent-name",
+      "--lease-seconds",
+    ]);
     for (const name of ["complete", "fail", "cancel", "handoff"]) {
       const terminal = command.commands
         .find((child) => child.name() === "interactions")

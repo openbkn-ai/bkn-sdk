@@ -166,6 +166,7 @@ describe("traceLifecycleApi interactions", () => {
 
     await api.startInteraction("conversation-1", {
       idempotency_key: "interaction-1",
+      agent_name: "供应链分析助手",
       lease_seconds: 60,
     });
     await api.getInteraction("interaction-1");
@@ -185,6 +186,7 @@ describe("traceLifecycleApi interactions", () => {
     ]);
     expect(jsonBody(interactionCalls[0]!)).toEqual({
       idempotency_key: "interaction-1",
+      agent_name: "供应链分析助手",
       lease_seconds: 60,
     });
     for (const call of interactionCalls.slice(2)) {
