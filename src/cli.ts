@@ -8,6 +8,7 @@
  */
 import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
+import { releaseLifecycleSessions } from "./api/lifecycle.js";
 import { adminCommand } from "./commands/admin.js";
 import { agentCommand } from "./commands/agent.js";
 import { appkeyCommand } from "./commands/appkey.js";
@@ -75,5 +76,11 @@ try {
   await program.parseAsync(argv);
 } catch (err) {
   console.error(formatError(err));
+  await releaseLifecycleSessions();
   process.exit(toExitCode(err));
 }
+
+// A deploy that manages lifecycle state opened an interaction for this command,
+// and a conversation permits only one at a time. Hand it back on the way out
+// instead of leaving it for the server's sweeper. Best-effort, never fatal.
+await releaseLifecycleSessions();

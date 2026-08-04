@@ -63,7 +63,9 @@ export async function request<T = unknown>(
       res = await send();
     }
     const text = await res.text();
-    if (!res.ok) throw new HttpError(res.status, res.statusText, text, hintFor(ctx, res.status));
+    if (!res.ok) {
+      throw new HttpError(res.status, res.statusText, text, hintFor(ctx, res.status, text));
+    }
     return (text ? JSON.parse(text) : undefined) as T;
   } finally {
     clearTimeout(timer);
@@ -75,11 +77,39 @@ export async function request<T = unknown>(
  * invalid/expired/revoked or its owner was disabled — re-issue, don't retry or
  * `auth login` (an AppKey has no login/refresh).
  */
-function hintFor(ctx: RequestContext, status: number): string | undefined {
+function hintFor(ctx: RequestContext, status: number, body: string): string | undefined {
   if (status === 401 && ctx.token.startsWith("bak_")) {
     return "AppKey invalid / expired / revoked / owner disabled — re-issue with `openbkn appkey create` (or `appkey regenerate <id>`). Do not auto-retry.";
   }
-  return undefined;
+  return lifecycleHint(body);
+}
+
+const LIFECYCLE_ACTIONS = new Set([
+  "create_conversation",
+  "start_interaction",
+  "ensure_operation",
+  "bkn_start_interaction",
+]);
+
+/**
+ * Next-step guidance when a deploy rejects a request for want of a managed
+ * lifecycle session. The SDK's own callers open one automatically, so reaching
+ * this means a hand-rolled request body — say what it lacks and where to get it.
+ * Returns `undefined` for every other error, so callers can pass any body in.
+ */
+export function lifecycleHint(body: string): string | undefined {
+  if (!LIFECYCLE_ACTIONS.has(requiredAction(body) ?? "")) return undefined;
+  return 'This deploy requires a managed lifecycle session: the request needs a `bkn_context` with conversation_id and interaction_id. Get both from `openbkn context tool-call <kn-id> bkn_start_interaction --args \'{"question":"<what you are asking>"}\'`, or use the `openbkn bkn` / `openbkn context` commands, which open and release one for you.';
+}
+
+function requiredAction(body: string): string | undefined {
+  try {
+    const parsed = JSON.parse(body) as { error?: { required_action?: unknown } };
+    const action = parsed.error?.required_action;
+    return typeof action === "string" ? action : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Refresh ctx.token from its refresh token, persist, and report success. */

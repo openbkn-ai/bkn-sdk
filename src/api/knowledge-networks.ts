@@ -8,6 +8,7 @@
  */
 import type { RequestContext } from "../types.js";
 import { request } from "./http.js";
+import { withManagedLifecycle } from "./lifecycle.js";
 
 const ONTOLOGY_BASE = "/api/ontology-manager/v1/knowledge-networks";
 const ONTOLOGY_QUERY_BASE = "/api/ontology-query/v1/knowledge-networks";
@@ -416,20 +417,32 @@ export interface SemanticSearchOptions {
   returnQueryUnderstanding?: boolean;
 }
 
+/**
+ * Semantic search over a KN.
+ *
+ * This is the one `/kn/*` tool with no MCP equivalent, so it cannot fall back
+ * to the transport that merges a conversation per connection — deploys that
+ * enforce the lifecycle contract need a `bkn_context` in the body, and
+ * {@link withManagedLifecycle} opens the session that supplies one. Deploys
+ * without the contract get the request unchanged.
+ */
 export function semanticSearch(
   ctx: RequestContext,
   knId: string,
   query: string,
   opts: SemanticSearchOptions = {},
 ): Promise<unknown> {
-  return request(ctx, `${RETRIEVAL_BASE}/semantic-search`, {
-    method: "POST",
-    body: {
-      kn_id: knId,
-      query,
-      mode: opts.mode ?? "keyword_vector_retrieval",
-      max_concepts: opts.maxConcepts ?? 10,
-      return_query_understanding: opts.returnQueryUnderstanding ?? false,
-    },
-  });
+  return withManagedLifecycle(ctx, knId, query, (bknContext) =>
+    request(ctx, `${RETRIEVAL_BASE}/semantic-search`, {
+      method: "POST",
+      body: {
+        kn_id: knId,
+        query,
+        mode: opts.mode ?? "keyword_vector_retrieval",
+        max_concepts: opts.maxConcepts ?? 10,
+        return_query_understanding: opts.returnQueryUnderstanding ?? false,
+        ...(bknContext ? { bkn_context: bknContext } : {}),
+      },
+    }),
+  );
 }

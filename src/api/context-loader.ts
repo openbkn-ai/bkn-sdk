@@ -9,10 +9,14 @@
  */
 import { createOperationTraceContext } from "../trace-context.js";
 import type { RequestContext } from "../types.js";
-import { HttpError } from "../utils/errors.js";
+import { HttpError, ToolError } from "../utils/errors.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
+// Cycle by design: lifecycle opens its session through this transport, and this
+// transport wraps business tools in a session. Neither touches the other at
+// module-eval time, so the cycle resolves before either function runs.
+import { withManagedLifecycle } from "./lifecycle.js";
 import { tlsFetch } from "./tls.js";
 
 const MCP_PATH = "/api/agent-retrieval/v1/mcp";
@@ -111,25 +115,79 @@ async function ensureSession(ctx: RequestContext, knId: string): Promise<string>
   return sessionId;
 }
 
-/** Unwrap a JSON-RPC result, decoding the MCP content[].text JSON payload. */
+/**
+ * Unwrap a JSON-RPC result, decoding the MCP content[].text JSON payload.
+ *
+ * A tool answers in one of two shapes: `content[].text` holding the payload as
+ * JSON, or `structuredContent` holding it beside a prose `text` line. The
+ * managed-lifecycle tools do the latter, so reading the text alone would reduce
+ * `bkn_create_conversation` to `{ raw: "managed lifecycle state updated" }` and
+ * drop the very id the caller asked for.
+ */
 function unwrap(parsed: unknown): unknown {
   const rpc = parsed as { result?: unknown; error?: { message: string } };
   if (rpc.error) throw new Error(`Context-loader error: ${rpc.error.message}`);
   const result = rpc.result as Record<string, unknown> | undefined;
   if (result === undefined) return parsed;
   const content = result.content;
-  if (Array.isArray(content) && content[0] && typeof content[0].text === "string") {
+  const text =
+    Array.isArray(content) && content[0] && typeof content[0].text === "string"
+      ? (content[0].text as string)
+      : undefined;
+  // A tool-level failure arrives as a 200 carrying isError. Returning it as
+  // data would let a caller act on an error object as if it were a result.
+  if (result.isError) {
+    throw new ToolError(
+      `Context-loader tool error: ${toolErrorMessage(result.structuredContent, text)}`,
+      toolErrorCode(result.structuredContent),
+    );
+  }
+  if (text !== undefined) {
     try {
-      return JSON.parse(content[0].text);
+      return JSON.parse(text);
     } catch {
-      return { raw: content[0].text };
+      // Prose, not a payload — the answer, if there is one, is structured.
+      return result.structuredContent ?? { raw: text };
     }
   }
-  return result;
+  return result.structuredContent ?? result;
 }
 
-/** Call any MCP tool by name. */
-export async function callTool(
+function toolErrorCode(structured: unknown): string | undefined {
+  const code = (structured as { error?: { code?: unknown } } | undefined)?.error?.code;
+  return typeof code === "string" ? code : undefined;
+}
+
+function toolErrorMessage(structured: unknown, text: string | undefined): string {
+  const error = (structured as { error?: { code?: unknown; message?: unknown } } | undefined)
+    ?.error;
+  const code = typeof error?.code === "string" ? error.code : undefined;
+  const message = typeof error?.message === "string" ? error.message : undefined;
+  if (code && message) return `${code}: ${message}`;
+  return code ?? message ?? text ?? "unknown error";
+}
+
+/**
+ * The tools that manage lifecycle state rather than consume it. They are how a
+ * session gets opened in the first place, so wrapping them in one would recur.
+ */
+const LIFECYCLE_TOOLS = new Set([
+  "bkn_create_conversation",
+  "bkn_resume_conversation",
+  "bkn_start_interaction",
+  "bkn_complete_interaction",
+  "bkn_finish_interaction",
+  "bkn_fail_interaction",
+  "bkn_cancel_interaction",
+  "bkn_handoff_interaction",
+  "bkn_close_conversation",
+  "bkn_get_operation",
+  "bkn_retry_operation",
+  "bkn_get_receipt",
+]);
+
+/** Call an MCP tool exactly as given, with no lifecycle context attached. */
+export async function callToolRaw(
   ctx: RequestContext,
   knId: string,
   name: string,
@@ -144,6 +202,31 @@ export async function callTool(
     id: nextId(),
   });
   return unwrap(parseBody(text));
+}
+
+/**
+ * Call any MCP tool by name.
+ *
+ * Deploys that enforce the lifecycle contract require a `bkn_context` in the
+ * tool arguments, the same way they require one in an HTTP `/kn/*` body. Older
+ * deploys merged a conversation per MCP connection and need nothing; the
+ * capability probe decides which is which.
+ */
+export function callTool(
+  ctx: RequestContext,
+  knId: string,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  if (LIFECYCLE_TOOLS.has(name)) return callToolRaw(ctx, knId, name, args);
+  return withManagedLifecycle(ctx, knId, questionFor(name, args), (bknContext) =>
+    callToolRaw(ctx, knId, name, bknContext ? { ...args, bkn_context: bknContext } : args),
+  );
+}
+
+/** The interaction's recorded question: the user's own words when the tool has them. */
+function questionFor(name: string, args: Record<string, unknown>): string {
+  return typeof args.query === "string" && args.query ? args.query : name;
 }
 
 /** Call a generic MCP method (tools/list, resources/list, ...). */

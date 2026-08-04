@@ -1,8 +1,9 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getKnDetail, getObjectTypes, getRelationTypes } from "../../src/api/context-loader.js";
+import { resetLifecycleCaches } from "../../src/api/lifecycle.js";
 import type { RequestContext } from "../../src/types.js";
 
 const ctx: RequestContext = {
@@ -39,7 +40,9 @@ function mockMcp(): typeof fetch {
 function toolCallBody(f: typeof fetch): { name: string; arguments: Record<string, unknown> } {
   const calls = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls;
   for (const [, init] of calls) {
-    const b = JSON.parse(init.body as string) as {
+    // The capability probe is a bodiless GET; only JSON-RPC POSTs carry one.
+    if (typeof init.body !== "string") continue;
+    const b = JSON.parse(init.body) as {
       method?: string;
       params?: { name: string; arguments: Record<string, unknown> };
     };
@@ -51,13 +54,15 @@ function toolCallBody(f: typeof fetch): { name: string; arguments: Record<string
 function toolCallHeaders(f: typeof fetch): Headers {
   const calls = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls;
   for (const [, init] of calls) {
-    const body = JSON.parse(init.body as string) as { method?: string };
+    if (typeof init.body !== "string") continue;
+    const body = JSON.parse(init.body) as { method?: string };
     if (body.method === "tools/call") return new Headers(init.headers);
   }
   throw new Error("no tools/call POST captured");
 }
 
 // A fresh kn per test avoids the module-level session cache masking the initialize POST.
+beforeEach(() => resetLifecycleCaches());
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -100,7 +105,10 @@ describe("progressive KN detail (get_kn_detail)", () => {
     await getKnDetail(longLivedCtx, "kn-long-lived-b");
 
     const headers = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls
-      .filter(([, init]) => JSON.parse(init.body as string).method === "tools/call")
+      .filter(
+        ([, init]) =>
+          typeof init.body === "string" && JSON.parse(init.body).method === "tools/call",
+      )
       .map(([, init]) => new Headers(init.headers));
     expect(headers).toHaveLength(2);
     expect(headers[0]?.get("bkn-operation-id")).not.toBe(headers[1]?.get("bkn-operation-id"));

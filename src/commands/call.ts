@@ -4,6 +4,7 @@
 /** `openbkn call`/`curl` — curl-style API passthrough with auth headers. */
 import { Command } from "commander";
 import { rawCall } from "../api/call.js";
+import { lifecycleHint } from "../api/http.js";
 import { resolveContext } from "../config/resolve.js";
 import { group } from "../help/grouped-help.js";
 import { printJson } from "../utils/output.js";
@@ -57,7 +58,14 @@ export function callCommand(): Command {
       } catch {
         process.stdout.write(res.body.endsWith("\n") ? res.body : `${res.body}\n`);
       }
-      if (res.status >= 400) process.exitCode = 1;
+      if (res.status >= 400) {
+        // stderr, so a hint never contaminates the response the caller is
+        // piping. `call` is a raw passthrough: it hands back the server's own
+        // body, which names the problem but not the fix.
+        const hint = lifecycleHint(res.body);
+        if (hint) console.error(hint);
+        process.exitCode = 1;
+      }
     });
 
   return group(cmd, "AUTHENTICATION & CONFIG");
