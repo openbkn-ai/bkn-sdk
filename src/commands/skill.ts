@@ -3,12 +3,27 @@
 
 /** `openbkn skill …` — skill registry and market. */
 import { Command } from "commander";
+import { DEFAULT_EXECUTE_TIMEOUT_SEC } from "../api/skills.js";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
+import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
+import { renderTree } from "../utils/skill-tree.js";
 import { clientFrom, outputOptions, readBody } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
+
+/** Backend contract: `validate:"oneof=custom internal"`. */
+const SKILL_SOURCES = ["custom", "internal"] as const;
+
+function checkSource(source: string | undefined): string | undefined {
+  if (source === undefined || (SKILL_SOURCES as readonly string[]).includes(source)) return source;
+  throw new InputError(`--source must be one of: ${SKILL_SOURCES.join(" | ")} (got '${source}')`);
+}
+
+/** `--draft` reads the editable draft; without it, reads target the release. */
+const draftOption = (c: Command) =>
+  c.option("--draft", "read the draft (management) version instead of the published one");
 
 export function skillCommand(): Command {
   const cmd = new Command("skill").description("Skill registry and market");
@@ -72,18 +87,95 @@ export function skillCommand(): Command {
       printJson(await clientFrom(cmd).skills.delete(id), outputOptions(cmd));
     });
 
-  cmd
-    .command("content <skill-id>")
+  draftOption(cmd.command("content <skill-id>"))
     .description("Read a skill's SKILL.md content index")
-    .action(async (id: string, _opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).skills.content(id), outputOptions(cmd));
+    .option("--raw", "write SKILL.md's own text instead of the index JSON")
+    .action(async (id: string, opts, cmd: Command) => {
+      const skills = clientFrom(cmd).skills;
+      if (opts.raw) {
+        process.stdout.write(await skills.contentRaw(id, { draft: opts.draft }));
+        return;
+      }
+      printJson(await skills.content(id, { draft: opts.draft }), outputOptions(cmd));
+    });
+
+  draftOption(cmd.command("read-file <skill-id> <rel-path>"))
+    .description("Read a file inside a skill (progressive)")
+    .option("--raw", "write the file's own text instead of the response JSON")
+    .action(async (id: string, relPath: string, opts, cmd: Command) => {
+      const skills = clientFrom(cmd).skills;
+      if (opts.raw) {
+        process.stdout.write(await skills.readFileRaw(id, relPath, { draft: opts.draft }));
+        return;
+      }
+      printJson(await skills.readFile(id, relPath, { draft: opts.draft }), outputOptions(cmd));
+    });
+
+  draftOption(cmd.command("files <skill-id> [path]"))
+    .description("List a skill's files (one level; --tree for the whole hierarchy)")
+    .option("--tree", "render the full hierarchy instead of one level")
+    .action(async (id: string, path: string | undefined, opts, cmd: Command) => {
+      const skills = clientFrom(cmd).skills;
+      const out = outputOptions(cmd);
+      if (opts.tree) {
+        const files = await skills.fileManifest(id, { draft: opts.draft });
+        if (out.json || out.compact) {
+          printJson({ skillId: id, files }, out);
+          return;
+        }
+        const bytes = files.reduce((sum, f) => sum + (f.size ?? 0), 0);
+        process.stdout.write(`${renderTree(files)}\n\n${files.length} files, ${bytes} B\n`);
+        return;
+      }
+      const listing = await skills.files(id, path, { draft: opts.draft });
+      if (out.json || out.compact) {
+        printJson(listing, out);
+        return;
+      }
+      printJson(
+        listing.entries.map((e) =>
+          e.type === "dir"
+            ? { name: `${e.name}/`, type: "dir", size: e.size, mime: "" }
+            : { name: e.name, type: e.fileType ?? "file", size: e.size, mime: e.mime ?? "" },
+        ),
+        out,
+      );
+      process.stdout.write(
+        `${listing.entries.length} entries here; ${listing.totalFiles} files, ${listing.totalSize} B below\n`,
+      );
     });
 
   cmd
-    .command("read-file <skill-id> <rel-path>")
-    .description("Read a file inside a skill (progressive)")
-    .action(async (id: string, relPath: string, _opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).skills.readFile(id, relPath), outputOptions(cmd));
+    .command("names <ids...>")
+    .description("Resolve skill ids to names (unknown ids are skipped)")
+    .action(async (ids: string[], _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).skills.names(ids), outputOptions(cmd));
+    });
+
+  cmd
+    .command("execute <skill-id>")
+    .description("Run a skill in the platform sandbox")
+    .requiredOption("--entry <shell>", "shell command to run inside the skill's work dir")
+    .option("--timeout <seconds>", "sandbox time limit", int, DEFAULT_EXECUTE_TIMEOUT_SEC)
+    .option("--raw", "write the run's stdout/stderr straight through")
+    .option("--exit-code", "exit with the sandbox's exit code")
+    .action(async (id: string, opts, cmd: Command) => {
+      const result = await clientFrom(cmd).skills.execute(id, {
+        entryShell: opts.entry,
+        timeout: opts.timeout,
+      });
+      // A mocked run never touched the skill's code; saying so on stderr keeps
+      // it out of a piped `--raw` capture while still reaching a human.
+      if (result?.mocked) {
+        process.stderr.write("warning: sandbox reported mocked=true — the skill did not run\n");
+      }
+      if (opts.raw) {
+        if (result?.stdout) process.stdout.write(result.stdout);
+        if (result?.stderr) process.stderr.write(result.stderr);
+      } else {
+        printJson(result, outputOptions(cmd));
+      }
+      if (opts.exitCode && result?.exit_code) process.exitCode = result.exit_code;
     });
 
   cmd
@@ -106,20 +198,25 @@ export function skillCommand(): Command {
   cmd
     .command("register <directory>")
     .description("Zip a local skill directory and register it")
-    .option("--source <s>", "source tag")
+    .option("--source <s>", `source tag: ${SKILL_SOURCES.join(" | ")}`, "custom")
     .option("--extend-info <json>", "extra metadata as JSON")
     .action(async (dir: string, opts, cmd: Command) => {
       const extendInfo = opts.extendInfo ? JSON.parse(opts.extendInfo) : undefined;
       printJson(
-        await clientFrom(cmd).skills.register(dir, { source: opts.source, extendInfo }),
+        await clientFrom(cmd).skills.register(dir, {
+          source: checkSource(opts.source),
+          extendInfo,
+        }),
         outputOptions(cmd),
       );
     });
-  cmd
-    .command("download <skill-id> [out-path]")
+  draftOption(cmd.command("download <skill-id> [out-path]"))
     .description("Download a skill archive to a local .zip")
-    .action(async (skillId: string, outPath: string | undefined, _o, cmd: Command) => {
-      printJson(await clientFrom(cmd).skills.download(skillId, outPath), outputOptions(cmd));
+    .action(async (skillId: string, outPath: string | undefined, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).skills.download(skillId, outPath, { draft: opts.draft }),
+        outputOptions(cmd),
+      );
     });
   cmd
     .command("install <skill-id> [directory]")

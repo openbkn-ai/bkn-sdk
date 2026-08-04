@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { deleteSkill, getSkill, listSkillMarket, listSkills } from "../../src/api/skills.js";
+import {
+  deleteSkill,
+  executeSkill,
+  getSkill,
+  getSkillContent,
+  getSkillNames,
+  listSkillMarket,
+  listSkills,
+  readSkillFile,
+} from "../../src/api/skills.js";
 import type { RequestContext } from "../../src/types.js";
 
 const ctx: RequestContext = {
@@ -48,5 +57,65 @@ describe("skill endpoints (agent-operator-integration)", () => {
     const f2 = mockFetch();
     await deleteSkill(ctx, "s2");
     expect(firstCall(f2)[1].method).toBe("DELETE");
+  });
+});
+
+describe("published vs draft reads", () => {
+  it("content hits the consumer path by default and management with draft", async () => {
+    const f1 = mockFetch();
+    await getSkillContent(ctx, "s1");
+    expect(new URL(firstCall(f1)[0]).pathname).toBe(
+      "/api/agent-operator-integration/v1/skills/s1/content",
+    );
+    vi.unstubAllGlobals();
+    const f2 = mockFetch();
+    await getSkillContent(ctx, "s1", { view: "draft" });
+    expect(new URL(firstCall(f2)[0]).pathname).toBe(
+      "/api/agent-operator-integration/v1/skills/s1/management/content",
+    );
+  });
+
+  it("read-file posts rel_path and carries response_mode", async () => {
+    const f = mockFetch();
+    await readSkillFile(ctx, "s1", "styles/tokens.json", {
+      view: "draft",
+      responseMode: "content",
+    });
+    const [url, init] = firstCall(f);
+    expect(new URL(url).pathname).toBe(
+      "/api/agent-operator-integration/v1/skills/s1/management/files/read",
+    );
+    expect(new URL(url).searchParams.get("response_mode")).toBe("content");
+    expect(JSON.parse(init.body as string)).toEqual({ rel_path: "styles/tokens.json" });
+  });
+});
+
+describe("executeSkill", () => {
+  it("posts entry_shell + timeout", async () => {
+    const f = mockFetch();
+    await executeSkill(ctx, "s1", { entryShell: "python run.py", timeout: 30 });
+    const [url, init] = firstCall(f);
+    expect(new URL(url).pathname).toBe("/api/agent-operator-integration/v1/skills/s1/execute");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      entry_shell: "python run.py",
+      timeout: 30,
+    });
+  });
+
+  it("omits timeout when unset, so the backend default applies", async () => {
+    const f = mockFetch();
+    await executeSkill(ctx, "s1", { entryShell: "ls" });
+    expect(JSON.parse(firstCall(f)[1].body as string)).toEqual({ entry_shell: "ls" });
+  });
+});
+
+describe("getSkillNames", () => {
+  it("posts the ids under `ids`, not `skill_ids`", async () => {
+    const f = mockFetch();
+    await getSkillNames(ctx, ["a", "b"]);
+    const [url, init] = firstCall(f);
+    expect(new URL(url).pathname).toBe("/api/agent-operator-integration/v1/skills/names");
+    expect(JSON.parse(init.body as string)).toEqual({ ids: ["a", "b"] });
   });
 });
