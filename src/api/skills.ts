@@ -130,7 +130,10 @@ export function executeSkill(
     // caller never learns the exit code. With no stated limit the sandbox
     // applies its own — 300s by default, 3600s at most — so the budget has to
     // cover that rather than a number of ours.
-    timeoutMs: (opts.timeout ?? SANDBOX_MAX_TIMEOUT_SEC) * 1000 + 15_000,
+    timeoutMs: executeBudgetMs(opts.timeout),
+    // The abort deadline alone tops out at undici's 300s header deadline,
+    // because `execute-sync` blocks and sends no headers until the run is over.
+    headersTimeoutMs: executeBudgetMs(opts.timeout),
   }) as Promise<SkillExecutionResult>;
 }
 
@@ -148,6 +151,11 @@ export function executeSkill(
  * Only ever a local budget: it is never sent, and it never shortens a run.
  */
 export const SANDBOX_MAX_TIMEOUT_SEC = 3600;
+
+/** Client-side budget for one run: the sandbox's limit, plus room for the round trip. */
+function executeBudgetMs(timeoutSec: number | undefined): number {
+  return (timeoutSec ?? SANDBOX_MAX_TIMEOUT_SEC) * 1000 + 15_000;
+}
 
 /** Resolve skill ids to names in one call. Unknown ids are skipped by the backend. */
 export function getSkillNames(ctx: RequestContext, ids: string[]): Promise<unknown> {

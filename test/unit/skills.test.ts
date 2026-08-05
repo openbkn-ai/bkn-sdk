@@ -119,3 +119,31 @@ describe("getSkillNames", () => {
     expect(JSON.parse(init.body as string)).toEqual({ ids: ["a", "b"] });
   });
 });
+
+describe("executeSkill transport budget", () => {
+  /** The dispatcher undici was handed, or undefined when the global fetch was used. */
+  function dispatcherOf(f: typeof fetch): { headersTimeout?: number } | undefined {
+    const calls = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls;
+    const init = calls[0]?.[1] as (RequestInit & { dispatcher?: unknown }) | undefined;
+    const agent = init?.dispatcher as Record<symbol, unknown> | undefined;
+    if (!agent) return undefined;
+    const key = Object.getOwnPropertySymbols(agent).find((s) => String(s).includes("options"));
+    return key ? (agent[key] as { headersTimeout?: number }) : {};
+  }
+
+  it("raises the header deadline past undici's 300s wall when no limit is given", async () => {
+    const f = mockFetch();
+    await executeSkill(ctx, "s1", { entryShell: "run.sh" });
+    // `execute-sync` blocks and sends no headers until the run ends, so an
+    // AbortController deadline alone tops out at 300s no matter how large.
+    expect(dispatcherOf(f)?.headersTimeout).toBe(3600 * 1000 + 15_000);
+  });
+
+  it("stays on the platform fetch for a budget it already honours", async () => {
+    const f = mockFetch();
+    await executeSkill(ctx, "s1", { entryShell: "run.sh", timeout: 60 });
+    // 75s is well under the wall — detouring would cost interceptability for
+    // nothing.
+    expect(dispatcherOf(f)).toBeUndefined();
+  });
+});

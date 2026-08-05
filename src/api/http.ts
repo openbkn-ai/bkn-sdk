@@ -22,6 +22,13 @@ export interface RequestInitEx {
   redirect?: "follow" | "error" | "manual";
   /** Per-request timeout; defaults to 30s. */
   timeoutMs?: number;
+  /**
+   * Raise undici's 300s response-header deadline for this request.
+   *
+   * Needed by any endpoint that blocks until its work finishes — it sends no
+   * headers until then, so `timeoutMs` alone cannot buy more than 300s.
+   */
+  headersTimeoutMs?: number;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -45,16 +52,21 @@ export async function request<T = unknown>(
   const timer = setTimeout(() => controller.abort(), init.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
   const send = () =>
-    tlsFetch(ctx.insecure, url, {
-      method: init.method ?? (hasBody ? "POST" : "GET"),
-      headers: buildHeaders(ctx, {
-        ...(hasBody ? { "content-type": "application/json" } : {}),
-        ...init.headers,
-      }),
-      body: hasBody ? JSON.stringify(init.body) : undefined,
-      redirect: init.redirect,
-      signal: controller.signal,
-    });
+    tlsFetch(
+      ctx.insecure,
+      url,
+      {
+        method: init.method ?? (hasBody ? "POST" : "GET"),
+        headers: buildHeaders(ctx, {
+          ...(hasBody ? { "content-type": "application/json" } : {}),
+          ...init.headers,
+        }),
+        body: hasBody ? JSON.stringify(init.body) : undefined,
+        redirect: init.redirect,
+        signal: controller.signal,
+      },
+      init.headersTimeoutMs,
+    );
 
   try {
     let res = await send();

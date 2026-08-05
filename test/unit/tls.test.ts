@@ -4,8 +4,14 @@ import { createServer as createHttpServer } from "node:http";
 import { createServer } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { tlsFetch } from "../../src/api/tls.js";
+
+// This file is the one that must exercise the real transport: it stands up a
+// real TLS server to prove the dispatcher actually changes verification. The
+// suite-wide passthrough in `test/setup` would route past the very thing under
+// test.
+vi.unmock("undici");
 
 /**
  * A self-signed platform is the whole reason `--insecure` exists, so the test

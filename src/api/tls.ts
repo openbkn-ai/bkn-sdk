@@ -18,11 +18,34 @@ import { Agent, FormData as UndiciFormData, fetch as undiciFetch } from "undici"
 
 type UndiciInit = NonNullable<Parameters<typeof undiciFetch>[1]>;
 
-// One shared agent — building an Agent per request leaks connection pools.
-let insecureAgent: Agent | undefined;
-function insecureDispatcher(): Agent {
-  insecureAgent ??= new Agent({ connect: { rejectUnauthorized: false } });
-  return insecureAgent;
+/**
+ * undici's own default deadline for response headers, measured on Node 24: a
+ * request to an endpoint that sends no headers fails with
+ * `UND_ERR_HEADERS_TIMEOUT` at 301s. Anything up to this needs no dispatcher.
+ */
+export const UNDICI_HEADERS_TIMEOUT_MS = 300_000;
+
+/**
+ * Agents are shared and cached — building one per request leaks connection
+ * pools. Keyed by the two things that can vary: certificate verification, and
+ * how long we will wait for response headers.
+ */
+const agents = new Map<string, Agent>();
+function dispatcherFor(insecure: boolean, headersTimeoutMs?: number): Agent {
+  const key = `${insecure}|${headersTimeoutMs ?? ""}`;
+  let agent = agents.get(key);
+  if (!agent) {
+    agent = new Agent({
+      ...(insecure ? { connect: { rejectUnauthorized: false } } : {}),
+      ...(headersTimeoutMs === undefined
+        ? {}
+        : // undici also enforces a body deadline; a request that waits this
+          // long for headers is not going to stream its body any faster.
+          { headersTimeout: headersTimeoutMs, bodyTimeout: headersTimeoutMs }),
+    });
+    agents.set(key, agent);
+  }
+  return agent;
 }
 
 /**
@@ -59,19 +82,32 @@ function toUndiciBody(body: RequestInit["body"]): UndiciInit["body"] {
  * `insecure` is set. Use it instead of the global `fetch` for every request
  * that honours `--insecure`.
  *
- * The ordinary path stays on the platform's own `fetch`; only an insecure
- * request detours through undici, since that is the only reason to carry a
- * dispatcher at all.
+ * The ordinary path stays on the platform's own `fetch`. A request detours
+ * through undici when it needs a dispatcher — to skip certificate
+ * verification, or to raise the deadline for response headers.
+ *
+ * That second reason is not theoretical: undici applies a 300s
+ * `headersTimeout` by default, and an endpoint that blocks until its work is
+ * done sends no headers until then. Measured on Node 24, a request to such an
+ * endpoint fails with `UND_ERR_HEADERS_TIMEOUT` at 301s no matter what
+ * `AbortController` deadline the caller set, so a longer client budget is not
+ * enough on its own.
  */
 export function tlsFetch(
   insecure: boolean | undefined,
   url: string | URL,
   init?: RequestInit,
+  headersTimeoutMs?: number,
 ): Promise<Response> {
-  if (!insecure) return fetch(url, init);
+  // Only detour for a header deadline that the platform's own `fetch` cannot
+  // already honour. Below the threshold the two behave identically, and staying
+  // on the global keeps it interceptable — a consumer who stubs `fetch` should
+  // not lose that because a caller asked for a deadline it was already meeting.
+  const needsAgent = headersTimeoutMs !== undefined && headersTimeoutMs > UNDICI_HEADERS_TIMEOUT_MS;
+  if (!insecure && !needsAgent) return fetch(url, init);
   return undiciFetch(url, {
     ...(init as UndiciInit | undefined),
     ...(init?.body === undefined || init?.body === null ? {} : { body: toUndiciBody(init.body) }),
-    dispatcher: insecureDispatcher(),
+    dispatcher: dispatcherFor(insecure === true, needsAgent ? headersTimeoutMs : undefined),
   }) as unknown as Promise<Response>;
 }

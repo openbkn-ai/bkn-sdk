@@ -6,7 +6,7 @@
 | `names <id...>` | Resolve ids → names in one call; unknown ids are skipped, not an error. |
 | `content <id> [--raw] [--draft]` / `read-file <id> <rel-path> [--raw] [--draft]` / `history <id>` | Progressive read + versions. |
 | `files <id> [path] [--tree] [--draft]` | File listing. No `path` = root; a directory path = its direct children; `--tree` = whole hierarchy under `path` (or the whole skill when `path` is omitted). |
-| `execute <id> --entry '<shell>' [--timeout <s>] [--raw] [--exit-code]` | Run the skill in the platform sandbox. Omit `--timeout` to leave the limit to the sandbox (300s by default, 3600s max). |
+| `execute <id> --entry '<shell>' [--timeout <s>] [--raw] [--exit-code]` | Run the skill in the platform sandbox. Omit `--timeout` to leave the limit to the sandbox (300s by default, 3600s max); the client waits out the sandbox's maximum either way. |
 | `set-status <id> <status>` | unpublish \| published \| offline. |
 | `register <dir> [--source custom\|internal] [--extend-info <json>]` | Zip a local skill dir → multipart register. SKILL.md must have frontmatter (name/description). `--source` defaults to `custom`, matching the backend's own default (`default:"custom" validate:"oneof=custom internal"`), so the registered result is unchanged from omitting it. |
 | `download <id> [out.zip] [--draft]` / `install <id> [dir]` | Save archive / download + unzip. |

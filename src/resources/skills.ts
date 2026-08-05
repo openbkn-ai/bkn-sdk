@@ -155,8 +155,10 @@ export function skills(ctx: RequestContext) {
     delete: (skillId: string) => deleteSkill(ctx, skillId),
     content: (skillId: string, opts?: SkillViewOptions) =>
       getSkillContent(ctx, skillId, { view: viewOf(opts) }),
+    // Normalized like every other path entry point, so `/a/b.md` addresses the
+    // same file here as it does under `--raw` and in `skill files`.
     readFile: (skillId: string, relPath: string, opts?: SkillViewOptions) =>
-      readSkillFile(ctx, skillId, relPath, { view: viewOf(opts) }),
+      readSkillFile(ctx, skillId, normalize(relPath), { view: viewOf(opts) }),
     /** SKILL.md's own text, for callers that want the document rather than a link. */
     contentRaw: (skillId: string, opts?: SkillViewOptions) =>
       readFileText(archives, ctx, skillId, "SKILL.md", viewOf(opts)),
