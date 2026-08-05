@@ -109,17 +109,24 @@ export function resetLifecycleCaches(): void {
  * error on a request that might have succeeded without any context.
  */
 export function lifecycleContract(ctx: RequestContext): Promise<Contract> {
-  const cached = contracts.get(ctx.baseUrl);
-  if (cached) return cached;
-  const probe = mcpInfo(ctx)
-    .then((info): Contract => {
+  let pending = contracts.get(ctx.baseUrl);
+  if (!pending) {
+    pending = mcpInfo(ctx).then((info): Contract => {
       const names = toolNames(info);
       if (names.includes(V1_MARKER)) return "managed-v1";
       return names.includes(V2_MARKER) ? "managed-v2" : "none";
-    })
-    .catch((): Contract => "none");
-  contracts.set(ctx.baseUrl, probe);
-  return probe;
+    });
+    contracts.set(ctx.baseUrl, pending);
+    // Same rule the session cache follows: a probe that failed is not an answer
+    // about the deploy, only about that moment. Caching the failure would let
+    // one blip — a 502, a token mid-refresh — decide that every later call in
+    // this process goes out without a `bkn_context`, and the reopen path cannot
+    // recover from that because it sees no context to reopen.
+    pending.catch(() => contracts.delete(ctx.baseUrl));
+  }
+  // Degrade for this call regardless: an unreachable catalog must not turn into
+  // a hard error on a request that might have succeeded without any context.
+  return pending.catch((): Contract => "none");
 }
 
 function toolNames(info: unknown): string[] {
@@ -176,10 +183,15 @@ async function openSession(
     // a caller-named conversation is passed back in.
     const started = await callToolRaw(ctx, knId, V2_MARKER, {
       question,
-      // Display-only, but it is the only thing separating a session the SDK
-      // opened from a real agent's in a Trace listing.
-      agent_name: AGENT_NAME,
-      ...(named ? { conversation_id: named } : {}),
+      // The name is fixed when the conversation is created, so it belongs only
+      // on the call that creates one. Joining a conversation the caller named
+      // and relabelling it `openbkn-sdk` would rewrite their attribution — the
+      // v1 join below has always omitted it, and this is the same decision.
+      ...(named
+        ? { conversation_id: named }
+        : // Display-only, but the only thing separating a session the SDK
+          // opened from a real agent's in a Trace listing.
+          { agent_name: AGENT_NAME }),
     });
     return {
       contract,
@@ -191,6 +203,15 @@ async function openSession(
   }
 
   if (named) {
+    // Borrowed, not ours: this interaction lives in the caller's conversation,
+    // which permits one active interaction at a time, so until its lease
+    // expires the caller cannot open their own. `releaseLifecycleSessions`
+    // cannot shorten that under v1 — `bkn_cancel_interaction` there demands a
+    // `completion_manifest_version`, and Core takes that as a free-form
+    // required string with no defined value to send, so a guess would fail the
+    // call rather than release anything. The v1 lease is five minutes and
+    // self-heals; a v2 deploy releases immediately. Revisit if a v1 deploy
+    // becomes available to verify a cancel against.
     const started = await callToolRaw(ctx, knId, V2_MARKER, {
       conversation_id: named,
       idempotency_key: `start:${PROCESS_ID}:${generation}`,
@@ -228,7 +249,7 @@ async function openSession(
 }
 
 /**
- * A session belongs to one KN and one caller, so both are part of its key.
+ * A session belongs to one KN, one caller, and one named conversation.
  *
  * The KN because the conversation is opened over an MCP session bound to
  * `x-kn-id`; the identity because an embedder can drive one base URL with a
@@ -236,13 +257,18 @@ async function openSession(
  * user's evidence under another's business turn — and later release it with the
  * wrong credential. The token is hashed rather than stored: this key ends up in
  * a long-lived map, and a bearer token does not belong there.
+ *
+ * The named conversation because a caller that asked for `conv_B` must not be
+ * handed an interaction on `conv_A`. The other two dimensions protect a caller
+ * who said nothing; this one protects a caller who said something specific,
+ * which is the worse of the two to ignore.
  */
 function sessionKey(ctx: RequestContext, knId: string): string {
   const identity = createHash("sha256")
-    .update(`${ctx.token} ${ctx.businessDomain}`)
+    .update(`${ctx.token} ${ctx.businessDomain}`)
     .digest("hex")
     .slice(0, 16);
-  return `${ctx.baseUrl} ${knId} ${identity}`;
+  return `${ctx.baseUrl} ${knId} ${identity} ${ctx.trace?.conversationId ?? ""}`;
 }
 
 /**

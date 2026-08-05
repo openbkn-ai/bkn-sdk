@@ -266,6 +266,80 @@ describe("managed lifecycle on semantic search", () => {
     expect(recorded.toolCalls).toHaveLength(2);
   });
 
+  it("keeps one session per named conversation rather than reusing the first", async () => {
+    const recorded = mockDeploy();
+    const host = `https://named-${hostSeq}.example.com`;
+    const trace = {
+      requestId: "req_1",
+      traceparent: "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
+    };
+    const a: RequestContext = {
+      ...freshCtx(),
+      baseUrl: host,
+      trace: { ...trace, conversationId: "conv_A" },
+    };
+    const b: RequestContext = {
+      ...freshCtx(),
+      baseUrl: host,
+      trace: { ...trace, conversationId: "conv_B" },
+    };
+    await semanticSearch(a, "kn-1", "物料");
+    await semanticSearch(b, "kn-1", "供应商");
+
+    // A caller who named conv_B must not silently get an interaction on conv_A,
+    // nor have it released on their behalf at exit.
+    expect(
+      (recorded.retrievalBodies[0]?.bkn_context as Record<string, string>).conversation_id,
+    ).toBe("conv_A");
+    expect(
+      (recorded.retrievalBodies[1]?.bkn_context as Record<string, string>).conversation_id,
+    ).toBe("conv_B");
+  });
+
+  it("re-probes the catalog after a probe failure instead of failing closed forever", async () => {
+    let probes = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/mcp/info")) {
+          probes += 1;
+          // One blip, then the deploy answers normally.
+          if (probes === 1) return new Response("gateway", { status: 502 });
+          return new Response(JSON.stringify(V2_CATALOG), { status: 200 });
+        }
+        if (url.endsWith("/v1/mcp")) {
+          const rpc = JSON.parse(init?.body as string) as { method?: string };
+          const headers = { "mcp-session-id": "s" };
+          if (rpc.method !== "tools/call") {
+            return new Response(JSON.stringify({ jsonrpc: "2.0", result: {} }), {
+              status: 200,
+              headers,
+            });
+          }
+          return new Response(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              result: {
+                content: [{ type: "text", text: "managed lifecycle state updated" }],
+                structuredContent: { conversation_id: "conv_1", interaction_id: "int_1" },
+              },
+            }),
+            { status: 200, headers },
+          );
+        }
+        return new Response(JSON.stringify({ concepts: [] }), { status: 200 });
+      }),
+    );
+
+    const ctx = freshCtx();
+    await semanticSearch(ctx, "kn-1", "物料");
+    await semanticSearch(ctx, "kn-1", "供应商");
+    // Caching the failure would leave a long-lived process sending no
+    // bkn_context for the rest of its life, with no path back.
+    expect(probes).toBe(2);
+  });
+
   it("keeps one session per caller rather than sharing across tokens", async () => {
     const recorded = mockDeploy();
     const host = `https://shared-${Date.now()}.example.com`;
