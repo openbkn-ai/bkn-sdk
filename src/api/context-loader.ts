@@ -76,17 +76,29 @@ async function post(
   knId: string,
   sessionId: string | undefined,
   body: unknown,
+  timeoutMs?: number,
 ) {
-  const res = await authFetch(ctx, () =>
-    tlsFetch(ctx.insecure, mcpUrl(ctx), {
-      method: "POST",
-      headers: headers(ctx, knId, sessionId),
-      body: JSON.stringify(body),
-    }),
-  );
-  const text = await res.text();
-  if (!res.ok) throw new HttpError(res.status, res.statusText, text);
-  return { res, text };
+  // Unbounded by default: a tool call can legitimately run long, and this
+  // transport has never imposed a deadline. Callers that run somewhere a hang
+  // would strand the process — a release on the way out — pass one in.
+  const controller = timeoutMs === undefined ? undefined : new AbortController();
+  const timer =
+    controller === undefined ? undefined : setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await authFetch(ctx, () =>
+      tlsFetch(ctx.insecure, mcpUrl(ctx), {
+        method: "POST",
+        headers: headers(ctx, knId, sessionId),
+        body: JSON.stringify(body),
+        ...(controller ? { signal: controller.signal } : {}),
+      }),
+    );
+    const text = await res.text();
+    if (!res.ok) throw new HttpError(res.status, res.statusText, text);
+    return { res, text };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function ensureSession(ctx: RequestContext, knId: string): Promise<string> {
@@ -199,15 +211,22 @@ export async function callToolRaw(
   name: string,
   args: Record<string, unknown>,
   options?: ToolCallOptions,
+  timeoutMs?: number,
 ): Promise<unknown> {
   const operationCtx = operationContext(ctx);
   const sessionId = await ensureSession(operationCtx, knId);
-  const { text } = await post(operationCtx, knId, sessionId, {
-    jsonrpc: "2.0",
-    method: "tools/call",
-    params: toolCallParams(name, args, options),
-    id: nextId(),
-  });
+  const { text } = await post(
+    operationCtx,
+    knId,
+    sessionId,
+    {
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: toolCallParams(name, args, options),
+      id: nextId(),
+    },
+    timeoutMs,
+  );
   return unwrapToolResult(parseBody(text)).value;
 }
 
@@ -246,6 +265,12 @@ export function callTool(
   options?: ToolCallOptions,
 ): Promise<unknown> {
   if (LIFECYCLE_TOOLS.has(name)) return callToolRaw(ctx, knId, name, args, options);
+  // A caller that built its own `bkn_context` gets it through untouched, and no
+  // session is opened on its behalf. `ManagedTrace.runOperation` pre-registers
+  // an Operation under a specific `operation_key` before handing the context to
+  // the tool call; replacing that key would orphan the registration, and
+  // `parent_operation_id` / `causation_event_ids` would be dropped with it.
+  if (args.bkn_context !== undefined) return callToolRaw(ctx, knId, name, args, options);
   return withManagedLifecycle(ctx, knId, questionFor(name, args), (bknContext) =>
     callToolRaw(ctx, knId, name, bknContext ? { ...args, bkn_context: bknContext } : args, options),
   );

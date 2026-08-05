@@ -5,13 +5,19 @@
  * Managed-lifecycle sessions for the context-loader's HTTP `/kn/*` surface.
  *
  * Deploys from 0.1.3 on reject every POST under `/kn/` whose body omits
- * `bkn_context`. The MCP transport is exempt — the server merges one
- * conversation per connection — but plain HTTP has no equivalent, so a caller
- * with no business conversation of its own (a CLI invocation, a script) fails
- * closed. Core will not hand a conversation to an end user directly either: its
- * REST surface demands a trusted gateway identity. The context-loader's MCP
- * tools are that gateway, so the route to a usable `bkn_context` runs through
- * them, and this module walks it.
+ * `bkn_context`, and the MCP tool surface wants the same object in its tool
+ * arguments. A caller with no business conversation of its own — a CLI
+ * invocation, a script — therefore fails closed on both. Core will not hand a
+ * conversation to an end user directly either: its REST surface demands a
+ * trusted gateway identity. The context-loader's MCP tools are that gateway, so
+ * the route to a usable `bkn_context` runs through them, and this module walks
+ * it.
+ *
+ * An earlier draft of this file claimed MCP was exempt because the server
+ * merges one conversation per connection. That fallback exists, but it is a
+ * fallback: a connection that supplies its own context is taken at its word,
+ * and supplying one is what makes the evidence land on a nameable turn rather
+ * than an anonymous per-connection bucket.
  *
  * Two incompatible contracts are in the wild and a deploy advertises which one
  * it speaks in its tool catalog:
@@ -25,7 +31,7 @@
  * predates the middleware has neither tool and needs no context; sending none
  * must keep working exactly as before.
  */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { RequestContext } from "../types.js";
 import { HttpError, ToolError } from "../utils/errors.js";
 import { callToolRaw, mcpInfo } from "./context-loader.js";
@@ -76,6 +82,16 @@ const STALE_SESSION_CODES = new Set([
  */
 const PROCESS_ID = randomUUID();
 let generation = 0;
+
+/** Display-only attribution, so an SDK-opened conversation is identifiable in Trace. */
+const AGENT_NAME = "openbkn-sdk";
+
+/**
+ * Releasing a session happens on the way out of a process, after the result is
+ * already printed. The MCP transport has no timeout of its own, so without this
+ * a wedged server would leave the command hanging with nothing left to say.
+ */
+const RELEASE_TIMEOUT_MS = 3_000;
 
 const contracts = new Map<string, Promise<Contract>>();
 const sessions = new Map<string, Promise<Session>>();
@@ -132,6 +148,19 @@ function readId(result: unknown, field: string, tool: string): string {
   return value;
 }
 
+/**
+ * A conversation the caller named but did not pair with an interaction.
+ *
+ * Both contracts can open an interaction inside an existing conversation, so
+ * this is a supported input, not an incomplete one — `--conversation-id` and
+ * `--interaction-id` are independent flags. Opening a fresh conversation here
+ * instead would file the evidence somewhere the caller never asked for, without
+ * saying so.
+ */
+function callerNamedConversation(ctx: RequestContext): string | undefined {
+  return ctx.trace?.interactionId ? undefined : ctx.trace?.conversationId;
+}
+
 async function openSession(
   ctx: RequestContext,
   knId: string,
@@ -139,16 +168,39 @@ async function openSession(
   question: string,
 ): Promise<Session> {
   generation += 1;
+  const named = callerNamedConversation(ctx);
   if (contract === "managed-v2") {
-    // Omitting conversation_id mints a fresh conversation. Reusing the one we
-    // had would be rejected whenever its interaction is still active, which is
-    // exactly the state a reopen is trying to escape.
-    const started = await callToolRaw(ctx, knId, V2_MARKER, { question });
+    // Without a conversation_id the server mints a fresh conversation. Reusing
+    // one of our own would be rejected whenever its interaction is still
+    // active, which is exactly the state a reopen is trying to escape — so only
+    // a caller-named conversation is passed back in.
+    const started = await callToolRaw(ctx, knId, V2_MARKER, {
+      question,
+      // Display-only, but it is the only thing separating a session the SDK
+      // opened from a real agent's in a Trace listing.
+      agent_name: AGENT_NAME,
+      ...(named ? { conversation_id: named } : {}),
+    });
     return {
       contract,
       ctx,
       knId,
       conversationId: readId(started, "conversation_id", V2_MARKER),
+      interactionId: readId(started, "interaction_id", V2_MARKER),
+    };
+  }
+
+  if (named) {
+    const started = await callToolRaw(ctx, knId, V2_MARKER, {
+      conversation_id: named,
+      idempotency_key: `start:${PROCESS_ID}:${generation}`,
+      question,
+    });
+    return {
+      contract,
+      ctx,
+      knId,
+      conversationId: named,
       interactionId: readId(started, "interaction_id", V2_MARKER),
     };
   }
@@ -176,6 +228,24 @@ async function openSession(
 }
 
 /**
+ * A session belongs to one KN and one caller, so both are part of its key.
+ *
+ * The KN because the conversation is opened over an MCP session bound to
+ * `x-kn-id`; the identity because an embedder can drive one base URL with a
+ * different token per user, and reusing a session across them would file one
+ * user's evidence under another's business turn — and later release it with the
+ * wrong credential. The token is hashed rather than stored: this key ends up in
+ * a long-lived map, and a bearer token does not belong there.
+ */
+function sessionKey(ctx: RequestContext, knId: string): string {
+  const identity = createHash("sha256")
+    .update(`${ctx.token} ${ctx.businessDomain}`)
+    .digest("hex")
+    .slice(0, 16);
+  return `${ctx.baseUrl} ${knId} ${identity}`;
+}
+
+/**
  * The session is cached as a promise so concurrent first calls share one
  * handshake — a conversation permits a single active interaction, so two racing
  * opens would leave one of them rejected.
@@ -186,12 +256,13 @@ function ensureSession(
   contract: Exclude<Contract, "none">,
   question: string,
 ): Promise<Session> {
-  const cached = sessions.get(ctx.baseUrl);
+  const key = sessionKey(ctx, knId);
+  const cached = sessions.get(key);
   if (cached) return cached;
   const opening = openSession(ctx, knId, contract, question);
-  sessions.set(ctx.baseUrl, opening);
+  sessions.set(key, opening);
   // A failed handshake must not poison the cache for the rest of the process.
-  opening.catch(() => sessions.delete(ctx.baseUrl));
+  opening.catch(() => sessions.delete(key));
   return opening;
 }
 
@@ -276,7 +347,7 @@ export async function withManagedLifecycle<T>(
     // conversation belongs to its owner's turn; silently replacing it would
     // detach the evidence from the business conversation it was meant for.
     if (!first || callerOwnedSession(ctx) || !code || !STALE_SESSION_CODES.has(code)) throw err;
-    sessions.delete(ctx.baseUrl);
+    sessions.delete(sessionKey(ctx, knId));
     const reopened = await bknContextFor(ctx, knId, question);
     if (!reopened) throw err;
     return await send(reopened);
@@ -303,11 +374,18 @@ export async function releaseLifecycleSessions(): Promise<void> {
       try {
         const session = await opening;
         if (session.contract !== "managed-v2") return;
-        await callToolRaw(session.ctx, session.knId, "bkn_finish_interaction", {
-          interaction_id: session.interactionId,
-          outcome: "cancelled",
-          reason: "client session ended",
-        });
+        await callToolRaw(
+          session.ctx,
+          session.knId,
+          "bkn_finish_interaction",
+          {
+            interaction_id: session.interactionId,
+            outcome: "cancelled",
+            reason: "client session ended",
+          },
+          undefined,
+          RELEASE_TIMEOUT_MS,
+        );
       } catch {
         // The interaction ages out on its own; a failed release is not the
         // command's problem.

@@ -11,6 +11,22 @@ For a third-party Agent such as Cursor, one Agent chat is one BKN Trace
 Conversation, one user question is one Interaction, and every OpenBKN business
 tool call is one Operation. Do not call a business tool outside this lifecycle.
 
+**Driving this by hand is for an Agent that owns a real business turn.** The SDK
+and CLI open a session of their own when a call would otherwise be rejected for
+having no `bkn_context`, so `openbkn context search-schema …` and
+`client.context.*` work without any of the steps below. That automatic session
+is a fallback, not a replacement: it has no answer to close over, so it is
+cancelled rather than completed, and its evidence is attributed to
+`openbkn-sdk`. An Agent with a genuine conversation should still run the
+lifecycle itself.
+
+A `bkn_context` you build yourself is always honoured — the SDK passes it
+through untouched and opens nothing, so a pre-registered `operation_key`,
+`parent_operation_id` and `causation_event_ids` survive. The same holds for
+`--conversation-id` / `--interaction-id` (and `BKN_CONVERSATION_ID` /
+`BKN_INTERACTION_ID`) on the CLI. Given only a conversation, the SDK opens its
+interaction inside that conversation rather than starting a new one.
+
 1. For the first business question in a chat, call `bkn_start_interaction` with
    the complete `question`, optional display-only `agent_name`, and no
    `conversation_id`. Context Loader creates or
