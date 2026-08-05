@@ -32,7 +32,7 @@ export interface SkillFileChild {
 export type SkillChild = SkillDirChild | SkillFileChild;
 
 /** Strip the surrounding slashes so `/styles/` and `styles` address the same node. */
-function normalize(path: string | undefined): string {
+export function normalize(path: string | undefined): string {
   return (path ?? "").replace(/^\/+|\/+$/g, "");
 }
 

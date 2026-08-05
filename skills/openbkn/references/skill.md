@@ -5,10 +5,10 @@
 | `list` / `market` / `get <id>` / `market <id>` | Browse registry + market. |
 | `names <id...>` | Resolve ids → names in one call; unknown ids are skipped, not an error. |
 | `content <id> [--raw] [--draft]` / `read-file <id> <rel-path> [--raw] [--draft]` / `history <id>` | Progressive read + versions. |
-| `files <id> [path] [--tree] [--draft]` | File listing. No `path` = root; a directory path = its direct children; `--tree` = whole hierarchy. |
-| `execute <id> --entry '<shell>' [--timeout <s>] [--raw] [--exit-code]` | Run the skill in the platform sandbox. |
+| `files <id> [path] [--tree] [--draft]` | File listing. No `path` = root; a directory path = its direct children; `--tree` = whole hierarchy under `path` (or the whole skill when `path` is omitted). |
+| `execute <id> --entry '<shell>' [--timeout <s>] [--raw] [--exit-code]` | Run the skill in the platform sandbox. Omit `--timeout` to leave the limit to the sandbox. |
 | `set-status <id> <status>` | unpublish \| published \| offline. |
-| `register <dir> [--source custom\|internal] [--extend-info <json>]` | Zip a local skill dir → multipart register. SKILL.md must have frontmatter (name/description). |
+| `register <dir> [--source custom\|internal] [--extend-info <json>]` | Zip a local skill dir → multipart register. SKILL.md must have frontmatter (name/description). `--source` defaults to `custom`, matching the backend's own default (`default:"custom" validate:"oneof=custom internal"`), so the registered result is unchanged from omitting it. |
 | `download <id> [out.zip] [--draft]` / `install <id> [dir]` | Save archive / download + unzip. |
 | `update-metadata <id> --body <json>` / `update-package <id> <dir>` | Edit metadata / replace package (zip). |
 | `republish <id> --version <v>` / `publish-history <id> --version <v>` | Republish / publish a historical version. |
@@ -45,7 +45,10 @@ The platform uploads the package into a sandbox session and runs `--entry` from
 its work dir, so scripts reach bundled files by relative path
 (`styles/brutalist/tokens.json`). `--raw` writes the run's stdout straight
 through (stderr stays on stderr) so output can be redirected into a file;
-`--exit-code` is opt-in, since it changes what the process returns.
+`--exit-code` is opt-in, since it changes what the process returns. A sandbox
+that reports `mocked=true` exits `125`: nothing failed, but nothing ran either,
+and `--exit-code && next-step` must not read that as a pass. An exit code the
+shell cannot represent (>255) becomes `1` rather than truncating to `0`.
 
 Check `mocked` in the response: `true` means the sandbox stubbed the run and the
 skill never executed. `--raw` prints that warning to stderr so it can't

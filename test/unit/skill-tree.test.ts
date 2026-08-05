@@ -115,3 +115,25 @@ describe("renderTree", () => {
     );
   });
 });
+
+describe("filesUnder", () => {
+  it("narrows to a subtree, so `files <id> <path> --tree` answers the question asked", () => {
+    expect(filesUnder(FILES, "references").map((f) => f.rel_path)).toEqual([
+      "references/checklist.md",
+      "references/layouts/dashboard.md",
+      "references/layouts/landing.md",
+    ]);
+  });
+
+  it("treats a leading and trailing slash as the same node", () => {
+    expect(filesUnder(FILES, "/references/")).toEqual(filesUnder(FILES, "references"));
+  });
+
+  it("returns everything when no path is given", () => {
+    expect(filesUnder(FILES, undefined)).toHaveLength(FILES.length);
+  });
+
+  it("does not let a prefix match a sibling directory", () => {
+    expect(filesUnder(FILES, "ref")).toEqual([]);
+  });
+});

@@ -132,7 +132,15 @@ export function executeSkill(
   }) as Promise<SkillExecutionResult>;
 }
 
-/** Sandbox default when `--timeout` is omitted; mirrors the backend's own default. */
+/**
+ * How long to assume a run may take when the caller names no limit.
+ *
+ * Only ever a local abort budget. The backend takes `timeout` as `omitempty`
+ * and passes it straight to the sandbox without substituting one of its own, so
+ * there is no server-side default for this to mirror — omitting the field
+ * leaves the limit to the sandbox, and this number only decides how long the
+ * client waits before giving up on the answer.
+ */
 export const DEFAULT_EXECUTE_TIMEOUT_SEC = 60;
 
 /** Resolve skill ids to names in one call. Unknown ids are skipped by the backend. */

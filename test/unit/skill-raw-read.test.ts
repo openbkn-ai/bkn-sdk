@@ -78,6 +78,25 @@ describe("raw file reads", () => {
     expect(calls.filter((p) => p.endsWith("/download"))).toHaveLength(1);
   });
 
+  it("never serves one client's archive to a client built on another token", async () => {
+    const { calls } = mockDeploy({ archiveBytes: await archive({ "a.md": "A" }) });
+    // The cache lives on the client, so a second identity re-fetches under its
+    // own credential instead of reading bytes the first one was granted.
+    await skills({ ...ctx, token: "alice" }).readFileRaw("shared-1", "a.md");
+    await skills({ ...ctx, token: "bob" }).readFileRaw("shared-1", "a.md");
+    expect(calls.filter((p) => p.endsWith("/download"))).toHaveLength(2);
+  });
+
+  it("addresses an archive entry the same way the listing does", async () => {
+    const { calls } = mockDeploy({
+      archiveBytes: await archive({ "references/checklist.md": "C" }),
+    });
+    // `skill files /references/` works, so `read-file /references/checklist.md`
+    // must too — the leading slash cannot mean different things per path.
+    expect(await skills(ctx).readFileRaw("norm-1", "/references/checklist.md")).toBe("C");
+    expect(calls.filter((p) => p.endsWith("/download"))).toHaveLength(1);
+  });
+
   it("reads the draft archive separately from the published one", async () => {
     const { calls } = mockDeploy({ archiveBytes: await archive({ "a.md": "A" }) });
     const s = skills(ctx);

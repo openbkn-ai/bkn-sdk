@@ -63,6 +63,47 @@ describe("skill execute", () => {
     expect(process.exitCode).toBe(3);
   });
 
+  it("rejects a --timeout that is not a positive integer", async () => {
+    stubExecute({ exit_code: 0, stdout: "", stderr: "", mocked: false });
+    captureStdio();
+    // NaN would reach the wire as `timeout: null` and clamp the local abort to
+    // 1ms, failing with a message about nothing the user typed.
+    await expect(
+      cli().parseAsync([...ARGS, "--entry", "run.sh", "--timeout", "abc"], { from: "user" }),
+    ).rejects.toThrow(/--timeout must be a positive integer/);
+  });
+
+  it("omits timeout entirely when the flag is absent", async () => {
+    stubExecute({ exit_code: 0, stdout: "", stderr: "", mocked: false });
+    captureStdio();
+    await cli().parseAsync([...ARGS, "--entry", "run.sh", "--raw"], { from: "user" });
+    const [, init] = (fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock
+      .calls[0] as [string, RequestInit];
+    // A CLI-side default would pin every run to our number instead of the
+    // sandbox's.
+    expect(JSON.parse(init.body as string)).toEqual({ entry_shell: "run.sh" });
+  });
+
+  it("fails the shell when the sandbox only mocked the run", async () => {
+    stubExecute({ exit_code: 0, stdout: "", stderr: "", mocked: true });
+    captureStdio();
+    // `skill execute … --exit-code && deploy` must not proceed on a run that
+    // never happened.
+    await cli().parseAsync([...ARGS, "--entry", "run.sh", "--raw", "--exit-code"], {
+      from: "user",
+    });
+    expect(process.exitCode).toBe(125);
+  });
+
+  it("does not let an out-of-range exit code truncate to success", async () => {
+    stubExecute({ exit_code: 256, stdout: "", stderr: "", mocked: false });
+    captureStdio();
+    await cli().parseAsync([...ARGS, "--entry", "boom.sh", "--raw", "--exit-code"], {
+      from: "user",
+    });
+    expect(process.exitCode).toBe(1);
+  });
+
   it("warns on stderr when the sandbox only mocked the run", async () => {
     stubExecute({ exit_code: 0, stdout: "fake\n", stderr: "", mocked: true });
     const { out, err } = captureStdio();

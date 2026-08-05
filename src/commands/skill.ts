@@ -3,15 +3,46 @@
 
 /** `openbkn skill …` — skill registry and market. */
 import { Command } from "commander";
-import { DEFAULT_EXECUTE_TIMEOUT_SEC } from "../api/skills.js";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
-import { renderTree } from "../utils/skill-tree.js";
+import { classifyPath, filesUnder, renderTree } from "../utils/skill-tree.js";
 import { clientFrom, outputOptions, readBody } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
+
+/**
+ * A bare `parseInt` turns a typo into `NaN`, which is worse than an error:
+ * `JSON.stringify` writes it to the wire as `null` (not "absent"), and Node
+ * clamps a `NaN` setTimeout delay to 1ms, so the request aborts almost
+ * immediately with a message about nothing the user typed.
+ */
+const positiveInt = (flag: string) => (v: string) => {
+  const n = Number.parseInt(v, 10);
+  if (!Number.isSafeInteger(n) || n <= 0) {
+    throw new InputError(`${flag} must be a positive integer (got '${v}')`);
+  }
+  return n;
+};
+
+/** A mocked run's own exit status, distinct from any the skill could return. */
+const MOCKED_EXIT_CODE = 125;
+
+/**
+ * What `--exit-code` should hand back to the shell.
+ *
+ * A mocked run reports 0 because nothing failed — but nothing ran either, and
+ * `skill execute … --exit-code && deploy` would take that as a green light.
+ * Exit codes are also a single byte: a sandbox returning 256 would truncate to
+ * 0 and read as success, so anything out of range becomes a plain 1.
+ */
+function sandboxExitCode(result: { mocked?: boolean; exit_code?: number } | undefined): number {
+  if (result?.mocked) return MOCKED_EXIT_CODE;
+  const code = result?.exit_code ?? 0;
+  if (!Number.isSafeInteger(code) || code < 0) return 1;
+  return code > 255 ? 1 : code;
+}
 
 /** Backend contract: `validate:"oneof=custom internal"`. */
 const SKILL_SOURCES = ["custom", "internal"] as const;
@@ -118,12 +149,39 @@ export function skillCommand(): Command {
       const skills = clientFrom(cmd).skills;
       const out = outputOptions(cmd);
       if (opts.tree) {
-        const files = await skills.fileManifest(id, { draft: opts.draft });
+        // `[path]` narrows the tree the same way it narrows the listing —
+        // rendering the whole manifest here would answer a question the user
+        // did not ask, without saying it had.
+        const all = await skills.fileManifest(id, { draft: opts.draft });
+        if (path !== undefined) {
+          const kind = classifyPath(all, path);
+          if (kind === "file")
+            throw new InputError(`'${path}' is a file — use \`skill read-file\`.`);
+          if (kind === "missing") throw new InputError(`'${path}' not found in skill ${id}.`);
+        }
+        const files = filesUnder(all, path);
+        const bytes = files.reduce((sum, f) => sum + (f.size ?? 0), 0);
         if (out.json || out.compact) {
-          printJson({ skillId: id, files }, out);
+          // A tree is a flat file list rather than one level of children, so
+          // `files` is not `entries`. The envelope and the key casing still
+          // match the listing, so a script can read both the same way.
+          printJson(
+            {
+              skillId: id,
+              path: path ?? "",
+              files: files.map((f) => ({
+                relPath: f.rel_path,
+                fileType: f.file_type,
+                size: f.size,
+                mime: f.mime_type,
+              })),
+              totalFiles: files.length,
+              totalSize: bytes,
+            },
+            out,
+          );
           return;
         }
-        const bytes = files.reduce((sum, f) => sum + (f.size ?? 0), 0);
         process.stdout.write(`${renderTree(files)}\n\n${files.length} files, ${bytes} B\n`);
         return;
       }
@@ -156,7 +214,14 @@ export function skillCommand(): Command {
     .command("execute <skill-id>")
     .description("Run a skill in the platform sandbox")
     .requiredOption("--entry <shell>", "shell command to run inside the skill's work dir")
-    .option("--timeout <seconds>", "sandbox time limit", int, DEFAULT_EXECUTE_TIMEOUT_SEC)
+    // No default here on purpose: with one, `opts.timeout` is never undefined
+    // and the "omit it and the backend decides" path is unreachable from the
+    // CLI, which would silently pin every run to our number instead of theirs.
+    .option(
+      "--timeout <seconds>",
+      "sandbox time limit (backend default when omitted)",
+      positiveInt("--timeout"),
+    )
     .option("--raw", "write the run's stdout/stderr straight through")
     .option("--exit-code", "exit with the sandbox's exit code")
     .action(async (id: string, opts, cmd: Command) => {
@@ -175,7 +240,7 @@ export function skillCommand(): Command {
       } else {
         printJson(result, outputOptions(cmd));
       }
-      if (opts.exitCode && result?.exit_code) process.exitCode = result.exit_code;
+      if (opts.exitCode) process.exitCode = sandboxExitCode(result);
     });
 
   cmd

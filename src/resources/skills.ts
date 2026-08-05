@@ -31,7 +31,7 @@ import {
 import type { RequestContext } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { unzipToDirectory, unzipToMap, zipDirectory } from "../utils/skill-archive.js";
-import { classifyPath, filesUnder, listChildren } from "../utils/skill-tree.js";
+import { classifyPath, filesUnder, listChildren, normalize } from "../utils/skill-tree.js";
 
 /** Which version a read targets: the published release, or the editable draft. */
 export interface SkillViewOptions {
@@ -43,24 +43,32 @@ function viewOf(opts: SkillViewOptions | undefined): SkillView {
 }
 
 /**
- * Unpacked archives, keyed by platform + skill + view. A single archive backs
- * every file read in a run, so reading ten files costs one download rather than
- * ten. Keyed per view because the draft and the release differ.
+ * Unpacked archives for one client, keyed by skill + view. A single archive
+ * backs every file read in a run, so reading ten files costs one download
+ * rather than ten. Keyed per view because the draft and the release differ.
+ *
+ * Scoped to the client rather than the module: `createClient` is public, and an
+ * embedder can hold one per user. A process-wide cache would let one user's
+ * request answer from bytes another user's token fetched, turning a backend
+ * authorization decision into a local cache hit — and, being unbounded, would
+ * hold every archive ever read for the life of the process. The CLI builds one
+ * client per run, so it keeps the download-once benefit either way.
  */
-const archiveCache = new Map<string, Promise<Map<string, Uint8Array>>>();
+type ArchiveCache = Map<string, Promise<Map<string, Uint8Array>>>;
 
 function cachedArchive(
+  cache: ArchiveCache,
   ctx: RequestContext,
   skillId: string,
   view: SkillView,
 ): Promise<Map<string, Uint8Array>> {
-  const key = `${ctx.baseUrl}|${skillId}|${view}`;
-  const hit = archiveCache.get(key);
+  const key = `${skillId}|${view}`;
+  const hit = cache.get(key);
   if (hit) return hit;
   const pending = downloadSkill(ctx, skillId, view).then(unzipToMap);
-  archiveCache.set(key, pending);
+  cache.set(key, pending);
   // A failed download must not poison later attempts.
-  pending.catch(() => archiveCache.delete(key));
+  pending.catch(() => cache.delete(key));
   return pending;
 }
 
@@ -107,6 +115,7 @@ function looksLossy(text: string): boolean {
  * archive, which is served through the same ingress the CLI already reached.
  */
 async function readFileText(
+  cache: ArchiveCache,
   ctx: RequestContext,
   skillId: string,
   relPath: string,
@@ -117,8 +126,8 @@ async function readFileText(
     if (looksLossy(res.content)) throw binaryError(relPath);
     return res.content;
   }
-  const archive = await cachedArchive(ctx, skillId, view);
-  const bytes = archive.get(relPath);
+  const archive = await cachedArchive(cache, ctx, skillId, view);
+  const bytes = archive.get(normalize(relPath));
   if (!bytes) {
     throw new InputError(`'${relPath}' not found in skill ${skillId}.`);
   }
@@ -126,6 +135,7 @@ async function readFileText(
 }
 
 export function skills(ctx: RequestContext) {
+  const archives: ArchiveCache = new Map();
   const manifest = async (skillId: string, opts?: SkillViewOptions): Promise<SkillFileEntry[]> => {
     const res = await getSkillContent(ctx, skillId, { view: viewOf(opts) });
     return res?.files ?? [];
@@ -143,10 +153,10 @@ export function skills(ctx: RequestContext) {
       readSkillFile(ctx, skillId, relPath, { view: viewOf(opts) }),
     /** SKILL.md's own text, for callers that want the document rather than a link. */
     contentRaw: (skillId: string, opts?: SkillViewOptions) =>
-      readFileText(ctx, skillId, "SKILL.md", viewOf(opts)),
+      readFileText(archives, ctx, skillId, "SKILL.md", viewOf(opts)),
     /** A bundled file's text. */
     readFileRaw: (skillId: string, relPath: string, opts?: SkillViewOptions) =>
-      readFileText(ctx, skillId, relPath, viewOf(opts)),
+      readFileText(archives, ctx, skillId, relPath, viewOf(opts)),
     /** Run the skill in the platform sandbox. */
     execute: (skillId: string, opts: ExecuteSkillOptions) => executeSkill(ctx, skillId, opts),
     /** Resolve skill ids to names; unknown ids are simply absent from the result. */
