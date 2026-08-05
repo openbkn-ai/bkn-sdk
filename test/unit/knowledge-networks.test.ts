@@ -180,3 +180,16 @@ describe("semanticSearch", () => {
     expect(JSON.parse(call[1].body as string)).not.toHaveProperty("bkn_context");
   });
 });
+
+describe("validateMetric", () => {
+  it("POSTs to metrics/validation (OpenAPI path)", async () => {
+    const { validateMetric } = await import("../../src/api/knowledge-networks.js");
+    const fetchMock = mockFetch();
+    await validateMetric(ctx, "kn-1", { entries: [] });
+    const call = firstCall(fetchMock);
+    expect(new URL(call[0]).pathname).toBe(
+      "/api/ontology-manager/v1/knowledge-networks/kn-1/metrics/validation",
+    );
+    expect(call[1].method).toBe("POST");
+  });
+});

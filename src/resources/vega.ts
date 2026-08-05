@@ -3,12 +3,16 @@
 
 import {
   type BuildTask,
+  type CatalogConnectionTestRequest,
+  type CatalogHealthCheckScheduleRequest,
+  type CatalogWriteOptions,
   type CreateBuildTaskRequest,
   type CreateCatalogRequest,
   type DeleteBuildTasksOptions,
   type ListBuildTasksOptions,
   type ListCatalogsOptions,
   type RawQueryRequest,
+  type UpdateCatalogRequest,
   catalogHealthStatus,
   createBuildTask,
   createCatalog,
@@ -19,6 +23,7 @@ import {
   enableCatalog,
   getBuildTask,
   getCatalog,
+  getCatalogHealthCheckSchedule,
   getConnectorType,
   listBuildTasks,
   listCatalogResources,
@@ -28,7 +33,9 @@ import {
   startBuildTask,
   stopBuildTask,
   testCatalogConnection,
+  testCatalogConnectionConfig,
   updateCatalog,
+  updateCatalogHealthCheckSchedule,
 } from "../api/vega.js";
 /**
  * Vega resource surface — the exported SDK API for Catalog + index builds.
@@ -42,16 +49,23 @@ export function vega(ctx: RequestContext) {
   return {
     catalogs: (opts?: ListCatalogsOptions) => listCatalogs(ctx, opts),
     getCatalog: (id: string) => getCatalog(ctx, id),
-    createCatalog: (req: CreateCatalogRequest) => createCatalog(ctx, req),
-    updateCatalog: (id: string, req: Partial<CreateCatalogRequest>) => updateCatalog(ctx, id, req),
+    createCatalog: (req: CreateCatalogRequest, opts?: CatalogWriteOptions) =>
+      createCatalog(ctx, req, opts),
+    updateCatalog: (id: string, req: UpdateCatalogRequest, opts?: CatalogWriteOptions) =>
+      updateCatalog(ctx, id, req, opts),
     enableCatalog: (id: string) => enableCatalog(ctx, id),
     disableCatalog: (id: string) => disableCatalog(ctx, id),
     deleteCatalog: (id: string) => deleteCatalog(ctx, id),
+    testCatalogConnectionConfig: (req: CatalogConnectionTestRequest) =>
+      testCatalogConnectionConfig(ctx, req),
     testCatalogConnection: (id: string) => testCatalogConnection(ctx, id),
+    catalogHealthCheckSchedule: (id: string) => getCatalogHealthCheckSchedule(ctx, id),
+    updateCatalogHealthCheckSchedule: (id: string, req: CatalogHealthCheckScheduleRequest) =>
+      updateCatalogHealthCheckSchedule(ctx, id, req),
     discoverCatalog: (id: string, wait = false) => discoverCatalog(ctx, id, wait),
     catalogResources: (id: string, category?: string, limit?: number, offset?: number) =>
       listCatalogResources(ctx, id, category, limit, offset),
-    catalogHealth: (ids: string[]) => catalogHealthStatus(ctx, ids),
+    catalogHealth: (id: string) => catalogHealthStatus(ctx, id),
     connectorTypes: () => listConnectorTypes(ctx),
     connectorType: (type: string) => getConnectorType(ctx, type),
 

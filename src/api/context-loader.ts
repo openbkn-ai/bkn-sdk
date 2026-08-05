@@ -13,11 +13,9 @@ import { HttpError, ToolError } from "../utils/errors.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
-// Cycle by design: lifecycle opens its session through this transport, and this
-// transport wraps business tools in a session. Neither touches the other at
-// module-eval time, so the cycle resolves before either function runs.
 import { withManagedLifecycle } from "./lifecycle.js";
 import { tlsFetch } from "./tls.js";
+import type { OperationReceipt } from "./trace-lifecycle.js";
 
 const MCP_PATH = "/api/agent-retrieval/v1/mcp";
 const PROTOCOL = "2024-11-05";
@@ -115,56 +113,102 @@ async function ensureSession(ctx: RequestContext, knId: string): Promise<string>
   return sessionId;
 }
 
-/**
- * Unwrap a JSON-RPC result, decoding the MCP content[].text JSON payload.
- *
- * A tool answers in one of two shapes: `content[].text` holding the payload as
- * JSON, or `structuredContent` holding it beside a prose `text` line. The
- * managed-lifecycle tools do the latter, so reading the text alone would reduce
- * `bkn_create_conversation` to `{ raw: "managed lifecycle state updated" }` and
- * drop the very id the caller asked for.
- */
-function unwrap(parsed: unknown): unknown {
-  const rpc = parsed as { result?: unknown; error?: { message: string } };
-  if (rpc.error) throw new Error(`Context-loader error: ${rpc.error.message}`);
-  const result = rpc.result as Record<string, unknown> | undefined;
-  if (result === undefined) return parsed;
-  const content = result.content;
-  const text =
-    Array.isArray(content) && content[0] && typeof content[0].text === "string"
-      ? (content[0].text as string)
-      : undefined;
-  // A tool-level failure arrives as a 200 carrying isError. Returning it as
-  // data would let a caller act on an error object as if it were a result.
-  if (result.isError) {
-    throw new ToolError(
-      `Context-loader tool error: ${toolErrorMessage(result.structuredContent, text)}`,
-      toolErrorCode(result.structuredContent),
-    );
-  }
-  if (text !== undefined) {
-    try {
-      return JSON.parse(text);
-    } catch {
-      // Prose, not a payload — the answer, if there is one, is structured.
-      return result.structuredContent ?? { raw: text };
-    }
-  }
-  return result.structuredContent ?? result;
+export interface ManagedToolResult<T = unknown> {
+  value: T;
+  receipt: OperationReceipt;
 }
 
-function toolErrorCode(structured: unknown): string | undefined {
-  const code = (structured as { error?: { code?: unknown } } | undefined)?.error?.code;
+/** Adapter-owned MCP metadata for lifecycle-safe host retries. */
+export interface ToolCallOptions {
+  hostConversationKey?: string;
+  clientInvocationId?: string;
+}
+
+interface UnwrappedToolResult {
+  value: unknown;
+  receipt?: OperationReceipt;
+}
+
+function toolErrorCode(structuredContent: unknown): string | undefined {
+  const code = (structuredContent as { error?: { code?: unknown } } | undefined)?.error?.code;
   return typeof code === "string" ? code : undefined;
 }
 
-function toolErrorMessage(structured: unknown, text: string | undefined): string {
-  const error = (structured as { error?: { code?: unknown; message?: unknown } } | undefined)
-    ?.error;
-  const code = typeof error?.code === "string" ? error.code : undefined;
-  const message = typeof error?.message === "string" ? error.message : undefined;
-  if (code && message) return `${code}: ${message}`;
-  return code ?? message ?? text ?? "unknown error";
+/** Unwrap a JSON-RPC result without discarding its trusted lifecycle receipt. */
+function unwrapToolResult(parsed: unknown): UnwrappedToolResult {
+  const rpc = parsed as { result?: unknown; error?: { message: string } };
+  if (rpc.error) throw new Error(`Context-loader error: ${rpc.error.message}`);
+  const result = rpc.result as Record<string, unknown> | undefined;
+  if (result === undefined) return { value: parsed };
+  const structuredContent = result.structuredContent;
+  const receipt = (structuredContent as { bkn_receipt?: OperationReceipt } | undefined)
+    ?.bkn_receipt;
+  const content = result.content;
+  if (result.isError === true) {
+    const message =
+      Array.isArray(content) && content[0] && typeof content[0].text === "string"
+        ? content[0].text
+        : "tool call failed";
+    // The structured error code, not the prose, is what tells a caller whether
+    // the failure is retryable — a dead lifecycle session is reopenable, a bad
+    // argument is not.
+    throw new ToolError(`Context-loader error: ${message}`, toolErrorCode(structuredContent));
+  }
+  if (Array.isArray(content) && content[0] && typeof content[0].text === "string") {
+    try {
+      return { value: JSON.parse(content[0].text), receipt };
+    } catch {
+      if (structuredContent !== undefined) {
+        return { value: structuredContent, receipt };
+      }
+      return { value: { raw: content[0].text }, receipt };
+    }
+  }
+  return { value: result, receipt };
+}
+
+function toolCallParams(
+  name: string,
+  args: Record<string, unknown>,
+  options?: ToolCallOptions,
+): Record<string, unknown> {
+  const meta = {
+    ...(options?.hostConversationKey
+      ? { "openbkn.ai/host-conversation-key": options.hostConversationKey }
+      : {}),
+    ...(options?.clientInvocationId
+      ? { "openbkn.ai/client-invocation-id": options.clientInvocationId }
+      : {}),
+  };
+  return {
+    name,
+    arguments: args,
+    ...(Object.keys(meta).length > 0 ? { _meta: meta } : {}),
+  };
+}
+
+/**
+ * Call an MCP tool exactly as given, with no lifecycle context attached.
+ *
+ * This is what the lifecycle module itself calls: the tools that open a session
+ * cannot be wrapped in one without recurring.
+ */
+export async function callToolRaw(
+  ctx: RequestContext,
+  knId: string,
+  name: string,
+  args: Record<string, unknown>,
+  options?: ToolCallOptions,
+): Promise<unknown> {
+  const operationCtx = operationContext(ctx);
+  const sessionId = await ensureSession(operationCtx, knId);
+  const { text } = await post(operationCtx, knId, sessionId, {
+    jsonrpc: "2.0",
+    method: "tools/call",
+    params: toolCallParams(name, args, options),
+    id: nextId(),
+  });
+  return unwrapToolResult(parseBody(text)).value;
 }
 
 /**
@@ -186,24 +230,6 @@ const LIFECYCLE_TOOLS = new Set([
   "bkn_get_receipt",
 ]);
 
-/** Call an MCP tool exactly as given, with no lifecycle context attached. */
-export async function callToolRaw(
-  ctx: RequestContext,
-  knId: string,
-  name: string,
-  args: Record<string, unknown>,
-): Promise<unknown> {
-  const operationCtx = operationContext(ctx);
-  const sessionId = await ensureSession(operationCtx, knId);
-  const { text } = await post(operationCtx, knId, sessionId, {
-    jsonrpc: "2.0",
-    method: "tools/call",
-    params: { name, arguments: args },
-    id: nextId(),
-  });
-  return unwrap(parseBody(text));
-}
-
 /**
  * Call any MCP tool by name.
  *
@@ -217,16 +243,40 @@ export function callTool(
   knId: string,
   name: string,
   args: Record<string, unknown>,
+  options?: ToolCallOptions,
 ): Promise<unknown> {
-  if (LIFECYCLE_TOOLS.has(name)) return callToolRaw(ctx, knId, name, args);
+  if (LIFECYCLE_TOOLS.has(name)) return callToolRaw(ctx, knId, name, args, options);
   return withManagedLifecycle(ctx, knId, questionFor(name, args), (bknContext) =>
-    callToolRaw(ctx, knId, name, bknContext ? { ...args, bkn_context: bknContext } : args),
+    callToolRaw(ctx, knId, name, bknContext ? { ...args, bkn_context: bknContext } : args, options),
   );
 }
 
 /** The interaction's recorded question: the user's own words when the tool has them. */
 function questionFor(name: string, args: Record<string, unknown>): string {
   return typeof args.query === "string" && args.query ? args.query : name;
+}
+
+/** Call a lifecycle-managed MCP tool and retain the trusted operation receipt. */
+export async function callManagedTool<T = unknown>(
+  ctx: RequestContext,
+  knId: string,
+  name: string,
+  args: Record<string, unknown>,
+  options?: ToolCallOptions,
+): Promise<ManagedToolResult<T>> {
+  const operationCtx = operationContext(ctx);
+  const sessionId = await ensureSession(operationCtx, knId);
+  const { text } = await post(operationCtx, knId, sessionId, {
+    jsonrpc: "2.0",
+    method: "tools/call",
+    params: toolCallParams(name, args, options),
+    id: nextId(),
+  });
+  const result = unwrapToolResult(parseBody(text));
+  if (!result.receipt) {
+    throw new Error("Context-loader managed tool response did not include bkn_receipt");
+  }
+  return { value: result.value as T, receipt: result.receipt };
 }
 
 /** Call a generic MCP method (tools/list, resources/list, ...). */

@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  CreateBuildTaskRequest,
   catalogHealthStatus,
   createBuildTask,
   createCatalog,
   deleteBuildTasks,
+  getBuildTask,
   getCatalog,
+  getCatalogHealthCheckSchedule,
   listBuildTasks,
   listCatalogResources,
   listCatalogs,
@@ -12,6 +15,10 @@ import {
   runSql,
   startBuildTask,
   stopBuildTask,
+  testCatalogConnection,
+  testCatalogConnectionConfig,
+  updateCatalog,
+  updateCatalogHealthCheckSchedule,
 } from "../../src/api/vega.js";
 import type { RequestContext } from "../../src/types.js";
 
@@ -67,11 +74,19 @@ describe("vega uses the vega-backend base path", () => {
     expect(new URL(firstCall(f)[0]).searchParams.has("limit")).toBe(false);
   });
 
-  it("catalogHealthStatus joins ids", async () => {
-    const f = mockFetch();
-    await catalogHealthStatus(ctx, ["a", "b"]);
+  it("catalogHealthStatus gets and parses one catalog", async () => {
+    const f = mockFetch({
+      id: "a b",
+      health_check_status: "healthy",
+      last_check_time: 123,
+      health_check_result: "ok",
+    });
+    await expect(catalogHealthStatus(ctx, "a b")).resolves.toMatchObject({
+      id: "a b",
+      health_check_status: "healthy",
+    });
     expect(new URL(firstCall(f)[0]).pathname).toBe(
-      "/api/vega-backend/v1/catalogs/a,b/health-status",
+      "/api/vega-backend/v1/catalogs/a%20b/health-status",
     );
   });
 
@@ -117,11 +132,12 @@ describe("vega uses the vega-backend base path", () => {
 
 describe("createBuildTask", () => {
   it("POSTs to /build-tasks under vega-backend", async () => {
-    const f = mockFetch({ id: "t-1", resource_id: "r-1", mode: "batch" });
-    await createBuildTask(ctx, { resource_id: "r-1", mode: "batch" });
+    const f = mockFetch({ id: "t-1" });
+    const task = await createBuildTask(ctx, { resource_id: "r-1", mode: "batch" });
     const call = firstCall(f);
     expect(new URL(call[0]).pathname).toBe("/api/vega-backend/v1/build-tasks");
     expect(call[1].method).toBe("POST");
+    expect(task).toEqual({ id: "t-1" });
   });
 
   it("sends execute_type but no resource index fields in the task body", async () => {
@@ -135,6 +151,16 @@ describe("createBuildTask", () => {
     expect(body).toEqual({ resource_id: "r-1", mode: "batch", execute_type: "full" });
   });
 
+  it("rejects execute_type for streaming tasks before making a request", () => {
+    expect(
+      CreateBuildTaskRequest.safeParse({
+        resource_id: "r-1",
+        mode: "streaming",
+        execute_type: "full",
+      }).success,
+    ).toBe(false);
+  });
+
   it("lists build tasks with server-side filters", async () => {
     const f = mockFetch({ entries: [] });
     await listBuildTasks(ctx, {
@@ -143,7 +169,7 @@ describe("createBuildTask", () => {
       status: ["running", "init"],
       active: true,
       mode: "batch",
-      orderBy: "status",
+      orderBy: "updated_at",
       order: "asc",
       limit: 5,
       offset: 10,
@@ -155,10 +181,18 @@ describe("createBuildTask", () => {
     expect(u.searchParams.get("status")).toBe("running,init");
     expect(u.searchParams.get("active")).toBe("true");
     expect(u.searchParams.get("mode")).toBe("batch");
-    expect(u.searchParams.get("order_by")).toBe("status");
+    expect(u.searchParams.get("order_by")).toBe("updated_at");
     expect(u.searchParams.get("order")).toBe("asc");
     expect(u.searchParams.get("limit")).toBe("5");
     expect(u.searchParams.get("offset")).toBe("10");
+  });
+
+  it("exposes the persisted batch execute_type on task responses", async () => {
+    mockFetch({ id: "t-1", mode: "batch", execute_type: "incremental" });
+    await expect(getBuildTask(ctx, "t-1")).resolves.toMatchObject({
+      id: "t-1",
+      execute_type: "incremental",
+    });
   });
 
   it("starts, stops, and deletes build tasks", async () => {
@@ -229,5 +263,121 @@ describe("createCatalog", () => {
     const body = JSON.parse(call[1].body as string);
     expect(body.connector_type).toBe("mysql");
     expect(body.connector_config).toEqual({ host: "h" });
+  });
+
+  it("sends allow_unhealthy and an initial health-check schedule", async () => {
+    const f = mockFetch({ id: "c-9" });
+    await createCatalog(
+      ctx,
+      {
+        name: "my-cat",
+        connectorType: "mysql",
+        connectorConfig: { host: "h" },
+        healthCheckSchedule: { mode: "enabled", cronExpr: "0 */2 * * *" },
+      },
+      { allowUnhealthy: true },
+    );
+    const call = firstCall(f);
+    const url = new URL(call[0]);
+    expect(url.searchParams.get("allow_unhealthy")).toBe("true");
+    expect(JSON.parse(call[1].body as string).health_check_schedule).toEqual({
+      mode: "enabled",
+      cron_expr: "0 */2 * * *",
+    });
+  });
+});
+
+describe("updateCatalog", () => {
+  it("sends a full PUT body with the path id and allow_unhealthy", async () => {
+    const f = mockFetch();
+    await updateCatalog(
+      ctx,
+      "c-9",
+      {
+        name: "renamed",
+        connectorType: "mysql",
+        connectorConfig: { host: "new-host" },
+        enabled: false,
+        tags: [],
+        description: "",
+        extensions: {},
+      },
+      { allowUnhealthy: true },
+    );
+    const call = firstCall(f);
+    const url = new URL(call[0]);
+    expect(url.pathname).toBe("/api/vega-backend/v1/catalogs/c-9");
+    expect(url.searchParams.get("allow_unhealthy")).toBe("true");
+    expect(call[1].method).toBe("PUT");
+    expect(JSON.parse(call[1].body as string)).toEqual({
+      id: "c-9",
+      name: "renamed",
+      connector_type: "mysql",
+      connector_config: { host: "new-host" },
+      enabled: false,
+      tags: [],
+      description: "",
+      extensions: {},
+    });
+  });
+});
+
+describe("catalog connection tests", () => {
+  it("preflights an unpersisted connector configuration", async () => {
+    const f = mockFetch({ success: true, message: "connected" });
+    await expect(
+      testCatalogConnectionConfig(ctx, {
+        connectorType: "postgresql",
+        connectorConfig: { host: "db.example.com" },
+      }),
+    ).resolves.toEqual({ success: true, message: "connected" });
+    const call = firstCall(f);
+    expect(new URL(call[0]).pathname).toBe("/api/vega-backend/v1/catalogs/test-connection");
+    expect(JSON.parse(call[1].body as string)).toEqual({
+      connector_type: "postgresql",
+      connector_config: { host: "db.example.com" },
+    });
+  });
+
+  it("returns a persisted catalog's business failure result", async () => {
+    const f = mockFetch({ success: false, message: "connection refused" });
+    await expect(testCatalogConnection(ctx, "c 9")).resolves.toEqual({
+      success: false,
+      message: "connection refused",
+    });
+    expect(new URL(firstCall(f)[0]).pathname).toBe(
+      "/api/vega-backend/v1/catalogs/c%209/test-connection",
+    );
+  });
+
+  it("rejects a malformed connection-test response", async () => {
+    mockFetch({ message: "missing success" });
+    await expect(testCatalogConnection(ctx, "c-9")).rejects.toThrow();
+  });
+});
+
+describe("catalog health-check schedule", () => {
+  const response = {
+    catalog_id: "c-9",
+    mode: "enabled",
+    cron_expr: "0 */2 * * *",
+    last_run: 100,
+    next_run: 200,
+  };
+
+  it("gets and parses the dedicated schedule", async () => {
+    const f = mockFetch(response);
+    await expect(getCatalogHealthCheckSchedule(ctx, "c-9")).resolves.toEqual(response);
+    expect(new URL(firstCall(f)[0]).pathname).toBe(
+      "/api/vega-backend/v1/catalogs/c-9/health-check-schedule",
+    );
+  });
+
+  it("updates the schedule without sending cron outside enabled mode", async () => {
+    const f = mockFetch({ ...response, mode: "disabled", next_run: 0 });
+    await updateCatalogHealthCheckSchedule(ctx, "c-9", { mode: "disabled" });
+    const call = firstCall(f);
+    expect(call[1].method).toBe("PUT");
+    expect(JSON.parse(call[1].body as string)).toEqual({ mode: "disabled" });
   });
 });

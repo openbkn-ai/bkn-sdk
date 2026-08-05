@@ -4,11 +4,14 @@
 /** `openbkn trace …` — trace data (search/get) + diagnose + eval-set. */
 import { readFileSync, writeFileSync } from "node:fs";
 import { Command } from "commander";
+import type {
+  InteractionCompletionInput,
+  RetryOperationAttemptInput,
+} from "../api/trace-lifecycle.js";
 import { renderReportMarkdown } from "../bkn-trace/diagnose.js";
 import { validateFixturePath } from "../bkn-trace/fixture-validate.js";
 import { validateSchemaFile } from "../bkn-trace/schema-validate.js";
 import { group } from "../help/grouped-help.js";
-import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, outputOptions, readBody } from "./_shared.js";
 
@@ -24,46 +27,154 @@ export function traceCommand(): Command {
       printJson(await clientFrom(cmd).trace.graph(traceId), outputOptions(cmd));
     });
 
-  cmd
-    .command("evidence-chain [trace-id]")
-    .description("Fetch BKN Trace evidence chain by trace id or --request-id")
-    .option("--request-id <id>", "BKN request id scope")
-    .option("--limit <n>", "maximum evidence trace batches", (v) => Number.parseInt(v, 10))
-    .action(async (traceId: string | undefined, opts, cmd: Command) => {
+  const conversations = cmd.command("conversations").description("Manage Trace conversations");
+  conversations
+    .command("list")
+    .description("List conversations in the authorized owner scope")
+    .option("--limit <n>", "page size, 1..100", (value) => Number.parseInt(value, 10))
+    .action(async (opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).trace.evidenceChain(traceScope(traceId, opts.requestId), {
-          limit: opts.limit,
+        await clientFrom(cmd).trace.lifecycle.listConversations({ limit: opts.limit }),
+        outputOptions(cmd),
+      );
+    });
+  conversations
+    .command("ensure-current <external-conversation-key>")
+    .description("Ensure the current Core-owned conversation generation")
+    .option("--one-shot", "create a one-shot conversation")
+    .option("--idempotency-key <key>", "stable idempotency key")
+    .action(async (externalConversationKey: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).trace.lifecycle.ensureConversation({
+          external_conversation_key: externalConversationKey,
+          idempotency_key: opts.idempotencyKey,
+          one_shot: Boolean(opts.oneShot),
+        }),
+        outputOptions(cmd),
+      );
+    });
+  conversations
+    .command("create-new-generation <external-conversation-key>")
+    .description("Create the next Core-owned conversation generation")
+    .requiredOption("--idempotency-key <key>", "stable idempotency key")
+    .action(async (externalConversationKey: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).trace.lifecycle.createNewConversationGeneration({
+          external_conversation_key: externalConversationKey,
+          idempotency_key: opts.idempotencyKey,
+        }),
+        outputOptions(cmd),
+      );
+    });
+  conversations
+    .command("resume <conversation-id>")
+    .description("Resume an existing authorized conversation")
+    .action(async (conversationId: string, _opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).trace.lifecycle.resumeConversation({
+          conversation_id: conversationId,
+        }),
+        outputOptions(cmd),
+      );
+    });
+  conversations
+    .command("get <conversation-id>")
+    .description("Get an authorized conversation")
+    .action(async (conversationId: string, _opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).trace.lifecycle.getConversation(conversationId),
+        outputOptions(cmd),
+      );
+    });
+  conversations
+    .command("close <conversation-id>")
+    .description("Close an active conversation")
+    .option("--idempotency-key <key>", "stable idempotency key")
+    .action(async (conversationId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).trace.lifecycle.closeConversation(conversationId, {
+          idempotency_key: opts.idempotencyKey,
         }),
         outputOptions(cmd),
       );
     });
 
-  cmd
-    .command("business-graph [trace-id]")
-    .description("Fetch BKN Trace business semantic graph by trace id or --request-id")
-    .option("--request-id <id>", "BKN request id scope")
-    .option("--limit <n>", "maximum evidence trace batches", (v) => Number.parseInt(v, 10))
-    .action(async (traceId: string | undefined, opts, cmd: Command) => {
+  const interactions = cmd.command("interactions").description("Inspect Trace interactions");
+  interactions
+    .command("start <conversation-id>")
+    .description("Start one managed interaction")
+    .requiredOption("--idempotency-key <key>", "stable idempotency key")
+    .option("--agent-name <name>", "conversation-level Agent display name")
+    .option("--lease-seconds <n>", "interaction lease duration", (value) =>
+      Number.parseInt(value, 10),
+    )
+    .action(async (conversationId: string, opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).trace.businessGraph(traceScope(traceId, opts.requestId), {
-          limit: opts.limit,
+        await clientFrom(cmd).trace.lifecycle.startInteraction(conversationId, {
+          idempotency_key: opts.idempotencyKey,
+          agent_name: opts.agentName,
+          lease_seconds: opts.leaseSeconds,
         }),
         outputOptions(cmd),
       );
     });
-
-  cmd
-    .command("snapshot-preview [trace-id]")
-    .description("Fetch metadata-only evidence snapshot preview by trace id or --request-id")
-    .option("--request-id <id>", "BKN request id scope")
-    .option("--limit <n>", "maximum evidence trace batches", (v) => Number.parseInt(v, 10))
-    .action(async (traceId: string | undefined, opts, cmd: Command) => {
+  interactions
+    .command("get <interaction-id>")
+    .description("Get an authorized interaction")
+    .action(async (interactionId: string, _opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).trace.snapshotPreview(traceScope(traceId, opts.requestId), {
-          limit: opts.limit,
-        }),
+        await clientFrom(cmd).trace.lifecycle.getInteraction(interactionId),
         outputOptions(cmd),
       );
+    });
+  for (const action of ["complete", "fail", "cancel", "handoff"] as const) {
+    interactions
+      .command(`${action} <interaction-id>`)
+      .description(`${action} a managed interaction using a 3.0 completion manifest`)
+      .requiredOption("--body-file <path>", "read completion manifest JSON from a protected file")
+      .action(async (interactionId: string, opts, cmd: Command) => {
+        const input = readBody(opts) as InteractionCompletionInput;
+        const lifecycle = clientFrom(cmd).trace.lifecycle;
+        const terminal = {
+          complete: lifecycle.completeInteraction,
+          fail: lifecycle.failInteraction,
+          cancel: lifecycle.cancelInteraction,
+          handoff: lifecycle.handoffInteraction,
+        }[action];
+        printJson(await terminal(interactionId, input), outputOptions(cmd));
+      });
+  }
+
+  const operations = cmd.command("operations").description("Inspect and retry operations");
+  operations
+    .command("get <operation-id>")
+    .description("Get an authorized operation")
+    .action(async (operationId: string, _opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).trace.lifecycle.getOperation(operationId),
+        outputOptions(cmd),
+      );
+    });
+  operations
+    .command("retry <operation-id>")
+    .description("Create the next retry attempt for an eligible failed operation")
+    .requiredOption("--body-file <path>", "read retry request JSON from a protected file")
+    .action(async (operationId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).trace.lifecycle.retryOperationAttempt(
+          operationId,
+          readBody(opts) as RetryOperationAttemptInput,
+        ),
+        outputOptions(cmd),
+      );
+    });
+
+  const receipts = cmd.command("receipts").description("Inspect durable operation receipts");
+  receipts
+    .command("get <receipt-id>")
+    .description("Get an authorized operation receipt")
+    .action(async (receiptId: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).trace.lifecycle.getReceipt(receiptId), outputOptions(cmd));
     });
 
   cmd
@@ -166,25 +277,5 @@ export function traceCommand(): Command {
       if (!result.ok) process.exitCode = 1;
     });
 
-  const evidence = cmd
-    .command("evidence")
-    .description("Submit BKN Trace 2.x business evidence events");
-  evidence
-    .command("emit <file>")
-    .description("Submit a BKN Trace 2.0/2.1 event batch JSON file")
-    .action(async (file: string, _opts, cmd: Command) => {
-      const body = JSON.parse(readFileSync(file, "utf8"));
-      printJson(await clientFrom(cmd).trace.emitEvidenceEvents(body), outputOptions(cmd));
-    });
-
   return group(cmd, "TRACE AI");
-}
-
-function traceScope(traceId: string | undefined, requestId: string | undefined) {
-  if (traceId && requestId) {
-    throw new InputError("Provide either trace id or --request-id, not both.");
-  }
-  if (requestId) return { requestId };
-  if (traceId) return traceId;
-  throw new InputError("Provide a trace id or --request-id.");
 }

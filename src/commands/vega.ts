@@ -3,7 +3,7 @@
 
 /** `openbkn vega …` — Catalog reads + index BuildTask. */
 import { Command } from "commander";
-import type { RawQueryRequest } from "../api/vega.js";
+import type { CatalogHealthCheckScheduleRequest, RawQueryRequest } from "../api/vega.js";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
@@ -11,6 +11,56 @@ import { printJson } from "../utils/output.js";
 import { clientFrom, csv, outputOptions } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
+const bool = (value: string): boolean => {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new InputError("boolean value must be true or false");
+};
+
+const parseJsonObject = (value: string, flag: string): Record<string, unknown> => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new InputError(`${flag} must be valid JSON`);
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new InputError(`${flag} must be a JSON object`);
+  }
+  return parsed as Record<string, unknown>;
+};
+
+const parseStringRecord = (value: string, flag: string): Record<string, string> => {
+  const parsed = parseJsonObject(value, flag);
+  if (Object.values(parsed).some((item) => typeof item !== "string")) {
+    throw new InputError(`${flag} values must be strings`);
+  }
+  return parsed as Record<string, string>;
+};
+
+const healthCheckSchedule = (
+  mode?: string,
+  cronExpr?: string,
+): CatalogHealthCheckScheduleRequest | undefined => {
+  if (!mode) {
+    if (cronExpr) throw new InputError("a health-check cron expression requires enabled mode");
+    return undefined;
+  }
+  if (mode === "enabled") {
+    if (!cronExpr) {
+      throw new InputError("a health-check cron expression is required in enabled mode");
+    }
+    return { mode, cronExpr };
+  }
+  if (mode === "inherit" || mode === "disabled") {
+    if (cronExpr) {
+      throw new InputError("a health-check cron expression is only valid in enabled mode");
+    }
+    return { mode };
+  }
+  throw new InputError("health-check mode must be inherit, enabled, or disabled");
+};
+
 const parsePairs = (raw?: string): Array<{ key: string; value: string }> | undefined => {
   if (!raw) return undefined;
   return raw
@@ -81,10 +131,10 @@ export function vegaCommand(): Command {
       );
     });
   catalog
-    .command("health <ids...>")
-    .description("Health-status for one or more catalogs")
-    .action(async (ids: string[], _opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).vega.catalogHealth(ids), outputOptions(cmd));
+    .command("health <id>")
+    .description("Health-status for a catalog")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.catalogHealth(id), outputOptions(cmd));
     });
   catalog
     .command("create")
@@ -98,62 +148,75 @@ export function vegaCommand(): Command {
     .option("--enabled", "create enabled (default: disabled)")
     .option("--internal", "create an internal catalog")
     .option("--extensions <json>", "extension key/value JSON object")
+    .option("--allow-unhealthy", "save the catalog when its connection test fails")
+    .option("--health-check-mode <mode>", "health schedule: inherit | enabled | disabled")
+    .option("--health-check-cron <expr>", "cron expression for enabled health checks")
     .action(async (opts, cmd: Command) => {
-      let connectorConfig: unknown;
-      try {
-        connectorConfig = JSON.parse(opts.connectorConfig);
-      } catch {
-        throw new Error("--connector-config must be valid JSON");
-      }
-      const extensions = opts.extensions ? JSON.parse(opts.extensions) : undefined;
+      const connectorConfig = parseJsonObject(opts.connectorConfig, "--connector-config");
+      const extensions = opts.extensions
+        ? parseStringRecord(opts.extensions, "--extensions")
+        : undefined;
       printJson(
-        await clientFrom(cmd).vega.createCatalog({
-          id: opts.id,
-          name: opts.name,
-          connectorType: opts.connectorType,
-          connectorConfig,
-          tags: opts.tags
-            ? String(opts.tags)
-                .split(",")
-                .map((t) => t.trim())
-                .filter(Boolean)
-            : undefined,
-          description: opts.description,
-          enabled: opts.enabled ? true : undefined,
-          internal: opts.internal ? true : undefined,
-          extensions,
-        }),
+        await clientFrom(cmd).vega.createCatalog(
+          {
+            id: opts.id,
+            name: opts.name,
+            connectorType: opts.connectorType,
+            connectorConfig,
+            tags: opts.tags
+              ? String(opts.tags)
+                  .split(",")
+                  .map((t) => t.trim())
+                  .filter(Boolean)
+              : undefined,
+            description: opts.description,
+            enabled: opts.enabled ? true : undefined,
+            internal: opts.internal ? true : undefined,
+            extensions,
+            healthCheckSchedule: healthCheckSchedule(opts.healthCheckMode, opts.healthCheckCron),
+          },
+          { allowUnhealthy: opts.allowUnhealthy ? true : undefined },
+        ),
         outputOptions(cmd),
       );
     });
   catalog
     .command("update <id>")
-    .description("Update a catalog")
-    .option("--name <s>", "catalog name")
-    .option("--connector-type <s>", "connector type")
+    .description("Fully update a catalog")
+    .requiredOption("--name <s>", "catalog name")
+    .requiredOption("--connector-type <s>", "connector type")
+    .requiredOption("--enabled <bool>", "current enabled state", bool)
     .option("--connector-config <json>", "connector config JSON")
     .option("--tags <t1,t2>", "comma-separated tags")
     .option("--description <s>", "description")
-    .option("--enabled <bool>", "enabled state")
     .option("--extensions <json>", "extension key/value JSON object")
+    .option("--allow-unhealthy", "save the update when its connection test fails")
     .action(async (id: string, opts, cmd: Command) => {
-      const connectorConfig = opts.connectorConfig ? JSON.parse(opts.connectorConfig) : undefined;
-      const extensions = opts.extensions ? JSON.parse(opts.extensions) : undefined;
+      const connectorConfig = opts.connectorConfig
+        ? parseJsonObject(opts.connectorConfig, "--connector-config")
+        : undefined;
+      const extensions = opts.extensions
+        ? parseStringRecord(opts.extensions, "--extensions")
+        : undefined;
       printJson(
-        await clientFrom(cmd).vega.updateCatalog(id, {
-          name: opts.name,
-          connectorType: opts.connectorType,
-          connectorConfig,
-          tags: opts.tags
-            ? String(opts.tags)
-                .split(",")
-                .map((t) => t.trim())
-                .filter(Boolean)
-            : undefined,
-          description: opts.description,
-          enabled: opts.enabled === undefined ? undefined : opts.enabled === "true",
-          extensions,
-        }),
+        await clientFrom(cmd).vega.updateCatalog(
+          id,
+          {
+            name: opts.name,
+            connectorType: opts.connectorType,
+            connectorConfig,
+            tags: opts.tags
+              ? String(opts.tags)
+                  .split(",")
+                  .map((t) => t.trim())
+                  .filter(Boolean)
+              : undefined,
+            description: opts.description,
+            enabled: opts.enabled,
+            extensions,
+          },
+          { allowUnhealthy: opts.allowUnhealthy ? true : undefined },
+        ),
         outputOptions(cmd),
       );
     });
@@ -180,6 +243,39 @@ export function vegaCommand(): Command {
     .description("Test a catalog connection")
     .action(async (id: string, _opts, cmd: Command) => {
       printJson(await clientFrom(cmd).vega.testCatalogConnection(id), outputOptions(cmd));
+    });
+  catalog
+    .command("test-connection-config")
+    .description("Test an unpersisted catalog connection configuration")
+    .requiredOption("--connector-type <s>", "connector type")
+    .requiredOption("--connector-config <json>", "connector config JSON")
+    .action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).vega.testCatalogConnectionConfig({
+          connectorType: opts.connectorType,
+          connectorConfig: parseJsonObject(opts.connectorConfig, "--connector-config"),
+        }),
+        outputOptions(cmd),
+      );
+    });
+  catalog
+    .command("health-check-schedule <id>")
+    .description("Get a catalog health-check schedule")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.catalogHealthCheckSchedule(id), outputOptions(cmd));
+    });
+  catalog
+    .command("set-health-check-schedule <id>")
+    .description("Update a catalog health-check schedule")
+    .requiredOption("--mode <mode>", "health schedule: inherit | enabled | disabled")
+    .option("--cron <expr>", "cron expression for enabled health checks")
+    .action(async (id: string, opts, cmd: Command) => {
+      const schedule = healthCheckSchedule(opts.mode, opts.cron);
+      if (!schedule) throw new InputError("--mode is required");
+      printJson(
+        await clientFrom(cmd).vega.updateCatalogHealthCheckSchedule(id, schedule),
+        outputOptions(cmd),
+      );
     });
   catalog
     .command("discover <id>")
@@ -377,9 +473,9 @@ export function vegaCommand(): Command {
     });
 
   dataset
-    .command("build-status <resource-id> <task-id>")
+    .command("build-status <task-id>")
     .description("Show a BuildTask's state and progress")
-    .action(async (_resourceId: string, taskId: string, _opts, cmd: Command) => {
+    .action(async (taskId: string, _opts, cmd: Command) => {
       const task = await clientFrom(cmd).vega.buildStatus(taskId);
       printJson(task, outputOptions(cmd));
     });
@@ -394,7 +490,7 @@ export function vegaCommand(): Command {
     .option("--status <status>", "comma-separated statuses")
     .option("--active", "only running/init tasks")
     .option("--mode <mode>", "filter by mode: batch | streaming")
-    .option("--order-by <field>", "default | created_at | updated_at | status | mode")
+    .option("--order-by <field>", "default | created_at | updated_at")
     .option("--order <dir>", "asc | desc")
     .action(async (opts, cmd: Command) => {
       printJson(
@@ -416,7 +512,7 @@ export function vegaCommand(): Command {
   dataset
     .command("build-start <task-id>")
     .description("Start a BuildTask")
-    .option("--reset", "restart from the beginning")
+    .option("--reset", "restart a full task from the beginning (ignored for incremental tasks)")
     .action(async (taskId: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).vega.startBuildTask(taskId, { reset: opts.reset }),

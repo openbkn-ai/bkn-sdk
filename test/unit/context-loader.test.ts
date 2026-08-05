@@ -1,9 +1,14 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getKnDetail, getObjectTypes, getRelationTypes } from "../../src/api/context-loader.js";
-import { resetLifecycleCaches } from "../../src/api/lifecycle.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  callManagedTool,
+  callTool,
+  getKnDetail,
+  getObjectTypes,
+  getRelationTypes,
+} from "../../src/api/context-loader.js";
 import type { RequestContext } from "../../src/types.js";
 
 const ctx: RequestContext = {
@@ -36,33 +41,41 @@ function mockMcp(): typeof fetch {
   return fn as unknown as typeof fetch;
 }
 
-/** The `tools/call` request body among all the MCP POSTs (skips initialize etc.). */
-function toolCallBody(f: typeof fetch): { name: string; arguments: Record<string, unknown> } {
+/**
+ * The JSON-RPC POSTs, in order. Bodyless calls are skipped: a tool call is now
+ * preceded by a GET probing the deploy's tool catalog for the lifecycle
+ * contract.
+ */
+function rpcCalls(f: typeof fetch): Array<[Record<string, unknown>, RequestInit]> {
   const calls = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls;
-  for (const [, init] of calls) {
-    // The capability probe is a bodiless GET; only JSON-RPC POSTs carry one.
-    if (typeof init.body !== "string") continue;
-    const b = JSON.parse(init.body) as {
-      method?: string;
-      params?: { name: string; arguments: Record<string, unknown> };
-    };
-    if (b.method === "tools/call" && b.params) return b.params;
+  return calls
+    .filter(([, init]) => typeof init?.body === "string")
+    .map(([, init]) => [JSON.parse(init.body as string) as Record<string, unknown>, init]);
+}
+
+/** The `tools/call` request body among all the MCP POSTs (skips initialize etc.). */
+function toolCallBody(f: typeof fetch): {
+  name: string;
+  arguments: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
+} {
+  for (const [body] of rpcCalls(f)) {
+    const params = body.params as
+      | { name: string; arguments: Record<string, unknown>; _meta?: Record<string, unknown> }
+      | undefined;
+    if (body.method === "tools/call" && params) return params;
   }
   throw new Error("no tools/call POST captured");
 }
 
 function toolCallHeaders(f: typeof fetch): Headers {
-  const calls = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls;
-  for (const [, init] of calls) {
-    if (typeof init.body !== "string") continue;
-    const body = JSON.parse(init.body) as { method?: string };
+  for (const [body, init] of rpcCalls(f)) {
     if (body.method === "tools/call") return new Headers(init.headers);
   }
   throw new Error("no tools/call POST captured");
 }
 
 // A fresh kn per test avoids the module-level session cache masking the initialize POST.
-beforeEach(() => resetLifecycleCaches());
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -104,11 +117,8 @@ describe("progressive KN detail (get_kn_detail)", () => {
     vi.setSystemTime(new Date("2026-07-27T09:01:00.000Z"));
     await getKnDetail(longLivedCtx, "kn-long-lived-b");
 
-    const headers = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls
-      .filter(
-        ([, init]) =>
-          typeof init.body === "string" && JSON.parse(init.body).method === "tools/call",
-      )
+    const headers = rpcCalls(f)
+      .filter(([body]) => body.method === "tools/call")
       .map(([, init]) => new Headers(init.headers));
     expect(headers).toHaveLength(2);
     expect(headers[0]?.get("bkn-operation-id")).not.toBe(headers[1]?.get("bkn-operation-id"));
@@ -147,5 +157,183 @@ describe("drill-down (get_object_types / get_relation_types)", () => {
     const p = toolCallBody(f);
     expect(p.name).toBe("get_relation_types");
     expect(p.arguments.ids).toEqual(["rel_a"]);
+  });
+});
+
+describe("managed MCP tool calls", () => {
+  it("sends host lifecycle hints as MCP metadata, never as model tool arguments", async () => {
+    const f = mockMcp();
+
+    await callTool(
+      ctx,
+      "kn-host-hints",
+      "bkn_start_interaction",
+      { question: "查询供应链库存" },
+      {
+        hostConversationKey: "cursor-chat-42",
+        clientInvocationId: "cursor-turn-7",
+      },
+    );
+
+    const params = toolCallBody(f);
+    expect(params.arguments).toEqual({ question: "查询供应链库存" });
+    expect(params._meta).toEqual({
+      "openbkn.ai/host-conversation-key": "cursor-chat-42",
+      "openbkn.ai/client-invocation-id": "cursor-turn-7",
+    });
+  });
+
+  it("omits MCP metadata when the host does not provide lifecycle hints", async () => {
+    const f = mockMcp();
+
+    await callTool(ctx, "kn-no-host-hints", "bkn_start_interaction", {
+      question: "查询供应链库存",
+    });
+
+    expect(toolCallBody(f)._meta).toBeUndefined();
+  });
+
+  it("returns structured start output when the text content is descriptive", async () => {
+    const interaction = {
+      conversation_id: "conversation_supply_chain",
+      interaction_id: "interaction_supply_chain",
+      execution_status: "active",
+    };
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        content: [{ type: "text", text: "managed lifecycle state updated" }],
+        structuredContent: interaction,
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(body, { status: 200, headers: { "mcp-session-id": "lifecycle-s1" } }),
+      ),
+    );
+
+    await expect(
+      callTool(ctx, "kn-lifecycle", "bkn_start_interaction", {
+        question: "查询供应链库存",
+      }),
+    ).resolves.toEqual(interaction);
+  });
+
+  it("rejects MCP tool errors instead of returning them as business values", async () => {
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: "conversation_required: call bkn_start_interaction first",
+          },
+        ],
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () => new Response(body, { status: 200, headers: { "mcp-session-id": "error-s1" } }),
+      ),
+    );
+
+    await expect(
+      callManagedTool(ctx, "kn-error", "search_schema", {
+        query: "6月份需求预测",
+      }),
+    ).rejects.toThrow(
+      "Context-loader error: conversation_required: call bkn_start_interaction first",
+    );
+  });
+
+  it("rejects managed tool responses without a trusted operation receipt", async () => {
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        content: [{ type: "text", text: JSON.stringify({ concepts: ["forecast"] }) }],
+        structuredContent: {},
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(body, { status: 200, headers: { "mcp-session-id": "missing-receipt-s1" } }),
+      ),
+    );
+
+    await expect(
+      callManagedTool(ctx, "kn-managed", "search_schema", {
+        query: "6月份需求预测",
+      }),
+    ).rejects.toThrow("Context-loader managed tool response did not include bkn_receipt");
+  });
+
+  it("returns the business value together with the trusted operation receipt", async () => {
+    const receipt = {
+      receipt_id: "receipt-1",
+      schema_version: "3.0.0",
+      conversation_id: "conversation_supply_chain",
+      interaction_id: "interaction_june_forecast",
+      operation_id: "operation-1",
+      attempt: 1,
+      operation_key: "search-schema",
+      tool_name: "search_schema",
+      normalized_input_hash: "sha256:input",
+      receipt_status: "completed",
+      evidence_durability: "pending",
+      required: true,
+      request_id: "request-1",
+      trace_id: "1234567890abcdef1234567890abcdef",
+      causation_event_ids: [],
+      observed_evidence_refs: [],
+      business_refs: [],
+      artifact_refs: [],
+      partial_reasons: [],
+      row_version: 2,
+      issued_at: "2026-08-02T06:00:00Z",
+      payload_hash: "sha256:payload",
+      owner: {
+        tenant_id: "tenant-1",
+        business_domain_id: "bd_public",
+        application_principal_id: "openbkn-sdk",
+        effective_subject_type: "user",
+        effective_subject_id: "user-1",
+      },
+    };
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        content: [{ type: "text", text: JSON.stringify({ concepts: ["forecast"] }) }],
+        structuredContent: { bkn_receipt: receipt },
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(body, { status: 200, headers: { "mcp-session-id": "managed-s1" } }),
+      ),
+    );
+
+    const result = await callManagedTool(ctx, "kn-managed", "search_schema", {
+      query: "6月份需求预测",
+      bkn_context: {
+        conversation_id: "conversation_supply_chain",
+        interaction_id: "interaction_june_forecast",
+        operation_key: "search-schema",
+      },
+    });
+
+    expect(result.value).toEqual({ concepts: ["forecast"] });
+    expect(result.receipt).toEqual(receipt);
   });
 });

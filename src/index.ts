@@ -15,27 +15,55 @@ export {
 } from "./types.js";
 export { HttpError, InputError } from "./utils/errors.js";
 export {
-  TraceSession,
-  type ActionHandle,
-  type ActionResultInput,
-  type BusinessRefInput,
-  type BusinessRefsInput,
-  type ClaimInput,
-  type EvidenceRefInput,
-  type EvidenceRefsInput,
-  type ExecuteActionInput,
-  type InteractionInput,
-  type OperationEventPayloadMap,
-  type OperationEventType,
-  type OperationInput,
-  type RecommendActionInput,
-  type TraceSessionOptions,
-} from "./trace-session.js";
+  ManagedTrace,
+  type BknBusinessContext,
+  type ConversationStrategy,
+  type ManagedCompletionInput,
+  type ManagedInteractionScope,
+  type ManagedOperationCall,
+  type ManagedOperationExecution,
+  type ManagedOperationInput,
+  type ManagedOperationResult,
+  type ManagedTraceOptions,
+  type SupportCandidate,
+} from "./managed-trace.js";
+export {
+  type ClaimSupport,
+  type CloseConversationInput,
+  type ConversationPage,
+  type CreateNewConversationGenerationInput,
+  type EnsureConversationInput,
+  type EnsureOperationInput,
+  type EvidenceDurability,
+  type EvidenceReference,
+  type ExpectedOperation,
+  type ExpectedReceipt,
+  type FinishOperationAttemptInput,
+  type InteractionCompletionInput,
+  type LifecycleError,
+  type LifecycleErrorCode,
+  type LifecycleErrorEnvelope,
+  type LifecycleOwner,
+  type LifecycleBusinessRef,
+  type ListConversationsQuery,
+  type ManagedClaim,
+  type ManagedConversation,
+  type ManagedInteraction,
+  type ManagedOperation,
+  type OperationReceipt,
+  type OperationResult,
+  type ResumeConversationInput,
+  type RetryOperationAttemptInput,
+  type StartInteractionInput,
+  type TraceLifecycleApi,
+  traceLifecycleApi,
+} from "./api/trace-lifecycle.js";
 
 // Resource namespaces (advanced: use with a resolved RequestContext).
 export { admin } from "./resources/admin.js";
 export { agents } from "./resources/agents.js";
 export { context } from "./resources/context-loader.js";
+export type { ManagedToolResult, ToolCallOptions } from "./api/context-loader.js";
 export { dataflows } from "./resources/dataflows.js";
 export { kn } from "./resources/knowledge-networks.js";
 export { models } from "./resources/models.js";
@@ -50,28 +78,11 @@ export * as auth from "./resources/auth.js";
 
 export type {
   ActionSummary,
-  BusinessEvidenceEventType,
-  BusinessGraphResponse,
-  EvidenceArtifact,
-  EvidenceArtifactIngestResponse,
-  EvidenceArtifactType,
-  EvidenceEvent,
-  EvidenceChainResponse,
-  EvidenceIngestRequest,
-  EvidenceIngestResponse,
-  EvidenceTraceContext,
   GraphPage,
-  InteractionSummary,
-  RequestSummary,
-  RequestSummaryQuery,
-  SnapshotPreviewResponse,
-  SummaryPage,
   TraceExecutionSummary,
   TraceGraphEdge,
   TraceGraphNode,
-  TraceQueryOptions,
   TraceGraphResponse,
-  TraceScope,
   VisibilitySummary,
 } from "./api/trace.js";
 
@@ -79,13 +90,23 @@ export type {
 export type {
   BuildMode,
   BuildTask,
+  CatalogConnectionTestRequest,
+  CatalogConnectionTestResult,
+  CatalogHealthCheckSchedule,
+  CatalogHealthCheckScheduleMode,
+  CatalogHealthCheckScheduleRequest,
+  CatalogHealthCheckStatus,
+  CatalogHealthStatus,
+  CatalogWriteOptions,
   CreateBuildTaskRequest,
+  CreateCatalogRequest,
   DslRawQueryRequest,
   QueryPagingMode,
   RawQueryContinuationRequest,
   RawQueryPaging,
   RawQueryRequest,
   SqlRawQueryRequest,
+  UpdateCatalogRequest,
 } from "./api/vega.js";
 
 // Low-level escape hatch for endpoints not yet wrapped.

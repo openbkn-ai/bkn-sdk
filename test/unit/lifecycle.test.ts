@@ -6,7 +6,7 @@ import { callTool, searchSchema } from "../../src/api/context-loader.js";
 import { semanticSearch } from "../../src/api/knowledge-networks.js";
 import { releaseLifecycleSessions, resetLifecycleCaches } from "../../src/api/lifecycle.js";
 import type { RequestContext } from "../../src/types.js";
-import { HttpError } from "../../src/utils/errors.js";
+import { HttpError, ToolError } from "../../src/utils/errors.js";
 
 const V1_CATALOG = {
   tools: [{ name: "bkn_create_conversation" }, { name: "bkn_start_interaction" }],
@@ -383,8 +383,11 @@ describe("MCP results that carry structuredContent", () => {
       ),
     );
 
-    await expect(callTool(freshCtx(), "kn-managed", "bkn_start_interaction", {})).rejects.toThrow(
-      /interaction_in_progress: the conversation already has an active interaction/,
+    const thrown = await callTool(freshCtx(), "kn-managed", "bkn_start_interaction", {}).catch(
+      (err: unknown) => err,
     );
+    expect(thrown).toBeInstanceOf(ToolError);
+    // The code, not the prose, is what decides whether a session can be reopened.
+    expect((thrown as ToolError).code).toBe("interaction_in_progress");
   });
 });
