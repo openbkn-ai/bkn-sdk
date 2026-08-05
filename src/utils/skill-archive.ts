@@ -33,6 +33,21 @@ export async function zipDirectory(dir: string): Promise<Uint8Array> {
   return new Uint8Array(await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" }));
 }
 
+/**
+ * Extract a zip archive into memory, keyed by the archive-relative path.
+ * Used to serve single-file reads without touching disk when the backend hands
+ * back an object-store URL the caller can't reach.
+ */
+export async function unzipToMap(bytes: Uint8Array): Promise<Map<string, Uint8Array>> {
+  const zip = await JSZip.loadAsync(bytes);
+  const out = new Map<string, Uint8Array>();
+  for (const entry of Object.values(zip.files)) {
+    if (entry.dir) continue;
+    out.set(entry.name, new Uint8Array(await entry.async("uint8array")));
+  }
+  return out;
+}
+
 /** Extract a zip archive into a target directory (created if missing). */
 export async function unzipToDirectory(bytes: Uint8Array, dir: string): Promise<string[]> {
   const abs = resolve(dir);

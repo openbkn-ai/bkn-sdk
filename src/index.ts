@@ -86,6 +86,19 @@ export type {
   VisibilitySummary,
 } from "./api/trace.js";
 
+// Skill execution + file-read types are part of the public contract.
+export type {
+  ExecuteSkillOptions,
+  SkillContentResponse,
+  SkillExecutionResult,
+  SkillFileEntry,
+  SkillReadFileResponse,
+  SkillResponseMode,
+  SkillView,
+} from "./api/skills.js";
+export type { SkillViewOptions } from "./resources/skills.js";
+export type { SkillChild, SkillDirChild, SkillFileChild } from "./utils/skill-tree.js";
+
 // Vega build types are part of the public contract.
 export type {
   BuildMode,
