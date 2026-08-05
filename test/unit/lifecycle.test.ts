@@ -132,8 +132,22 @@ function mockDeploy(opts: MockOptions = {}): Recorded {
   return recorded;
 }
 
+/** The body of the most recent `/kn/semantic-search` POST. */
+function lastRetrievalBody(f: typeof fetch): Record<string, unknown> {
+  const calls = (f as unknown as { mock: { calls: [string | URL, RequestInit][] } }).mock.calls;
+  const hit = calls.filter(([url]) => String(url).includes("/kn/semantic-search")).pop();
+  if (!hit) throw new Error("no retrieval POST captured");
+  return JSON.parse(hit[1].body as string) as Record<string, unknown>;
+}
+
 beforeEach(() => resetLifecycleCaches());
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  // Restored here rather than at the end of the test that installs them: a
+  // failing assertion would otherwise leak fake timers into every later case,
+  // turning one failure into a cascade.
+  vi.useRealTimers();
+});
 
 describe("managed lifecycle on semantic search", () => {
   it("omits bkn_context on a deploy without the lifecycle tools", async () => {
@@ -353,7 +367,6 @@ describe("managed lifecycle on semantic search", () => {
     // good would leave a long-lived process sending no bkn_context for the
     // rest of its life, with no path back.
     expect(probes).toBe(2);
-    vi.useRealTimers();
   });
 
   it("keeps one session per caller rather than sharing across tokens", async () => {
@@ -369,6 +382,59 @@ describe("managed lifecycle on semantic search", () => {
     const first = recorded.retrievalBodies[0]?.bkn_context as Record<string, string>;
     const second = recorded.retrievalBodies[1]?.bkn_context as Record<string, string>;
     expect(second.conversation_id).not.toBe(first.conversation_id);
+  });
+
+  it("does not let one caller's rejected token silence the deploy for everyone", async () => {
+    let probes = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/mcp/info")) {
+          probes += 1;
+          const auth = new Headers(init?.headers).get("authorization");
+          // Only Alice's credential is stale.
+          if (auth?.includes("stale")) {
+            return new Response(JSON.stringify({ error: "expired" }), { status: 401 });
+          }
+          return new Response(JSON.stringify(V2_CATALOG), { status: 200 });
+        }
+        if (url.endsWith("/v1/mcp")) {
+          const rpc = JSON.parse(init?.body as string) as { method?: string };
+          const headers = { "mcp-session-id": "s" };
+          if (rpc.method !== "tools/call") {
+            return new Response(JSON.stringify({ jsonrpc: "2.0", result: {} }), {
+              status: 200,
+              headers,
+            });
+          }
+          return new Response(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              result: {
+                content: [{ type: "text", text: "managed lifecycle state updated" }],
+                structuredContent: { conversation_id: "conv_1", interaction_id: "int_1" },
+              },
+            }),
+            { status: 200, headers },
+          );
+        }
+        return new Response(JSON.stringify({ concepts: [] }), { status: 200 });
+      }),
+    );
+
+    const host = `https://tenants-${hostSeq}.example.com`;
+    const alice: RequestContext = { ...freshCtx(), baseUrl: host, token: "stale" };
+    const bob: RequestContext = { ...freshCtx(), baseUrl: host, token: "good" };
+    await semanticSearch(alice, "kn-1", "物料");
+    const bobBody = await semanticSearch(bob, "kn-1", "物料").then(() =>
+      lastRetrievalBody(fetch as unknown as typeof fetch),
+    );
+
+    // A 401 is a fact about one identity. Filing it under the host would make
+    // every other tenant on it look like a deploy with no lifecycle at all.
+    expect(bobBody).toHaveProperty("bkn_context");
+    expect(probes).toBe(2);
   });
 
   it("sends a caller-built bkn_context as-is and opens no session", async () => {

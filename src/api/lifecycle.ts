@@ -102,6 +102,12 @@ const contracts = new Map<string, Promise<Contract>>();
  * a doomed round trip per business call — or worse, waits out the request
  * timeout each time, where before only the first call did. Caching it forever
  * lets one blip decide the rest of the process. A short window does both jobs.
+ *
+ * Recorded per caller, not per deploy. The probe carries `ctx.token`, so a 401
+ * is a fact about one identity; filing it under the base URL alone would let
+ * one expired token answer "no lifecycle here" for every other tenant sharing
+ * that host. Same distinction the session key draws — that one decides whose
+ * session a request joins, this one decides whose failure it inherits.
  */
 const PROBE_FAILURE_TTL_MS = 30_000;
 const probeFailures = new Map<string, number>();
@@ -121,10 +127,11 @@ export function resetLifecycleCaches(): void {
  * error on a request that might have succeeded without any context.
  */
 export function lifecycleContract(ctx: RequestContext): Promise<Contract> {
-  const failedAt = probeFailures.get(ctx.baseUrl);
+  const failureKey = `${ctx.baseUrl}\0${identityOf(ctx)}`;
+  const failedAt = probeFailures.get(failureKey);
   if (failedAt !== undefined) {
     if (Date.now() - failedAt < PROBE_FAILURE_TTL_MS) return Promise.resolve("none");
-    probeFailures.delete(ctx.baseUrl);
+    probeFailures.delete(failureKey);
   }
   let pending = contracts.get(ctx.baseUrl);
   if (!pending) {
@@ -139,14 +146,21 @@ export function lifecycleContract(ctx: RequestContext): Promise<Contract> {
     // blip — a 502, a token mid-refresh — decide that every later call in this
     // process goes out without a `bkn_context`, and the reopen path cannot
     // recover from that, since it sees no context to reopen.
-    pending.catch(() => {
+    pending.catch((err: unknown) => {
       contracts.delete(ctx.baseUrl);
-      probeFailures.set(ctx.baseUrl, Date.now());
+      // An authorization failure is not worth a window at all: a refresh can
+      // fix it on the very next call, and holding it would spend 30s answering
+      // from a credential that has already been replaced.
+      if (!isAuthFailure(err)) probeFailures.set(failureKey, Date.now());
     });
   }
   // Degrade for this call regardless: an unreachable catalog must not turn into
   // a hard error on a request that might have succeeded without any context.
   return pending.catch((): Contract => "none");
+}
+
+function isAuthFailure(err: unknown): boolean {
+  return err instanceof HttpError && (err.status === 401 || err.status === 403);
 }
 
 function toolNames(info: unknown): string[] {
@@ -289,12 +303,15 @@ async function openSession(
  * hash the same. Unreachable in practice, but this key decides whose session a
  * request joins.
  */
-function sessionKey(ctx: RequestContext, knId: string): string {
-  const identity = createHash("sha256")
+function identityOf(ctx: RequestContext): string {
+  return createHash("sha256")
     .update(`${ctx.token}\0${ctx.businessDomain}`)
     .digest("hex")
     .slice(0, 16);
-  return `${ctx.baseUrl}\0${knId}\0${identity}\0${ctx.trace?.conversationId ?? ""}`;
+}
+
+function sessionKey(ctx: RequestContext, knId: string): string {
+  return `${ctx.baseUrl}\0${knId}\0${identityOf(ctx)}\0${ctx.trace?.conversationId ?? ""}`;
 }
 
 /**
