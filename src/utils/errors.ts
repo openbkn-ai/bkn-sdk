@@ -21,6 +21,21 @@ export class HttpError extends Error {
   }
 }
 
+/**
+ * Raised when an MCP tool answers with `isError`. The transport call succeeded,
+ * so this is not an {@link HttpError} — but the server's error `code` is what
+ * decides whether a caller can recover, so it travels with the error.
+ */
+export class ToolError extends Error {
+  readonly code?: string;
+
+  constructor(message: string, code?: string) {
+    super(message);
+    this.name = "ToolError";
+    if (code) this.code = code;
+  }
+}
+
 /** Raised for bad CLI/SDK input before any request is made. */
 export class InputError extends Error {
   constructor(message: string) {
@@ -52,7 +67,10 @@ export function formatError(err: unknown): string {
       return `Forbidden (HTTP 403)${serverMsg ? `: ${serverMsg}` : " — admin privileges required"}.`;
     }
     const detail = err.body ? `: ${truncate(err.body, 500)}` : "";
-    return `Request failed (HTTP ${err.status} ${err.statusText})${detail}`;
+    // A hint on any other status is the actionable half of the message — a bare
+    // server error body tells the user what failed but never what to do next.
+    const next = err.hint ? ` ${err.hint}` : "";
+    return `Request failed (HTTP ${err.status} ${err.statusText})${detail}${next}`;
   }
   if (err instanceof Error) {
     // `fetch` throws a terse "fetch failed"; the real reason is on `.cause`.

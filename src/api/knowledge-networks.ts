@@ -8,6 +8,7 @@
  */
 import type { RequestContext } from "../types.js";
 import { request } from "./http.js";
+import { type BknContext, withManagedLifecycle } from "./lifecycle.js";
 
 const ONTOLOGY_BASE = "/api/ontology-manager/v1/knowledge-networks";
 const ONTOLOGY_QUERY_BASE = "/api/ontology-query/v1/knowledge-networks";
@@ -414,22 +415,55 @@ export interface SemanticSearchOptions {
   mode?: string;
   maxConcepts?: number;
   returnQueryUnderstanding?: boolean;
+  /**
+   * A `bkn_context` the caller built itself, sent as-is.
+   *
+   * The same escape hatch `context.toolCall` has: supplying one skips the
+   * managed session entirely, so an `operation_key` pre-registered through
+   * `ManagedTrace` survives instead of being replaced, and
+   * `parent_operation_id` / `causation_event_ids` travel with it.
+   */
+  bknContext?: BknContext;
 }
 
+function searchBody(knId: string, query: string, opts: SemanticSearchOptions) {
+  return {
+    kn_id: knId,
+    query,
+    mode: opts.mode ?? "keyword_vector_retrieval",
+    max_concepts: opts.maxConcepts ?? 10,
+    return_query_understanding: opts.returnQueryUnderstanding ?? false,
+  };
+}
+
+/**
+ * Semantic search over a KN.
+ *
+ * This is the one `/kn/*` tool with no MCP equivalent, so it cannot fall back
+ * to the transport that merges a conversation per connection — deploys that
+ * enforce the lifecycle contract need a `bkn_context` in the body, and
+ * {@link withManagedLifecycle} opens the session that supplies one. Deploys
+ * without the contract get the request unchanged.
+ */
 export function semanticSearch(
   ctx: RequestContext,
   knId: string,
   query: string,
   opts: SemanticSearchOptions = {},
 ): Promise<unknown> {
-  return request(ctx, `${RETRIEVAL_BASE}/semantic-search`, {
-    method: "POST",
-    body: {
-      kn_id: knId,
-      query,
-      mode: opts.mode ?? "keyword_vector_retrieval",
-      max_concepts: opts.maxConcepts ?? 10,
-      return_query_understanding: opts.returnQueryUnderstanding ?? false,
-    },
-  });
+  if (opts.bknContext) {
+    return request(ctx, `${RETRIEVAL_BASE}/semantic-search`, {
+      method: "POST",
+      body: { ...searchBody(knId, query, opts), bkn_context: opts.bknContext },
+    });
+  }
+  return withManagedLifecycle(ctx, knId, query, (bknContext) =>
+    request(ctx, `${RETRIEVAL_BASE}/semantic-search`, {
+      method: "POST",
+      body: {
+        ...searchBody(knId, query, opts),
+        ...(bknContext ? { bkn_context: bknContext } : {}),
+      },
+    }),
+  );
 }

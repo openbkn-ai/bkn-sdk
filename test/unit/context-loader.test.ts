@@ -41,31 +41,35 @@ function mockMcp(): typeof fetch {
   return fn as unknown as typeof fetch;
 }
 
+/**
+ * The JSON-RPC POSTs, in order. Bodyless calls are skipped: a tool call is now
+ * preceded by a GET probing the deploy's tool catalog for the lifecycle
+ * contract.
+ */
+function rpcCalls(f: typeof fetch): Array<[Record<string, unknown>, RequestInit]> {
+  const calls = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls;
+  return calls
+    .filter(([, init]) => typeof init?.body === "string")
+    .map(([, init]) => [JSON.parse(init.body as string) as Record<string, unknown>, init]);
+}
+
 /** The `tools/call` request body among all the MCP POSTs (skips initialize etc.). */
 function toolCallBody(f: typeof fetch): {
   name: string;
   arguments: Record<string, unknown>;
   _meta?: Record<string, unknown>;
 } {
-  const calls = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls;
-  for (const [, init] of calls) {
-    const b = JSON.parse(init.body as string) as {
-      method?: string;
-      params?: {
-        name: string;
-        arguments: Record<string, unknown>;
-        _meta?: Record<string, unknown>;
-      };
-    };
-    if (b.method === "tools/call" && b.params) return b.params;
+  for (const [body] of rpcCalls(f)) {
+    const params = body.params as
+      | { name: string; arguments: Record<string, unknown>; _meta?: Record<string, unknown> }
+      | undefined;
+    if (body.method === "tools/call" && params) return params;
   }
   throw new Error("no tools/call POST captured");
 }
 
 function toolCallHeaders(f: typeof fetch): Headers {
-  const calls = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls;
-  for (const [, init] of calls) {
-    const body = JSON.parse(init.body as string) as { method?: string };
+  for (const [body, init] of rpcCalls(f)) {
     if (body.method === "tools/call") return new Headers(init.headers);
   }
   throw new Error("no tools/call POST captured");
@@ -113,8 +117,8 @@ describe("progressive KN detail (get_kn_detail)", () => {
     vi.setSystemTime(new Date("2026-07-27T09:01:00.000Z"));
     await getKnDetail(longLivedCtx, "kn-long-lived-b");
 
-    const headers = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls
-      .filter(([, init]) => JSON.parse(init.body as string).method === "tools/call")
+    const headers = rpcCalls(f)
+      .filter(([body]) => body.method === "tools/call")
       .map(([, init]) => new Headers(init.headers));
     expect(headers).toHaveLength(2);
     expect(headers[0]?.get("bkn-operation-id")).not.toBe(headers[1]?.get("bkn-operation-id"));

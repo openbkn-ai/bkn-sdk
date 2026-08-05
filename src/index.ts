@@ -13,7 +13,11 @@ export {
   DEFAULT_LIST_LIMIT,
   DEFAULT_QUERY_LIMIT,
 } from "./types.js";
-export { HttpError, InputError } from "./utils/errors.js";
+export { HttpError, InputError, ToolError } from "./utils/errors.js";
+// A long-lived embedder opens managed interactions the same way the CLI does,
+// and needs the same way to hand them back.
+export { releaseLifecycleSessions } from "./api/lifecycle.js";
+export type { BknContext } from "./api/lifecycle.js";
 export {
   ManagedTrace,
   type BknBusinessContext,

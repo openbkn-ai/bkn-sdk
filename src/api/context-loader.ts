@@ -9,10 +9,11 @@
  */
 import { createOperationTraceContext } from "../trace-context.js";
 import type { RequestContext } from "../types.js";
-import { HttpError } from "../utils/errors.js";
+import { HttpError, ToolError } from "../utils/errors.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
+import { withManagedLifecycle } from "./lifecycle.js";
 import { tlsFetch } from "./tls.js";
 import type { OperationReceipt } from "./trace-lifecycle.js";
 
@@ -75,17 +76,29 @@ async function post(
   knId: string,
   sessionId: string | undefined,
   body: unknown,
+  timeoutMs?: number,
 ) {
-  const res = await authFetch(ctx, () =>
-    tlsFetch(ctx.insecure, mcpUrl(ctx), {
-      method: "POST",
-      headers: headers(ctx, knId, sessionId),
-      body: JSON.stringify(body),
-    }),
-  );
-  const text = await res.text();
-  if (!res.ok) throw new HttpError(res.status, res.statusText, text);
-  return { res, text };
+  // Unbounded by default: a tool call can legitimately run long, and this
+  // transport has never imposed a deadline. Callers that run somewhere a hang
+  // would strand the process — a release on the way out — pass one in.
+  const controller = timeoutMs === undefined ? undefined : new AbortController();
+  const timer =
+    controller === undefined ? undefined : setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await authFetch(ctx, () =>
+      tlsFetch(ctx.insecure, mcpUrl(ctx), {
+        method: "POST",
+        headers: headers(ctx, knId, sessionId),
+        body: JSON.stringify(body),
+        ...(controller ? { signal: controller.signal } : {}),
+      }),
+    );
+    const text = await res.text();
+    if (!res.ok) throw new HttpError(res.status, res.statusText, text);
+    return { res, text };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function ensureSession(ctx: RequestContext, knId: string): Promise<string> {
@@ -128,6 +141,11 @@ interface UnwrappedToolResult {
   receipt?: OperationReceipt;
 }
 
+function toolErrorCode(structuredContent: unknown): string | undefined {
+  const code = (structuredContent as { error?: { code?: unknown } } | undefined)?.error?.code;
+  return typeof code === "string" ? code : undefined;
+}
+
 /** Unwrap a JSON-RPC result without discarding its trusted lifecycle receipt. */
 function unwrapToolResult(parsed: unknown): UnwrappedToolResult {
   const rpc = parsed as { result?: unknown; error?: { message: string } };
@@ -143,7 +161,10 @@ function unwrapToolResult(parsed: unknown): UnwrappedToolResult {
       Array.isArray(content) && content[0] && typeof content[0].text === "string"
         ? content[0].text
         : "tool call failed";
-    throw new Error(`Context-loader error: ${message}`);
+    // The structured error code, not the prose, is what tells a caller whether
+    // the failure is retryable — a dead lifecycle session is reopenable, a bad
+    // argument is not.
+    throw new ToolError(`Context-loader error: ${message}`, toolErrorCode(structuredContent));
   }
   if (Array.isArray(content) && content[0] && typeof content[0].text === "string") {
     try {
@@ -178,23 +199,86 @@ function toolCallParams(
   };
 }
 
-/** Call any MCP tool by name. */
-export async function callTool(
+/**
+ * Call an MCP tool exactly as given, with no lifecycle context attached.
+ *
+ * This is what the lifecycle module itself calls: the tools that open a session
+ * cannot be wrapped in one without recurring.
+ */
+export async function callToolRaw(
+  ctx: RequestContext,
+  knId: string,
+  name: string,
+  args: Record<string, unknown>,
+  options?: ToolCallOptions,
+  timeoutMs?: number,
+): Promise<unknown> {
+  const operationCtx = operationContext(ctx);
+  const sessionId = await ensureSession(operationCtx, knId);
+  const { text } = await post(
+    operationCtx,
+    knId,
+    sessionId,
+    {
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: toolCallParams(name, args, options),
+      id: nextId(),
+    },
+    timeoutMs,
+  );
+  return unwrapToolResult(parseBody(text)).value;
+}
+
+/**
+ * The tools that manage lifecycle state rather than consume it. They are how a
+ * session gets opened in the first place, so wrapping them in one would recur.
+ */
+const LIFECYCLE_TOOLS = new Set([
+  "bkn_create_conversation",
+  "bkn_resume_conversation",
+  "bkn_start_interaction",
+  "bkn_complete_interaction",
+  "bkn_finish_interaction",
+  "bkn_fail_interaction",
+  "bkn_cancel_interaction",
+  "bkn_handoff_interaction",
+  "bkn_close_conversation",
+  "bkn_get_operation",
+  "bkn_retry_operation",
+  "bkn_get_receipt",
+]);
+
+/**
+ * Call any MCP tool by name.
+ *
+ * Deploys that enforce the lifecycle contract require a `bkn_context` in the
+ * tool arguments, the same way they require one in an HTTP `/kn/*` body. Older
+ * deploys merged a conversation per MCP connection and need nothing; the
+ * capability probe decides which is which.
+ */
+export function callTool(
   ctx: RequestContext,
   knId: string,
   name: string,
   args: Record<string, unknown>,
   options?: ToolCallOptions,
 ): Promise<unknown> {
-  const operationCtx = operationContext(ctx);
-  const sessionId = await ensureSession(operationCtx, knId);
-  const { text } = await post(operationCtx, knId, sessionId, {
-    jsonrpc: "2.0",
-    method: "tools/call",
-    params: toolCallParams(name, args, options),
-    id: nextId(),
-  });
-  return unwrapToolResult(parseBody(text)).value;
+  if (LIFECYCLE_TOOLS.has(name)) return callToolRaw(ctx, knId, name, args, options);
+  // A caller that built its own `bkn_context` gets it through untouched, and no
+  // session is opened on its behalf. `ManagedTrace.runOperation` pre-registers
+  // an Operation under a specific `operation_key` before handing the context to
+  // the tool call; replacing that key would orphan the registration, and
+  // `parent_operation_id` / `causation_event_ids` would be dropped with it.
+  if (args.bkn_context !== undefined) return callToolRaw(ctx, knId, name, args, options);
+  return withManagedLifecycle(ctx, knId, questionFor(name, args), (bknContext) =>
+    callToolRaw(ctx, knId, name, bknContext ? { ...args, bkn_context: bknContext } : args, options),
+  );
+}
+
+/** The interaction's recorded question: the user's own words when the tool has them. */
+function questionFor(name: string, args: Record<string, unknown>): string {
+  return typeof args.query === "string" && args.query ? args.query : name;
 }
 
 /** Call a lifecycle-managed MCP tool and retain the trusted operation receipt. */

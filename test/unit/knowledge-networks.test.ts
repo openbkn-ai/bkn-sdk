@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { relationTypePaths } from "../../src/api/bkn-backend.js";
 import {
   getKnowledgeNetwork,
@@ -9,6 +9,7 @@ import {
   querySubgraph,
   semanticSearch,
 } from "../../src/api/knowledge-networks.js";
+import { resetLifecycleCaches } from "../../src/api/lifecycle.js";
 import type { RequestContext } from "../../src/types.js";
 
 const ctx: RequestContext = {
@@ -33,6 +34,14 @@ function mockFetch(): typeof fetch {
 function firstCall(fetchMock: typeof fetch): CallArgs {
   const args = (fetchMock as unknown as { mock: { calls: CallArgs[] } }).mock.calls[0];
   if (!args) throw new Error("fetch was not called");
+  return args;
+}
+
+/** The fetch call to a given path, for endpoints reached after a capability probe. */
+function callTo(fetchMock: typeof fetch, pathname: string): CallArgs {
+  const calls = (fetchMock as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+  const args = calls.find(([url]) => new URL(url).pathname === pathname);
+  if (!args) throw new Error(`no fetch to ${pathname}`);
   return args;
 }
 
@@ -147,11 +156,14 @@ describe("reads tunnelled over POST", () => {
 });
 
 describe("semanticSearch", () => {
+  // Search probes the MCP tool catalog first to decide whether this deploy
+  // needs a `bkn_context`, so the retrieval POST is no longer the first call.
+  beforeEach(() => resetLifecycleCaches());
+
   it("POSTs the retrieval body with defaults", async () => {
     const fetchMock = mockFetch();
     await semanticSearch(ctx, "kn-1", "churn");
-    const call = firstCall(fetchMock);
-    expect(new URL(call[0]).pathname).toBe("/api/agent-retrieval/v1/kn/semantic-search");
+    const call = callTo(fetchMock, "/api/agent-retrieval/v1/kn/semantic-search");
     expect(call[1].method).toBe("POST");
     expect(JSON.parse(call[1].body as string)).toMatchObject({
       kn_id: "kn-1",
@@ -159,6 +171,13 @@ describe("semanticSearch", () => {
       mode: "keyword_vector_retrieval",
       max_concepts: 10,
     });
+  });
+
+  it("leaves the body untouched when the deploy has no lifecycle tools", async () => {
+    const fetchMock = mockFetch();
+    await semanticSearch(ctx, "kn-1", "churn");
+    const call = callTo(fetchMock, "/api/agent-retrieval/v1/kn/semantic-search");
+    expect(JSON.parse(call[1].body as string)).not.toHaveProperty("bkn_context");
   });
 });
 
