@@ -22,7 +22,10 @@ lifecycle itself.
 
 A `bkn_context` you build yourself is always honoured — the SDK passes it
 through untouched and opens nothing, so a pre-registered `operation_key`,
-`parent_operation_id` and `causation_event_ids` survive. The same holds for
+`parent_operation_id` and `causation_event_ids` survive. That holds for MCP
+tool arguments (`client.context.*`, `openbkn context tool-call`) and for the
+HTTP retrieval path, where `client.kn.search(kn, q, { bknContext })` takes the
+same object. The same holds for
 `--conversation-id` / `--interaction-id` (and `BKN_CONVERSATION_ID` /
 `BKN_INTERACTION_ID`) on the CLI. Given only a conversation, the SDK opens its
 interaction inside that conversation rather than starting a new one.

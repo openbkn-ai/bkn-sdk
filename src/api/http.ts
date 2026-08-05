@@ -96,10 +96,23 @@ const LIFECYCLE_ACTIONS = new Set([
  * lifecycle session. The SDK's own callers open one automatically, so reaching
  * this means a hand-rolled request body — say what it lacks and where to get it.
  * Returns `undefined` for every other error, so callers can pass any body in.
+ *
+ * The handshake differs by deploy and `required_action` does not distinguish
+ * them — a deploy needing only `bkn_start_interaction` still answers
+ * `create_conversation` — so the text sends the reader to the tool catalog
+ * rather than naming one of the two shapes and being wrong half the time.
  */
 export function lifecycleHint(body: string): string | undefined {
   if (!LIFECYCLE_ACTIONS.has(requiredAction(body) ?? "")) return undefined;
-  return 'This deploy requires a managed lifecycle session: the request needs a `bkn_context` with conversation_id and interaction_id. Get both from `openbkn context tool-call <kn-id> bkn_start_interaction --args \'{"question":"<what you are asking>"}\'`, or use the `openbkn bkn` / `openbkn context` commands, which open and release one for you.';
+  return (
+    "This deploy requires a managed lifecycle session: the request needs a `bkn_context` " +
+    "with conversation_id and interaction_id. Easiest fix: use the `openbkn bkn` / `openbkn " +
+    "context` commands, which open and release one for you. To do it by hand, check " +
+    "`openbkn context info` for the deploy's lifecycle tools — where it lists " +
+    "`bkn_create_conversation`, call that first and pass the conversation_id it returns to " +
+    "`bkn_start_interaction`; where it does not, `bkn_start_interaction` alone returns both ids. " +
+    "Either way: `openbkn context tool-call <kn-id> <tool> --args '{...}'`."
+  );
 }
 
 function requiredAction(body: string): string | undefined {

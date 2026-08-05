@@ -247,7 +247,12 @@ describe("managed lifecycle on semantic search", () => {
 
     // Opening a fresh conversation would file the evidence somewhere the caller
     // never asked for, silently.
-    expect(recorded.toolCalls[0]?.arguments.conversation_id).toBe("conv_caller_named");
+    // Exact match: the name is fixed at creation, so joining must not relabel
+    // someone else's conversation.
+    expect(recorded.toolCalls[0]?.arguments).toEqual({
+      question: "物料",
+      conversation_id: "conv_caller_named",
+    });
     const context = recorded.retrievalBodies[0]?.bkn_context as Record<string, string>;
     expect(context.conversation_id).toBe("conv_caller_named");
     expect(context.interaction_id).toBe("int_1");
@@ -332,12 +337,23 @@ describe("managed lifecycle on semantic search", () => {
       }),
     );
 
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-05T00:00:00.000Z"));
     const ctx = freshCtx();
+
     await semanticSearch(ctx, "kn-1", "物料");
+    // Inside the failure window the probe is not repeated: a durably missing
+    // catalog would otherwise cost a doomed round trip on every business call.
     await semanticSearch(ctx, "kn-1", "供应商");
-    // Caching the failure would leave a long-lived process sending no
-    // bkn_context for the rest of its life, with no path back.
+    expect(probes).toBe(1);
+
+    vi.setSystemTime(new Date("2026-08-05T00:01:00.000Z"));
+    await semanticSearch(ctx, "kn-1", "订单");
+    // And past it, the deploy gets another chance — caching the failure for
+    // good would leave a long-lived process sending no bkn_context for the
+    // rest of its life, with no path back.
     expect(probes).toBe(2);
+    vi.useRealTimers();
   });
 
   it("keeps one session per caller rather than sharing across tokens", async () => {
@@ -353,6 +369,21 @@ describe("managed lifecycle on semantic search", () => {
     const first = recorded.retrievalBodies[0]?.bkn_context as Record<string, string>;
     const second = recorded.retrievalBodies[1]?.bkn_context as Record<string, string>;
     expect(second.conversation_id).not.toBe(first.conversation_id);
+  });
+
+  it("sends a caller-built bkn_context as-is and opens no session", async () => {
+    const recorded = mockDeploy({ catalog: V1_CATALOG });
+    const owned = {
+      conversation_id: "conv_owned",
+      interaction_id: "int_owned",
+      operation_key: "op:pre-registered",
+    };
+    await semanticSearch(freshCtx(), "kn-managed", "物料", { bknContext: owned });
+
+    // The same escape hatch context.toolCall has: a pre-registered
+    // operation_key must reach the server unchanged.
+    expect(recorded.toolCalls).toHaveLength(0);
+    expect(recorded.retrievalBodies[0]?.bkn_context).toEqual(owned);
   });
 
   it("reopens the session once when the interaction has died, then retries", async () => {

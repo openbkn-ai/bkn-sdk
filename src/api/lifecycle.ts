@@ -94,11 +94,23 @@ const AGENT_NAME = "openbkn-sdk";
 const RELEASE_TIMEOUT_MS = 3_000;
 
 const contracts = new Map<string, Promise<Contract>>();
+
+/**
+ * How long a failed probe stays failed.
+ *
+ * Not caching it at all means a deploy whose `/mcp/info` is durably gone pays
+ * a doomed round trip per business call — or worse, waits out the request
+ * timeout each time, where before only the first call did. Caching it forever
+ * lets one blip decide the rest of the process. A short window does both jobs.
+ */
+const PROBE_FAILURE_TTL_MS = 30_000;
+const probeFailures = new Map<string, number>();
 const sessions = new Map<string, Promise<Session>>();
 
 /** Reset both caches. Tests only — a process never needs this. */
 export function resetLifecycleCaches(): void {
   contracts.clear();
+  probeFailures.clear();
   sessions.clear();
 }
 
@@ -109,6 +121,11 @@ export function resetLifecycleCaches(): void {
  * error on a request that might have succeeded without any context.
  */
 export function lifecycleContract(ctx: RequestContext): Promise<Contract> {
+  const failedAt = probeFailures.get(ctx.baseUrl);
+  if (failedAt !== undefined) {
+    if (Date.now() - failedAt < PROBE_FAILURE_TTL_MS) return Promise.resolve("none");
+    probeFailures.delete(ctx.baseUrl);
+  }
   let pending = contracts.get(ctx.baseUrl);
   if (!pending) {
     pending = mcpInfo(ctx).then((info): Contract => {
@@ -117,12 +134,15 @@ export function lifecycleContract(ctx: RequestContext): Promise<Contract> {
       return names.includes(V2_MARKER) ? "managed-v2" : "none";
     });
     contracts.set(ctx.baseUrl, pending);
-    // Same rule the session cache follows: a probe that failed is not an answer
-    // about the deploy, only about that moment. Caching the failure would let
-    // one blip — a 502, a token mid-refresh — decide that every later call in
-    // this process goes out without a `bkn_context`, and the reopen path cannot
-    // recover from that because it sees no context to reopen.
-    pending.catch(() => contracts.delete(ctx.baseUrl));
+    // Same rule the session cache follows: a probe that failed is not a lasting
+    // answer about the deploy, only about that moment. Keeping it would let one
+    // blip — a 502, a token mid-refresh — decide that every later call in this
+    // process goes out without a `bkn_context`, and the reopen path cannot
+    // recover from that, since it sees no context to reopen.
+    pending.catch(() => {
+      contracts.delete(ctx.baseUrl);
+      probeFailures.set(ctx.baseUrl, Date.now());
+    });
   }
   // Degrade for this call regardless: an unreachable catalog must not turn into
   // a hard error on a request that might have succeeded without any context.
@@ -262,13 +282,19 @@ async function openSession(
  * handed an interaction on `conv_A`. The other two dimensions protect a caller
  * who said nothing; this one protects a caller who said something specific,
  * which is the worse of the two to ignore.
+ *
+ * Parts are joined on NUL, written as the two-character escape so the file
+ * stays plain ASCII. A separator that cannot occur inside a part is the point:
+ * with a space, `token="a b"` + `domain="c"` and `token="a"` + `domain="b c"`
+ * hash the same. Unreachable in practice, but this key decides whose session a
+ * request joins.
  */
 function sessionKey(ctx: RequestContext, knId: string): string {
   const identity = createHash("sha256")
-    .update(`${ctx.token} ${ctx.businessDomain}`)
+    .update(`${ctx.token}\0${ctx.businessDomain}`)
     .digest("hex")
     .slice(0, 16);
-  return `${ctx.baseUrl} ${knId} ${identity} ${ctx.trace?.conversationId ?? ""}`;
+  return `${ctx.baseUrl}\0${knId}\0${identity}\0${ctx.trace?.conversationId ?? ""}`;
 }
 
 /**
@@ -383,39 +409,58 @@ export async function withManagedLifecycle<T>(
 /**
  * Release the interactions this process opened.
  *
- * Only v2 can do this cheaply: its finish takes an id and an outcome, where v1
- * demands a closure manifest enumerating every operation and receipt — v1
- * sessions are `one_shot` and left to the server's idle sweeper instead. The
- * outcome is `cancelled` because a CLI invocation has no answer artifact to
- * close over, and `completed` without one is rejected.
+ * Only v2 is released. Its finish takes an id and an outcome, where v1's
+ * cancel demands a closure manifest — and the two kinds of v1 session are
+ * skipped for different reasons: one we opened ourselves carries `one_shot`
+ * and is swept when idle, while one opened inside a caller's conversation has
+ * no `one_shot` to rely on and no manifest we can supply (see `openSession`),
+ * so it waits out its five-minute lease. The outcome is `cancelled` because a
+ * CLI invocation has no answer artifact to close over, and `completed` without
+ * one is rejected.
  *
  * Best-effort by construction: this runs while a process is shutting down,
- * where a throw would turn a successful command into a failed one.
+ * where a throw would turn a successful command into a failed one. The whole
+ * release is bounded, not just its final call — the handshake being awaited
+ * here has no deadline of its own, so a server that accepted the connection
+ * and went quiet would hold the process open after its output was printed.
  */
 export async function releaseLifecycleSessions(): Promise<void> {
   const pending = [...sessions.values()];
   sessions.clear();
-  await Promise.all(
-    pending.map(async (opening) => {
-      try {
-        const session = await opening;
-        if (session.contract !== "managed-v2") return;
-        await callToolRaw(
-          session.ctx,
-          session.knId,
-          "bkn_finish_interaction",
-          {
-            interaction_id: session.interactionId,
-            outcome: "cancelled",
-            reason: "client session ended",
-          },
-          undefined,
-          RELEASE_TIMEOUT_MS,
-        );
-      } catch {
-        // The interaction ages out on its own; a failed release is not the
-        // command's problem.
-      }
-    }),
-  );
+  await Promise.all(pending.map((opening) => withDeadline(releaseOne(opening))));
+}
+
+/** Resolve when `work` settles or the release deadline passes, whichever is first. */
+function withDeadline(work: Promise<void>): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, RELEASE_TIMEOUT_MS);
+    // Do not hold the event loop open for a release nobody is waiting on.
+    timer.unref?.();
+    work.finally(() => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+async function releaseOne(opening: Promise<Session>): Promise<void> {
+  try {
+    const session = await opening;
+    if (session.contract !== "managed-v2") return;
+    await callToolRaw(
+      session.ctx,
+      session.knId,
+      "bkn_finish_interaction",
+      {
+        interaction_id: session.interactionId,
+        outcome: "cancelled",
+        reason: "client session ended",
+      },
+      undefined,
+      RELEASE_TIMEOUT_MS,
+    );
+  } catch {
+    // The interaction ages out on its own; a failed release is not the
+    // command's problem.
+  }
 }
