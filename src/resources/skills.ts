@@ -121,7 +121,13 @@ async function readFileText(
   relPath: string,
   view: SkillView,
 ): Promise<string> {
-  const res = await readSkillFile(ctx, skillId, relPath, { view, responseMode: "content" });
+  // Normalize once, at the entry: the archive lookup below already did, so
+  // without this `/a/b.md` resolves on the path that falls back and 404s on the
+  // path that does not.
+  const res = await readSkillFile(ctx, skillId, normalize(relPath), {
+    view,
+    responseMode: "content",
+  });
   if (typeof res?.content === "string" && res.content.length > 0) {
     if (looksLossy(res.content)) throw binaryError(relPath);
     return res.content;

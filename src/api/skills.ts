@@ -126,22 +126,28 @@ export function executeSkill(
       ...(opts.timeout === undefined ? {} : { timeout: opts.timeout }),
     },
     // Outlast the sandbox: the default client timeout is shorter than the run
-    // budget, so without this a long `--timeout` aborts locally mid-execution
-    // and the caller never learns the exit code.
-    timeoutMs: (opts.timeout ?? DEFAULT_EXECUTE_TIMEOUT_SEC) * 1000 + 15_000,
+    // budget, so without this a long run aborts locally mid-execution and the
+    // caller never learns the exit code. With no stated limit the sandbox
+    // applies its own — 300s by default, 3600s at most — so the budget has to
+    // cover that rather than a number of ours.
+    timeoutMs: (opts.timeout ?? SANDBOX_MAX_TIMEOUT_SEC) * 1000 + 15_000,
   }) as Promise<SkillExecutionResult>;
 }
 
 /**
- * How long to assume a run may take when the caller names no limit.
+ * The sandbox's own ceiling, used as the client's abort budget when the caller
+ * names no limit.
  *
- * Only ever a local abort budget. The backend takes `timeout` as `omitempty`
- * and passes it straight to the sandbox without substituting one of its own, so
- * there is no server-side default for this to mirror — omitting the field
- * leaves the limit to the sandbox, and this number only decides how long the
- * client waits before giving up on the answer.
+ * Every hop passes `timeout` through untouched — `ExecuteSkill` to
+ * `ExecuteShell` to the sandbox control plane's `execute-sync`, `omitempty`
+ * throughout — so with the field absent the limit is the sandbox's: 300s by
+ * default, 3600s as the documented maximum (`infra/sandbox/CLAUDE.md`). Budget
+ * against the maximum, because a deploy may raise the default and a client that
+ * gave up first would report an abort where an exit code was coming.
+ *
+ * Only ever a local budget: it is never sent, and it never shortens a run.
  */
-export const DEFAULT_EXECUTE_TIMEOUT_SEC = 60;
+export const SANDBOX_MAX_TIMEOUT_SEC = 3600;
 
 /** Resolve skill ids to names in one call. Unknown ids are skipped by the backend. */
 export function getSkillNames(ctx: RequestContext, ids: string[]): Promise<unknown> {

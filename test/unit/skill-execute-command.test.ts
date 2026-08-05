@@ -63,15 +63,18 @@ describe("skill execute", () => {
     expect(process.exitCode).toBe(3);
   });
 
-  it("rejects a --timeout that is not a positive integer", async () => {
-    stubExecute({ exit_code: 0, stdout: "", stderr: "", mocked: false });
-    captureStdio();
-    // NaN would reach the wire as `timeout: null` and clamp the local abort to
-    // 1ms, failing with a message about nothing the user typed.
-    await expect(
-      cli().parseAsync([...ARGS, "--entry", "run.sh", "--timeout", "abc"], { from: "user" }),
-    ).rejects.toThrow(/--timeout must be a positive integer/);
-  });
+  it.each(["abc", "1e3", "3.9", "30abc", "-5", "0"])(
+    "rejects --timeout %s rather than silently using a different limit",
+    async (bad) => {
+      stubExecute({ exit_code: 0, stdout: "", stderr: "", mocked: false });
+      captureStdio();
+      // `parseInt` stops at the first non-digit, so `1e3` would quietly become
+      // a 1-second limit — worse than an error.
+      await expect(
+        cli().parseAsync([...ARGS, "--entry", "run.sh", "--timeout", bad], { from: "user" }),
+      ).rejects.toThrow(/--timeout must be a positive integer/);
+    },
+  );
 
   it("omits timeout entirely when the flag is absent", async () => {
     stubExecute({ exit_code: 0, stdout: "", stderr: "", mocked: false });
@@ -111,5 +114,60 @@ describe("skill execute", () => {
     // The warning must not land in stdout, which callers redirect into files.
     expect(err.join("")).toMatch(/mocked=true/);
     expect(out.join("")).toBe("fake\n");
+  });
+});
+
+describe("skill files --tree", () => {
+  const MANIFEST = [
+    { rel_path: "SKILL.md", file_type: "reference", size: 10 },
+    { rel_path: "references/checklist.md", file_type: "reference", size: 20 },
+    { rel_path: "references/layouts/landing.md", file_type: "reference", size: 30 },
+    { rel_path: "scripts/gen.py", file_type: "script", size: 40 },
+  ];
+
+  function stubManifest() {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ files: MANIFEST }), { status: 200 })),
+    );
+  }
+
+  const TREE_ARGS = ["--base-url", "https://demo.example.com", "--token", "t", "skill", "files"];
+
+  it("narrows the tree to the given path", async () => {
+    stubManifest();
+    const { out } = captureStdio();
+    await cli().parseAsync([...TREE_ARGS, "s1", "references", "--tree"], { from: "user" });
+    const text = out.join("");
+    // The wiring is what regressed before: the pure helpers were always right,
+    // `--tree` just never called them with `path`.
+    expect(text).toContain("checklist.md");
+    expect(text).toContain("landing.md");
+    expect(text).not.toContain("gen.py");
+    expect(text).not.toContain("SKILL.md");
+    expect(text).toMatch(/2 files, 50 B/);
+  });
+
+  it("renders the whole skill when no path is given", async () => {
+    stubManifest();
+    const { out } = captureStdio();
+    await cli().parseAsync([...TREE_ARGS, "s1", "--tree"], { from: "user" });
+    expect(out.join("")).toMatch(/4 files, 100 B/);
+  });
+
+  it("refuses a file path instead of rendering the whole manifest", async () => {
+    stubManifest();
+    captureStdio();
+    await expect(
+      cli().parseAsync([...TREE_ARGS, "s1", "SKILL.md", "--tree"], { from: "user" }),
+    ).rejects.toThrow(/is a file/);
+  });
+
+  it("refuses a path that is not in the skill", async () => {
+    stubManifest();
+    captureStdio();
+    await expect(
+      cli().parseAsync([...TREE_ARGS, "s1", "nope", "--tree"], { from: "user" }),
+    ).rejects.toThrow(/not found in skill/);
   });
 });

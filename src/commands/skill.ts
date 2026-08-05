@@ -19,6 +19,12 @@ const int = (v: string) => Number.parseInt(v, 10);
  * immediately with a message about nothing the user typed.
  */
 const positiveInt = (flag: string) => (v: string) => {
+  // Digits only: `parseInt` stops at the first non-digit, so `1e3` would become
+  // 1 and `30abc` would become 30 — a silently different limit rather than an
+  // error, which is the failure this guard exists to prevent.
+  if (!/^\d+$/.test(v)) {
+    throw new InputError(`${flag} must be a positive integer (got '${v}')`);
+  }
   const n = Number.parseInt(v, 10);
   if (!Number.isSafeInteger(n) || n <= 0) {
     throw new InputError(`${flag} must be a positive integer (got '${v}')`);
@@ -219,7 +225,7 @@ export function skillCommand(): Command {
     // CLI, which would silently pin every run to our number instead of theirs.
     .option(
       "--timeout <seconds>",
-      "sandbox time limit (backend default when omitted)",
+      "sandbox time limit (the sandbox's own limit when omitted)",
       positiveInt("--timeout"),
     )
     .option("--raw", "write the run's stdout/stderr straight through")
