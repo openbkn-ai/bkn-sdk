@@ -45,9 +45,9 @@
     "chalk": "^5.4.1",
     "commander": "^13.1.0",
     "csv-parse": "^6.2.1",
-    "js-yaml": "^4.2.0",
+    "js-yaml": "^4.3.0",
     "jszip": "^3.10.1",
-    "undici": "^8.7.0",
+    "undici": "^8.9.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
