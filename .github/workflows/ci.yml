@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
 
+# Lint and test read the checkout and nothing else. Declared at the top so both
+# jobs inherit it — the default token is broader than either needs, and
+# `release.yml` / `automation-claude-review.yml` already scope theirs.
+permissions:
+  contents: read
+
 jobs:
   ci:
     runs-on: ubuntu-latest
