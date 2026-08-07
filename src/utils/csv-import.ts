@@ -103,7 +103,7 @@ export function buildImportDag(opts: DagBodyOptions): Record<string, unknown> {
   };
 }
 
-/** Single-level glob (`dir/*.csv`) — readdir + basename match. Node 18 safe. */
+/** Single-level glob (`dir/*.csv`) — readdir + basename match. */
 function globOne(pattern: string): string[] {
   const dir = dirname(pattern);
   const re = new RegExp(

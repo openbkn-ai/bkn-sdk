@@ -7,7 +7,7 @@ tools; this records what the rewrite picks and why. Update here if a choice chan
 
 | Concern | Choice | Why |
 | ------- | ------ | --- |
-| Language | TypeScript (ESM), Node ≥ 22 | Both legacy repos are TS; ≥22 (the legacy SDK's floor) for stable native fetch / test runner |
+| Language | TypeScript (ESM), Node ≥ 22.19 | Both legacy repos are TS; ≥22 (the legacy SDK's floor) for stable native fetch / test runner, and undici — the only dependency that names a floor — requires 22.19 |
 | CLI framework | **commander** | Mature, 0 runtime deps, clean command tree, biggest ecosystem. Needs a custom grouped-help renderer (see below) |
 | Interactive prompts | **@clack/prompts** | Pretty modern prompts for login / business-domain selection. Replaces `ink`/`inquirer` — lighter, no TUI |
 | Pretty output | **chalk** + **cli-table3** | Color + aligned tables for human output |
