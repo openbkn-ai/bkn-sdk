@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { vegaCommand } from "../../src/commands/vega.js";
 
@@ -12,8 +12,13 @@ function cli(): Command {
   return root;
 }
 
+afterEach(() => vi.unstubAllGlobals());
+
 describe("vega dataset build-list", () => {
   it("rejects the removed default ordering before issuing a request", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
     await expect(
       cli().parseAsync(
         [
@@ -30,5 +35,6 @@ describe("vega dataset build-list", () => {
         { from: "user" },
       ),
     ).rejects.toThrow(/--order-by default is no longer supported/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
