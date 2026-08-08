@@ -162,7 +162,7 @@ describe("createBuildTask", () => {
   });
 
   it("lists build tasks with server-side filters", async () => {
-    const f = mockFetch({ entries: [] });
+    const f = mockFetch({ entries: [], total_count: 0 });
     await listBuildTasks(ctx, {
       resourceId: "r-1",
       catalogId: "c-1",
@@ -185,6 +185,50 @@ describe("createBuildTask", () => {
     expect(u.searchParams.get("order")).toBe("asc");
     expect(u.searchParams.get("limit")).toBe("5");
     expect(u.searchParams.get("offset")).toBe("10");
+  });
+
+  it("parses list entries as summaries without detail fields", async () => {
+    mockFetch({
+      entries: [
+        {
+          id: "t-1",
+          resource_id: "r-1",
+          catalog_id: "c-1",
+          status: "completed",
+          mode: "batch",
+          total_count: 10,
+          synced_count: 10,
+          vectorized_count: 8,
+          synced_mark: "mark-1",
+          creator: { id: "u-1", type: "user" },
+          create_time: 100,
+          update_time: 200,
+          failure_detail: "detail-only",
+          index_config: { features: [{ vector: {} }] },
+        },
+      ],
+      total_count: 1,
+    });
+
+    await expect(listBuildTasks(ctx)).resolves.toEqual({
+      entries: [
+        {
+          id: "t-1",
+          resource_id: "r-1",
+          catalog_id: "c-1",
+          status: "completed",
+          mode: "batch",
+          total_count: 10,
+          synced_count: 10,
+          vectorized_count: 8,
+          synced_mark: "mark-1",
+          creator: { id: "u-1", type: "user" },
+          create_time: 100,
+          update_time: 200,
+        },
+      ],
+      total_count: 1,
+    });
   });
 
   it("exposes the persisted batch execute_type on task responses", async () => {
