@@ -187,7 +187,7 @@ describe("createBuildTask", () => {
     expect(u.searchParams.get("offset")).toBe("10");
   });
 
-  it("parses list entries as summaries without detail fields", async () => {
+  it("parses list entries as typed summaries while preserving forward-compatible fields", async () => {
     mockFetch({
       entries: [
         {
@@ -225,10 +225,20 @@ describe("createBuildTask", () => {
           creator: { id: "u-1", type: "user" },
           create_time: 100,
           update_time: 200,
+          failure_detail: "detail-only",
+          index_config: { features: [{ vector: {} }] },
         },
       ],
       total_count: 1,
     });
+  });
+
+  it("rejects the removed default ordering before making a request", async () => {
+    const f = mockFetch();
+    await expect(listBuildTasks(ctx, { orderBy: "default" as never })).rejects.toThrow(
+      /no longer supported/,
+    );
+    expect(f).not.toHaveBeenCalled();
   });
 
   it("exposes the persisted batch execute_type on task responses", async () => {

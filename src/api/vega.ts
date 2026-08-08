@@ -8,6 +8,7 @@
  */
 import { z } from "zod";
 import type { RequestContext } from "../types.js";
+import { InputError } from "../utils/errors.js";
 import { request } from "./http.js";
 
 // Vega backend base path.
@@ -127,41 +128,46 @@ export const BuildTask = z
 export type BuildTask = z.infer<typeof BuildTask>;
 
 /** Lightweight BuildTask representation returned by list APIs. */
-export const BuildTaskSummary = z.object({
-  id: z.string(),
-  resource_id: z.string(),
-  resource_name: z.string().optional(),
-  catalog_id: z.string(),
-  catalog_name: z.string().optional(),
-  status: BuildTaskStatus,
-  mode: BuildMode,
-  execute_type: BuildTaskExecuteType.optional(),
-  total_count: z.number(),
-  synced_count: z.number(),
-  vectorized_count: z.number(),
-  synced_mark: z.string(),
-  error_msg: z.string().optional(),
-  creator: z.object({
+export const BuildTaskSummary = z
+  .object({
     id: z.string(),
-    name: z.string().optional(),
-    type: z.string(),
-  }),
-  create_time: z.number(),
-  update_time: z.number(),
-  index_health: z
-    .object({
-      embedding: z.string(),
-      fulltext: z.string(),
-      usable: z.boolean(),
-    })
-    .optional(),
-});
+    resource_id: z.string(),
+    resource_name: z.string().optional(),
+    catalog_id: z.string(),
+    catalog_name: z.string().optional(),
+    status: BuildTaskStatus,
+    mode: BuildMode,
+    execute_type: BuildTaskExecuteType.optional(),
+    total_count: z.number(),
+    synced_count: z.number(),
+    vectorized_count: z.number(),
+    synced_mark: z.string(),
+    error_msg: z.string().optional(),
+    creator: z.object({
+      id: z.string(),
+      name: z.string().optional(),
+      type: z.string(),
+    }),
+    create_time: z.number(),
+    update_time: z.number(),
+    index_health: z
+      .object({
+        embedding: z.string(),
+        fulltext: z.string(),
+        usable: z.boolean(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
 export type BuildTaskSummary = z.infer<typeof BuildTaskSummary>;
 
-export const ListBuildTasksResponse = z.object({
-  entries: z.array(BuildTaskSummary),
-  total_count: z.number(),
-});
+export const ListBuildTasksResponse = z
+  .object({
+    entries: z.array(BuildTaskSummary),
+    total_count: z.number(),
+  })
+  .passthrough();
 export type ListBuildTasksResponse = z.infer<typeof ListBuildTasksResponse>;
 
 /** Create an index BuildTask for a resource. Returns the task (with its id). */
@@ -195,6 +201,11 @@ export async function listBuildTasks(
   ctx: RequestContext,
   opts: ListBuildTasksOptions = {},
 ): Promise<ListBuildTasksResponse> {
+  if ((opts as { orderBy?: unknown }).orderBy === "default") {
+    throw new InputError(
+      'orderBy "default" is no longer supported; use "created_at" or "updated_at"',
+    );
+  }
   const res = await request<unknown>(ctx, `${VEGA_BASE}/build-tasks`, {
     query: {
       limit: opts.limit,
