@@ -107,6 +107,7 @@ export type { SkillChild, SkillDirChild, SkillFileChild } from "./utils/skill-tr
 export type {
   BuildMode,
   BuildTask,
+  BuildTaskSummary,
   CatalogConnectionTestRequest,
   CatalogConnectionTestResult,
   CatalogHealthCheckSchedule,
@@ -119,6 +120,8 @@ export type {
   CreateCatalogRequest,
   DslRawQueryRequest,
   QueryPagingMode,
+  ListBuildTasksOptions,
+  ListBuildTasksResponse,
   RawQueryContinuationRequest,
   RawQueryPaging,
   RawQueryRequest,

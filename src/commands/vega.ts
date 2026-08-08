@@ -490,9 +490,14 @@ export function vegaCommand(): Command {
     .option("--status <status>", "comma-separated statuses")
     .option("--active", "only running/init tasks")
     .option("--mode <mode>", "filter by mode: batch | streaming")
-    .option("--order-by <field>", "default | created_at | updated_at")
+    .option("--order-by <field>", "created_at | updated_at")
     .option("--order <dir>", "asc | desc")
     .action(async (opts, cmd: Command) => {
+      if (opts.orderBy === "default") {
+        throw new InputError(
+          '--order-by default is no longer supported; use "created_at" or "updated_at"',
+        );
+      }
       printJson(
         await clientFrom(cmd).vega.buildTasks({
           limit: opts.limit,
