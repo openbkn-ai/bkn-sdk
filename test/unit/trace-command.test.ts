@@ -30,7 +30,7 @@ describe("trace lifecycle CLI contract", () => {
       command.commands
         .find((child) => child.name() === "operations")
         ?.commands.map((c) => c.name()),
-    ).toEqual(expect.arrayContaining(["get", "retry"]));
+    ).toEqual(expect.arrayContaining(["get", "attempt", "retry"]));
     const retry = command.commands
       .find((child) => child.name() === "operations")
       ?.commands.find((child) => child.name() === "retry");
@@ -40,7 +40,17 @@ describe("trace lifecycle CLI contract", () => {
       command.commands
         .find((child) => child.name() === "interactions")
         ?.commands.map((c) => c.name()),
-    ).toEqual(expect.arrayContaining(["start", "get", "complete", "fail", "cancel", "handoff"]));
+    ).toEqual(
+      expect.arrayContaining([
+        "start",
+        "get",
+        "operations",
+        "complete",
+        "fail",
+        "cancel",
+        "handoff",
+      ]),
+    );
     const start = command.commands
       .find((child) => child.name() === "interactions")
       ?.commands.find((child) => child.name() === "start");

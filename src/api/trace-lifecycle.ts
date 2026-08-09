@@ -21,6 +21,7 @@ const FORBIDDEN_INPUT_FIELDS = new Set([
   "effective_subject_id",
   "delegation_id",
 ]);
+const OPAQUE_PAYLOAD_FIELDS = new Set(["input", "output", "error"]);
 
 export type LifecycleErrorCode =
   | "conversation_required"
@@ -181,11 +182,10 @@ export interface ManagedOperation {
   interaction_id: string;
   operation_key: string;
   tool_name: string;
-  normalized_input_hash: string;
   parent_operation_id?: string;
   causation_event_ids?: string[];
   attempt: number;
-  attempt_status: "pending" | "completed" | "failed";
+  attempt_status: "ready" | "pending" | "completed" | "failed";
   retryable: boolean;
   row_version: number;
   created_at: string;
@@ -213,27 +213,65 @@ export interface OperationReceipt {
   attempt: number;
   operation_key: string;
   tool_name: string;
-  normalized_input_hash: string;
   receipt_status: "pending" | "completed" | "failed";
   evidence_durability: EvidenceDurability;
   required: boolean;
   request_id: string;
   trace_id: string;
   causation_event_ids: string[];
-  observed_evidence_refs: EvidenceReference[];
+  observed_evidence_refs: string[];
   business_refs: LifecycleBusinessRef[];
   artifact_refs: string[];
   partial_reasons: string[];
   row_version: number;
   issued_at: string;
   terminal_at?: string;
-  payload_hash: string;
 }
 
 export interface OperationResult {
   operation: ManagedOperation;
   receipt: OperationReceipt;
   created: boolean;
+  execute: boolean;
+}
+
+export type PayloadMode = "inline" | "referenced" | "omitted";
+export type OperationProtocol = "mcp" | "sdk" | "internal";
+
+export interface PayloadEnvelope {
+  mode: PayloadMode;
+  media_type: "application/json";
+  byte_length?: number;
+  inline?: unknown;
+  ref?: string;
+  omitted_reason?: "payload_too_large" | "serialization_failed";
+}
+
+export interface OperationCallFact {
+  operation_id: string;
+  attempt: number;
+  conversation_id: string;
+  interaction_id: string;
+  receipt_id?: string;
+  tool_name: string;
+  protocol: OperationProtocol;
+  source_module: string;
+  parent_operation_id?: string;
+  input: PayloadEnvelope;
+  output?: PayloadEnvelope;
+  error?: PayloadEnvelope;
+  request_id?: string;
+  trace_id?: string;
+  span_id?: string;
+  started_at: string;
+  finished_at?: string;
+  status: "ready" | "pending" | "completed" | "failed";
+  retryable: boolean;
+}
+
+export interface OperationCallFactPage {
+  entries: OperationCallFact[];
+  total: number;
 }
 
 export interface EnsureConversationInput {
@@ -263,7 +301,9 @@ export interface StartInteractionInput {
 export interface EnsureOperationInput {
   operation_key: string;
   tool_name: string;
-  normalized_input_hash: string;
+  protocol: OperationProtocol;
+  source_module: string;
+  input: PayloadEnvelope;
   parent_operation_id?: string;
   causation_event_ids?: string[];
   required?: boolean;
@@ -278,12 +318,14 @@ export interface RetryOperationAttemptInput {
 
 export interface FinishOperationAttemptInput {
   receipt_id: string;
-  payload_hash: string;
+  output?: PayloadEnvelope;
+  error?: PayloadEnvelope;
   evidence_durability: EvidenceDurability;
   retryable?: boolean;
-  request_id: string;
-  trace_id: string;
-  observed_evidence_refs?: EvidenceReference[];
+  request_id?: string;
+  trace_id?: string;
+  span_id?: string;
+  observed_evidence_refs?: string[];
   business_refs?: LifecycleBusinessRef[];
   artifact_refs?: string[];
   partial_reasons?: string[];
@@ -328,6 +370,8 @@ export interface TraceLifecycleApi {
     input: EnsureOperationInput,
   ): Promise<OperationResult>;
   getOperation(operationId: string): Promise<ManagedOperation>;
+  getOperationAttempt(operationId: string, attempt: number): Promise<OperationCallFact>;
+  listInteractionOperations(interactionId: string): Promise<OperationCallFactPage>;
   retryOperationAttempt(
     operationId: string,
     input: RetryOperationAttemptInput,
@@ -366,7 +410,7 @@ export function traceLifecycleApi(ctx: RequestContext): TraceLifecycleApi {
   ): Promise<OperationResult> =>
     post(
       `/operations/${encodeURIComponent(operationId)}/attempts/${encodeURIComponent(String(attempt))}:${action}`,
-      input,
+      withTraceCorrelation(ctx, input),
     );
 
   return {
@@ -401,6 +445,12 @@ export function traceLifecycleApi(ctx: RequestContext): TraceLifecycleApi {
         input,
       ),
     getOperation: (operationId) => get(`/operations/${encodeURIComponent(operationId)}`),
+    getOperationAttempt: (operationId, attempt) =>
+      get(
+        `/operations/${encodeURIComponent(operationId)}/attempts/${encodeURIComponent(String(attempt))}`,
+      ),
+    listInteractionOperations: (interactionId) =>
+      get(`/interactions/${encodeURIComponent(interactionId)}/operations`),
     retryOperationAttempt: (operationId, input) =>
       post(`/operations/${encodeURIComponent(operationId)}/attempts`, input),
     completeOperationAttempt: (operationId, attempt, input) =>
@@ -408,6 +458,19 @@ export function traceLifecycleApi(ctx: RequestContext): TraceLifecycleApi {
     failOperationAttempt: (operationId, attempt, input) =>
       finishAttempt(operationId, attempt, "fail", input),
     getReceipt: (receiptId) => get(`/receipts/${encodeURIComponent(receiptId)}`),
+  };
+}
+
+function withTraceCorrelation(
+  ctx: RequestContext,
+  input: FinishOperationAttemptInput,
+): FinishOperationAttemptInput {
+  const traceparent = ctx.trace?.traceparent.split("-");
+  return {
+    ...input,
+    request_id: input.request_id ?? ctx.trace?.requestId,
+    trace_id: input.trace_id ?? traceparent?.[1],
+    span_id: input.span_id ?? traceparent?.[2],
   };
 }
 
@@ -422,7 +485,7 @@ function assertNoForbiddenInputFields(input: object): void {
       if (FORBIDDEN_INPUT_FIELDS.has(field)) {
         throw new InputError(`Lifecycle input field "${field}" is not allowed`);
       }
-      pending.push(nested);
+      if (!OPAQUE_PAYLOAD_FIELDS.has(field)) pending.push(nested);
     }
   }
 }

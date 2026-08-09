@@ -12,6 +12,7 @@ import { renderReportMarkdown } from "../bkn-trace/diagnose.js";
 import { validateFixturePath } from "../bkn-trace/fixture-validate.js";
 import { validateSchemaFile } from "../bkn-trace/schema-validate.js";
 import { group } from "../help/grouped-help.js";
+import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, outputOptions, readBody } from "./_shared.js";
 
@@ -127,6 +128,15 @@ export function traceCommand(): Command {
         outputOptions(cmd),
       );
     });
+  interactions
+    .command("operations <interaction-id>")
+    .description("List the exact Operation call facts for one interaction")
+    .action(async (interactionId: string, _opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).trace.lifecycle.listInteractionOperations(interactionId),
+        outputOptions(cmd),
+      );
+    });
   for (const action of ["complete", "fail", "cancel", "handoff"] as const) {
     interactions
       .command(`${action} <interaction-id>`)
@@ -152,6 +162,19 @@ export function traceCommand(): Command {
     .action(async (operationId: string, _opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).trace.lifecycle.getOperation(operationId),
+        outputOptions(cmd),
+      );
+    });
+  operations
+    .command("attempt <operation-id> <attempt>")
+    .description("Get one exact Operation attempt call fact")
+    .action(async (operationId: string, attempt: string, _opts, cmd: Command) => {
+      if (!/^[1-9]\d*$/.test(attempt)) {
+        throw new InputError("attempt must be a positive integer");
+      }
+      const ordinal = Number.parseInt(attempt, 10);
+      printJson(
+        await clientFrom(cmd).trace.lifecycle.getOperationAttempt(operationId, ordinal),
         outputOptions(cmd),
       );
     });

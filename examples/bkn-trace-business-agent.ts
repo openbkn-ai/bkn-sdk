@@ -1,13 +1,7 @@
-import type {
-  BknBusinessContext,
-  BknClient,
-  ManagedOperationCall,
-  OperationReceipt,
-} from "../src/index.js";
+import type { BknBusinessContext, BknClient, ManagedOperationCall } from "../src/index.js";
 
 export interface BusinessQueryResult {
   answer: string;
-  receipt: OperationReceipt;
 }
 
 /**
@@ -29,12 +23,16 @@ export async function runBusinessInteraction(
         {
           operationKey: "sales-orders-by-product",
           toolName: "query_object_instance",
-          normalizedInputHash: "sha256:replace-with-canonical-input-hash",
+          input: {
+            kn_id: "supplychain_hd0202",
+            ot_id: "purchase_order",
+            filters: [{ field: "product_code", op: "==", value: "P-001" }],
+          },
           required: true,
         },
         async ({ context, operation }) => {
           const result = await invokeOpenBkn(context, operation);
-          return { value: result.answer, receipt: result.receipt };
+          return result.answer;
         },
       );
 
@@ -43,36 +41,10 @@ export async function runBusinessInteraction(
           "Operation completed but its business response must be reloaded by reference",
         );
       }
-      const evidence = query.receipt.observed_evidence_refs[0];
-      if (!evidence) throw new Error("The business result did not return an evidence reference");
-
       return {
         completion_manifest_version: "3.0.0",
         completion_reason: "answer_completed",
-        claims: [
-          {
-            claim_id: "sales-order-summary",
-            claim_type: "answer",
-            materiality: "material" as const,
-            claim_status: "asserted" as const,
-            content_artifact_ref: "artifact:answer-managed-by-ee-extension",
-            required_support_roles: ["calculation_input"],
-            supports: [
-              {
-                target_ref: evidence.evidence_ref,
-                target_type: "evidence" as const,
-                source_interaction_id: evidence.source_interaction_id,
-                source_revision_id: evidence.source_revision_id,
-                source_operation_id: evidence.source_operation_id,
-                version: evidence.version,
-                content_hash: evidence.content_hash,
-                fragment_selector: evidence.fragment_selector,
-                role: "calculation_input",
-                status: "adopted" as const,
-              },
-            ],
-          },
-        ],
+        claims: [],
       };
     },
   );

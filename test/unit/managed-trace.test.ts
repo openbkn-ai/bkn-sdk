@@ -58,30 +58,18 @@ function receipt(id = "receipt-1", operationId = "operation-1"): OperationReceip
     attempt: 1,
     operation_key: "operation-key-1",
     tool_name: "run_sql",
-    normalized_input_hash: "sha256:input",
     receipt_status: "completed",
     evidence_durability: "durable",
     required: true,
     request_id: "request-1",
     trace_id: "4b3d59daeff5bfbb23d46c47a5051ec9",
     causation_event_ids: [],
-    observed_evidence_refs: [
-      {
-        evidence_ref: "event:observed-1",
-        ref_type: "event",
-        source_interaction_id: "interaction-1",
-        source_revision_id: "revision-1",
-        source_operation_id: operationId,
-        version: "1",
-        content_hash: "sha256:evidence",
-      },
-    ],
+    observed_evidence_refs: ["event:observed-1"],
     business_refs: [],
     artifact_refs: [],
     partial_reasons: [],
     row_version: 2,
     issued_at: "2026-07-31T00:00:00Z",
-    payload_hash: "sha256:payload",
   };
 }
 
@@ -92,7 +80,6 @@ function operation(id = "operation-1"): ManagedOperation {
     interaction_id: "interaction-1",
     operation_key: "operation-key-1",
     tool_name: "run_sql",
-    normalized_input_hash: "sha256:input",
     attempt: 1,
     attempt_status: "pending",
     retryable: false,
@@ -140,11 +127,28 @@ function lifecycleApi() {
         evidence_durability: "pending" as const,
       },
       created: true,
+      execute: true,
     })),
     getOperation: vi.fn<TraceLifecycleApi["getOperation"]>(),
+    getOperationAttempt: vi.fn<TraceLifecycleApi["getOperationAttempt"]>(),
+    listInteractionOperations: vi.fn<TraceLifecycleApi["listInteractionOperations"]>(),
     retryOperationAttempt: vi.fn<TraceLifecycleApi["retryOperationAttempt"]>(),
-    completeOperationAttempt: vi.fn(),
-    failOperationAttempt: vi.fn(),
+    completeOperationAttempt: vi.fn<TraceLifecycleApi["completeOperationAttempt"]>(async () => ({
+      operation: { ...operation(), attempt_status: "completed" as const },
+      receipt: receipt(),
+      created: false,
+      execute: false,
+    })),
+    failOperationAttempt: vi.fn<TraceLifecycleApi["failOperationAttempt"]>(async () => ({
+      operation: { ...operation(), attempt_status: "failed" as const },
+      receipt: {
+        ...receipt(),
+        receipt_status: "failed" as const,
+        evidence_durability: "durable" as const,
+      },
+      created: false,
+      execute: false,
+    })),
     getReceipt: vi.fn(),
   } satisfies TraceLifecycleApi;
   return api;
@@ -355,7 +359,7 @@ describe("ManagedTrace interaction lifecycle", () => {
         scope.recordReceipt(receipt());
         expect(scope.supportCandidates()).toEqual([
           {
-            ref: expect.objectContaining({ evidence_ref: "event:observed-1" }),
+            ref: "event:observed-1",
             state: "observed",
             adopted: false,
           },
@@ -429,7 +433,8 @@ describe("ManagedTrace operation lifecycle", () => {
   it("registers the operation before one business execution and records its receipt", async () => {
     const api = lifecycleApi();
     const managed = new ManagedTrace(api, { idFactory: () => "id-1" });
-    const execute = vi.fn(async () => ({ value: { rows: 3 }, receipt: receipt() }));
+    const businessResult = { rows: 3, entries: [{ purchase_order_number: "PO-240801" }] };
+    const execute = vi.fn(async () => businessResult);
 
     await managed.withInteraction(
       { mode: "resume_by_id", conversationId: "conversation-1" },
@@ -438,30 +443,107 @@ describe("ManagedTrace operation lifecycle", () => {
           {
             operationKey: "operation-key-1",
             toolName: "run_sql",
-            normalizedInputHash: "sha256:input",
+            input: {
+              sql: "SELECT purchase_order_number FROM {{.purchase_orders}} LIMIT 20",
+            },
             required: true,
           },
           execute,
         );
-        expect(result).toEqual({ value: { rows: 3 }, receipt: receipt(), recovered: false });
+        expect(result).toEqual({ value: businessResult, receipt: receipt(), recovered: false });
         return completion();
       },
     );
 
     expect(api.ensureOperation).toHaveBeenCalledOnce();
+    expect(api.ensureOperation.mock.calls[0]?.[2]).toEqual(
+      expect.objectContaining({
+        input: {
+          mode: "inline",
+          inline: {
+            sql: "SELECT purchase_order_number FROM {{.purchase_orders}} LIMIT 20",
+          },
+          media_type: "application/json",
+        },
+      }),
+    );
+    expect(api.ensureOperation.mock.calls[0]?.[2]).not.toHaveProperty("normalized_input_hash");
     expect(execute).toHaveBeenCalledOnce();
+    expect(api.completeOperationAttempt).toHaveBeenCalledWith(
+      "operation-1",
+      1,
+      expect.objectContaining({
+        receipt_id: "receipt-1",
+        output: {
+          mode: "inline",
+          inline: businessResult,
+          media_type: "application/json",
+        },
+      }),
+    );
     expect(api.completeInteraction.mock.calls[0]?.[1].expected_receipts).toEqual([
       { receipt_id: "receipt-1", required: true },
     ]);
   });
 
-  it("recovers a lost response by reading the same receipt without replaying the business call", async () => {
+  it("records the actual exception and rethrows the same error object", async () => {
     const api = lifecycleApi();
-    api.getReceipt.mockResolvedValue(receipt());
+    api.failOperationAttempt.mockRejectedValue(new Error("Trace Core unavailable"));
     const managed = new ManagedTrace(api, { idFactory: () => "id-1" });
-    const execute = vi.fn(async () => {
-      throw new Error("socket closed after commit");
+    const businessError = Object.assign(new Error("Vega query failed"), {
+      name: "BackendError",
+      code: "VEGA_QUERY_FAILED",
     });
+    let caught: unknown;
+
+    try {
+      await managed.withInteraction(
+        { mode: "resume_by_id", conversationId: "conversation-1" },
+        async (scope) => {
+          await scope.runOperation(
+            {
+              operationKey: "operation-key-1",
+              toolName: "run_sql",
+              input: { sql: "SELECT * FROM {{.missing_resource}}" },
+            },
+            async () => {
+              throw businessError;
+            },
+          );
+          return completion();
+        },
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBe(businessError);
+    expect(api.failOperationAttempt).toHaveBeenCalledWith(
+      "operation-1",
+      1,
+      expect.objectContaining({
+        receipt_id: "receipt-1",
+        retryable: false,
+        error: expect.objectContaining({
+          mode: "inline",
+          inline: expect.objectContaining({
+            name: "BackendError",
+            message: "Vega query failed",
+            code: "VEGA_QUERY_FAILED",
+            stage: "sdk_execution",
+            retryable: false,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("preserves the business result when terminal Trace persistence fails", async () => {
+    const api = lifecycleApi();
+    api.completeOperationAttempt.mockRejectedValue(new Error("Trace Core unavailable"));
+    const managed = new ManagedTrace(api, { idFactory: () => "id-1" });
+    const businessResult = { total_count: 1 };
+    const execute = vi.fn(async () => businessResult);
 
     await managed.withInteraction(
       { mode: "resume_by_id", conversationId: "conversation-1" },
@@ -470,17 +552,20 @@ describe("ManagedTrace operation lifecycle", () => {
           {
             operationKey: "operation-key-1",
             toolName: "run_sql",
-            normalizedInputHash: "sha256:input",
+            input: { sql: "SELECT COUNT(*) FROM {{.purchase_orders}}" },
           },
           execute,
         );
-        expect(result).toEqual({ value: undefined, receipt: receipt(), recovered: true });
+        expect(result).toEqual({
+          value: businessResult,
+          receipt: expect.objectContaining({ receipt_status: "pending" }),
+          recovered: false,
+        });
         return completion();
       },
     );
 
     expect(execute).toHaveBeenCalledOnce();
-    expect(api.getReceipt).toHaveBeenCalledWith("receipt-1");
   });
 
   it.each(["pending", "failed"] as const)(
@@ -495,6 +580,7 @@ describe("ManagedTrace operation lifecycle", () => {
           evidence_durability: evidenceDurability,
         },
         created: false,
+        execute: false,
       });
       const managed = new ManagedTrace(api, { idFactory: () => "id-1" });
       const execute = vi.fn();
@@ -506,7 +592,7 @@ describe("ManagedTrace operation lifecycle", () => {
             {
               operationKey: "operation-key-1",
               toolName: "run_sql",
-              normalizedInputHash: "sha256:input",
+              input: { sql: "SELECT * FROM {{.purchase_orders}}" },
             },
             execute,
           );
@@ -519,13 +605,20 @@ describe("ManagedTrace operation lifecycle", () => {
     },
   );
 
-  it("rejects a recovered receipt that belongs to another operation attempt", async () => {
+  it("does not replay a pending attempt that Core has not authorized for execution", async () => {
     const api = lifecycleApi();
-    api.getReceipt.mockResolvedValue({ ...receipt(), operation_id: "operation-other" });
-    const managed = new ManagedTrace(api, { idFactory: () => "id-1" });
-    const execute = vi.fn(async () => {
-      throw new Error("socket closed after commit");
+    api.ensureOperation.mockResolvedValue({
+      operation: { ...operation(), attempt_status: "pending" },
+      receipt: {
+        ...receipt(),
+        receipt_status: "pending",
+        evidence_durability: "pending",
+      },
+      created: false,
+      execute: false,
     });
+    const managed = new ManagedTrace(api, { idFactory: () => "id-1" });
+    const execute = vi.fn();
 
     await expect(
       managed.withInteraction(
@@ -534,41 +627,16 @@ describe("ManagedTrace operation lifecycle", () => {
           await scope.runOperation(
             {
               operationKey: "operation-key-1",
-              toolName: "run_sql",
-              normalizedInputHash: "sha256:input",
+              toolName: "execute_action",
+              input: { action: "release_purchase_order" },
             },
             execute,
           );
           return completion();
         },
       ),
-    ).rejects.toThrow("does not match the registered operation attempt");
-    expect(execute).toHaveBeenCalledOnce();
-  });
-
-  it("rejects an executor receipt that belongs to another operation", async () => {
-    const api = lifecycleApi();
-    const managed = new ManagedTrace(api, { idFactory: () => "id-1" });
-
-    await expect(
-      managed.withInteraction(
-        { mode: "resume_by_id", conversationId: "conversation-1" },
-        async (scope) => {
-          await scope.runOperation(
-            {
-              operationKey: "operation-key-1",
-              toolName: "run_sql",
-              normalizedInputHash: "sha256:input",
-            },
-            async () => ({
-              value: undefined,
-              receipt: { ...receipt(), operation_id: "operation-other" },
-            }),
-          );
-          return completion();
-        },
-      ),
-    ).rejects.toThrow("does not match the registered operation attempt");
+    ).rejects.toThrow("is pending and is not authorized for execution");
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it("fails the interaction when the authoritative receipt is not retryable", async () => {
@@ -581,6 +649,7 @@ describe("ManagedTrace operation lifecycle", () => {
         evidence_durability: "failed",
       },
       created: false,
+      execute: false,
     });
     const managed = new ManagedTrace(api, { idFactory: () => "id-1" });
     const execute = vi.fn();
@@ -593,7 +662,7 @@ describe("ManagedTrace operation lifecycle", () => {
             {
               operationKey: "operation-key-1",
               toolName: "run_sql",
-              normalizedInputHash: "sha256:input",
+              input: { sql: "SELECT * FROM {{.purchase_orders}}" },
             },
             execute,
           );
@@ -612,10 +681,11 @@ describe("ManagedTrace operation lifecycle", () => {
       receipt_status: "failed" as const,
       evidence_durability: "failed" as const,
     };
-    api.ensureOperation.mockResolvedValue({
+    api.ensureOperation.mockResolvedValueOnce({
       operation: { ...operation(), attempt_status: "failed", retryable: true },
       receipt: failedReceipt,
       created: false,
+      execute: false,
     });
     const retryReceipt = {
       ...receipt("receipt-2"),
@@ -624,17 +694,30 @@ describe("ManagedTrace operation lifecycle", () => {
       evidence_durability: "pending" as const,
     };
     api.retryOperationAttempt.mockResolvedValue({
+      operation: { ...operation(), attempt: 2, attempt_status: "ready", retryable: false },
+      receipt: retryReceipt,
+      created: false,
+      execute: false,
+    });
+    api.ensureOperation.mockResolvedValueOnce({
       operation: { ...operation(), attempt: 2, attempt_status: "pending", retryable: false },
       receipt: retryReceipt,
-      created: true,
+      created: false,
+      execute: true,
     });
     const completedRetry = {
       ...retryReceipt,
       receipt_status: "completed" as const,
       evidence_durability: "durable" as const,
     };
+    api.completeOperationAttempt.mockResolvedValue({
+      operation: { ...operation(), attempt: 2, attempt_status: "completed" },
+      receipt: completedRetry,
+      created: false,
+      execute: false,
+    });
     const managed = new ManagedTrace(api, { idFactory: () => "id-1" });
-    const execute = vi.fn(async () => ({ value: "ok", receipt: completedRetry }));
+    const execute = vi.fn(async () => "ok");
 
     await managed.withInteraction(
       { mode: "resume_by_id", conversationId: "conversation-1" },
@@ -643,7 +726,7 @@ describe("ManagedTrace operation lifecycle", () => {
           {
             operationKey: "operation-key-1",
             toolName: "run_sql",
-            normalizedInputHash: "sha256:input",
+            input: { sql: "SELECT * FROM {{.purchase_orders}}" },
           },
           execute,
         );
@@ -653,6 +736,7 @@ describe("ManagedTrace operation lifecycle", () => {
     );
 
     expect(api.retryOperationAttempt).toHaveBeenCalledOnce();
+    expect(api.ensureOperation).toHaveBeenCalledTimes(2);
     expect(execute).toHaveBeenCalledOnce();
   });
 
@@ -666,6 +750,7 @@ describe("ManagedTrace operation lifecycle", () => {
         evidence_durability: "failed",
       },
       created: false,
+      execute: false,
     });
     const managed = new ManagedTrace(api, { idFactory: () => "id-1" });
 
@@ -677,7 +762,7 @@ describe("ManagedTrace operation lifecycle", () => {
             {
               operationKey: "operation-key-1",
               toolName: "run_sql",
-              normalizedInputHash: "sha256:input",
+              input: { sql: "SELECT * FROM {{.purchase_orders}}" },
               maxAttempts: 1,
             },
             vi.fn(),
@@ -687,5 +772,29 @@ describe("ManagedTrace operation lifecycle", () => {
       ),
     ).rejects.toThrow("maximum attempt count 1");
     expect(api.retryOperationAttempt).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid maximum attempt count before creating an operation", async () => {
+    const api = lifecycleApi();
+    const managed = new ManagedTrace(api, { idFactory: () => "id-1" });
+
+    await expect(
+      managed.withInteraction(
+        { mode: "resume_by_id", conversationId: "conversation-1" },
+        async (scope) => {
+          await scope.runOperation(
+            {
+              operationKey: "operation-key-1",
+              toolName: "run_sql",
+              input: { sql: "SELECT * FROM {{.purchase_orders}}" },
+              maxAttempts: 0,
+            },
+            vi.fn(),
+          );
+          return completion();
+        },
+      ),
+    ).rejects.toThrow("maxAttempts must be an integer between 1 and 10");
+    expect(api.ensureOperation).not.toHaveBeenCalled();
   });
 });
