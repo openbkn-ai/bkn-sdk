@@ -55,7 +55,7 @@ Unified TypeScript SDK + CLI for the **BKN** (Business Knowledge Network) platfo
 
 | Concern | Choice |
 | ------- | ------ |
-| Language | TypeScript (ESM), Node ≥ 22 |
+| Language | TypeScript (ESM), Node ≥ 22.19 |
 | CLI | `commander` + `@clack/prompts` (prompts) + `chalk`/`cli-table3` (output); no TUI |
 | Validation | `zod` at IO boundaries |
 | HTTP | native `fetch` |
