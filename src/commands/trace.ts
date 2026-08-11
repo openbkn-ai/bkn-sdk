@@ -8,6 +8,8 @@ import type {
   InteractionCompletionInput,
   RetryOperationAttemptInput,
 } from "../api/trace-lifecycle.js";
+import type { PayloadEnvelope } from "../api/trace-lifecycle.js";
+import type { TechnicalTraceDetail } from "../api/trace.js";
 import { renderReportMarkdown } from "../bkn-trace/diagnose.js";
 import { validateFixturePath } from "../bkn-trace/fixture-validate.js";
 import { validateSchemaFile } from "../bkn-trace/schema-validate.js";
@@ -15,6 +17,42 @@ import { group } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, outputOptions, readBody } from "./_shared.js";
+
+function renderPayload(payload: PayloadEnvelope | undefined): string {
+  if (!payload) return "-";
+  if (payload.mode === "inline") return JSON.stringify(payload.inline);
+  if (payload.mode === "referenced") return `[referenced] ${payload.ref ?? "-"}`;
+  return `[omitted] ${payload.omitted_reason ?? "unknown"}`;
+}
+
+export function renderTechnicalTraceDetail(detail: TechnicalTraceDetail): string {
+  const lines = [
+    `Trace: ${detail.summary.trace_id}`,
+    `Status: ${detail.summary.status}`,
+    `Request: ${detail.summary.request_id || "-"}`,
+    `Question: ${detail.summary.question_preview || "-"}`,
+    `Result: ${detail.summary.result_preview || "-"}`,
+    `Service: ${detail.summary.root_service || "-"}`,
+    `Spans: ${detail.graph?.data.nodes.length ?? 0}`,
+  ];
+  if (detail.partial) {
+    lines.push(`Partial: ${(detail.partial_reasons ?? []).join(", ") || "yes"}`);
+  }
+  for (const operation of detail.operations) {
+    lines.push(
+      "",
+      `${operation.fact.tool_name} · ${operation.fact.operation_id} · attempt ${operation.fact.attempt} · ${operation.state}`,
+      `Source: ${operation.fact.protocol}/${operation.fact.source_module}`,
+      `Input: ${renderPayload(operation.fact.input)}`,
+    );
+    if (operation.fact.output) lines.push(`Output: ${renderPayload(operation.fact.output)}`);
+    if (operation.fact.error) lines.push(`Error: ${renderPayload(operation.fact.error)}`);
+    if (operation.partial_reasons?.length) {
+      lines.push(`Partial: ${operation.partial_reasons.join(", ")}`);
+    }
+  }
+  return `${lines.join("\n")}\n`;
+}
 
 export function traceCommand(): Command {
   const cmd = new Command("trace").description(
@@ -201,8 +239,18 @@ export function traceCommand(): Command {
     });
 
   cmd
-    .command("get <conversation-id>")
-    .description("Fetch all trace spans for a conversation")
+    .command("get <trace-id>")
+    .description("Get one typed technical trace with Span and Operation facts")
+    .action(async (traceId: string, _opts, cmd: Command) => {
+      const detail = await clientFrom(cmd).trace.get(traceId);
+      const output = outputOptions(cmd);
+      if (output.json || output.compact) printJson(detail, output);
+      else process.stdout.write(renderTechnicalTraceDetail(detail));
+    });
+
+  cmd
+    .command("spans <conversation-id>")
+    .description("Fetch normalized spans for a conversation")
     .option("--max-spans <n>", "max spans", (v) => Number.parseInt(v, 10))
     .action(async (conversationId: string, opts, cmd: Command) => {
       printJson(
@@ -213,11 +261,31 @@ export function traceCommand(): Command {
 
   cmd
     .command("search")
-    .description("Raw trace search (--body / --body-file OpenSearch JSON)")
-    .option("--body <json>", "search body JSON")
-    .option("--body-file <path>", "read search body JSON from a file")
+    .description("List authorized technical traces")
+    .option("--limit <n>", "page size, 1..200", (value) => Number.parseInt(value, 10))
+    .option("--cursor <cursor>", "opaque pagination cursor")
+    .option("--from <time>", "started at or after this RFC3339 timestamp")
+    .option("--to <time>", "started at or before this RFC3339 timestamp")
+    .option("--status <status>", "execution status")
+    .option("--service <service>", "exact producing service")
+    .option("--tool <tool>", "exact root tool")
+    .option("--trace-id <id>", "exact Trace ID")
+    .option("--error-keyword <text>", "case-insensitive error text")
     .action(async (opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).trace.search(readBody(opts)), outputOptions(cmd));
+      printJson(
+        await clientFrom(cmd).trace.search({
+          limit: opts.limit,
+          cursor: opts.cursor,
+          from: opts.from,
+          to: opts.to,
+          status: opts.status,
+          service: opts.service,
+          tool: opts.tool,
+          traceId: opts.traceId,
+          errorKeyword: opts.errorKeyword,
+        }),
+        outputOptions(cmd),
+      );
     });
 
   cmd

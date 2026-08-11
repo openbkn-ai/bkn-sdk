@@ -360,6 +360,7 @@ export class ManagedTrace {
           receipt: current.receipt,
         });
       } catch (executeError) {
+        const retryable = isExplicitlyRetryable(executeError);
         try {
           const failed = await this.api.failOperationAttempt(
             current.operation.operation_id,
@@ -368,14 +369,27 @@ export class ManagedTrace {
               receipt_id: current.receipt.receipt_id,
               error: payloadEnvelope(operationError(executeError)),
               evidence_durability: "durable",
-              retryable: false,
+              retryable,
             },
           );
           recordReceipt(failed.receipt);
         } catch {
           recordReceipt(current.receipt);
+          throw executeError;
         }
-        throw executeError;
+        if (!retryable || current.operation.attempt >= maxAttempts) {
+          throw executeError;
+        }
+        await this.api.retryOperationAttempt(current.operation.operation_id, {
+          lease_token: interaction.lease_token,
+          lease_epoch: interaction.lease_epoch,
+        });
+        current = await this.api.ensureOperation(
+          conversation.conversation_id,
+          interaction.interaction_id,
+          ensureInput,
+        );
+        continue;
       }
 
       try {
@@ -470,6 +484,7 @@ function payloadEnvelope(value: unknown): PayloadEnvelope {
 }
 
 function operationError(error: unknown): Record<string, unknown> {
+  const retryable = isExplicitlyRetryable(error);
   if (error instanceof Error) {
     const code = (error as Error & { code?: unknown }).code;
     return {
@@ -479,7 +494,7 @@ function operationError(error: unknown): Record<string, unknown> {
         ? { code }
         : { code: error.name || "sdk_operation_error" }),
       stage: "sdk_execution",
-      retryable: false,
+      retryable,
       ...(error.stack ? { stack: error.stack } : {}),
     };
   }
@@ -488,6 +503,15 @@ function operationError(error: unknown): Record<string, unknown> {
     message: String(error),
     code: "sdk_operation_error",
     stage: "sdk_execution",
-    retryable: false,
+    retryable,
   };
+}
+
+function isExplicitlyRetryable(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "retryable" in error &&
+    (error as { retryable?: unknown }).retryable === true
+  );
 }

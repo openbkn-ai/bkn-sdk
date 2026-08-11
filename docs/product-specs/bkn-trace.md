@@ -35,7 +35,7 @@ generation、owner、tenant、应用主体、effective subject 和 delegation �
 
 调用方在 `runOperation` 中提交真实 `input`，execute 回调只返回业务结果或抛出实际异常。包装器在成功时提交实际输出，在失败时提交异常名称、消息、错误码、阶段与可重试性；调用方不计算输入或输出哈希。Managed Trace 固定记录 `protocol=sdk` 和 `source_module=managed-trace-sdk`，这两个字段是 Trace 生产者身份，不是业务 SDK 参数。
 
-只有 Core 已存在的失败 Operation 被标记为 retryable 时，SDK 才能在调用方配置的 `maxAttempts` 上限内创建下一 attempt，并必须再次 ensure 领取 Core 的执行授权。Core 返回 `execute=false`、已完成 Receipt 或未授权的 pending attempt 时都不重放业务调用。业务调用完成后若 Trace 终态写入失败，SDK 保留原业务返回或原异常，不用可观测性故障改写业务行为。
+execute 抛出的错误默认不可重试。只有错误对象明确携带 `retryable: true`（调用方确认该操作可安全重放）或 Core 已存在的失败 Operation 已被标记为 retryable 时，SDK 才能在调用方配置的 `maxAttempts` 上限内创建下一 attempt，并必须再次 ensure 领取 Core 的执行授权。Core 返回 `execute=false`、已完成 Receipt 或未授权的 pending attempt 时都不重放业务调用。业务调用完成后若 Trace 终态写入失败，SDK 保留原业务返回或原异常，不用可观测性故障改写业务行为。
 
 Operation Receipt 中的 `observed_evidence_refs` 只是证据引用 ID 候选。SDK 不会自动将它们采用为 Claim 支撑；需要生成 Claim 时，调用方应先读取对应证据，再明确写入来源 Interaction、revision、operation、version、content hash 和 fragment selector。
 
@@ -43,8 +43,10 @@ Operation Receipt 中的 `observed_evidence_refs` 只是证据引用 ID 候选�
 
 - `client.trace.lifecycle`：Conversation、Interaction、Operation、OperationCallFact 与 Receipt 的低层 API。
 - `client.trace.withInteraction`：第三方 Agent 的高层受管包装。
+- `client.trace.search`：通过时间、状态、服务、工具、Trace ID 和错误关键词查询类型化 Trace 摘要，不接受原始查询 DSL。
+- `client.trace.get`：读取单个 Trace 的用户问题、业务结果摘要、Span 与 Operation 原始调用事实。
 - `client.trace.graph`、`client.trace.spans`：技术 Trace 定位。
-- `client.trace.search/diagnose/scan/evalSet*`：技术 Trace 分析与测试工具。
+- `client.trace.diagnose/scan/evalSet*`：技术 Trace 分析与测试工具。
 
 Community 制品不分发 2.x Evidence 写入 Session、Artifact 正文读写、业务证据链、业务语义图或快照解释实现。业务解释与内容 Resolver 属于受许可 EE 扩展；2.x 数据只作为服务端历史读取与迁移对象。
 
@@ -56,7 +58,7 @@ Community 制品不分发 2.x Evidence 写入 Session、Artifact 正文读写、
 - `openbkn trace receipts get`
 - `openbkn trace graph|get|search|diagnose|scan`
 
-Interaction 终止 manifest 和 Operation retry fencing 字段通过 `--body` 或受保护的 `--body-file` 提交。lease token 不进入命令行参数，避免出现在 shell history 或进程列表。
+Interaction 终止 manifest 和 Operation retry fencing 字段通过受保护的 `--body-file` 提交。lease token 不进入命令行参数，避免出现在 shell history 或进程列表。
 
 ## 完成标准
 

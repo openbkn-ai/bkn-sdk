@@ -5,10 +5,12 @@
 import { fetchAgentInfo, sendChat } from "../api/agent-chat.js";
 import { traceLifecycleApi } from "../api/trace-lifecycle.js";
 import {
+  type TechnicalTraceQuery,
   getRawSpansByConversation,
   getSpansByConversation,
+  getTechnicalTrace,
   getTraceGraph,
-  traceSearch,
+  listTechnicalTraces,
 } from "../api/trace.js";
 import { claudeAvailable, judgeJson } from "../bkn-trace/claude-judge.js";
 import {
@@ -96,8 +98,10 @@ export function trace(ctx: RequestContext) {
     lifecycle,
     /** Own one complete interaction lifecycle around an application callback. */
     withInteraction: managed.withInteraction.bind(managed),
-    /** Raw trace search (OpenSearch-style body). */
-    search: (body: unknown) => traceSearch(ctx, body),
+    /** Authorized typed technical Trace list. */
+    search: (query: TechnicalTraceQuery = {}) => listTechnicalTraces(ctx, query),
+    /** One technical Trace with Span and Operation facts. */
+    get: (traceId: string) => getTechnicalTrace(ctx, traceId),
     /** Normalized trace tree/status graph by trace id. */
     graph: (traceId: string) => getTraceGraph(ctx, traceId),
     /** All span source docs for a conversation. */

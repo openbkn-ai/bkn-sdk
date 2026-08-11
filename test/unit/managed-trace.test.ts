@@ -740,6 +740,91 @@ describe("ManagedTrace operation lifecycle", () => {
     expect(execute).toHaveBeenCalledOnce();
   });
 
+  it("retries an execution error only when the error explicitly declares retryable", async () => {
+    const api = lifecycleApi();
+    const firstReceipt = {
+      ...receipt(),
+      receipt_status: "pending" as const,
+      evidence_durability: "pending" as const,
+    };
+    const retryReceipt = {
+      ...receipt("receipt-2"),
+      attempt: 2,
+      receipt_status: "pending" as const,
+      evidence_durability: "pending" as const,
+    };
+    api.ensureOperation.mockResolvedValueOnce({
+      operation: { ...operation(), attempt: 1, attempt_status: "pending", retryable: false },
+      receipt: firstReceipt,
+      created: true,
+      execute: true,
+    });
+    api.failOperationAttempt.mockResolvedValue({
+      operation: { ...operation(), attempt: 1, attempt_status: "failed", retryable: true },
+      receipt: {
+        ...firstReceipt,
+        receipt_status: "failed" as const,
+        evidence_durability: "failed" as const,
+      },
+      created: false,
+      execute: false,
+    });
+    api.retryOperationAttempt.mockResolvedValue({
+      operation: { ...operation(), attempt: 2, attempt_status: "ready", retryable: false },
+      receipt: retryReceipt,
+      created: false,
+      execute: false,
+    });
+    api.ensureOperation.mockResolvedValueOnce({
+      operation: { ...operation(), attempt: 2, attempt_status: "pending", retryable: false },
+      receipt: retryReceipt,
+      created: false,
+      execute: true,
+    });
+    const completedRetry = {
+      ...retryReceipt,
+      receipt_status: "completed" as const,
+      evidence_durability: "durable" as const,
+    };
+    api.completeOperationAttempt.mockResolvedValue({
+      operation: { ...operation(), attempt: 2, attempt_status: "completed" },
+      receipt: completedRetry,
+      created: false,
+      execute: false,
+    });
+    const transient = Object.assign(new Error("temporary Vega outage"), {
+      code: "VEGA_TEMPORARY_UNAVAILABLE",
+      retryable: true,
+    });
+    const execute = vi.fn().mockRejectedValueOnce(transient).mockResolvedValueOnce("ok");
+    const managed = new ManagedTrace(api, { idFactory: () => "id-1" });
+
+    await managed.withInteraction(
+      { mode: "resume_by_id", conversationId: "conversation-1" },
+      async (scope) => {
+        await expect(
+          scope.runOperation(
+            {
+              operationKey: "operation-key-1",
+              toolName: "run_sql",
+              input: { sql: "SELECT * FROM {{.purchase_orders}}" },
+            },
+            execute,
+          ),
+        ).resolves.toEqual({ value: "ok", receipt: completedRetry, recovered: false });
+        return completion();
+      },
+    );
+
+    expect(api.failOperationAttempt).toHaveBeenCalledWith(
+      "operation-1",
+      1,
+      expect.objectContaining({ retryable: true }),
+    );
+    expect(api.retryOperationAttempt).toHaveBeenCalledOnce();
+    expect(execute).toHaveBeenCalledTimes(2);
+  });
+
   it("honors a caller-configured maximum attempt count", async () => {
     const api = lifecycleApi();
     api.ensureOperation.mockResolvedValue({
