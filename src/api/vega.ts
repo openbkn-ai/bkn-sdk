@@ -103,7 +103,7 @@ export const CatalogDeletionImpact = z
   .object({
     catalog_id: z.string(),
     can_delete: z.boolean(),
-    blockers: z.array(CatalogDeletionBlocker),
+    blockers: z.array(CatalogDeletionBlocker.or(z.string())),
     resources: z.number().int(),
     protected_resources: z.number().int(),
     build_tasks: CatalogDeletionTaskImpact,
