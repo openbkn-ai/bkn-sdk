@@ -283,8 +283,8 @@ export interface TraceGraphNode {
   service_name?: string;
   status: string;
   error_message?: string;
-  start_nano: number;
-  end_nano: number;
+  start_nano: number | string;
+  end_nano: number | string;
   duration_nano: number;
 }
 
@@ -566,15 +566,17 @@ export async function getSpansByConversation(
 }
 
 function normalizedDetailSpans(detail: TechnicalTraceDetail): Array<Record<string, unknown>> {
-  const operationsBySpan = new Map(
-    detail.operations
-      .filter((operation) => operation.fact.span_id)
-      .map((operation) => [operation.fact.span_id as string, operation]),
-  );
-  const representedOperations = new Set<string>();
+  const operationsBySpan = new Map<string, TechnicalTraceOperation[]>();
+  for (const operation of detail.operations) {
+    const spanId = operation.fact.span_id;
+    if (!spanId) continue;
+    operationsBySpan.set(spanId, [...(operationsBySpan.get(spanId) ?? []), operation]);
+  }
+  const representedAttempts = new Set<string>();
   const graphSpans = (detail.graph?.data.nodes ?? []).map((node) => {
-    const operation = operationsBySpan.get(node.span_id);
-    if (operation) representedOperations.add(operation.fact.operation_id);
+    const matchingOperations = operationsBySpan.get(node.span_id) ?? [];
+    const operation = matchingOperations.length === 1 ? matchingOperations[0] : undefined;
+    if (operation) representedAttempts.add(operationAttemptKey(operation));
     return compactRecord({
       traceId: detail.summary.trace_id,
       spanId: node.span_id,
@@ -591,13 +593,11 @@ function normalizedDetailSpans(detail: TechnicalTraceDetail): Array<Record<strin
     });
   });
   const operationSpans = detail.operations
-    .filter((operation) => !representedOperations.has(operation.fact.operation_id))
+    .filter((operation) => !representedAttempts.has(operationAttemptKey(operation)))
     .map((operation) =>
       compactRecord({
         traceId: operation.fact.trace_id ?? detail.summary.trace_id,
-        spanId:
-          operation.fact.span_id ??
-          `${operation.fact.operation_id}:attempt:${operation.fact.attempt}`,
+        spanId: operationAttemptKey(operation),
         parentSpanId: "",
         name: operation.fact.tool_name,
         kind: "CLIENT",
@@ -612,6 +612,10 @@ function normalizedDetailSpans(detail: TechnicalTraceDetail): Array<Record<strin
       }),
     );
   return [...graphSpans, ...operationSpans];
+}
+
+function operationAttemptKey(operation: TechnicalTraceOperation): string {
+  return `${operation.fact.operation_id}:attempt:${operation.fact.attempt}`;
 }
 
 function operationAttributes(operation: TechnicalTraceOperation): Record<string, unknown> {
@@ -635,9 +639,16 @@ function payloadText(value: unknown): string {
 }
 
 function safeNanoString(value: unknown): string | undefined {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
-    ? String(value)
-    : undefined;
+  if (typeof value === "string" && /^\d+$/.test(value)) return value;
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    Number.isInteger(value) &&
+    value >= 0
+  ) {
+    return String(value);
+  }
+  return undefined;
 }
 
 function compactRecord(value: Record<string, unknown>): Record<string, unknown> {

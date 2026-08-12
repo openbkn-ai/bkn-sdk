@@ -355,6 +355,7 @@ describe("trace Community resource", () => {
     expect("requests" in resource).toBe(false);
     expect("interactions" in resource).toBe(false);
   });
+
 });
 
 describe("typed BKN Trace graph APIs", () => {
@@ -517,7 +518,7 @@ describe("getSpansByConversation (two-hop)", () => {
     );
   });
 
-  it("does not stringify missing or unsafe nanosecond values", async () => {
+  it("preserves realistic epoch nanoseconds and omits invalid values", async () => {
     const f = mockFetchSeq([
       { entries: [{ trace_id: "t-1", request_id: "req-1", status: "completed" }], total: 1 },
       {
@@ -531,7 +532,8 @@ describe("getSpansByConversation (two-hop)", () => {
                 name: "span-a",
                 kind: "CLIENT",
                 status: "ok",
-                start_nano: 9_007_199_254_740_992,
+                start_nano: 1_786_000_000_123_456_800,
+                end_nano: "1786000000123457000",
               },
             ],
             edges: [],
@@ -544,8 +546,102 @@ describe("getSpansByConversation (two-hop)", () => {
 
     const spans = await getSpansByConversation(ctx, "conv-1");
 
-    expect(spans[0]).not.toHaveProperty("startTimeUnixNano");
-    expect(spans[0]).not.toHaveProperty("endTimeUnixNano");
+    expect(spans[0]).toMatchObject({
+      startTimeUnixNano: "1786000000123456800",
+      endTimeUnixNano: "1786000000123457000",
+    });
+  });
+
+  it("preserves every operation attempt without duplicate span ids", async () => {
+    const baseFact = {
+      operation_id: "op-retry",
+      conversation_id: "conv-1",
+      interaction_id: "int-1",
+      tool_name: "run_sql",
+      protocol: "mcp",
+      source_module: "context-loader",
+      trace_id: "t-1",
+      span_id: "span-shared",
+      started_at: "2026-08-09T10:00:00Z",
+      finished_at: "2026-08-09T10:00:00.001Z",
+      retryable: true,
+    };
+    mockFetchSeq([
+      { entries: [{ trace_id: "t-1", request_id: "req-1", status: "failed" }], total: 1 },
+      {
+        summary: { trace_id: "t-1", request_id: "req-1", status: "failed" },
+        graph: {
+          trace_id: "t-1",
+          data: {
+            nodes: [
+              {
+                span_id: "span-shared",
+                name: "run_sql",
+                kind: "CLIENT",
+                status: "error",
+                start_nano: 10,
+                end_nano: 20,
+                duration_nano: 10,
+              },
+            ],
+            edges: [],
+          },
+        },
+        operations: [
+          {
+            fact: {
+              ...baseFact,
+              attempt: 1,
+              input: {
+                mode: "inline",
+                media_type: "application/json",
+                inline: { sql: "SELECT 1" },
+              },
+              status: "failed",
+            },
+            receipt: {},
+            state: "failed",
+          },
+          {
+            fact: {
+              ...baseFact,
+              attempt: 2,
+              input: {
+                mode: "inline",
+                media_type: "application/json",
+                inline: { sql: "SELECT 2" },
+              },
+              status: "completed",
+            },
+            receipt: {},
+            state: "completed",
+          },
+        ],
+        partial: false,
+      },
+    ]);
+
+    const spans = await getSpansByConversation(ctx, "conv-1");
+
+    expect(new Set(spans.map((entry) => entry.spanId)).size).toBe(spans.length);
+    expect(spans).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          spanId: "op-retry:attempt:1",
+          attributes: expect.objectContaining({
+            "bkn.operation.attempt": 1,
+            "gen_ai.tool.args": { sql: "SELECT 1" },
+          }),
+        }),
+        expect.objectContaining({
+          spanId: "op-retry:attempt:2",
+          attributes: expect.objectContaining({
+            "bkn.operation.attempt": 2,
+            "gen_ai.tool.args": { sql: "SELECT 2" },
+          }),
+        }),
+      ]),
+    );
   });
 
   it("returns no spans when the typed trace list is empty", async () => {
