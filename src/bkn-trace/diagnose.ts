@@ -68,6 +68,9 @@ export interface DiagnoseReport {
   diagnosedAt: string | null;
   mode: "symbolic-only" | "hybrid";
   rulesApplied: string[];
+  skippedRules?: string[];
+  partial?: boolean;
+  partialReasons?: string[];
   findingCount: number;
   summary?: Summary;
   findings: Finding[];

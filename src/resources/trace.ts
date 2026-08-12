@@ -71,7 +71,11 @@ export function trace(ctx: RequestContext) {
     const spansForPrimary =
       traceIds.length > 0 ? spans.filter((s) => !s.traceId || s.traceId === primaryTraceId) : spans;
     const tree = assembleTraceTree(primaryTraceId, spansForPrimary);
-    const findings = runRules(tree);
+    const applicableRules = BUILTIN_RULES.filter((rule) => isRuleApplicable(rule.id, tree.spans));
+    const skippedRules = BUILTIN_RULES.filter((rule) => !applicableRules.includes(rule)).map(
+      (rule) => rule.id,
+    );
+    const findings = runRules(tree, applicableRules);
     let mode: DiagnoseReport["mode"] = "symbolic-only";
     let summary: Summary | undefined;
     if (opts.llm && claudeAvailable()) {
@@ -86,7 +90,16 @@ export function trace(ctx: RequestContext) {
       conversationId,
       diagnosedAt: null,
       mode,
-      rulesApplied: BUILTIN_RULES.map((r) => r.id),
+      rulesApplied: applicableRules.map((rule) => rule.id),
+      ...(skippedRules.length > 0
+        ? {
+            skippedRules,
+            partial: true,
+            partialReasons: [
+              "typed Trace facts do not contain the attributes required by these rules",
+            ],
+          }
+        : {}),
       findingCount: findings.length,
       ...(summary ? { summary } : {}),
       findings,
@@ -177,4 +190,32 @@ export function trace(ctx: RequestContext) {
       });
     },
   };
+}
+
+function isRuleApplicable(
+  ruleId: string,
+  spans: Array<{ kind: string; attributes: Record<string, unknown> }>,
+): boolean {
+  const tools = spans.filter((span) => span.kind === "tool");
+  const llms = spans.filter((span) => span.kind === "llm");
+  const retrievals = spans.filter((span) => span.kind === "retrieval");
+  switch (ruleId) {
+    case "tool_loop_no_state_change":
+      return tools.some((span) => Object.hasOwn(span.attributes, "gen_ai.conversation.state"));
+    case "tool_error_swallowed":
+      return (
+        tools.some((span) => Object.hasOwn(span.attributes, "error.message")) &&
+        llms.some((span) => Object.hasOwn(span.attributes, "gen_ai.prompt"))
+      );
+    case "retrieval_empty_no_fallback":
+      return retrievals.some((span) =>
+        Object.hasOwn(span.attributes, "gen_ai.retrieval.result_count"),
+      );
+    case "llm_response_truncated_no_continue":
+      return llms.some((span) => Object.hasOwn(span.attributes, "gen_ai.response.finish_reasons"));
+    case "excessive_tool_calls_per_turn":
+      return tools.length > 0;
+    default:
+      return false;
+  }
 }

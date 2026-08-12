@@ -356,6 +356,52 @@ describe("trace Community resource", () => {
     expect("interactions" in resource).toBe(false);
   });
 
+  it("reports unsupported diagnosis rules as skipped instead of applied", async () => {
+    mockFetchSeq([
+      { entries: [{ trace_id: "t-1", request_id: "req-1", status: "completed" }], total: 1 },
+      {
+        summary: { trace_id: "t-1", request_id: "req-1", status: "completed" },
+        operations: [
+          {
+            fact: {
+              operation_id: "op-1",
+              attempt: 1,
+              conversation_id: "conv-1",
+              interaction_id: "int-1",
+              tool_name: "run_sql",
+              protocol: "mcp",
+              source_module: "context-loader",
+              input: {
+                mode: "inline",
+                media_type: "application/json",
+                inline: { sql: "SELECT 1" },
+              },
+              started_at: "2026-08-09T10:00:00Z",
+              finished_at: "2026-08-09T10:00:00.001Z",
+              status: "completed",
+              retryable: false,
+            },
+            receipt: {},
+            state: "completed",
+          },
+        ],
+        partial: false,
+      },
+    ]);
+
+    const report = await trace(ctx).diagnose("conv-1");
+
+    expect(report.rulesApplied).toEqual(["excessive_tool_calls_per_turn"]);
+    expect(report.skippedRules).toEqual(
+      expect.arrayContaining([
+        "tool_loop_no_state_change",
+        "tool_error_swallowed",
+        "retrieval_empty_no_fallback",
+        "llm_response_truncated_no_continue",
+      ]),
+    );
+    expect(report.partial).toBe(true);
+  });
 });
 
 describe("typed BKN Trace graph APIs", () => {

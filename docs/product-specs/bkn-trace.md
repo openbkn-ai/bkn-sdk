@@ -48,6 +48,8 @@ Operation Receipt 中的 `observed_evidence_refs` 只是证据引用 ID 候选�
 - `client.trace.graph`、`client.trace.spans`：技术 Trace 定位。
 - `client.trace.diagnose/scan/evalSet*`：技术 Trace 分析与测试工具。
 
+`diagnose` 只执行当前 typed Trace 事实能够支撑的规则。缺少 LLM、retrieval 或状态属性时，报告通过 `skippedRules` 和 `partialReasons` 明确说明不可评估范围，不能把“没有数据”解释成“没有问题”。Managed Trace 能稳定评估的基础范围是 Operation 工具调用事实；更丰富规则须由 Trace 生产者提供对应属性。
+
 Community 制品不分发 2.x Evidence 写入 Session、Artifact 正文读写、业务证据链、业务语义图或快照解释实现。业务解释与内容 Resolver 属于受许可 EE 扩展；2.x 数据只作为服务端历史读取与迁移对象。
 
 ## CLI
