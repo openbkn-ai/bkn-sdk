@@ -394,20 +394,25 @@ export class ManagedTrace {
         if (!retryable || current.operation.attempt >= maxAttempts) {
           throw executeError;
         }
-        await this.api.retryOperationAttempt(current.operation.operation_id, {
-          lease_token: interaction.lease_token,
-          lease_epoch: interaction.lease_epoch,
-        });
-        const previousAttempt = current.operation.attempt;
-        current = await this.api.ensureOperation(
-          conversation.conversation_id,
-          interaction.interaction_id,
-          ensureInput,
-        );
-        if (current.operation.attempt <= previousAttempt) {
-          throw new OperationFailedError(
-            `Operation "${current.operation.operation_id}" did not advance beyond attempt ${previousAttempt}`,
+        try {
+          await this.api.retryOperationAttempt(current.operation.operation_id, {
+            lease_token: interaction.lease_token,
+            lease_epoch: interaction.lease_epoch,
+          });
+          const previousAttempt = current.operation.attempt;
+          current = await this.api.ensureOperation(
+            conversation.conversation_id,
+            interaction.interaction_id,
+            ensureInput,
           );
+          if (current.operation.attempt <= previousAttempt) {
+            throw new OperationFailedError(
+              `Operation "${current.operation.operation_id}" did not advance beyond attempt ${previousAttempt}`,
+            );
+          }
+        } catch (traceError) {
+          this.reportTraceError(traceError, current.operation, "fail");
+          throw executeError;
         }
         continue;
       }

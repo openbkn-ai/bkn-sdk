@@ -786,6 +786,51 @@ describe("ManagedTrace operation lifecycle", () => {
     expect(api.ensureOperation).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps the business error when Trace cannot advance a retry attempt", async () => {
+    const api = lifecycleApi();
+    api.ensureOperation.mockResolvedValue({
+      operation: { ...operation(), attempt: 1, attempt_status: "pending", retryable: false },
+      receipt: {
+        ...receipt(),
+        receipt_status: "pending" as const,
+        evidence_durability: "pending" as const,
+      },
+      created: true,
+      execute: true,
+    });
+    api.failOperationAttempt.mockResolvedValue({
+      operation: { ...operation(), attempt: 1, attempt_status: "failed", retryable: true },
+      receipt: {
+        ...receipt(),
+        receipt_status: "failed" as const,
+        evidence_durability: "failed" as const,
+      },
+      created: false,
+      execute: false,
+    });
+    const businessError = Object.assign(new Error("temporary business failure"), {
+      retryable: true,
+    });
+    const onTraceError = vi.fn();
+    const managed = new ManagedTrace(api, { idFactory: () => "id-1", onTraceError });
+
+    await expect(
+      managed.withInteraction(
+        { mode: "resume_by_id", conversationId: "conversation-1" },
+        async (scope) => {
+          await scope.runOperation({ toolName: "run_sql", input: { sql: "SELECT 1" } }, async () =>
+            Promise.reject(businessError),
+          );
+          return completion();
+        },
+      ),
+    ).rejects.toBe(businessError);
+    expect(onTraceError).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ operationId: "operation-1", attempt: 1, phase: "fail" }),
+    );
+  });
+
   it("retries an execution error only when the error explicitly declares retryable", async () => {
     const api = lifecycleApi();
     const firstReceipt = {
