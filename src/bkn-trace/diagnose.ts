@@ -68,6 +68,9 @@ export interface DiagnoseReport {
   diagnosedAt: string | null;
   mode: "symbolic-only" | "hybrid";
   rulesApplied: string[];
+  skippedRules?: string[];
+  partial?: boolean;
+  partialReasons?: string[];
   findingCount: number;
   summary?: Summary;
   findings: Finding[];
@@ -518,6 +521,17 @@ export function renderReportMarkdown(r: DiagnoseReport): string {
     `> conversation \`${r.conversationId}\` · mode ${r.mode} · ${r.findingCount} finding(s)`,
     "",
   );
+  if (r.partial) {
+    lines.push("## Partial coverage", "");
+    lines.push(
+      `- **applied rules**: ${r.rulesApplied.map((rule) => `\`${rule}\``).join(", ") || "—"}`,
+    );
+    lines.push(
+      `- **skipped rules**: ${(r.skippedRules ?? []).map((rule) => `\`${rule}\``).join(", ") || "—"}`,
+    );
+    for (const reason of r.partialReasons ?? []) lines.push(`- **reason**: ${reason}`);
+    lines.push("");
+  }
   if (r.summary) {
     lines.push(`**${r.summary.headline}**`, "");
     if (r.summary.primaryRootCause) {
@@ -526,7 +540,13 @@ export function renderReportMarkdown(r: DiagnoseReport): string {
     }
   }
   if (r.findings.length === 0) {
-    if (!r.summary) lines.push("No issues found by the symbolic rules.");
+    if (!r.summary) {
+      lines.push(
+        r.partial
+          ? "No findings were produced by the rules that could be evaluated."
+          : "No issues found by the symbolic rules.",
+      );
+    }
     return lines.join("\n");
   }
   const order = { high: 0, medium: 1, low: 2 } as const;

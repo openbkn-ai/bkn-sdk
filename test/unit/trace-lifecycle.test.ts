@@ -203,7 +203,13 @@ describe("traceLifecycleApi operations and receipts", () => {
     await api.ensureOperation("conversation-1", "interaction-1", {
       operation_key: "operation-key-1",
       tool_name: "vega.run_sql",
-      normalized_input_hash: "sha256:input",
+      protocol: "sdk",
+      source_module: "managed-trace-sdk",
+      input: {
+        mode: "inline",
+        inline: { sql: "SELECT * FROM {{.purchase_orders}} LIMIT 20" },
+        media_type: "application/json" as const,
+      },
       parent_operation_id: "operation-parent",
       causation_event_ids: ["event-1"],
       required: true,
@@ -211,49 +217,54 @@ describe("traceLifecycleApi operations and receipts", () => {
       lease_epoch: 3,
     });
     await api.getOperation("operation-1");
+    await api.getOperationAttempt("operation-1", 1);
+    await api.listInteractionOperations("interaction-1");
     await api.retryOperationAttempt("operation-1", {
       lease_token: "lease-1",
       lease_epoch: 3,
     });
-    const finishInput = {
+    const completeInput = {
       receipt_id: "receipt-1",
-      payload_hash: "sha256:payload",
+      output: {
+        mode: "inline" as const,
+        inline: { entries: [{ purchase_order_number: "PO-240801" }], total_count: 1 },
+        media_type: "application/json" as const,
+      },
       evidence_durability: "durable" as const,
       retryable: false,
       request_id: "request-1",
       trace_id: "trace-1",
-      observed_evidence_refs: [
-        {
-          evidence_ref: "event:event-1",
-          ref_type: "event" as const,
-          source_interaction_id: "interaction-1",
-          source_revision_id: "revision-1",
-          source_operation_id: "operation-1",
-          version: "1",
-          content_hash: "sha256:evidence",
-        },
-      ],
-      business_refs: [
-        {
-          ref_type: "object",
-          ref_id: "purchase-order-1",
-          business_domain_id: "bd_supply_chain",
-          version: "7",
-          as_of: "2026-08-01T10:00:00Z",
-          display_hint: "PO-1",
-        },
-      ],
-      artifact_refs: ["artifact:result-1"],
-      partial_reasons: [],
+      span_id: "span-1",
     };
-    await api.completeOperationAttempt("operation-1", 1, finishInput);
-    await api.failOperationAttempt("operation-1", 2, finishInput);
+    const failInput = {
+      receipt_id: "receipt-2",
+      error: {
+        mode: "inline" as const,
+        inline: {
+          name: "BackendError",
+          message: "Vega query failed",
+          code: "VEGA_QUERY_FAILED",
+          stage: "sdk_execution",
+          retryable: false,
+        },
+        media_type: "application/json" as const,
+      },
+      evidence_durability: "durable" as const,
+      retryable: false,
+      request_id: "request-2",
+      trace_id: "trace-2",
+      span_id: "span-2",
+    };
+    await api.completeOperationAttempt("operation-1", 1, completeInput);
+    await api.failOperationAttempt("operation-1", 2, failInput);
     await api.getReceipt("receipt-1");
 
     const operationCalls = calls(fetchMock);
     expect(operationCalls.map((call) => new URL(call[0]).pathname)).toEqual([
       "/api/agent-observability/v1/conversations/conversation-1/interactions/interaction-1/operations:ensure",
       "/api/agent-observability/v1/operations/operation-1",
+      "/api/agent-observability/v1/operations/operation-1/attempts/1",
+      "/api/agent-observability/v1/interactions/interaction-1/operations",
       "/api/agent-observability/v1/operations/operation-1/attempts",
       "/api/agent-observability/v1/operations/operation-1/attempts/1:complete",
       "/api/agent-observability/v1/operations/operation-1/attempts/2:fail",
@@ -262,23 +273,57 @@ describe("traceLifecycleApi operations and receipts", () => {
     expect(jsonBody(operationCalls[0]!)).toEqual({
       operation_key: "operation-key-1",
       tool_name: "vega.run_sql",
-      normalized_input_hash: "sha256:input",
+      protocol: "sdk",
+      source_module: "managed-trace-sdk",
+      input: {
+        mode: "inline",
+        inline: { sql: "SELECT * FROM {{.purchase_orders}} LIMIT 20" },
+        media_type: "application/json",
+      },
       parent_operation_id: "operation-parent",
       causation_event_ids: ["event-1"],
       required: true,
       lease_token: "lease-1",
       lease_epoch: 3,
     });
-    expect(jsonBody(operationCalls[2]!)).toEqual({
+    expect(jsonBody(operationCalls[4]!)).toEqual({
       lease_token: "lease-1",
       lease_epoch: 3,
     });
-    expect(jsonBody(operationCalls[3]!)).toEqual(finishInput);
-    expect(jsonBody(operationCalls[4]!)).toEqual(finishInput);
+    expect(jsonBody(operationCalls[5]!)).toEqual(completeInput);
+    expect(jsonBody(operationCalls[6]!)).toEqual(failInput);
   });
 });
 
 describe("trace lifecycle contract boundaries", () => {
+  it("treats business payload fields as opaque lifecycle content", async () => {
+    const fetchMock = mockFetch();
+    const api = traceLifecycleApi(ctx);
+    const businessInput = {
+      owner: "采购负责人",
+      tenant_id: "supplier-tenant",
+      generation: 3,
+    };
+
+    await api.ensureOperation("conversation-1", "interaction-1", {
+      operation_key: "operation-key-1",
+      tool_name: "query_object_instance",
+      protocol: "sdk",
+      source_module: "managed-trace-sdk",
+      input: {
+        mode: "inline",
+        media_type: "application/json",
+        inline: businessInput,
+      },
+      lease_token: "lease-1",
+      lease_epoch: 1,
+    });
+
+    expect(jsonBody(calls(fetchMock)[0]!)).toEqual(
+      expect.objectContaining({ input: expect.objectContaining({ inline: businessInput }) }),
+    );
+  });
+
   it.each([
     "generation",
     "on_behalf_of",
@@ -293,6 +338,19 @@ describe("trace lifecycle contract boundaries", () => {
     const input = { external_conversation_key: "external-1", [field]: "forbidden" };
 
     await expect(api.ensureConversation(input)).rejects.toThrow(field);
+    expect(calls(fetchMock)).toHaveLength(0);
+  });
+
+  it("does not treat an arbitrary field named input as an opaque payload envelope", async () => {
+    const fetchMock = mockFetch();
+    const api = traceLifecycleApi(ctx);
+
+    await expect(
+      api.ensureConversation({
+        external_conversation_key: "external-1",
+        metadata: { input: { tenant_id: "forbidden" } },
+      } as never),
+    ).rejects.toThrow("tenant_id");
     expect(calls(fetchMock)).toHaveLength(0);
   });
 

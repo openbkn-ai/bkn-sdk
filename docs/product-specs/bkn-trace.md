@@ -33,34 +33,43 @@ generation、owner、tenant、应用主体、effective subject 和 delegation �
 }
 ```
 
-业务响应丢失时，SDK 查询同一 Receipt，不直接重放副作用。只有 Core 将失败 Operation 标记为 retryable 时，SDK 才能在调用方配置的 `maxAttempts` 上限内创建下一 attempt。恢复回执必须与原 `receipt_id + operation_id + attempt + operation_key + normalized_input_hash` 完全一致。
+调用方在 `runOperation` 中提交真实 `input`，execute 回调只返回业务结果或抛出实际异常。包装器在成功时提交实际输出，在失败时提交异常名称、消息、错误码、阶段与可重试性；调用方不计算输入或输出哈希。Managed Trace 固定记录 `protocol=sdk` 和 `source_module=managed-trace-sdk`，这两个字段是 Trace 生产者身份，不是业务 SDK 参数。
 
-Operation Receipt 中的 `observed_evidence_refs` 只是候选。调用方必须在每个 Claim 的 `supports[]` 中逐项标记 `adopted` 或 `rejected`，并固定来源 Interaction、revision、operation、version、content hash 和 fragment selector；SDK 不自动采用全部 observed refs。
+execute 抛出的错误默认不可重试。只有错误对象明确携带 `retryable: true`（调用方确认该操作可安全重放）或 Core 已存在的失败 Operation 已被标记为 retryable 时，SDK 才能在调用方配置的 `maxAttempts` 上限内创建下一 attempt，并必须再次 ensure 领取 Core 的执行授权。Core 返回 `execute=false`、已完成 Receipt 或未授权的 pending attempt 时都不重放业务调用。业务调用完成后若 Trace 终态写入失败，SDK 保留原业务返回或原异常，不用可观测性故障改写业务行为。
+
+Operation Receipt 中的 `observed_evidence_refs` 只是证据引用 ID 候选。SDK 不会自动将它们采用为 Claim 支撑；需要生成 Claim 时，调用方应先读取对应证据，再明确写入来源 Interaction、revision、operation、version、content hash 和 fragment selector。
 
 ## 公共接口
 
-- `client.trace.lifecycle`：Conversation、Interaction、Operation、Receipt 的低层 3.0 API。
+- `client.trace.lifecycle`：Conversation、Interaction、Operation、OperationCallFact 与 Receipt 的低层 API。
 - `client.trace.withInteraction`：第三方 Agent 的高层受管包装。
+- `client.trace.search`：通过时间、状态、服务、工具、Trace ID 和错误关键词查询类型化 Trace 摘要，不接受原始查询 DSL。
+- `client.trace.get`：读取单个 Trace 的用户问题、业务结果摘要、Span 与 Operation 原始调用事实。
 - `client.trace.graph`、`client.trace.spans`：技术 Trace 定位。
-- `client.trace.search/diagnose/scan/evalSet*`：技术 Trace 分析与测试工具。
+- `client.trace.diagnose/scan/evalSet*`：技术 Trace 分析与测试工具。
+
+`diagnose` 只执行当前 typed Trace 事实能够支撑的规则。缺少 LLM、retrieval 或状态属性时，报告通过 `skippedRules` 和 `partialReasons` 明确说明不可评估范围，不能把“没有数据”解释成“没有问题”。Managed Trace 能稳定评估的基础范围是 Operation 工具调用事实；更丰富规则须由 Trace 生产者提供对应属性。
 
 Community 制品不分发 2.x Evidence 写入 Session、Artifact 正文读写、业务证据链、业务语义图或快照解释实现。业务解释与内容 Resolver 属于受许可 EE 扩展；2.x 数据只作为服务端历史读取与迁移对象。
 
 ## CLI
 
 - `openbkn trace conversations list|get|ensure-current|create-new-generation|resume|close`
-- `openbkn trace interactions start|get|complete|fail|cancel|handoff`
-- `openbkn trace operations get|retry`
+- `openbkn trace interactions start|get|operations|complete|fail|cancel|handoff`
+- `openbkn trace operations get|attempt|retry`
 - `openbkn trace receipts get`
-- `openbkn trace graph|get|search|diagnose|scan`
+- `openbkn trace graph|get|spans|detail|search|diagnose|scan`
 
-Interaction 终止 manifest 和 Operation retry fencing 字段通过 `--body` 或受保护的 `--body-file` 提交。lease token 不进入命令行参数，避免出现在 shell history 或进程列表。
+`trace get <conversation-id>` 与 `trace spans <conversation-id>` 均读取会话 Span；`trace detail <trace-id>` 读取单条类型化技术 Trace，避免改变既有 `trace get` 的参数语义。
+
+Interaction 终止 manifest 和 Operation retry fencing 字段通过受保护的 `--body-file` 提交。lease token 不进入命令行参数，避免出现在 shell history 或进程列表。
 
 ## 完成标准
 
 - 稳定外部会话键的并发 ensure 只形成一个 Core generation，调用方自报 generation 或身份字段被拒绝。
 - 包装层只终止一次；complete 响应丢失时查询权威 Interaction，并以相同 terminal idempotency key 最多重放一次 complete，不能反向 fail。
 - 不可重试失败会终止本轮；可重试失败创建新的 Core attempt，不产生第二次已成功副作用。
+- 每个 Operation attempt 可以回读真实输入以及真实输出或结构化错误。
 - 不同 Claim 只采用各自的精确 supports，observed refs 不自动 adopted。
 - 公共 SDK 不缓存、打印或写普通日志中的 Artifact 正文和敏感字段。
 - 在 `#541`、`#544`、`#542/#546` 就绪后，用真实第三方 Agent 完成三轮 Conversation E2E；测试不得手工构造证据冒充真实验收。

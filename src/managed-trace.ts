@@ -3,12 +3,12 @@
 
 import { randomUUID } from "node:crypto";
 import type {
-  EvidenceReference,
   InteractionCompletionInput,
   ManagedConversation,
   ManagedInteraction,
   ManagedOperation,
   OperationReceipt,
+  PayloadEnvelope,
   TraceLifecycleApi,
 } from "./api/trace-lifecycle.js";
 import { InputError } from "./utils/errors.js";
@@ -17,6 +17,7 @@ const FORBIDDEN_INPUT_FIELDS = ["generation", "on_behalf_of", "onBehalfOf"] as c
 
 class CompletionMissingError extends InputError {}
 class OperationFailedError extends InputError {}
+class OperationPendingError extends InputError {}
 
 export type ConversationStrategy =
   | { mode: "resume_by_id"; conversationId: string }
@@ -40,7 +41,7 @@ export interface BknBusinessContext {
 }
 
 export interface SupportCandidate {
-  ref: EvidenceReference;
+  ref: string;
   state: "observed";
   adopted: false;
 }
@@ -57,7 +58,7 @@ export interface ManagedInteractionScope {
   supportCandidates(): SupportCandidate[];
   runOperation<T>(
     input: ManagedOperationInput,
-    execute: (call: ManagedOperationCall) => Promise<ManagedOperationExecution<T>>,
+    execute: (call: ManagedOperationCall) => Promise<T>,
   ): Promise<ManagedOperationResult<T>>;
   cancel(reason: string): Promise<ManagedInteraction>;
   handoff(reason: string): Promise<ManagedInteraction>;
@@ -66,7 +67,7 @@ export interface ManagedInteractionScope {
 export interface ManagedOperationInput {
   operationKey?: string;
   toolName: string;
-  normalizedInputHash: string;
+  input: unknown;
   parentOperationId?: string;
   causationEventIds?: string[];
   required?: boolean;
@@ -80,21 +81,22 @@ export interface ManagedOperationCall {
   receipt: OperationReceipt;
 }
 
-export interface ManagedOperationExecution<T> {
-  value: T;
-  receipt: OperationReceipt;
-}
-
 export type ManagedOperationResult<T> =
-  | (ManagedOperationExecution<T> & { recovered: false })
+  | { value: T; receipt: OperationReceipt; recovered: false }
   | { value: undefined; receipt: OperationReceipt; recovered: true };
 
 export interface ManagedTraceOptions {
   idFactory?: () => string;
+  /** Report Trace persistence failures without replacing the business result/error. */
+  onTraceError?: (
+    error: unknown,
+    context: { operationId: string; attempt: number; phase: "complete" | "fail" },
+  ) => void;
 }
 
 export class ManagedTrace {
   private readonly idFactory: () => string;
+  private readonly onTraceError?: ManagedTraceOptions["onTraceError"];
   private readonly pendingConversations = new Map<string, Promise<ManagedConversation>>();
   private readonly activeConversationIds = new Set<string>();
 
@@ -103,6 +105,7 @@ export class ManagedTrace {
     options: ManagedTraceOptions = {},
   ) {
     this.idFactory = options.idFactory ?? randomUUID;
+    this.onTraceError = options.onTraceError;
   }
 
   async withInteraction(
@@ -167,7 +170,7 @@ export class ManagedTrace {
           ),
         runOperation: async <T>(
           input: ManagedOperationInput,
-          execute: (call: ManagedOperationCall) => Promise<ManagedOperationExecution<T>>,
+          execute: (call: ManagedOperationCall) => Promise<T>,
         ) =>
           this.runOperation(
             conversation,
@@ -295,29 +298,32 @@ export class ManagedTrace {
     conversation: ManagedConversation,
     interaction: ManagedInteraction,
     input: ManagedOperationInput,
-    execute: (call: ManagedOperationCall) => Promise<ManagedOperationExecution<T>>,
+    execute: (call: ManagedOperationCall) => Promise<T>,
     bknContext: ManagedInteractionScope["bknContext"],
     recordReceipt: ManagedInteractionScope["recordReceipt"],
   ): Promise<ManagedOperationResult<T>> {
     const operationKey = input.operationKey ?? this.idFactory();
-    let current = await this.api.ensureOperation(
-      conversation.conversation_id,
-      interaction.interaction_id,
-      {
-        operation_key: operationKey,
-        tool_name: input.toolName,
-        normalized_input_hash: input.normalizedInputHash,
-        parent_operation_id: input.parentOperationId,
-        causation_event_ids: input.causationEventIds,
-        required: input.required ?? true,
-        lease_token: interaction.lease_token,
-        lease_epoch: interaction.lease_epoch,
-      },
-    );
     const maxAttempts = input.maxAttempts ?? 2;
     if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 10) {
       throw new InputError("maxAttempts must be an integer between 1 and 10");
     }
+    const ensureInput = {
+      operation_key: operationKey,
+      tool_name: input.toolName,
+      protocol: "sdk" as const,
+      source_module: "managed-trace-sdk",
+      input: payloadEnvelope(input.input),
+      parent_operation_id: input.parentOperationId,
+      causation_event_ids: input.causationEventIds,
+      required: input.required ?? true,
+      lease_token: interaction.lease_token,
+      lease_epoch: interaction.lease_epoch,
+    };
+    let current = await this.api.ensureOperation(
+      conversation.conversation_id,
+      interaction.interaction_id,
+      ensureInput,
+    );
 
     while (true) {
       if (isCompletedReceipt(current.receipt)) {
@@ -336,51 +342,117 @@ export class ManagedTrace {
             `Operation "${current.operation.operation_id}" reached maximum attempt count ${maxAttempts}`,
           );
         }
-        current = await this.api.retryOperationAttempt(current.operation.operation_id, {
+        await this.api.retryOperationAttempt(current.operation.operation_id, {
           lease_token: interaction.lease_token,
           lease_epoch: interaction.lease_epoch,
         });
+        const previousAttempt = current.operation.attempt;
+        current = await this.api.ensureOperation(
+          conversation.conversation_id,
+          interaction.interaction_id,
+          ensureInput,
+        );
+        if (current.operation.attempt <= previousAttempt) {
+          throw new OperationFailedError(
+            `Operation "${current.operation.operation_id}" did not advance beyond attempt ${previousAttempt}`,
+          );
+        }
         continue;
       }
+      if (!current.execute) {
+        throw new OperationPendingError(
+          `Operation "${current.operation.operation_id}" is pending and is not authorized for execution`,
+        );
+      }
 
-      let result: ManagedOperationExecution<T>;
+      let value: T;
       try {
-        result = await execute({
+        value = await execute({
           context: bknContext(operationKey, input.parentOperationId, input.causationEventIds),
           operation: current.operation,
           receipt: current.receipt,
         });
       } catch (executeError) {
-        const recovered = await this.api.getReceipt(current.receipt.receipt_id);
-        if (!isTerminalReceipt(recovered)) throw executeError;
-        assertSameReceipt(current.receipt, recovered);
-        current = {
-          ...current,
-          operation: isFailedReceipt(recovered)
-            ? await this.api.getOperation(current.operation.operation_id)
-            : current.operation,
-          receipt: recovered,
-        };
+        const retryable = isExplicitlyRetryable(executeError);
+        try {
+          const failed = await this.api.failOperationAttempt(
+            current.operation.operation_id,
+            current.operation.attempt,
+            {
+              receipt_id: current.receipt.receipt_id,
+              error: payloadEnvelope(operationError(executeError)),
+              evidence_durability: "durable",
+              retryable,
+            },
+          );
+          recordReceipt(failed.receipt);
+        } catch (traceError) {
+          this.reportTraceError(traceError, current.operation, "fail");
+          recordReceipt(current.receipt);
+          throw executeError;
+        }
+        if (!retryable || current.operation.attempt >= maxAttempts) {
+          throw executeError;
+        }
+        try {
+          await this.api.retryOperationAttempt(current.operation.operation_id, {
+            lease_token: interaction.lease_token,
+            lease_epoch: interaction.lease_epoch,
+          });
+          const previousAttempt = current.operation.attempt;
+          current = await this.api.ensureOperation(
+            conversation.conversation_id,
+            interaction.interaction_id,
+            ensureInput,
+          );
+          if (current.operation.attempt <= previousAttempt) {
+            throw new OperationFailedError(
+              `Operation "${current.operation.operation_id}" did not advance beyond attempt ${previousAttempt}`,
+            );
+          }
+        } catch (traceError) {
+          this.reportTraceError(traceError, current.operation, "fail");
+          throw executeError;
+        }
         continue;
       }
 
-      assertSameReceipt(current.receipt, result.receipt);
-      recordReceipt(result.receipt);
-      if (isCompletedReceipt(result.receipt)) {
-        return { ...result, recovered: false };
-      }
-      current = {
-        ...current,
-        operation: isFailedReceipt(result.receipt)
-          ? await this.api.getOperation(current.operation.operation_id)
-          : current.operation,
-        receipt: result.receipt,
-      };
-      if (!isTerminalReceipt(result.receipt)) {
-        throw new InputError(
-          `Operation "${current.operation.operation_id}" returned a pending receipt`,
+      try {
+        const completed = await this.api.completeOperationAttempt(
+          current.operation.operation_id,
+          current.operation.attempt,
+          {
+            receipt_id: current.receipt.receipt_id,
+            output: payloadEnvelope(value),
+            evidence_durability: "durable",
+            retryable: false,
+          },
         );
+        recordReceipt(completed.receipt);
+        return { value, receipt: completed.receipt, recovered: false };
+      } catch (traceError) {
+        // The business call already completed. Trace terminal persistence must
+        // not replace or hide the application result.
+        this.reportTraceError(traceError, current.operation, "complete");
+        recordReceipt(current.receipt);
+        return { value, receipt: current.receipt, recovered: false };
       }
+    }
+  }
+
+  private reportTraceError(
+    error: unknown,
+    operation: ManagedOperation,
+    phase: "complete" | "fail",
+  ): void {
+    try {
+      this.onTraceError?.(error, {
+        operationId: operation.operation_id,
+        attempt: operation.attempt,
+        phase,
+      });
+    } catch {
+      // Observability reporting must not alter the application result or error.
     }
   }
 }
@@ -412,10 +484,6 @@ function expectedReceipts(receipts: Iterable<OperationReceipt>) {
   }));
 }
 
-function isTerminalReceipt(receipt: OperationReceipt): boolean {
-  return receipt.receipt_status !== "pending";
-}
-
 function isCompletedReceipt(receipt: OperationReceipt): boolean {
   return receipt.receipt_status === "completed";
 }
@@ -424,14 +492,68 @@ function isFailedReceipt(receipt: OperationReceipt): boolean {
   return receipt.receipt_status === "failed";
 }
 
-function assertSameReceipt(expected: OperationReceipt, actual: OperationReceipt): void {
-  if (
-    actual.receipt_id !== expected.receipt_id ||
-    actual.operation_id !== expected.operation_id ||
-    actual.attempt !== expected.attempt ||
-    actual.operation_key !== expected.operation_key ||
-    actual.normalized_input_hash !== expected.normalized_input_hash
-  ) {
-    throw new InputError("Recovered receipt does not match the registered operation attempt");
+const MAX_INLINE_PAYLOAD_BYTES = 1 << 20;
+
+function payloadEnvelope(value: unknown): PayloadEnvelope {
+  try {
+    const serialized = JSON.stringify(value);
+    if (serialized === undefined) {
+      return {
+        mode: "omitted",
+        media_type: "application/json",
+        byte_length: 0,
+        omitted_reason: "serialization_failed",
+      };
+    }
+    const byteLength = Buffer.byteLength(serialized);
+    if (byteLength > MAX_INLINE_PAYLOAD_BYTES) {
+      return {
+        mode: "omitted",
+        media_type: "application/json",
+        byte_length: byteLength,
+        omitted_reason: "payload_too_large",
+      };
+    }
+    return { mode: "inline", media_type: "application/json", inline: JSON.parse(serialized) };
+  } catch {
+    return {
+      mode: "omitted",
+      media_type: "application/json",
+      byte_length: 0,
+      omitted_reason: "serialization_failed",
+    };
   }
+}
+
+function operationError(error: unknown): Record<string, unknown> {
+  const retryable = isExplicitlyRetryable(error);
+  if (error instanceof Error) {
+    const code = (error as Error & { code?: unknown }).code;
+    return {
+      name: error.name,
+      message: error.message,
+      ...(typeof code === "string" && code
+        ? { code }
+        : { code: error.name || "sdk_operation_error" }),
+      stage: "sdk_execution",
+      retryable,
+      ...(error.stack ? { stack: error.stack } : {}),
+    };
+  }
+  return {
+    name: "NonErrorThrown",
+    message: String(error),
+    code: "sdk_operation_error",
+    stage: "sdk_execution",
+    retryable,
+  };
+}
+
+function isExplicitlyRetryable(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "retryable" in error &&
+    (error as { retryable?: unknown }).retryable === true
+  );
 }

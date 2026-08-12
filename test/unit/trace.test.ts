@@ -10,10 +10,13 @@ import {
   getRequestTraces,
   getSnapshotPreview,
   getSpansByConversation,
+  getTechnicalTrace,
   getTraceGraph,
   listRequestSummaries,
-  traceSearch,
+  listTechnicalTraces,
 } from "../../src/api/trace.js";
+import type { RawSpan } from "../../src/api/trace.js";
+import { assembleTraceTree } from "../../src/bkn-trace/diagnose.js";
 import { trace } from "../../src/resources/trace.js";
 import type { RequestContext } from "../../src/types.js";
 
@@ -40,14 +43,61 @@ function calls(f: typeof fetch): CallArgs[] {
 }
 afterEach(() => vi.unstubAllGlobals());
 
-describe("traceSearch", () => {
-  it("POSTs to the observability _search endpoint", async () => {
-    const f = mockFetchSeq([{}]);
-    await traceSearch(ctx, { query: {} });
+describe("typed technical Trace APIs", () => {
+  it("GETs the typed trace list with stable filters", async () => {
+    const f = mockFetchSeq([{ entries: [], total: 0 }]);
+    await listTechnicalTraces(ctx, {
+      limit: 20,
+      from: "2026-08-01T00:00:00Z",
+      to: "2026-08-09T00:00:00Z",
+      status: "failed",
+      service: "context-loader",
+      tool: "run_sql",
+      traceId: "trace-1",
+      errorKeyword: "timeout",
+    });
     const c = calls(f)[0];
     if (!c) throw new Error("no call");
-    expect(new URL(c[0]).pathname).toBe("/api/agent-observability/v1/traces/_search");
-    expect(c[1].method).toBe("POST");
+    const url = new URL(c[0]);
+    expect(url.pathname).toBe("/api/agent-observability/v1/traces");
+    expect(c[1].method).toBe("GET");
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({
+      limit: "20",
+      from: "2026-08-01T00:00:00Z",
+      to: "2026-08-09T00:00:00Z",
+      status: "failed",
+      service: "context-loader",
+      tool: "run_sql",
+      trace_id: "trace-1",
+      error_keyword: "timeout",
+    });
+  });
+
+  it("GETs one typed trace detail", async () => {
+    const f = mockFetchSeq([
+      {
+        summary: { trace_id: "trace/1", request_id: "req-1", status: "completed" },
+        operations: [],
+        partial: false,
+      },
+    ]);
+
+    const detail = await getTechnicalTrace(ctx, "trace/1");
+
+    const c = calls(f)[0];
+    if (!c) throw new Error("no call");
+    expect(new URL(c[0]).pathname).toBe("/api/agent-observability/v1/traces/trace%2F1");
+    expect(c[1].method).toBe("GET");
+    expect(detail.summary.trace_id).toBe("trace/1");
+  });
+
+  it("rejects unknown list filters instead of silently returning an unfiltered page", async () => {
+    const f = mockFetchSeq([]);
+
+    expect(() =>
+      listTechnicalTraces(ctx, { query: { term: { traceId: "trace-1" } } } as never),
+    ).toThrow("Unknown technical Trace query field");
+    expect(calls(f)).toHaveLength(0);
   });
 });
 
@@ -305,15 +355,69 @@ describe("trace Community resource", () => {
     expect("requests" in resource).toBe(false);
     expect("interactions" in resource).toBe(false);
   });
+
+  it("reports unsupported diagnosis rules as skipped instead of applied", async () => {
+    mockFetchSeq([
+      { entries: [{ trace_id: "t-1", request_id: "req-1", status: "completed" }], total: 1 },
+      {
+        summary: { trace_id: "t-1", request_id: "req-1", status: "completed" },
+        operations: [
+          {
+            fact: {
+              operation_id: "op-1",
+              attempt: 1,
+              conversation_id: "conv-1",
+              interaction_id: "int-1",
+              tool_name: "run_sql",
+              protocol: "mcp",
+              source_module: "context-loader",
+              input: {
+                mode: "inline",
+                media_type: "application/json",
+                inline: { sql: "SELECT 1" },
+              },
+              started_at: "2026-08-09T10:00:00Z",
+              finished_at: "2026-08-09T10:00:00.001Z",
+              status: "completed",
+              retryable: false,
+            },
+            receipt: {},
+            state: "completed",
+          },
+        ],
+        partial: false,
+      },
+    ]);
+
+    const report = await trace(ctx).diagnose("conv-1");
+
+    expect(report.rulesApplied).toEqual(["excessive_tool_calls_per_turn"]);
+    expect(report.skippedRules).toEqual(
+      expect.arrayContaining([
+        "tool_loop_no_state_change",
+        "tool_error_swallowed",
+        "retrieval_empty_no_fallback",
+        "llm_response_truncated_no_continue",
+      ]),
+    );
+    expect(report.partial).toBe(true);
+  });
 });
 
 describe("typed BKN Trace graph APIs", () => {
   it("GETs trace graph by trace id", async () => {
-    const f = mockFetchSeq([{ trace_id: "trace_1", status: "ok", data: { nodes: [], edges: [] } }]);
+    const f = mockFetchSeq([
+      {
+        summary: { trace_id: "trace_1", request_id: "req_1", status: "completed", span_count: 0 },
+        graph: { trace_id: "trace_1", status: "ok", data: { nodes: [], edges: [] } },
+        operations: [],
+        partial: false,
+      },
+    ]);
     const result = await getTraceGraph(ctx, "trace_1");
     const c = calls(f)[0];
     if (!c) throw new Error("no call");
-    expect(new URL(c[0]).pathname).toBe("/api/agent-observability/v1/traces/trace_1/trace-graph");
+    expect(new URL(c[0]).pathname).toBe("/api/agent-observability/v1/traces/trace_1");
     expect(c[1].method).toBe("GET");
     expect(result.trace_id).toBe("trace_1");
   });
@@ -329,9 +433,13 @@ describe("typed BKN Trace graph APIs", () => {
     if (!evidenceCall || !graphCall) throw new Error("missing calls");
     const evidenceURL = new URL(evidenceCall[0]);
     const graphURL = new URL(graphCall[0]);
-    expect(evidenceURL.pathname).toBe("/api/agent-observability/v1/traces/trace_1/evidence-chain");
+    expect(evidenceURL.pathname).toBe(
+      "/api/agent-observability/v1/business-provenance/traces/trace_1/evidence-chain",
+    );
     expect(evidenceURL.searchParams.get("limit")).toBe("50");
-    expect(graphURL.pathname).toBe("/api/agent-observability/v1/traces/trace_1/business-graph");
+    expect(graphURL.pathname).toBe(
+      "/api/agent-observability/v1/business-provenance/traces/trace_1/business-graph",
+    );
     expect(graphURL.searchParams.get("limit")).toBe("50");
   });
 
@@ -349,14 +457,15 @@ describe("typed BKN Trace graph APIs", () => {
     const evidenceURL = new URL(evidenceCall[0]);
     const graphURL = new URL(graphCall[0]);
     const snapshotURL = new URL(snapshotCall[0]);
-    expect(evidenceURL.pathname).toBe("/api/agent-observability/v1/traces/by-request");
-    expect(evidenceURL.searchParams.get("request_id")).toBe("req_1");
-    expect(graphURL.pathname).toBe("/api/agent-observability/v1/traces/by-request/business-graph");
-    expect(graphURL.searchParams.get("request_id")).toBe("req_1");
-    expect(snapshotURL.pathname).toBe(
-      "/api/agent-observability/v1/traces/by-request/snapshot-preview",
+    expect(evidenceURL.pathname).toBe(
+      "/api/agent-observability/v1/business-provenance/requests/req_1/evidence-chain",
     );
-    expect(snapshotURL.searchParams.get("request_id")).toBe("req_1");
+    expect(graphURL.pathname).toBe(
+      "/api/agent-observability/v1/business-provenance/requests/req_1/business-graph",
+    );
+    expect(snapshotURL.pathname).toBe(
+      "/api/agent-observability/v1/business-provenance/requests/req_1/snapshot-preview",
+    );
   });
 
   it("does not serialize a NaN limit", async () => {
@@ -373,20 +482,220 @@ describe("typed BKN Trace graph APIs", () => {
 });
 
 describe("getSpansByConversation (two-hop)", () => {
-  it("aggregates trace ids then fetches their spans", async () => {
+  it("lists typed traces then preserves operation input in normalized tool spans", async () => {
     const f = mockFetchSeq([
-      { aggregations: { tids: { buckets: [{ key: "t-1" }] } } },
-      { hits: { hits: [{ _source: { traceId: "t-1", name: "span-a" } }] } },
+      { entries: [{ trace_id: "t-1", request_id: "req-1", status: "completed" }], total: 1 },
+      {
+        summary: { trace_id: "t-1", request_id: "req-1", status: "completed" },
+        graph: {
+          trace_id: "t-1",
+          data: {
+            nodes: [
+              {
+                span_id: "span-1",
+                name: "span-a",
+                kind: "CLIENT",
+                status: "ok",
+                start_nano: 10,
+                end_nano: 20,
+                duration_nano: 10,
+              },
+            ],
+            edges: [],
+          },
+        },
+        operations: [
+          {
+            fact: {
+              operation_id: "op-1",
+              attempt: 1,
+              conversation_id: "conv-1",
+              interaction_id: "int-1",
+              tool_name: "run_sql",
+              protocol: "mcp",
+              source_module: "context-loader",
+              input: {
+                mode: "inline",
+                media_type: "application/json",
+                inline: { sql: "SELECT 1" },
+              },
+              trace_id: "t-1",
+              span_id: "span-1",
+              started_at: "2026-08-09T10:00:00Z",
+              finished_at: "2026-08-09T10:00:00.001Z",
+              status: "completed",
+              retryable: false,
+            },
+            receipt: {},
+            state: "completed",
+          },
+        ],
+        partial: false,
+      },
     ]);
     const spans = await getSpansByConversation(ctx, "conv-1");
     expect(calls(f)).toHaveLength(2);
-    expect(spans).toEqual([{ traceId: "t-1", name: "span-a" }]);
+    expect(new URL(calls(f)[0]?.[0] ?? "").searchParams.get("conversation_id")).toBe("conv-1");
+    expect(new URL(calls(f)[1]?.[0] ?? "").pathname).toBe("/api/agent-observability/v1/traces/t-1");
+    expect(spans).toEqual([
+      {
+        traceId: "t-1",
+        spanId: "span-1",
+        parentSpanId: "",
+        name: "span-a",
+        kind: "CLIENT",
+        startTimeUnixNano: "10",
+        endTimeUnixNano: "20",
+        status: { code: "OK" },
+        attributes: {
+          "service.name": "",
+          "gen_ai.operation.name": "execute_tool",
+          "gen_ai.tool.name": "run_sql",
+          "gen_ai.tool.args": { sql: "SELECT 1" },
+          "bkn.operation.id": "op-1",
+          "bkn.operation.attempt": 1,
+          "bkn.operation.protocol": "mcp",
+          "bkn.operation.source_module": "context-loader",
+        },
+      },
+    ]);
+    expect(assembleTraceTree("t-1", spans as unknown as RawSpan[]).byKind.get("tool")).toHaveLength(
+      1,
+    );
   });
 
-  it("uses flat hits when no aggregations are returned", async () => {
-    const f = mockFetchSeq([{ hits: { hits: [{ _source: { name: "flat" } }] } }]);
+  it("preserves realistic epoch nanoseconds and omits invalid values", async () => {
+    const f = mockFetchSeq([
+      { entries: [{ trace_id: "t-1", request_id: "req-1", status: "completed" }], total: 1 },
+      {
+        summary: { trace_id: "t-1", request_id: "req-1", status: "completed" },
+        graph: {
+          trace_id: "t-1",
+          data: {
+            nodes: [
+              {
+                span_id: "span-1",
+                name: "span-a",
+                kind: "CLIENT",
+                status: "ok",
+                start_nano: 1_786_000_000_123_456_800,
+                end_nano: "1786000000123457000",
+              },
+            ],
+            edges: [],
+          },
+        },
+        operations: [],
+        partial: true,
+      },
+    ]);
+
+    const spans = await getSpansByConversation(ctx, "conv-1");
+
+    expect(spans[0]).toMatchObject({
+      startTimeUnixNano: "1786000000123456800",
+      endTimeUnixNano: "1786000000123457000",
+    });
+  });
+
+  it("preserves every operation attempt without duplicate span ids", async () => {
+    const baseFact = {
+      operation_id: "op-retry",
+      conversation_id: "conv-1",
+      interaction_id: "int-1",
+      tool_name: "run_sql",
+      protocol: "mcp",
+      source_module: "context-loader",
+      trace_id: "t-1",
+      span_id: "span-shared",
+      started_at: "2026-08-09T10:00:00Z",
+      finished_at: "2026-08-09T10:00:00.001Z",
+      retryable: true,
+    };
+    mockFetchSeq([
+      { entries: [{ trace_id: "t-1", request_id: "req-1", status: "failed" }], total: 1 },
+      {
+        summary: { trace_id: "t-1", request_id: "req-1", status: "failed" },
+        graph: {
+          trace_id: "t-1",
+          data: {
+            nodes: [
+              {
+                span_id: "span-shared",
+                name: "run_sql",
+                kind: "CLIENT",
+                status: "error",
+                start_nano: 10,
+                end_nano: 20,
+                duration_nano: 10,
+              },
+            ],
+            edges: [],
+          },
+        },
+        operations: [
+          {
+            fact: {
+              ...baseFact,
+              attempt: 1,
+              input: {
+                mode: "inline",
+                media_type: "application/json",
+                inline: { sql: "SELECT 1" },
+              },
+              status: "failed",
+            },
+            receipt: {},
+            state: "failed",
+          },
+          {
+            fact: {
+              ...baseFact,
+              attempt: 2,
+              input: {
+                mode: "inline",
+                media_type: "application/json",
+                inline: { sql: "SELECT 2" },
+              },
+              status: "completed",
+            },
+            receipt: {},
+            state: "completed",
+          },
+        ],
+        partial: false,
+      },
+    ]);
+
+    const spans = await getSpansByConversation(ctx, "conv-1");
+
+    expect(new Set(spans.map((entry) => entry.spanId)).size).toBe(spans.length);
+    expect(spans).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          spanId: "op-retry:attempt:1",
+          attributes: expect.objectContaining({
+            "bkn.operation.attempt": 1,
+            "gen_ai.tool.args": { sql: "SELECT 1" },
+          }),
+        }),
+        expect.objectContaining({
+          spanId: "op-retry:attempt:2",
+          attributes: expect.objectContaining({
+            "bkn.operation.attempt": 2,
+            "gen_ai.tool.args": { sql: "SELECT 2" },
+          }),
+        }),
+      ]),
+    );
+    const tree = assembleTraceTree("t-1", spans as unknown as RawSpan[]);
+    expect(tree.spans.find((entry) => entry.spanId === "op-retry:attempt:1")?.status).toBe("error");
+  });
+
+  it("returns no spans when the typed trace list is empty", async () => {
+    const f = mockFetchSeq([{ entries: [], total: 0 }]);
     const spans = await getSpansByConversation(ctx, "conv-1");
     expect(calls(f)).toHaveLength(1);
-    expect(spans).toEqual([{ name: "flat" }]);
+    expect(spans).toEqual([]);
   });
 });

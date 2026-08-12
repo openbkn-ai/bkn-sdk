@@ -286,7 +286,6 @@ describe("managed MCP tool calls", () => {
       attempt: 1,
       operation_key: "search-schema",
       tool_name: "search_schema",
-      normalized_input_hash: "sha256:input",
       receipt_status: "completed",
       evidence_durability: "pending",
       required: true,
@@ -299,7 +298,6 @@ describe("managed MCP tool calls", () => {
       partial_reasons: [],
       row_version: 2,
       issued_at: "2026-08-02T06:00:00Z",
-      payload_hash: "sha256:payload",
       owner: {
         tenant_id: "tenant-1",
         business_domain_id: "bd_public",

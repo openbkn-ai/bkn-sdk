@@ -117,4 +117,24 @@ describe("trace diagnose — symbolic rules", () => {
     });
     expect(md).toContain("No issues found");
   });
+
+  it("renders partial diagnosis coverage instead of claiming no issues", () => {
+    const md = renderReportMarkdown({
+      traceId: "trace-1",
+      conversationId: "c1",
+      diagnosedAt: null,
+      mode: "symbolic-only",
+      rulesApplied: ["excessive_tool_calls_per_turn"],
+      skippedRules: ["tool_error_swallowed", "retrieval_empty_no_fallback"],
+      partial: true,
+      partialReasons: ["typed Trace facts do not contain required attributes"],
+      findingCount: 0,
+      findings: [],
+    });
+
+    expect(md).toContain("Partial coverage");
+    expect(md).toContain("tool_error_swallowed");
+    expect(md).toContain("typed Trace facts do not contain required attributes");
+    expect(md).not.toContain("No issues found");
+  });
 });
