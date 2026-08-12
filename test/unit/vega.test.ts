@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
+  type CatalogDeletionImpact,
   CreateBuildTaskRequest,
   catalogHealthStatus,
   createBuildTask,
@@ -21,6 +22,7 @@ import {
   updateCatalog,
   updateCatalogHealthCheckSchedule,
 } from "../../src/api/vega.js";
+import { vega } from "../../src/resources/vega.js";
 import type { RequestContext } from "../../src/types.js";
 
 const ctx: RequestContext = {
@@ -286,7 +288,13 @@ describe("deleteCatalog", () => {
     };
     const f = mockFetch(impact);
 
-    await expect(deleteCatalog(ctx, "c-1", { dryRun: true })).resolves.toEqual(impact);
+    const apiResult = deleteCatalog(ctx, "c-1", { dryRun: true });
+    expectTypeOf(apiResult).resolves.toEqualTypeOf<CatalogDeletionImpact>();
+    await expect(apiResult).resolves.toEqual(impact);
+
+    const resourceResult = vega(ctx).deleteCatalog("c-1", { dryRun: true });
+    expectTypeOf(resourceResult).resolves.toEqualTypeOf<CatalogDeletionImpact>();
+    await expect(resourceResult).resolves.toEqual(impact);
     const call = firstCall(f);
     const url = new URL(call[0]);
     expect(url.pathname).toBe("/api/vega-backend/v1/catalogs/c-1");
@@ -297,7 +305,13 @@ describe("deleteCatalog", () => {
   it("performs a real deletion without sending dry_run", async () => {
     const f = mockFetch();
 
-    await expect(deleteCatalog(ctx, "c-1")).resolves.toBeUndefined();
+    const apiResult = deleteCatalog(ctx, "c-1");
+    expectTypeOf(apiResult).resolves.toBeUndefined();
+    await expect(apiResult).resolves.toBeUndefined();
+
+    const resourceResult = vega(ctx).deleteCatalog("c-1");
+    expectTypeOf(resourceResult).resolves.toBeUndefined();
+    await expect(resourceResult).resolves.toBeUndefined();
     const url = new URL(firstCall(f)[0]);
     expect(url.searchParams.has("dry_run")).toBe(false);
   });
@@ -305,7 +319,9 @@ describe("deleteCatalog", () => {
   it("rejects an invalid deletion impact at the API boundary", async () => {
     mockFetch({ catalog_id: "c-1", can_delete: true });
 
-    await expect(deleteCatalog(ctx, "c-1", { dryRun: true })).rejects.toThrow();
+    await expect(deleteCatalog(ctx, "c-1", { dryRun: true })).rejects.toThrow(
+      /may not support deletion preflight; verify whether the Catalog still exists/,
+    );
   });
 });
 

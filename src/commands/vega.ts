@@ -78,13 +78,16 @@ const parsePairs = (raw?: string): Array<{ key: string; value: string }> | undef
 };
 
 const buildTaskStatuses = (raw?: string): BuildTaskStatus[] | undefined => {
+  if (!raw) return undefined;
   const statuses = csv(raw);
-  if (!statuses) return undefined;
+  if (!statuses?.length) {
+    throw new InputError("--status must include at least one build status");
+  }
   return statuses.map((status) => {
     const parsed = BuildTaskStatus.safeParse(status);
     if (!parsed.success) {
       throw new InputError(
-        "build status must be pending, running, stopping, stopped, completed, failed, or cancelled",
+        `invalid build status "${status}"; expected one of ${BuildTaskStatus.options.join(", ")}`,
       );
     }
     return parsed.data;
@@ -509,7 +512,7 @@ export function vegaCommand(): Command {
     .option("--offset <n>", "page offset", int, 0)
     .option("--resource-id <id>", "filter by resource id")
     .option("--catalog-id <id>", "filter by catalog id")
-    .option("--status <status>", "comma-separated statuses")
+    .option("--status <status>", `comma-separated statuses: ${BuildTaskStatus.options.join(" | ")}`)
     .option("--mode <mode>", "filter by mode: batch | streaming")
     .option("--order-by <field>", "created_at | updated_at")
     .option("--order <dir>", "asc | desc")

@@ -88,6 +88,54 @@ describe("vega dataset build-list", () => {
     expect(url.searchParams.getAll("status")).toEqual(["pending", "running"]);
   });
 
+  it("rejects an empty status list before issuing a request", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      cli().parseAsync(
+        [
+          "--base-url",
+          "https://demo.example.com",
+          "--token",
+          "t",
+          "vega",
+          "dataset",
+          "build-list",
+          "--status",
+          ",",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow(/at least one build status/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("reports the invalid status and the schema-derived allowed values", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      cli().parseAsync(
+        [
+          "--base-url",
+          "https://demo.example.com",
+          "--token",
+          "t",
+          "vega",
+          "dataset",
+          "build-list",
+          "--status",
+          "queued",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow(
+      'invalid build status "queued"; expected one of pending, running, stopping, stopped, completed, failed, cancelled',
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("rejects the removed --active option", async () => {
     suppressOutput();
     await expect(

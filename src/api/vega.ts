@@ -507,7 +507,17 @@ export async function deleteCatalog<T extends DeleteCatalogOptions | undefined =
     method: "DELETE",
     query: { dry_run: opts?.dryRun === undefined ? undefined : String(opts.dryRun) },
   });
-  return (opts?.dryRun ? CatalogDeletionImpact.parse(result) : undefined) as DeleteCatalogResult<T>;
+  if (opts?.dryRun) {
+    const impact = CatalogDeletionImpact.safeParse(result);
+    if (!impact.success) {
+      throw new Error(
+        "The server did not return a Catalog deletion impact for dry_run=true. " +
+          "It may not support deletion preflight; verify whether the Catalog still exists before retrying.",
+      );
+    }
+    return impact.data as DeleteCatalogResult<T>;
+  }
+  return undefined as DeleteCatalogResult<T>;
 }
 
 export async function testCatalogConnectionConfig(
