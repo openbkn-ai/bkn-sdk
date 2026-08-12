@@ -103,10 +103,11 @@ describe("trace lifecycle CLI contract", () => {
     ).toEqual(["get"]);
   });
 
-  it("exposes typed trace list filters and uses trace id for get", () => {
+  it("keeps get conversation-scoped and uses detail for one technical trace", () => {
     const command = traceCommand();
     const search = command.commands.find((child) => child.name() === "search");
     const get = command.commands.find((child) => child.name() === "get");
+    const detail = command.commands.find((child) => child.name() === "detail");
 
     expect(search?.options.map((option) => option.long)).toEqual([
       "--limit",
@@ -118,8 +119,11 @@ describe("trace lifecycle CLI contract", () => {
       "--tool",
       "--trace-id",
       "--error-keyword",
+      "--conversation-id",
+      "--interaction-id",
     ]);
-    expect(get?.registeredArguments[0]?.name()).toBe("trace-id");
+    expect(get?.registeredArguments[0]?.name()).toBe("conversation-id");
+    expect(detail?.registeredArguments[0]?.name()).toBe("trace-id");
   });
 
   it("renders operation input, output and error without business interpretation", () => {

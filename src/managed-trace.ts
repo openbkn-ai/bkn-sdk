@@ -87,10 +87,16 @@ export type ManagedOperationResult<T> =
 
 export interface ManagedTraceOptions {
   idFactory?: () => string;
+  /** Report Trace persistence failures without replacing the business result/error. */
+  onTraceError?: (
+    error: unknown,
+    context: { operationId: string; attempt: number; phase: "complete" | "fail" },
+  ) => void;
 }
 
 export class ManagedTrace {
   private readonly idFactory: () => string;
+  private readonly onTraceError?: ManagedTraceOptions["onTraceError"];
   private readonly pendingConversations = new Map<string, Promise<ManagedConversation>>();
   private readonly activeConversationIds = new Set<string>();
 
@@ -99,6 +105,7 @@ export class ManagedTrace {
     options: ManagedTraceOptions = {},
   ) {
     this.idFactory = options.idFactory ?? randomUUID;
+    this.onTraceError = options.onTraceError;
   }
 
   async withInteraction(
@@ -339,11 +346,17 @@ export class ManagedTrace {
           lease_token: interaction.lease_token,
           lease_epoch: interaction.lease_epoch,
         });
+        const previousAttempt = current.operation.attempt;
         current = await this.api.ensureOperation(
           conversation.conversation_id,
           interaction.interaction_id,
           ensureInput,
         );
+        if (current.operation.attempt <= previousAttempt) {
+          throw new OperationFailedError(
+            `Operation "${current.operation.operation_id}" did not advance beyond attempt ${previousAttempt}`,
+          );
+        }
         continue;
       }
       if (!current.execute) {
@@ -373,7 +386,8 @@ export class ManagedTrace {
             },
           );
           recordReceipt(failed.receipt);
-        } catch {
+        } catch (traceError) {
+          this.reportTraceError(traceError, current.operation, "fail");
           recordReceipt(current.receipt);
           throw executeError;
         }
@@ -384,11 +398,17 @@ export class ManagedTrace {
           lease_token: interaction.lease_token,
           lease_epoch: interaction.lease_epoch,
         });
+        const previousAttempt = current.operation.attempt;
         current = await this.api.ensureOperation(
           conversation.conversation_id,
           interaction.interaction_id,
           ensureInput,
         );
+        if (current.operation.attempt <= previousAttempt) {
+          throw new OperationFailedError(
+            `Operation "${current.operation.operation_id}" did not advance beyond attempt ${previousAttempt}`,
+          );
+        }
         continue;
       }
 
@@ -405,12 +425,29 @@ export class ManagedTrace {
         );
         recordReceipt(completed.receipt);
         return { value, receipt: completed.receipt, recovered: false };
-      } catch {
+      } catch (traceError) {
         // The business call already completed. Trace terminal persistence must
         // not replace or hide the application result.
+        this.reportTraceError(traceError, current.operation, "complete");
         recordReceipt(current.receipt);
         return { value, receipt: current.receipt, recovered: false };
       }
+    }
+  }
+
+  private reportTraceError(
+    error: unknown,
+    operation: ManagedOperation,
+    phase: "complete" | "fail",
+  ): void {
+    try {
+      this.onTraceError?.(error, {
+        operationId: operation.operation_id,
+        attempt: operation.attempt,
+        phase,
+      });
+    } catch {
+      // Observability reporting must not alter the application result or error.
     }
   }
 }

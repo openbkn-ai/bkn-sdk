@@ -56,7 +56,9 @@ Community 制品不分发 2.x Evidence 写入 Session、Artifact 正文读写、
 - `openbkn trace interactions start|get|operations|complete|fail|cancel|handoff`
 - `openbkn trace operations get|attempt|retry`
 - `openbkn trace receipts get`
-- `openbkn trace graph|get|search|diagnose|scan`
+- `openbkn trace graph|get|spans|detail|search|diagnose|scan`
+
+`trace get <conversation-id>` 与 `trace spans <conversation-id>` 均读取会话 Span；`trace detail <trace-id>` 读取单条类型化技术 Trace，避免改变既有 `trace get` 的参数语义。
 
 Interaction 终止 manifest 和 Operation retry fencing 字段通过受保护的 `--body-file` 提交。lease token 不进入命令行参数，避免出现在 shell history 或进程列表。
 

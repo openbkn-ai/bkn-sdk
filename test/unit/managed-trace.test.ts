@@ -541,7 +541,8 @@ describe("ManagedTrace operation lifecycle", () => {
   it("preserves the business result when terminal Trace persistence fails", async () => {
     const api = lifecycleApi();
     api.completeOperationAttempt.mockRejectedValue(new Error("Trace Core unavailable"));
-    const managed = new ManagedTrace(api, { idFactory: () => "id-1" });
+    const onTraceError = vi.fn();
+    const managed = new ManagedTrace(api, { idFactory: () => "id-1", onTraceError });
     const businessResult = { total_count: 1 };
     const execute = vi.fn(async () => businessResult);
 
@@ -566,6 +567,10 @@ describe("ManagedTrace operation lifecycle", () => {
     );
 
     expect(execute).toHaveBeenCalledOnce();
+    expect(onTraceError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "Trace Core unavailable" }),
+      expect.objectContaining({ operationId: "operation-1", attempt: 1, phase: "complete" }),
+    );
   });
 
   it.each(["pending", "failed"] as const)(
@@ -738,6 +743,47 @@ describe("ManagedTrace operation lifecycle", () => {
     expect(api.retryOperationAttempt).toHaveBeenCalledOnce();
     expect(api.ensureOperation).toHaveBeenCalledTimes(2);
     expect(execute).toHaveBeenCalledOnce();
+  });
+
+  it("stops when the server does not advance the authoritative retry attempt", async () => {
+    const api = lifecycleApi();
+    const failedReceipt = {
+      ...receipt(),
+      receipt_status: "failed" as const,
+      evidence_durability: "failed" as const,
+    };
+    api.ensureOperation.mockResolvedValue({
+      operation: { ...operation(), attempt: 1, attempt_status: "failed", retryable: true },
+      receipt: failedReceipt,
+      created: false,
+      execute: false,
+    });
+    api.retryOperationAttempt.mockResolvedValue({
+      operation: { ...operation(), attempt: 2, attempt_status: "ready", retryable: false },
+      receipt: { ...receipt("receipt-2"), attempt: 2 },
+      created: false,
+      execute: false,
+    });
+    const managed = new ManagedTrace(api, { idFactory: () => "id-1" });
+
+    await expect(
+      managed.withInteraction(
+        { mode: "resume_by_id", conversationId: "conversation-1" },
+        async (scope) => {
+          await scope.runOperation(
+            {
+              operationKey: "operation-key-1",
+              toolName: "run_sql",
+              input: { sql: "SELECT 1" },
+            },
+            async () => "never",
+          );
+          return completion();
+        },
+      ),
+    ).rejects.toThrow("did not advance beyond attempt 1");
+    expect(api.retryOperationAttempt).toHaveBeenCalledOnce();
+    expect(api.ensureOperation).toHaveBeenCalledTimes(2);
   });
 
   it("retries an execution error only when the error explicitly declares retryable", async () => {

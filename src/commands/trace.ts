@@ -239,7 +239,18 @@ export function traceCommand(): Command {
     });
 
   cmd
-    .command("get <trace-id>")
+    .command("get <conversation-id>")
+    .description("Fetch normalized spans for a conversation")
+    .option("--max-spans <n>", "max spans", (v) => Number.parseInt(v, 10))
+    .action(async (conversationId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).trace.spans(conversationId, { maxSpans: opts.maxSpans }),
+        outputOptions(cmd),
+      );
+    });
+
+  cmd
+    .command("detail <trace-id>")
     .description("Get one typed technical trace with Span and Operation facts")
     .action(async (traceId: string, _opts, cmd: Command) => {
       const detail = await clientFrom(cmd).trace.get(traceId);
@@ -271,6 +282,8 @@ export function traceCommand(): Command {
     .option("--tool <tool>", "exact root tool")
     .option("--trace-id <id>", "exact Trace ID")
     .option("--error-keyword <text>", "case-insensitive error text")
+    .option("--conversation-id <id>", "exact conversation ID")
+    .option("--interaction-id <id>", "exact interaction ID")
     .action(async (opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).trace.search({
@@ -283,6 +296,8 @@ export function traceCommand(): Command {
           tool: opts.tool,
           traceId: opts.traceId,
           errorKeyword: opts.errorKeyword,
+          conversationId: opts.conversationId,
+          interactionId: opts.interactionId,
         }),
         outputOptions(cmd),
       );

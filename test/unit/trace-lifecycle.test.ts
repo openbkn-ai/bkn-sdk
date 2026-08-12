@@ -341,6 +341,19 @@ describe("trace lifecycle contract boundaries", () => {
     expect(calls(fetchMock)).toHaveLength(0);
   });
 
+  it("does not treat an arbitrary field named input as an opaque payload envelope", async () => {
+    const fetchMock = mockFetch();
+    const api = traceLifecycleApi(ctx);
+
+    await expect(
+      api.ensureConversation({
+        external_conversation_key: "external-1",
+        metadata: { input: { tenant_id: "forbidden" } },
+      } as never),
+    ).rejects.toThrow("tenant_id");
+    expect(calls(fetchMock)).toHaveLength(0);
+  });
+
   it("propagates the existing HttpError with the lifecycle envelope untouched", async () => {
     const envelope = {
       error: {

@@ -485,7 +485,18 @@ function assertNoForbiddenInputFields(input: object): void {
       if (FORBIDDEN_INPUT_FIELDS.has(field)) {
         throw new InputError(`Lifecycle input field "${field}" is not allowed`);
       }
-      if (!OPAQUE_PAYLOAD_FIELDS.has(field)) pending.push(nested);
+      if (!(OPAQUE_PAYLOAD_FIELDS.has(field) && isPayloadEnvelope(nested))) pending.push(nested);
     }
   }
+}
+
+function isPayloadEnvelope(value: unknown): value is PayloadEnvelope {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    (candidate.mode === "inline" ||
+      candidate.mode === "referenced" ||
+      candidate.mode === "omitted") &&
+    candidate.media_type === "application/json"
+  );
 }

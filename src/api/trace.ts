@@ -2,12 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 /**
- * BKN Trace client (agent-observability). Implements raw trace search and a
- * two-hop "spans by conversation" fetch. The full
- * diagnose/eval-set rule engine (LLM-as-judge) is a separate large feature and
- * is NOT included here — see docs/exec-plans/tech-debt-tracker.md.
+ * BKN Trace client (agent-observability). Implements typed technical Trace
+ * queries and conversation-scoped Span normalization for diagnose/eval-set.
  */
 import type { RequestContext } from "../types.js";
+import { InputError } from "../utils/errors.js";
 import { request } from "./http.js";
 import type { OperationCallFact, OperationReceipt } from "./trace-lifecycle.js";
 
@@ -557,23 +556,92 @@ export async function getSpansByConversation(
     conversationId,
     limit: opts.maxTraceIds ?? 100,
   });
-  const details = await Promise.all(
-    page.entries.map((entry) => getTechnicalTrace(ctx, entry.trace_id)),
+  const spans: Array<Record<string, unknown>> = [];
+  const maxSpans = opts.maxSpans ?? 2000;
+  for (const entry of page.entries) {
+    if (spans.length >= maxSpans) break;
+    spans.push(...normalizedDetailSpans(await getTechnicalTrace(ctx, entry.trace_id)));
+  }
+  return spans.slice(0, maxSpans);
+}
+
+function normalizedDetailSpans(detail: TechnicalTraceDetail): Array<Record<string, unknown>> {
+  const operationsBySpan = new Map(
+    detail.operations
+      .filter((operation) => operation.fact.span_id)
+      .map((operation) => [operation.fact.span_id as string, operation]),
   );
-  const spans = details.flatMap((detail) =>
-    (detail.graph?.data.nodes ?? []).map((node) => ({
+  const representedOperations = new Set<string>();
+  const graphSpans = (detail.graph?.data.nodes ?? []).map((node) => {
+    const operation = operationsBySpan.get(node.span_id);
+    if (operation) representedOperations.add(operation.fact.operation_id);
+    return compactRecord({
       traceId: detail.summary.trace_id,
       spanId: node.span_id,
       parentSpanId: node.parent_span_id ?? "",
       name: node.name,
       kind: node.kind,
-      startTimeUnixNano: String(node.start_nano),
-      endTimeUnixNano: String(node.end_nano),
+      startTimeUnixNano: safeNanoString(node.start_nano),
+      endTimeUnixNano: safeNanoString(node.end_nano),
       status: { code: node.status === "error" ? "STATUS_CODE_ERROR" : "STATUS_CODE_OK" },
-      attributes: { "service.name": node.service_name ?? "" },
-    })),
-  );
-  return spans.slice(0, opts.maxSpans ?? 2000);
+      attributes: {
+        "service.name": node.service_name ?? "",
+        ...(operation ? operationAttributes(operation) : {}),
+      },
+    });
+  });
+  const operationSpans = detail.operations
+    .filter((operation) => !representedOperations.has(operation.fact.operation_id))
+    .map((operation) =>
+      compactRecord({
+        traceId: operation.fact.trace_id ?? detail.summary.trace_id,
+        spanId:
+          operation.fact.span_id ??
+          `${operation.fact.operation_id}:attempt:${operation.fact.attempt}`,
+        parentSpanId: "",
+        name: operation.fact.tool_name,
+        kind: "CLIENT",
+        startTimeUnixNano: isoToNanos(operation.fact.started_at),
+        endTimeUnixNano: operation.fact.finished_at
+          ? isoToNanos(operation.fact.finished_at)
+          : undefined,
+        status: {
+          code: operation.fact.status === "failed" ? "STATUS_CODE_ERROR" : "STATUS_CODE_OK",
+        },
+        attributes: operationAttributes(operation),
+      }),
+    );
+  return [...graphSpans, ...operationSpans];
+}
+
+function operationAttributes(operation: TechnicalTraceOperation): Record<string, unknown> {
+  const input = operation.fact.input.mode === "inline" ? operation.fact.input.inline : undefined;
+  const error = operation.fact.error;
+  const errorValue = error?.mode === "inline" ? error.inline : undefined;
+  return compactRecord({
+    "gen_ai.operation.name": "execute_tool",
+    "gen_ai.tool.name": operation.fact.tool_name,
+    "gen_ai.tool.args": input,
+    "error.message": errorValue === undefined ? undefined : payloadText(errorValue),
+    "bkn.operation.id": operation.fact.operation_id,
+    "bkn.operation.attempt": operation.fact.attempt,
+    "bkn.operation.protocol": operation.fact.protocol,
+    "bkn.operation.source_module": operation.fact.source_module,
+  });
+}
+
+function payloadText(value: unknown): string {
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+function safeNanoString(value: unknown): string | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    ? String(value)
+    : undefined;
+}
+
+function compactRecord(value: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
 }
 
 function traceTarget(
@@ -623,6 +691,21 @@ function summaryQuery(query: RequestSummaryQuery): Record<string, string | numbe
 function technicalTraceQuery(
   query: TechnicalTraceQuery,
 ): Record<string, string | number> | undefined {
+  const supported = new Set([
+    "limit",
+    "cursor",
+    "from",
+    "to",
+    "status",
+    "service",
+    "tool",
+    "traceId",
+    "errorKeyword",
+    "conversationId",
+    "interactionId",
+  ]);
+  const unknown = Object.keys(query).find((field) => !supported.has(field));
+  if (unknown) throw new InputError(`Unknown technical Trace query field "${unknown}"`);
   const result: Record<string, string | number> = {};
   if (query.limit !== undefined && Number.isFinite(query.limit)) result.limit = query.limit;
   if (query.cursor) result.cursor = query.cursor;

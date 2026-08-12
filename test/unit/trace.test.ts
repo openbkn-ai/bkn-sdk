@@ -15,6 +15,8 @@ import {
   listRequestSummaries,
   listTechnicalTraces,
 } from "../../src/api/trace.js";
+import type { RawSpan } from "../../src/api/trace.js";
+import { assembleTraceTree } from "../../src/bkn-trace/diagnose.js";
 import { trace } from "../../src/resources/trace.js";
 import type { RequestContext } from "../../src/types.js";
 
@@ -87,6 +89,15 @@ describe("typed technical Trace APIs", () => {
     expect(new URL(c[0]).pathname).toBe("/api/agent-observability/v1/traces/trace%2F1");
     expect(c[1].method).toBe("GET");
     expect(detail.summary.trace_id).toBe("trace/1");
+  });
+
+  it("rejects unknown list filters instead of silently returning an unfiltered page", async () => {
+    const f = mockFetchSeq([]);
+
+    expect(() =>
+      listTechnicalTraces(ctx, { query: { term: { traceId: "trace-1" } } } as never),
+    ).toThrow("Unknown technical Trace query field");
+    expect(calls(f)).toHaveLength(0);
   });
 });
 
@@ -424,7 +435,7 @@ describe("typed BKN Trace graph APIs", () => {
 });
 
 describe("getSpansByConversation (two-hop)", () => {
-  it("lists typed traces then fetches their typed details", async () => {
+  it("lists typed traces then preserves operation input in normalized tool spans", async () => {
     const f = mockFetchSeq([
       { entries: [{ trace_id: "t-1", request_id: "req-1", status: "completed" }], total: 1 },
       {
@@ -446,7 +457,32 @@ describe("getSpansByConversation (two-hop)", () => {
             edges: [],
           },
         },
-        operations: [],
+        operations: [
+          {
+            fact: {
+              operation_id: "op-1",
+              attempt: 1,
+              conversation_id: "conv-1",
+              interaction_id: "int-1",
+              tool_name: "run_sql",
+              protocol: "mcp",
+              source_module: "context-loader",
+              input: {
+                mode: "inline",
+                media_type: "application/json",
+                inline: { sql: "SELECT 1" },
+              },
+              trace_id: "t-1",
+              span_id: "span-1",
+              started_at: "2026-08-09T10:00:00Z",
+              finished_at: "2026-08-09T10:00:00.001Z",
+              status: "completed",
+              retryable: false,
+            },
+            receipt: {},
+            state: "completed",
+          },
+        ],
         partial: false,
       },
     ]);
@@ -464,9 +500,52 @@ describe("getSpansByConversation (two-hop)", () => {
         startTimeUnixNano: "10",
         endTimeUnixNano: "20",
         status: { code: "STATUS_CODE_OK" },
-        attributes: { "service.name": "" },
+        attributes: {
+          "service.name": "",
+          "gen_ai.operation.name": "execute_tool",
+          "gen_ai.tool.name": "run_sql",
+          "gen_ai.tool.args": { sql: "SELECT 1" },
+          "bkn.operation.id": "op-1",
+          "bkn.operation.attempt": 1,
+          "bkn.operation.protocol": "mcp",
+          "bkn.operation.source_module": "context-loader",
+        },
       },
     ]);
+    expect(assembleTraceTree("t-1", spans as unknown as RawSpan[]).byKind.get("tool")).toHaveLength(
+      1,
+    );
+  });
+
+  it("does not stringify missing or unsafe nanosecond values", async () => {
+    const f = mockFetchSeq([
+      { entries: [{ trace_id: "t-1", request_id: "req-1", status: "completed" }], total: 1 },
+      {
+        summary: { trace_id: "t-1", request_id: "req-1", status: "completed" },
+        graph: {
+          trace_id: "t-1",
+          data: {
+            nodes: [
+              {
+                span_id: "span-1",
+                name: "span-a",
+                kind: "CLIENT",
+                status: "ok",
+                start_nano: 9_007_199_254_740_992,
+              },
+            ],
+            edges: [],
+          },
+        },
+        operations: [],
+        partial: true,
+      },
+    ]);
+
+    const spans = await getSpansByConversation(ctx, "conv-1");
+
+    expect(spans[0]).not.toHaveProperty("startTimeUnixNano");
+    expect(spans[0]).not.toHaveProperty("endTimeUnixNano");
   });
 
   it("returns no spans when the typed trace list is empty", async () => {

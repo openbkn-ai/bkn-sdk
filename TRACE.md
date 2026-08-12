@@ -25,7 +25,7 @@ const result = await interaction.runOperation(
 );
 ```
 
-包装器在 execute 前 ensure Operation；重试时先申请新 attempt，再 ensure 领取执行权。Core 返回 `execute=false` 时不执行业务回调。成功时把 execute 的返回值作为 `output`，失败时把原异常转换为结构化 `error`。execute 的返回对象保持不变，抛出的错误对象也保持不变。Trace 终态写入失败不能覆盖已经产生的业务结果或异常。
+包装器在 execute 前 ensure Operation；重试时先申请新 attempt，再 ensure 领取执行权。Core 返回 `execute=false` 时不执行业务回调。成功时把 execute 的返回值作为 `output`，失败时把原异常转换为结构化 `error`。execute 的返回对象保持不变，抛出的错误对象也保持不变。Trace 终态写入失败不能覆盖已经产生的业务结果或异常；调用方可通过 `ManagedTraceOptions.onTraceError` 接收失败，并通过返回 Receipt 的 `receipt_status` 判断终态是否持久化。
 
 输入、输出和错误采用固定 1 MiB 的 `PayloadEnvelope`：阈值内为 `inline`，超限为 `omitted / payload_too_large`，无法 JSON 序列化时为 `omitted / serialization_failed`。SDK 不自动创建新的大对象存储。
 
@@ -42,6 +42,8 @@ const result = await interaction.runOperation(
 ## CLI 读取
 
 ```bash
+openbkn trace get <conversation-id> --json
+openbkn trace detail <trace-id> --json
 openbkn trace interactions operations <interaction-id> --json
 openbkn trace operations attempt <operation-id> <attempt> --json
 ```
