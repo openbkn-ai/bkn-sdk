@@ -585,7 +585,7 @@ function normalizedDetailSpans(detail: TechnicalTraceDetail): Array<Record<strin
       kind: node.kind,
       startTimeUnixNano: safeNanoString(node.start_nano),
       endTimeUnixNano: safeNanoString(node.end_nano),
-      status: { code: node.status === "error" ? "STATUS_CODE_ERROR" : "STATUS_CODE_OK" },
+      status: { code: node.status === "error" ? "ERROR" : "OK" },
       attributes: {
         "service.name": node.service_name ?? "",
         ...(operation ? operationAttributes(operation) : {}),
@@ -606,7 +606,7 @@ function normalizedDetailSpans(detail: TechnicalTraceDetail): Array<Record<strin
           ? isoToNanos(operation.fact.finished_at)
           : undefined,
         status: {
-          code: operation.fact.status === "failed" ? "STATUS_CODE_ERROR" : "STATUS_CODE_OK",
+          code: operation.fact.status === "failed" ? "ERROR" : "OK",
         },
         attributes: operationAttributes(operation),
       }),

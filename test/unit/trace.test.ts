@@ -546,7 +546,7 @@ describe("getSpansByConversation (two-hop)", () => {
         kind: "CLIENT",
         startTimeUnixNano: "10",
         endTimeUnixNano: "20",
-        status: { code: "STATUS_CODE_OK" },
+        status: { code: "OK" },
         attributes: {
           "service.name": "",
           "gen_ai.operation.name": "execute_tool",
@@ -688,6 +688,8 @@ describe("getSpansByConversation (two-hop)", () => {
         }),
       ]),
     );
+    const tree = assembleTraceTree("t-1", spans as unknown as RawSpan[]);
+    expect(tree.spans.find((entry) => entry.spanId === "op-retry:attempt:1")?.status).toBe("error");
   });
 
   it("returns no spans when the typed trace list is empty", async () => {
