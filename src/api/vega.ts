@@ -92,6 +92,7 @@ export const CatalogDeletionBlocker = z.enum([
   "semantic_understanding_tasks_running",
 ]);
 export type CatalogDeletionBlocker = z.infer<typeof CatalogDeletionBlocker>;
+const UnknownCatalogDeletionBlocker = z.string() as z.ZodType<string & {}>;
 
 export const CatalogDeletionTaskImpact = z.object({
   will_cancel: z.number().int(),
@@ -103,7 +104,7 @@ export const CatalogDeletionImpact = z
   .object({
     catalog_id: z.string(),
     can_delete: z.boolean(),
-    blockers: z.array(CatalogDeletionBlocker.or(z.string())),
+    blockers: z.array(CatalogDeletionBlocker.or(UnknownCatalogDeletionBlocker)),
     resources: z.number().int(),
     protected_resources: z.number().int(),
     build_tasks: CatalogDeletionTaskImpact,

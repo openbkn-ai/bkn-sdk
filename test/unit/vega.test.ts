@@ -325,6 +325,10 @@ describe("deleteCatalog", () => {
   });
 
   it("preserves unknown deletion blockers for forward compatibility", async () => {
+    type ImpactBlocker = CatalogDeletionImpact["blockers"][number];
+    expectTypeOf<ImpactBlocker>().not.toEqualTypeOf<string>();
+    expectTypeOf<"future_blocker">().toMatchTypeOf<ImpactBlocker>();
+
     const impact = {
       catalog_id: "c-1",
       can_delete: false,
