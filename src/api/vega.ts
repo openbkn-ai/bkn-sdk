@@ -510,9 +510,11 @@ export async function deleteCatalog<T extends DeleteCatalogOptions | undefined =
   if (opts?.dryRun) {
     const impact = CatalogDeletionImpact.safeParse(result);
     if (!impact.success) {
+      const validationIssues = impact.error.issues
+        .map((issue) => `${issue.path.join(".") || "<root>"}: ${issue.message}`)
+        .join("; ");
       throw new Error(
-        "The server did not return a Catalog deletion impact for dry_run=true. " +
-          "It may not support deletion preflight; verify whether the Catalog still exists before retrying.",
+        `The server did not return a Catalog deletion impact for dry_run=true. It may not support deletion preflight; verify whether the Catalog still exists before retrying. Response validation failed — ${validationIssues}`,
       );
     }
     return impact.data as DeleteCatalogResult<T>;

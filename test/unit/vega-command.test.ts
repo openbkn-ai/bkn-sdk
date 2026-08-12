@@ -111,6 +111,29 @@ describe("vega dataset build-list", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("rejects an explicitly empty status value before issuing a request", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      cli().parseAsync(
+        [
+          "--base-url",
+          "https://demo.example.com",
+          "--token",
+          "t",
+          "vega",
+          "dataset",
+          "build-list",
+          "--status",
+          "",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow(/at least one build status/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("reports the invalid status and the schema-derived allowed values", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

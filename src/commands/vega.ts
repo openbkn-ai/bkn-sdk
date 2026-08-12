@@ -78,7 +78,7 @@ const parsePairs = (raw?: string): Array<{ key: string; value: string }> | undef
 };
 
 const buildTaskStatuses = (raw?: string): BuildTaskStatus[] | undefined => {
-  if (!raw) return undefined;
+  if (raw === undefined) return undefined;
   const statuses = csv(raw);
   if (!statuses?.length) {
     throw new InputError("--status must include at least one build status");

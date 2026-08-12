@@ -320,7 +320,7 @@ describe("deleteCatalog", () => {
     mockFetch({ catalog_id: "c-1", can_delete: true });
 
     await expect(deleteCatalog(ctx, "c-1", { dryRun: true })).rejects.toThrow(
-      /may not support deletion preflight; verify whether the Catalog still exists/,
+      /discover_schedules: Required/,
     );
   });
 });
