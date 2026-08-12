@@ -3,7 +3,11 @@
 
 /** `openbkn vega …` — Catalog reads + index BuildTask. */
 import { Command } from "commander";
-import type { CatalogHealthCheckScheduleRequest, RawQueryRequest } from "../api/vega.js";
+import {
+  BuildTaskStatus,
+  type CatalogHealthCheckScheduleRequest,
+  type RawQueryRequest,
+} from "../api/vega.js";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
@@ -71,6 +75,20 @@ const parsePairs = (raw?: string): Array<{ key: string; value: string }> | undef
       return { key: part.slice(0, idx).trim(), value: part.slice(idx + 1).trim() };
     })
     .filter((p) => p.key.length > 0);
+};
+
+const buildTaskStatuses = (raw?: string): BuildTaskStatus[] | undefined => {
+  const statuses = csv(raw);
+  if (!statuses) return undefined;
+  return statuses.map((status) => {
+    const parsed = BuildTaskStatus.safeParse(status);
+    if (!parsed.success) {
+      throw new InputError(
+        "build status must be pending, running, stopping, stopped, completed, failed, or cancelled",
+      );
+    }
+    return parsed.data;
+  });
 };
 
 export function vegaCommand(): Command {
@@ -235,8 +253,12 @@ export function vegaCommand(): Command {
   catalog
     .command("delete <id>")
     .description("Delete a catalog")
-    .action(async (id: string, _opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).vega.deleteCatalog(id), outputOptions(cmd));
+    .option("--dry-run", "preview deletion impact without changing data")
+    .action(async (id: string, opts, cmd: Command) => {
+      const result = opts.dryRun
+        ? await clientFrom(cmd).vega.deleteCatalog(id, { dryRun: true })
+        : await clientFrom(cmd).vega.deleteCatalog(id);
+      printJson(result, outputOptions(cmd));
     });
   catalog
     .command("test-connection <id>")
@@ -488,7 +510,6 @@ export function vegaCommand(): Command {
     .option("--resource-id <id>", "filter by resource id")
     .option("--catalog-id <id>", "filter by catalog id")
     .option("--status <status>", "comma-separated statuses")
-    .option("--active", "only running/init tasks")
     .option("--mode <mode>", "filter by mode: batch | streaming")
     .option("--order-by <field>", "created_at | updated_at")
     .option("--order <dir>", "asc | desc")
@@ -504,8 +525,7 @@ export function vegaCommand(): Command {
           offset: opts.offset,
           resourceId: opts.resourceId,
           catalogId: opts.catalogId,
-          status: opts.status,
-          active: opts.active,
+          status: buildTaskStatuses(opts.status),
           mode: opts.mode,
           orderBy: opts.orderBy,
           order: opts.order,

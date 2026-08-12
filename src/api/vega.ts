@@ -21,12 +21,13 @@ export const BuildTaskExecuteType = z.enum(["incremental", "full"]);
 export type BuildTaskExecuteType = z.infer<typeof BuildTaskExecuteType>;
 
 export const BuildTaskStatus = z.enum([
-  "init",
+  "pending",
   "running",
   "stopping",
   "stopped",
   "completed",
   "failed",
+  "cancelled",
 ]);
 export type BuildTaskStatus = z.infer<typeof BuildTaskStatus>;
 
@@ -83,6 +84,48 @@ export type CatalogConnectionTestResult = z.infer<typeof CatalogConnectionTestRe
 export interface CatalogWriteOptions {
   allowUnhealthy?: boolean;
 }
+
+export const CatalogDeletionBlocker = z.enum([
+  "protected_resources",
+  "build_tasks_running_or_stopping",
+  "discover_tasks_running",
+  "semantic_understanding_tasks_running",
+]);
+export type CatalogDeletionBlocker = z.infer<typeof CatalogDeletionBlocker>;
+
+export const CatalogDeletionTaskImpact = z.object({
+  will_cancel: z.number().int(),
+  blocking: z.number().int(),
+});
+export type CatalogDeletionTaskImpact = z.infer<typeof CatalogDeletionTaskImpact>;
+
+export const CatalogDeletionImpact = z
+  .object({
+    catalog_id: z.string(),
+    can_delete: z.boolean(),
+    blockers: z.array(CatalogDeletionBlocker),
+    resources: z.number().int(),
+    protected_resources: z.number().int(),
+    build_tasks: CatalogDeletionTaskImpact,
+    catalog_health_check_schedules: z.number().int(),
+    discover_schedules: z.number().int(),
+    discover_tasks: CatalogDeletionTaskImpact,
+    semantic_understanding_tasks: CatalogDeletionTaskImpact,
+  })
+  .passthrough();
+export type CatalogDeletionImpact = z.infer<typeof CatalogDeletionImpact>;
+
+export interface DeleteCatalogOptions {
+  dryRun?: boolean;
+}
+
+export type DeleteCatalogResult<T extends DeleteCatalogOptions | undefined> = T extends undefined
+  ? undefined
+  : T extends { dryRun: true }
+    ? CatalogDeletionImpact
+    : T extends { dryRun?: false | undefined }
+      ? undefined
+      : CatalogDeletionImpact | undefined;
 
 /** POST /build-tasks body. */
 export const CreateBuildTaskRequest = z.discriminatedUnion("mode", [
@@ -191,7 +234,6 @@ export interface ListBuildTasksOptions {
   resourceId?: string;
   catalogId?: string;
   status?: BuildTaskStatus | BuildTaskStatus[];
-  active?: boolean;
   mode?: BuildMode;
   orderBy?: "created_at" | "updated_at";
   order?: "asc" | "desc";
@@ -212,8 +254,7 @@ export async function listBuildTasks(
       offset: opts.offset,
       resource_id: opts.resourceId || undefined,
       catalog_id: opts.catalogId || undefined,
-      status: Array.isArray(opts.status) ? opts.status.join(",") : opts.status || undefined,
-      active: opts.active === undefined ? undefined : String(opts.active),
+      status: opts.status || undefined,
       mode: opts.mode,
       order_by: opts.orderBy,
       order: opts.order,
@@ -457,8 +498,16 @@ export function disableCatalog(ctx: RequestContext, id: string): Promise<unknown
   });
 }
 
-export function deleteCatalog(ctx: RequestContext, id: string): Promise<unknown> {
-  return request(ctx, `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}`, { method: "DELETE" });
+export async function deleteCatalog<T extends DeleteCatalogOptions | undefined = undefined>(
+  ctx: RequestContext,
+  id: string,
+  opts?: T,
+): Promise<DeleteCatalogResult<T>> {
+  const result = await request<unknown>(ctx, `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    query: { dry_run: opts?.dryRun === undefined ? undefined : String(opts.dryRun) },
+  });
+  return (opts?.dryRun ? CatalogDeletionImpact.parse(result) : undefined) as DeleteCatalogResult<T>;
 }
 
 export async function testCatalogConnectionConfig(

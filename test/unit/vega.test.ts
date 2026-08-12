@@ -5,6 +5,7 @@ import {
   createBuildTask,
   createCatalog,
   deleteBuildTasks,
+  deleteCatalog,
   getBuildTask,
   getCatalog,
   getCatalogHealthCheckSchedule,
@@ -166,8 +167,7 @@ describe("createBuildTask", () => {
     await listBuildTasks(ctx, {
       resourceId: "r-1",
       catalogId: "c-1",
-      status: ["running", "init"],
-      active: true,
+      status: ["pending", "running"],
       mode: "batch",
       orderBy: "updated_at",
       order: "asc",
@@ -178,8 +178,8 @@ describe("createBuildTask", () => {
     expect(u.pathname).toBe("/api/vega-backend/v1/build-tasks");
     expect(u.searchParams.get("resource_id")).toBe("r-1");
     expect(u.searchParams.get("catalog_id")).toBe("c-1");
-    expect(u.searchParams.get("status")).toBe("running,init");
-    expect(u.searchParams.get("active")).toBe("true");
+    expect(u.searchParams.getAll("status")).toEqual(["pending", "running"]);
+    expect(u.searchParams.has("active")).toBe(false);
     expect(u.searchParams.get("mode")).toBe("batch");
     expect(u.searchParams.get("order_by")).toBe("updated_at");
     expect(u.searchParams.get("order")).toBe("asc");
@@ -267,6 +267,45 @@ describe("createBuildTask", () => {
     expect(deleteUrl.pathname).toBe("/api/vega-backend/v1/build-tasks/t-1,t-2");
     expect(deleteUrl.searchParams.get("ignore_missing")).toBe("true");
     expect(deleteUrl.searchParams.get("delete_active_index")).toBe("true");
+  });
+});
+
+describe("deleteCatalog", () => {
+  it("returns a validated deletion impact for a dry run", async () => {
+    const impact = {
+      catalog_id: "c-1",
+      can_delete: false,
+      blockers: ["discover_tasks_running"],
+      resources: 3,
+      protected_resources: 0,
+      build_tasks: { will_cancel: 1, blocking: 0 },
+      catalog_health_check_schedules: 1,
+      discover_schedules: 1,
+      discover_tasks: { will_cancel: 2, blocking: 1 },
+      semantic_understanding_tasks: { will_cancel: 0, blocking: 0 },
+    };
+    const f = mockFetch(impact);
+
+    await expect(deleteCatalog(ctx, "c-1", { dryRun: true })).resolves.toEqual(impact);
+    const call = firstCall(f);
+    const url = new URL(call[0]);
+    expect(url.pathname).toBe("/api/vega-backend/v1/catalogs/c-1");
+    expect(url.searchParams.get("dry_run")).toBe("true");
+    expect(call[1].method).toBe("DELETE");
+  });
+
+  it("performs a real deletion without sending dry_run", async () => {
+    const f = mockFetch();
+
+    await expect(deleteCatalog(ctx, "c-1")).resolves.toBeUndefined();
+    const url = new URL(firstCall(f)[0]);
+    expect(url.searchParams.has("dry_run")).toBe(false);
+  });
+
+  it("rejects an invalid deletion impact at the API boundary", async () => {
+    mockFetch({ catalog_id: "c-1", can_delete: true });
+
+    await expect(deleteCatalog(ctx, "c-1", { dryRun: true })).rejects.toThrow();
   });
 });
 
