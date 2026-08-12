@@ -194,7 +194,7 @@ export function trace(ctx: RequestContext) {
 
 function isRuleApplicable(
   ruleId: string,
-  spans: Array<{ kind: string; attributes: Record<string, unknown> }>,
+  spans: Array<{ kind: string; status: string; attributes: Record<string, unknown> }>,
 ): boolean {
   const tools = spans.filter((span) => span.kind === "tool");
   const llms = spans.filter((span) => span.kind === "llm");
@@ -204,18 +204,27 @@ function isRuleApplicable(
       return tools.some((span) => Object.hasOwn(span.attributes, "gen_ai.conversation.state"));
     case "tool_error_swallowed":
       return (
-        tools.some((span) => Object.hasOwn(span.attributes, "error.message")) &&
-        llms.some((span) => Object.hasOwn(span.attributes, "gen_ai.prompt"))
+        tools.some((span) => span.status === "error") &&
+        llms.some(
+          (span) =>
+            Object.hasOwn(span.attributes, "gen_ai.prompt") ||
+            Object.hasOwn(span.attributes, "llm.prompt"),
+        )
       );
     case "retrieval_empty_no_fallback":
       return retrievals.some((span) =>
         Object.hasOwn(span.attributes, "gen_ai.retrieval.result_count"),
       );
     case "llm_response_truncated_no_continue":
-      return llms.some((span) => Object.hasOwn(span.attributes, "gen_ai.response.finish_reasons"));
+      return llms.some(
+        (span) =>
+          Object.hasOwn(span.attributes, "gen_ai.response.finish_reasons") ||
+          Object.hasOwn(span.attributes, "gen_ai.response.finish_reason") ||
+          Object.hasOwn(span.attributes, "llm.finish_reason"),
+      );
     case "excessive_tool_calls_per_turn":
-      return tools.length > 0;
+      return true;
     default:
-      return false;
+      return true;
   }
 }
