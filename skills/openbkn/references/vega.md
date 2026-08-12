@@ -4,12 +4,14 @@
 |---------|-------|
 | `catalog list [--limit] [--offset]` / `catalog get <id>` | Catalogs. |
 | `catalog resources <id> [--category table] [--limit n] [--offset n]` | Resources under a catalog. Backend defaults to 20; `--limit -1` fetches all. |
+| `catalog delete <id> [--dry-run]` | Preview deletion impact with `--dry-run`; omit it to delete. Running tasks and protected resources block deletion. |
 | `catalog health <ids...>` | Health-status for one or more catalogs. |
 | `connector-type list` / `connector-type get <type>` | Available connector types. |
 | `sql --query "<sql>"` / `sql -d <json>` | Run SQL or OpenSearch DSL directly against a data source. SQL uses a `{{<resource-id>}}` table placeholder; DSL identifies its resource with top-level `resource_id`. See [§ vega sql](#vega-sql--run-sql--dsl-against-a-data-source). |
 | `resource …` | Vega-backend resources (mirror of top-level `resource`). |
 | `dataset build <resource-id> --mode batch\|streaming [--embedding-fields a,b] [--build-key-fields k] [--embedding-model <id>] [--fulltext-fields a,b] [--fulltext-analyzer <n>] [--execute-type incremental\|full] [--wait] [--timeout <s>]` | Create an index BuildTask. **Index build lives on the resource (one resource = one table); there is no KN-level build.** `batch` requires `--build-key-fields` (else `400 build_key_fields is required for batch mode`). |
 | `dataset build-status <task-id>` | BuildTask status + progress. |
+| `dataset build-list [--status pending,running]` | List BuildTasks. Multiple statuses are OR filters; valid states include `cancelled`. |
 
 ## `vega sql` — run SQL / DSL against a data source
 

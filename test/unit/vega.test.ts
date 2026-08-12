@@ -1,10 +1,12 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
+  type CatalogDeletionImpact,
   CreateBuildTaskRequest,
   catalogHealthStatus,
   createBuildTask,
   createCatalog,
   deleteBuildTasks,
+  deleteCatalog,
   getBuildTask,
   getCatalog,
   getCatalogHealthCheckSchedule,
@@ -20,6 +22,7 @@ import {
   updateCatalog,
   updateCatalogHealthCheckSchedule,
 } from "../../src/api/vega.js";
+import { vega } from "../../src/resources/vega.js";
 import type { RequestContext } from "../../src/types.js";
 
 const ctx: RequestContext = {
@@ -166,8 +169,7 @@ describe("createBuildTask", () => {
     await listBuildTasks(ctx, {
       resourceId: "r-1",
       catalogId: "c-1",
-      status: ["running", "init"],
-      active: true,
+      status: ["pending", "running"],
       mode: "batch",
       orderBy: "updated_at",
       order: "asc",
@@ -178,8 +180,8 @@ describe("createBuildTask", () => {
     expect(u.pathname).toBe("/api/vega-backend/v1/build-tasks");
     expect(u.searchParams.get("resource_id")).toBe("r-1");
     expect(u.searchParams.get("catalog_id")).toBe("c-1");
-    expect(u.searchParams.get("status")).toBe("running,init");
-    expect(u.searchParams.get("active")).toBe("true");
+    expect(u.searchParams.getAll("status")).toEqual(["pending", "running"]);
+    expect(u.searchParams.has("active")).toBe(false);
     expect(u.searchParams.get("mode")).toBe("batch");
     expect(u.searchParams.get("order_by")).toBe("updated_at");
     expect(u.searchParams.get("order")).toBe("asc");
@@ -267,6 +269,81 @@ describe("createBuildTask", () => {
     expect(deleteUrl.pathname).toBe("/api/vega-backend/v1/build-tasks/t-1,t-2");
     expect(deleteUrl.searchParams.get("ignore_missing")).toBe("true");
     expect(deleteUrl.searchParams.get("delete_active_index")).toBe("true");
+  });
+});
+
+describe("deleteCatalog", () => {
+  it("returns a validated deletion impact for a dry run", async () => {
+    const impact = {
+      catalog_id: "c-1",
+      can_delete: false,
+      blockers: ["discover_tasks_running"],
+      resources: 3,
+      protected_resources: 0,
+      build_tasks: { will_cancel: 1, blocking: 0 },
+      catalog_health_check_schedules: 1,
+      discover_schedules: 1,
+      discover_tasks: { will_cancel: 2, blocking: 1 },
+      semantic_understanding_tasks: { will_cancel: 0, blocking: 0 },
+    };
+    const f = mockFetch(impact);
+
+    const apiResult = deleteCatalog(ctx, "c-1", { dryRun: true });
+    expectTypeOf(apiResult).resolves.toEqualTypeOf<CatalogDeletionImpact>();
+    await expect(apiResult).resolves.toEqual(impact);
+
+    const resourceResult = vega(ctx).deleteCatalog("c-1", { dryRun: true });
+    expectTypeOf(resourceResult).resolves.toEqualTypeOf<CatalogDeletionImpact>();
+    await expect(resourceResult).resolves.toEqual(impact);
+    const call = firstCall(f);
+    const url = new URL(call[0]);
+    expect(url.pathname).toBe("/api/vega-backend/v1/catalogs/c-1");
+    expect(url.searchParams.get("dry_run")).toBe("true");
+    expect(call[1].method).toBe("DELETE");
+  });
+
+  it("performs a real deletion without sending dry_run", async () => {
+    const f = mockFetch();
+
+    const apiResult = deleteCatalog(ctx, "c-1");
+    expectTypeOf(apiResult).resolves.toBeUndefined();
+    await expect(apiResult).resolves.toBeUndefined();
+
+    const resourceResult = vega(ctx).deleteCatalog("c-1");
+    expectTypeOf(resourceResult).resolves.toBeUndefined();
+    await expect(resourceResult).resolves.toBeUndefined();
+    const url = new URL(firstCall(f)[0]);
+    expect(url.searchParams.has("dry_run")).toBe(false);
+  });
+
+  it("rejects an invalid deletion impact at the API boundary", async () => {
+    mockFetch({ catalog_id: "c-1", can_delete: true });
+
+    const result = deleteCatalog(ctx, "c-1", { dryRun: true });
+    await expect(result).rejects.toThrow(/may not support deletion preflight/);
+    await expect(result).rejects.toThrow(/discover_schedules/);
+  });
+
+  it("preserves unknown deletion blockers for forward compatibility", async () => {
+    type ImpactBlocker = CatalogDeletionImpact["blockers"][number];
+    expectTypeOf<ImpactBlocker>().not.toEqualTypeOf<string>();
+    expectTypeOf<"future_blocker">().toMatchTypeOf<ImpactBlocker>();
+
+    const impact = {
+      catalog_id: "c-1",
+      can_delete: false,
+      blockers: ["future_blocker"],
+      resources: 1,
+      protected_resources: 0,
+      build_tasks: { will_cancel: 0, blocking: 0 },
+      catalog_health_check_schedules: 0,
+      discover_schedules: 0,
+      discover_tasks: { will_cancel: 0, blocking: 0 },
+      semantic_understanding_tasks: { will_cancel: 0, blocking: 0 },
+    };
+    mockFetch(impact);
+
+    await expect(deleteCatalog(ctx, "c-1", { dryRun: true })).resolves.toEqual(impact);
   });
 });
 

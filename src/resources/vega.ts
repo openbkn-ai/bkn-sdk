@@ -9,6 +9,7 @@ import {
   type CreateBuildTaskRequest,
   type CreateCatalogRequest,
   type DeleteBuildTasksOptions,
+  type DeleteCatalogOptions,
   type ListBuildTasksOptions,
   type ListCatalogsOptions,
   type RawQueryRequest,
@@ -43,7 +44,14 @@ import {
  */
 import type { RequestContext } from "../types.js";
 
-const TERMINAL_STATES = new Set(["completed", "success", "failed", "stopped", "error"]);
+const TERMINAL_STATES = new Set([
+  "completed",
+  "success",
+  "failed",
+  "stopped",
+  "cancelled",
+  "error",
+]);
 
 export function vega(ctx: RequestContext) {
   return {
@@ -55,7 +63,8 @@ export function vega(ctx: RequestContext) {
       updateCatalog(ctx, id, req, opts),
     enableCatalog: (id: string) => enableCatalog(ctx, id),
     disableCatalog: (id: string) => disableCatalog(ctx, id),
-    deleteCatalog: (id: string) => deleteCatalog(ctx, id),
+    deleteCatalog: <T extends DeleteCatalogOptions | undefined = undefined>(id: string, opts?: T) =>
+      deleteCatalog(ctx, id, opts),
     testCatalogConnectionConfig: (req: CatalogConnectionTestRequest) =>
       testCatalogConnectionConfig(ctx, req),
     testCatalogConnection: (id: string) => testCatalogConnection(ctx, id),

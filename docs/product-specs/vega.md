@@ -11,6 +11,9 @@ Browse the Vega catalog — data sources, views, atomic views, connector types �
 - `openbkn vega catalog test-connection <id>` — synchronously test the persisted configuration and inspect the returned `success` business result.
 - `openbkn vega catalog health <id>` — read the latest typed health status for one Catalog.
 - `openbkn vega catalog health-check-schedule <id>` / `set-health-check-schedule <id>` — read or fully update a physical Catalog's independent schedule.
+- `openbkn vega catalog delete <id> --dry-run` — preview the resources, pending
+  tasks, running blockers, and schedules affected by deletion. Omit `--dry-run`
+  to perform the real deletion.
 - `openbkn vega resource list` — resources (limit 30); `openbkn vega resource preview <id>` — sample (limit 50).
 - Health / inspection: connector-type listing and health checks across catalog resources.
 - Index build → see **Index build (BuildTask)** below. This is the platform's build task; it replaces the removed KN-level `bkn build` (see [knowledge-networks.md](knowledge-networks.md)).
@@ -34,6 +37,8 @@ CLI:
 
 - `openbkn vega dataset build <resource-id> --mode batch [--embedding-fields …] [--build-key-fields …] [--embedding-model …] [--fulltext-fields …] [--execute-type incremental|full] [--wait] [--timeout <s>]` — optional index flags update the Resource, then create a BuildTask.
 - `openbkn vega dataset build-status <task-id>` — progress: `status` + `synced_count` / `vectorized_count`.
+- `openbkn vega dataset build-list --status pending,running` — filter by one or
+  more statuses; the SDK sends repeated `status` query parameters.
 - `openbkn vega dataset build-start <task-id> [--reset]` — `--reset` restarts only a full task; it is ignored for incremental tasks.
 
 **Field searchability is separate** — declared on the resource property schema via
@@ -47,6 +52,9 @@ determines what is indexed; the BuildTask uses its snapshot.
 - `vega.testCatalogConnection(id)` calls the persisted-Catalog endpoint. Both connection-test methods return `{ success, message? }`; `success: false` is a completed probe, not an HTTP failure.
 - `vega.createCatalog(request, { allowUnhealthy })` accepts an optional `healthCheckSchedule`. `vega.updateCatalog(id, request, { allowUnhealthy })` follows the backend's full PUT contract and always injects the path ID into the body.
 - `vega.catalogHealthCheckSchedule(id)` and `vega.updateCatalogHealthCheckSchedule(id, request)` use the dedicated GET/PUT endpoint. Modes are `inherit`, `enabled`, and `disabled`; only `enabled` accepts `cronExpr`.
+- `vega.deleteCatalog(id, { dryRun: true })` returns a typed
+  `CatalogDeletionImpact`; `vega.deleteCatalog(id)` performs the real deletion
+  and returns `undefined`.
 
 ## Edge cases
 
@@ -56,4 +64,9 @@ determines what is indexed; the BuildTask uses its snapshot.
 - Health-check schedules exist only for physical Catalogs. The Catalog list/get responses do not embed them.
 - Custom health-check Cron expressions must not run more frequently than hourly; the backend remains the authority for validating the expression.
 - Build is **not** freely re-runnable — it kicks a task and returns a `task-id`; never auto-retry, surface the id for `build-status` polling.
+- BuildTask statuses are `pending`, `running`, `stopping`, `stopped`,
+  `completed`, `failed`, and `cancelled`. Start accepts only `stopped` or
+  `failed`; stop accepts only `pending` or `running`.
 - `execute_type` is batch-only. Streaming tasks must not send it. A failed batch task resumes by default; use `--reset` only when a full task must rebuild from the beginning.
+- A deletion preflight is advisory. A later real deletion can still return a
+  conflict if task or resource state changes between the two requests.
