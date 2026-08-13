@@ -514,14 +514,9 @@ export function vegaCommand(): Command {
     .option("--catalog-id <id>", "filter by catalog id")
     .option("--status <status>", `comma-separated statuses: ${BuildTaskStatus.options.join(" | ")}`)
     .option("--mode <mode>", "filter by mode: batch | streaming")
-    .option("--order-by <field>", "created_at | updated_at")
-    .option("--order <dir>", "asc | desc")
+    .option("--sort <field>", "sort field: create_time | update_time")
+    .option("--direction <dir>", "sort direction: asc | desc")
     .action(async (opts, cmd: Command) => {
-      if (opts.orderBy === "default") {
-        throw new InputError(
-          '--order-by default is no longer supported; use "created_at" or "updated_at"',
-        );
-      }
       printJson(
         await clientFrom(cmd).vega.buildTasks({
           limit: opts.limit,
@@ -530,8 +525,8 @@ export function vegaCommand(): Command {
           catalogId: opts.catalogId,
           status: buildTaskStatuses(opts.status),
           mode: opts.mode,
-          orderBy: opts.orderBy,
-          order: opts.order,
+          sort: opts.sort,
+          direction: opts.direction,
         }),
         outputOptions(cmd),
       );

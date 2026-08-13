@@ -171,8 +171,8 @@ describe("createBuildTask", () => {
       catalogId: "c-1",
       status: ["pending", "running"],
       mode: "batch",
-      orderBy: "updated_at",
-      order: "asc",
+      sort: "update_time",
+      direction: "asc",
       limit: 5,
       offset: 10,
     });
@@ -183,8 +183,8 @@ describe("createBuildTask", () => {
     expect(u.searchParams.getAll("status")).toEqual(["pending", "running"]);
     expect(u.searchParams.has("active")).toBe(false);
     expect(u.searchParams.get("mode")).toBe("batch");
-    expect(u.searchParams.get("order_by")).toBe("updated_at");
-    expect(u.searchParams.get("order")).toBe("asc");
+    expect(u.searchParams.get("sort")).toBe("update_time");
+    expect(u.searchParams.get("direction")).toBe("asc");
     expect(u.searchParams.get("limit")).toBe("5");
     expect(u.searchParams.get("offset")).toBe("10");
   });
@@ -233,14 +233,6 @@ describe("createBuildTask", () => {
       ],
       total_count: 1,
     });
-  });
-
-  it("rejects the removed default ordering before making a request", async () => {
-    const f = mockFetch();
-    await expect(listBuildTasks(ctx, { orderBy: "default" as never })).rejects.toThrow(
-      /no longer supported/,
-    );
-    expect(f).not.toHaveBeenCalled();
   });
 
   it("exposes the persisted batch execute_type on task responses", async () => {

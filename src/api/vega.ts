@@ -8,7 +8,6 @@
  */
 import { z } from "zod";
 import type { RequestContext } from "../types.js";
-import { InputError } from "../utils/errors.js";
 import { request } from "./http.js";
 
 // Vega backend base path.
@@ -236,19 +235,14 @@ export interface ListBuildTasksOptions {
   catalogId?: string;
   status?: BuildTaskStatus | BuildTaskStatus[];
   mode?: BuildMode;
-  orderBy?: "created_at" | "updated_at";
-  order?: "asc" | "desc";
+  sort?: "create_time" | "update_time";
+  direction?: "asc" | "desc";
 }
 
 export async function listBuildTasks(
   ctx: RequestContext,
   opts: ListBuildTasksOptions = {},
 ): Promise<ListBuildTasksResponse> {
-  if ((opts as { orderBy?: unknown }).orderBy === "default") {
-    throw new InputError(
-      'orderBy "default" is no longer supported; use "created_at" or "updated_at"',
-    );
-  }
   const res = await request<unknown>(ctx, `${VEGA_BASE}/build-tasks`, {
     query: {
       limit: opts.limit,
@@ -257,8 +251,8 @@ export async function listBuildTasks(
       catalog_id: opts.catalogId || undefined,
       status: opts.status || undefined,
       mode: opts.mode,
-      order_by: opts.orderBy,
-      order: opts.order,
+      sort: opts.sort,
+      direction: opts.direction,
     },
   });
   return ListBuildTasksResponse.parse(res);

@@ -38,7 +38,8 @@ CLI:
 - `openbkn vega dataset build <resource-id> --mode batch [--embedding-fields …] [--build-key-fields …] [--embedding-model …] [--fulltext-fields …] [--execute-type incremental|full] [--wait] [--timeout <s>]` — optional index flags update the Resource, then create a BuildTask.
 - `openbkn vega dataset build-status <task-id>` — progress: `status` + `synced_count` / `vectorized_count`.
 - `openbkn vega dataset build-list --status pending,running` — filter by one or
-  more statuses; the SDK sends repeated `status` query parameters.
+  more statuses; the SDK sends repeated `status` query parameters. Use
+  `--sort create_time|update_time` and `--direction asc|desc` for ordering.
 - `openbkn vega dataset build-start <task-id> [--reset]` — `--reset` restarts only a full task; it is ignored for incremental tasks.
 
 **Field searchability is separate** — declared on the resource property schema via
