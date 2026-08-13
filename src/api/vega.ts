@@ -31,6 +31,12 @@ export const BuildTaskStatus = z.enum([
 ]);
 export type BuildTaskStatus = z.infer<typeof BuildTaskStatus>;
 
+export const BuildTaskSort = z.enum(["create_time", "update_time"]);
+export type BuildTaskSort = z.infer<typeof BuildTaskSort>;
+
+export const SortDirection = z.enum(["asc", "desc"]);
+export type SortDirection = z.infer<typeof SortDirection>;
+
 export const CatalogHealthCheckScheduleMode = z.enum(["inherit", "enabled", "disabled"]);
 export type CatalogHealthCheckScheduleMode = z.infer<typeof CatalogHealthCheckScheduleMode>;
 
@@ -236,17 +242,18 @@ export interface ListBuildTasksOptions {
   catalogId?: string;
   status?: BuildTaskStatus | BuildTaskStatus[];
   mode?: BuildMode;
-  orderBy?: "created_at" | "updated_at";
-  order?: "asc" | "desc";
+  sort?: BuildTaskSort;
+  direction?: SortDirection;
 }
 
 export async function listBuildTasks(
   ctx: RequestContext,
   opts: ListBuildTasksOptions = {},
 ): Promise<ListBuildTasksResponse> {
-  if ((opts as { orderBy?: unknown }).orderBy === "default") {
+  const legacy = opts as ListBuildTasksOptions & { orderBy?: unknown; order?: unknown };
+  if (legacy.orderBy !== undefined || legacy.order !== undefined) {
     throw new InputError(
-      'orderBy "default" is no longer supported; use "created_at" or "updated_at"',
+      'orderBy/order were replaced by sort ("create_time" | "update_time") and direction ("asc" | "desc")',
     );
   }
   const res = await request<unknown>(ctx, `${VEGA_BASE}/build-tasks`, {
@@ -257,8 +264,8 @@ export async function listBuildTasks(
       catalog_id: opts.catalogId || undefined,
       status: opts.status || undefined,
       mode: opts.mode,
-      order_by: opts.orderBy,
-      order: opts.order,
+      sort: opts.sort,
+      direction: opts.direction,
     },
   });
   return ListBuildTasksResponse.parse(res);
@@ -632,7 +639,9 @@ export async function catalogHealthStatus(
 }
 
 export function listConnectorTypes(ctx: RequestContext): Promise<unknown> {
-  return request(ctx, `${VEGA_BASE}/connector-types`, { query: { sort: "name", order: "asc" } });
+  return request(ctx, `${VEGA_BASE}/connector-types`, {
+    query: { sort: "name", direction: "asc" },
+  });
 }
 
 export function getConnectorType(ctx: RequestContext, type: string): Promise<unknown> {

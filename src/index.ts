@@ -111,6 +111,7 @@ export type { SkillChild, SkillDirChild, SkillFileChild } from "./utils/skill-tr
 export type {
   BuildMode,
   BuildTask,
+  BuildTaskSort,
   BuildTaskStatus,
   BuildTaskSummary,
   CatalogConnectionTestRequest,
@@ -136,6 +137,7 @@ export type {
   RawQueryPaging,
   RawQueryRequest,
   SqlRawQueryRequest,
+  SortDirection,
   UpdateCatalogRequest,
 } from "./api/vega.js";
 

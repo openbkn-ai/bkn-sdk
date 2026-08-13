@@ -178,26 +178,61 @@ describe("vega dataset build-list", () => {
     ).rejects.toThrow();
   });
 
-  it("rejects the removed default ordering before issuing a request", async () => {
+  it("sends the shared sort and direction parameters", async () => {
+    const fetchMock = mockFetch({ entries: [], total_count: 0 });
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "dataset",
+        "build-list",
+        "--sort",
+        "update_time",
+        "--direction",
+        "asc",
+      ],
+      { from: "user" },
+    );
+
+    const url = new URL(fetchMock.mock.calls[0]?.[0] as string);
+    expect(url.searchParams.get("sort")).toBe("update_time");
+    expect(url.searchParams.get("direction")).toBe("asc");
+    expect(url.searchParams.has("order_by")).toBe(false);
+    expect(url.searchParams.has("order")).toBe(false);
+  });
+
+  it("rejects invalid sort and direction values before issuing a request", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
+    suppressOutput();
 
-    await expect(
-      cli().parseAsync(
-        [
-          "--base-url",
-          "https://demo.example.com",
-          "--token",
-          "t",
-          "vega",
-          "dataset",
-          "build-list",
-          "--order-by",
-          "default",
-        ],
-        { from: "user" },
-      ),
-    ).rejects.toThrow(/--order-by default is no longer supported/);
+    const invalidOptions = [
+      ["--sort", "created_at", /invalid build task sort/],
+      ["--direction", "up", /invalid sort direction/],
+    ] as const;
+    for (const [flag, value, message] of invalidOptions) {
+      await expect(
+        cli().parseAsync(
+          [
+            "--base-url",
+            "https://demo.example.com",
+            "--token",
+            "t",
+            "vega",
+            "dataset",
+            "build-list",
+            flag,
+            value,
+          ],
+          { from: "user" },
+        ),
+      ).rejects.toThrow(message);
+    }
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
