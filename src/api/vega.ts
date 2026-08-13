@@ -8,6 +8,7 @@
  */
 import { z } from "zod";
 import type { RequestContext } from "../types.js";
+import { InputError } from "../utils/errors.js";
 import { request } from "./http.js";
 
 // Vega backend base path.
@@ -29,6 +30,12 @@ export const BuildTaskStatus = z.enum([
   "cancelled",
 ]);
 export type BuildTaskStatus = z.infer<typeof BuildTaskStatus>;
+
+export const BuildTaskSort = z.enum(["create_time", "update_time"]);
+export type BuildTaskSort = z.infer<typeof BuildTaskSort>;
+
+export const SortDirection = z.enum(["asc", "desc"]);
+export type SortDirection = z.infer<typeof SortDirection>;
 
 export const CatalogHealthCheckScheduleMode = z.enum(["inherit", "enabled", "disabled"]);
 export type CatalogHealthCheckScheduleMode = z.infer<typeof CatalogHealthCheckScheduleMode>;
@@ -235,14 +242,20 @@ export interface ListBuildTasksOptions {
   catalogId?: string;
   status?: BuildTaskStatus | BuildTaskStatus[];
   mode?: BuildMode;
-  sort?: "create_time" | "update_time";
-  direction?: "asc" | "desc";
+  sort?: BuildTaskSort;
+  direction?: SortDirection;
 }
 
 export async function listBuildTasks(
   ctx: RequestContext,
   opts: ListBuildTasksOptions = {},
 ): Promise<ListBuildTasksResponse> {
+  const legacy = opts as ListBuildTasksOptions & { orderBy?: unknown; order?: unknown };
+  if (legacy.orderBy !== undefined || legacy.order !== undefined) {
+    throw new InputError(
+      'orderBy/order were replaced by sort ("create_time" | "update_time") and direction ("asc" | "desc")',
+    );
+  }
   const res = await request<unknown>(ctx, `${VEGA_BASE}/build-tasks`, {
     query: {
       limit: opts.limit,
@@ -626,7 +639,9 @@ export async function catalogHealthStatus(
 }
 
 export function listConnectorTypes(ctx: RequestContext): Promise<unknown> {
-  return request(ctx, `${VEGA_BASE}/connector-types`, { query: { sort: "name", order: "asc" } });
+  return request(ctx, `${VEGA_BASE}/connector-types`, {
+    query: { sort: "name", direction: "asc" },
+  });
 }
 
 export function getConnectorType(ctx: RequestContext, type: string): Promise<unknown> {

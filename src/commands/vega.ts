@@ -4,9 +4,11 @@
 /** `openbkn vega …` — Catalog reads + index BuildTask. */
 import { Command } from "commander";
 import {
+  BuildTaskSort,
   BuildTaskStatus,
   type CatalogHealthCheckScheduleRequest,
   type RawQueryRequest,
+  SortDirection,
 } from "../api/vega.js";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
@@ -92,6 +94,28 @@ const buildTaskStatuses = (raw?: string): BuildTaskStatus[] | undefined => {
     }
     return parsed.data;
   });
+};
+
+const buildTaskSort = (raw?: string): BuildTaskSort | undefined => {
+  if (raw === undefined) return undefined;
+  const parsed = BuildTaskSort.safeParse(raw);
+  if (!parsed.success) {
+    throw new InputError(
+      `invalid build task sort "${raw}"; expected one of ${BuildTaskSort.options.join(", ")}`,
+    );
+  }
+  return parsed.data;
+};
+
+const sortDirection = (raw?: string): SortDirection | undefined => {
+  if (raw === undefined) return undefined;
+  const parsed = SortDirection.safeParse(raw);
+  if (!parsed.success) {
+    throw new InputError(
+      `invalid sort direction "${raw}"; expected one of ${SortDirection.options.join(", ")}`,
+    );
+  }
+  return parsed.data;
 };
 
 export function vegaCommand(): Command {
@@ -514,8 +538,8 @@ export function vegaCommand(): Command {
     .option("--catalog-id <id>", "filter by catalog id")
     .option("--status <status>", `comma-separated statuses: ${BuildTaskStatus.options.join(" | ")}`)
     .option("--mode <mode>", "filter by mode: batch | streaming")
-    .option("--sort <field>", "sort field: create_time | update_time")
-    .option("--direction <dir>", "sort direction: asc | desc")
+    .option("--sort <field>", `sort field: ${BuildTaskSort.options.join(" | ")}`)
+    .option("--direction <dir>", `sort direction: ${SortDirection.options.join(" | ")}`)
     .action(async (opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).vega.buildTasks({
@@ -525,8 +549,8 @@ export function vegaCommand(): Command {
           catalogId: opts.catalogId,
           status: buildTaskStatuses(opts.status),
           mode: opts.mode,
-          sort: opts.sort,
-          direction: opts.direction,
+          sort: buildTaskSort(opts.sort),
+          direction: sortDirection(opts.direction),
         }),
         outputOptions(cmd),
       );

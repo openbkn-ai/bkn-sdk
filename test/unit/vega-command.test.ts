@@ -205,4 +205,34 @@ describe("vega dataset build-list", () => {
     expect(url.searchParams.has("order_by")).toBe(false);
     expect(url.searchParams.has("order")).toBe(false);
   });
+
+  it("rejects invalid sort and direction values before issuing a request", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    suppressOutput();
+
+    const invalidOptions = [
+      ["--sort", "created_at", /invalid build task sort/],
+      ["--direction", "up", /invalid sort direction/],
+    ] as const;
+    for (const [flag, value, message] of invalidOptions) {
+      await expect(
+        cli().parseAsync(
+          [
+            "--base-url",
+            "https://demo.example.com",
+            "--token",
+            "t",
+            "vega",
+            "dataset",
+            "build-list",
+            flag,
+            value,
+          ],
+          { from: "user" },
+        ),
+      ).rejects.toThrow(message);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

@@ -99,6 +99,8 @@ describe("vega uses the vega-backend base path", () => {
     const u = new URL(firstCall(f)[0]);
     expect(u.pathname).toBe("/api/vega-backend/v1/connector-types");
     expect(u.searchParams.get("sort")).toBe("name");
+    expect(u.searchParams.get("direction")).toBe("asc");
+    expect(u.searchParams.has("order")).toBe(false);
   });
 
   it("listCatalogs sends new filters and repeated extension params", async () => {
@@ -187,6 +189,19 @@ describe("createBuildTask", () => {
     expect(u.searchParams.get("direction")).toBe("asc");
     expect(u.searchParams.get("limit")).toBe("5");
     expect(u.searchParams.get("offset")).toBe("10");
+  });
+
+  it("rejects removed build task sorting options before making a request", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      listBuildTasks(ctx, {
+        orderBy: "updated_at",
+        order: "asc",
+      } as never),
+    ).rejects.toThrow(/orderBy\/order were replaced by sort/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("parses list entries as typed summaries while preserving forward-compatible fields", async () => {
