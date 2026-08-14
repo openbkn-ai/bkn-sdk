@@ -10,6 +10,7 @@ import { z } from "zod";
 import type { RequestContext } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { request } from "./http.js";
+import { parseBigIntJSON } from "./json-bigint.js";
 
 // Vega backend base path.
 const VEGA_BASE = "/api/vega-backend/v1";
@@ -364,7 +365,11 @@ export type SqlQueryRequest = RawQueryRequest;
  * connector to use. `POST /api/vega-backend/v1/resources/query`.
  */
 export function runSql(ctx: RequestContext, body: RawQueryRequest): Promise<unknown> {
-  return request(ctx, `${VEGA_BASE}/resources/query`, { method: "POST", body });
+  return request(ctx, `${VEGA_BASE}/resources/query`, {
+    method: "POST",
+    body,
+    responseParser: parseBigIntJSON,
+  });
 }
 
 export interface ListCatalogsOptions {

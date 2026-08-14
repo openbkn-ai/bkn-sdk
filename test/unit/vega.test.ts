@@ -355,6 +355,29 @@ describe("deleteCatalog", () => {
 });
 
 describe("runSql", () => {
+  it("preserves an unsafe BIGINT response value as native bigint", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response('{"columns":[],"entries":[{"id_card":110101199001152345,"safe_id":42}]}', {
+            status: 200,
+          }),
+      ),
+    );
+
+    await expect(
+      runSql(ctx, {
+        query: "SELECT id_card, safe_id FROM {{r-1}}",
+        query_format: "sql",
+        input_dialect: "mysql",
+      }),
+    ).resolves.toEqual({
+      columns: [],
+      entries: [{ id_card: 110101199001152345n, safe_id: 42 }],
+    });
+  });
+
   it("POSTs an initial SQL query using the raw-query contract", async () => {
     const f = mockFetch({ rows: [] });
     await runSql(ctx, {

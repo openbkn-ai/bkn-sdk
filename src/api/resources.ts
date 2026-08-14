@@ -7,6 +7,7 @@
  */
 import type { RequestContext } from "../types.js";
 import { request } from "./http.js";
+import { parseBigIntJSON } from "./json-bigint.js";
 
 const BASE = "/api/vega-backend/v1/resources";
 
@@ -328,5 +329,6 @@ export function queryResource(
     method: "POST",
     headers: { "X-HTTP-Method-Override": "GET" },
     body,
+    responseParser: parseBigIntJSON,
   });
 }

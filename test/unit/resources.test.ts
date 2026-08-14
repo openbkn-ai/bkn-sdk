@@ -145,6 +145,22 @@ describe("updateResource/configureResourceIndex", () => {
 });
 
 describe("queryResource", () => {
+  it("preserves an unsafe BIGINT response value as native bigint", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response('{"entries":[{"id_card":110101199001152345,"safe_id":42}]}', {
+            status: 200,
+          }),
+      ),
+    );
+
+    await expect(queryResource(ctx, "r-1")).resolves.toEqual({
+      entries: [{ id_card: 110101199001152345n, safe_id: 42 }],
+    });
+  });
+
   it("POSTs to /data with the paging contract and GET override", async () => {
     const f = mockFetch();
     await queryResource(ctx, "r-1", { limit: 5, offset: 2, needTotal: true });
