@@ -17,7 +17,7 @@ jobs:
           node-version: 24.19.0
           cache: npm
           registry-url: https://registry.npmjs.org
-      # Trusted Publishing (OIDC) needs npm >= 11.5.1 — newer than what Node 24 ships.
+      # Keep npm current for Trusted Publishing (OIDC) and release tooling.
       - run: npm install -g npm@latest
       - run: npm ci
       # Derive the npm dist-tag from the version: a prerelease (e.g.
