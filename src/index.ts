@@ -14,7 +14,7 @@ export {
   DEFAULT_QUERY_LIMIT,
 } from "./types.js";
 export { HttpError, InputError, ToolError } from "./utils/errors.js";
-export { parseBigIntJSON, stringifyBigIntJSON } from "./api/json-bigint.js";
+export { parseBigIntJSON, stringifyBigIntJSON } from "./utils/json-bigint.js";
 // A long-lived embedder opens managed interactions the same way the CLI does,
 // and needs the same way to hand them back.
 export { releaseLifecycleSessions } from "./api/lifecycle.js";

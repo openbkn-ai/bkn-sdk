@@ -73,6 +73,10 @@ const raw = await bkn.call("/api/...", { method: "GET" });
 
 Importing the package has no side effects; `createClient` resolves config explicitly.
 
+Vega dynamic-data responses may contain native `bigint` values for integers
+outside JavaScript's safe range. Serialize such a result with the exported
+`stringifyBigIntJSON()` helper instead of native `JSON.stringify()`.
+
 ## Develop
 
 ```bash

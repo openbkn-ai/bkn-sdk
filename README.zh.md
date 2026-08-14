@@ -67,6 +67,10 @@ const raw = await bkn.call("/api/...", { method: "GET" });
 
 import 本包无副作用；`createClient` 显式解析配置。
 
+Vega 动态数据响应中，超出 JavaScript 安全整数范围的值可能是原生 `bigint`。
+序列化这类结果时，请使用导出的 `stringifyBigIntJSON()`，不要使用原生
+`JSON.stringify()`。
+
 ## 开发
 
 ```bash

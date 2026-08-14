@@ -1,7 +1,7 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
-import { stringifyBigIntJSON } from "../api/json-bigint.js";
+import { stringifyBigIntJSON } from "./json-bigint.js";
 
 /** Output helpers: clean JSON for scripts, aligned plain columns for humans. */
 export interface OutputOptions {

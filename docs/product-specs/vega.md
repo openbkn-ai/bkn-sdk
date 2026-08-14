@@ -57,9 +57,10 @@ determines what is indexed; the BuildTask uses its snapshot.
   `CatalogDeletionImpact`; `vega.deleteCatalog(id)` performs the real deletion
   and returns `undefined`.
 - Vega dynamic-data responses (`vega.sql()` and resource previews) preserve
-  integers outside JavaScript's safe range as native `bigint`; safe integers
-  remain `number`. Use the exported `stringifyBigIntJSON()` helper instead of
-  native `JSON.stringify()` when serializing a result containing `bigint`.
+  integers outside JavaScript's safe range as native `bigint`. Other JSON
+  numbers remain `number`. Use the exported `stringifyBigIntJSON()` helper
+  instead of native `JSON.stringify()` when serializing a result containing
+  `bigint`.
 
 ## Edge cases
 

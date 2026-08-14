@@ -9,8 +9,8 @@
 import { z } from "zod";
 import type { RequestContext } from "../types.js";
 import { InputError } from "../utils/errors.js";
+import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { request } from "./http.js";
-import { parseBigIntJSON } from "./json-bigint.js";
 
 // Vega backend base path.
 const VEGA_BASE = "/api/vega-backend/v1";

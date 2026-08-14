@@ -403,6 +403,17 @@ describe("runSql", () => {
     });
   });
 
+  it("serializes an unsafe BIGINT DSL filter without rounding", async () => {
+    const f = mockFetch({ rows: [] });
+    await runSql(ctx, {
+      query_format: "dsl",
+      input_dialect: "opensearch",
+      query: { term: { id_card: 110101199001152345n } },
+    });
+
+    expect(firstCall(f)[1].body).toContain("110101199001152345");
+  });
+
   it("POSTs only the opaque cursor for a continuation", async () => {
     const f = mockFetch({ rows: [] });
     await runSql(ctx, { paging: { cursor: "cursor-1" }, need_total: true });

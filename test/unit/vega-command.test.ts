@@ -64,6 +64,29 @@ describe("vega catalog delete", () => {
   });
 });
 
+describe("vega sql", () => {
+  it("preserves an unsafe BIGINT in --data", async () => {
+    const fetchMock = mockFetch({ entries: [] });
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "sql",
+        "--data",
+        '{"query_format":"dsl","input_dialect":"opensearch","query":{"term":{"id_card":110101199001152345}}}',
+      ],
+      { from: "user" },
+    );
+
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toContain("110101199001152345");
+  });
+});
+
 describe("vega dataset build-list", () => {
   it("expands comma-separated statuses into repeated query parameters", async () => {
     const fetchMock = mockFetch({ entries: [], total_count: 0 });

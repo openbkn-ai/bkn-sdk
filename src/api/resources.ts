@@ -6,8 +6,8 @@
  * Responses passed through as parsed JSON.
  */
 import type { RequestContext } from "../types.js";
+import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { request } from "./http.js";
-import { parseBigIntJSON } from "./json-bigint.js";
 
 const BASE = "/api/vega-backend/v1/resources";
 

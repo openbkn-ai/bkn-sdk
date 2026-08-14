@@ -8,8 +8,8 @@
 import { refreshAccessToken } from "../auth/oauth.js";
 import type { RequestContext } from "../types.js";
 import { HttpError } from "../utils/errors.js";
+import { stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { buildHeaders } from "./headers.js";
-import { stringifyBigIntJSON } from "./json-bigint.js";
 import { tlsFetch } from "./tls.js";
 
 export interface RequestInitEx {
