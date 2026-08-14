@@ -9,6 +9,7 @@ JavaScript safe-integer range, without changing the Vega HTTP JSON contract.
 
 - Apply a BIGINT-safe response parser only to Vega raw queries and resource-data
   previews.
+- Preserve bigint values in Managed Trace operation input and output evidence.
 - Keep safe integers as JavaScript numbers and represent unsafe integers as
   native JavaScript `bigint` values.
 - Add regression coverage for both Vega dynamic-data entry points.
