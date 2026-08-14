@@ -15,7 +15,7 @@ npm install -g @openbkn/bkn-sdk   # CLI：openbkn
 npm install @openbkn/bkn-sdk
 ```
 
-需要 Node ≥ 22.19。
+需要 Node ≥ 24.19.0。
 
 ## CLI
 

@@ -14,10 +14,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24.19.0
           cache: npm
           registry-url: https://registry.npmjs.org
-      # Trusted Publishing (OIDC) needs npm >= 11.5.1 — newer than what Node 22 ships.
+      # Trusted Publishing (OIDC) needs npm >= 11.5.1 — newer than what Node 24 ships.
       - run: npm install -g npm@latest
       - run: npm ci
       # Derive the npm dist-tag from the version: a prerelease (e.g.
