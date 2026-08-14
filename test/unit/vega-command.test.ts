@@ -215,7 +215,7 @@ describe("vega dataset build-list", () => {
         "dataset",
         "build-list",
         "--sort",
-        "update_time",
+        "finish_time",
         "--direction",
         "asc",
       ],
@@ -223,7 +223,7 @@ describe("vega dataset build-list", () => {
     );
 
     const url = new URL(fetchMock.mock.calls[0]?.[0] as string);
-    expect(url.searchParams.get("sort")).toBe("update_time");
+    expect(url.searchParams.get("sort")).toBe("finish_time");
     expect(url.searchParams.get("direction")).toBe("asc");
     expect(url.searchParams.has("order_by")).toBe(false);
     expect(url.searchParams.has("order")).toBe(false);
@@ -236,6 +236,7 @@ describe("vega dataset build-list", () => {
 
     const invalidOptions = [
       ["--sort", "created_at", /invalid build task sort/],
+      ["--sort", "update_time", /invalid build task sort/],
       ["--direction", "up", /invalid sort direction/],
     ] as const;
     for (const [flag, value, message] of invalidOptions) {

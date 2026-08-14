@@ -173,7 +173,7 @@ describe("createBuildTask", () => {
       catalogId: "c-1",
       status: ["pending", "running"],
       mode: "batch",
-      sort: "update_time",
+      sort: "last_progress_time",
       direction: "asc",
       limit: 5,
       offset: 10,
@@ -185,7 +185,7 @@ describe("createBuildTask", () => {
     expect(u.searchParams.getAll("status")).toEqual(["pending", "running"]);
     expect(u.searchParams.has("active")).toBe(false);
     expect(u.searchParams.get("mode")).toBe("batch");
-    expect(u.searchParams.get("sort")).toBe("update_time");
+    expect(u.searchParams.get("sort")).toBe("last_progress_time");
     expect(u.searchParams.get("direction")).toBe("asc");
     expect(u.searchParams.get("limit")).toBe("5");
     expect(u.searchParams.get("offset")).toBe("10");
@@ -219,7 +219,9 @@ describe("createBuildTask", () => {
           synced_mark: "mark-1",
           creator: { id: "u-1", type: "user" },
           create_time: 100,
-          update_time: 200,
+          start_time: 120,
+          finish_time: 200,
+          last_progress_time: 180,
           failure_detail: "detail-only",
           index_config: { features: [{ vector: {} }] },
         },
@@ -241,7 +243,9 @@ describe("createBuildTask", () => {
           synced_mark: "mark-1",
           creator: { id: "u-1", type: "user" },
           create_time: 100,
-          update_time: 200,
+          start_time: 120,
+          finish_time: 200,
+          last_progress_time: 180,
           failure_detail: "detail-only",
           index_config: { features: [{ vector: {} }] },
         },
@@ -250,11 +254,21 @@ describe("createBuildTask", () => {
     });
   });
 
-  it("exposes the persisted batch execute_type on task responses", async () => {
-    mockFetch({ id: "t-1", mode: "batch", execute_type: "incremental" });
+  it("exposes the persisted batch execute type and lifecycle timestamps", async () => {
+    mockFetch({
+      id: "t-1",
+      mode: "batch",
+      execute_type: "incremental",
+      start_time: 120,
+      finish_time: 200,
+      last_progress_time: 180,
+    });
     await expect(getBuildTask(ctx, "t-1")).resolves.toMatchObject({
       id: "t-1",
       execute_type: "incremental",
+      start_time: 120,
+      finish_time: 200,
+      last_progress_time: 180,
     });
   });
 

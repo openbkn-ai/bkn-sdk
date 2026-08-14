@@ -32,7 +32,12 @@ export const BuildTaskStatus = z.enum([
 ]);
 export type BuildTaskStatus = z.infer<typeof BuildTaskStatus>;
 
-export const BuildTaskSort = z.enum(["create_time", "update_time"]);
+export const BuildTaskSort = z.enum([
+  "create_time",
+  "start_time",
+  "finish_time",
+  "last_progress_time",
+]);
 export type BuildTaskSort = z.infer<typeof BuildTaskSort>;
 
 export const SortDirection = z.enum(["asc", "desc"]);
@@ -163,6 +168,9 @@ export const BuildTask = z
     total_count: z.number().optional(),
     synced_count: z.number().optional(),
     vectorized_count: z.number().optional(),
+    start_time: z.number().optional(),
+    finish_time: z.number().optional(),
+    last_progress_time: z.number().optional(),
     index_config: z.unknown().optional(),
     catalog_id: z.string().optional(),
     execute_type: BuildTaskExecuteType.optional(),
@@ -200,7 +208,9 @@ export const BuildTaskSummary = z
       type: z.string(),
     }),
     create_time: z.number(),
-    update_time: z.number(),
+    start_time: z.number().optional(),
+    finish_time: z.number().optional(),
+    last_progress_time: z.number().optional(),
     index_health: z
       .object({
         embedding: z.string(),
@@ -254,7 +264,7 @@ export async function listBuildTasks(
   const legacy = opts as ListBuildTasksOptions & { orderBy?: unknown; order?: unknown };
   if (legacy.orderBy !== undefined || legacy.order !== undefined) {
     throw new InputError(
-      'orderBy/order were replaced by sort ("create_time" | "update_time") and direction ("asc" | "desc")',
+      'orderBy/order were replaced by sort ("create_time" | "start_time" | "finish_time" | "last_progress_time") and direction ("asc" | "desc")',
     );
   }
   const res = await request<unknown>(ctx, `${VEGA_BASE}/build-tasks`, {
