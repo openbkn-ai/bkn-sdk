@@ -267,6 +267,11 @@ export async function listBuildTasks(
       'orderBy/order were replaced by sort ("create_time" | "start_time" | "finish_time" | "last_progress_time") and direction ("asc" | "desc")',
     );
   }
+  if (opts.sort !== undefined && !BuildTaskSort.safeParse(opts.sort).success) {
+    throw new InputError(
+      `invalid build task sort "${opts.sort}"; expected one of ${BuildTaskSort.options.join(", ")}`,
+    );
+  }
   const res = await request<unknown>(ctx, `${VEGA_BASE}/build-tasks`, {
     query: {
       limit: opts.limit,

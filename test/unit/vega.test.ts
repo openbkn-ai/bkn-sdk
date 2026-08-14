@@ -201,6 +201,9 @@ describe("createBuildTask", () => {
         order: "asc",
       } as never),
     ).rejects.toThrow(/orderBy\/order were replaced by sort/);
+    await expect(listBuildTasks(ctx, { sort: "update_time" } as never)).rejects.toThrow(
+      /invalid build task sort/,
+    );
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -252,6 +255,32 @@ describe("createBuildTask", () => {
       ],
       total_count: 1,
     });
+  });
+
+  it("parses pending summaries without lifecycle timestamps", async () => {
+    mockFetch({
+      entries: [
+        {
+          id: "t-1",
+          resource_id: "r-1",
+          catalog_id: "c-1",
+          status: "pending",
+          mode: "batch",
+          total_count: 0,
+          synced_count: 0,
+          vectorized_count: 0,
+          synced_mark: "",
+          creator: { id: "u-1", type: "user" },
+          create_time: 100,
+        },
+      ],
+      total_count: 1,
+    });
+
+    const result = await listBuildTasks(ctx);
+    expect(result.entries[0]?.start_time).toBeUndefined();
+    expect(result.entries[0]?.finish_time).toBeUndefined();
+    expect(result.entries[0]?.last_progress_time).toBeUndefined();
   });
 
   it("exposes the persisted batch execute type and lifecycle timestamps", async () => {
