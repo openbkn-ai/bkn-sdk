@@ -8,6 +8,7 @@
 import { refreshAccessToken } from "../auth/oauth.js";
 import type { RequestContext } from "../types.js";
 import { HttpError } from "../utils/errors.js";
+import { stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { buildHeaders } from "./headers.js";
 import { tlsFetch } from "./tls.js";
 
@@ -29,6 +30,8 @@ export interface RequestInitEx {
    * headers until then, so `timeoutMs` alone cannot buy more than 300s.
    */
   headersTimeoutMs?: number;
+  /** Optional parser for a successful non-empty response body. */
+  responseParser?: (text: string) => unknown;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -61,7 +64,7 @@ export async function request<T = unknown>(
           ...(hasBody ? { "content-type": "application/json" } : {}),
           ...init.headers,
         }),
-        body: hasBody ? JSON.stringify(init.body) : undefined,
+        body: hasBody ? stringifyBigIntJSON(init.body) : undefined,
         redirect: init.redirect,
         signal: controller.signal,
       },
@@ -78,7 +81,7 @@ export async function request<T = unknown>(
     if (!res.ok) {
       throw new HttpError(res.status, res.statusText, text, hintFor(ctx, res.status, text));
     }
-    return (text ? JSON.parse(text) : undefined) as T;
+    return (text ? (init.responseParser ?? JSON.parse)(text) : undefined) as T;
   } finally {
     clearTimeout(timer);
   }

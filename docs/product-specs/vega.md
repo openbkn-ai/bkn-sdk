@@ -56,6 +56,11 @@ determines what is indexed; the BuildTask uses its snapshot.
 - `vega.deleteCatalog(id, { dryRun: true })` returns a typed
   `CatalogDeletionImpact`; `vega.deleteCatalog(id)` performs the real deletion
   and returns `undefined`.
+- Vega dynamic-data responses (`vega.sql()` and resource previews) preserve
+  integers outside JavaScript's safe range as native `bigint`. Other JSON
+  numbers remain `number`. Use the exported `stringifyBigIntJSON()` helper
+  instead of native `JSON.stringify()` when serializing a result containing
+  `bigint`.
 
 ## Edge cases
 
@@ -71,3 +76,6 @@ determines what is indexed; the BuildTask uses its snapshot.
 - `execute_type` is batch-only. Streaming tasks must not send it. A failed batch task resumes by default; use `--reset` only when a full task must rebuild from the beginning.
 - A deletion preflight is advisory. A later real deletion can still return a
   conflict if task or resource state changes between the two requests.
+- `openbkn --json` emits native BIGINT values as unquoted JSON number literals.
+  Downstream JavaScript must use a bigint-aware parser; ordinary `JSON.parse`
+  is not precision-safe for these values.

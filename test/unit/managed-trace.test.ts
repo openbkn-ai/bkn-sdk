@@ -486,6 +486,32 @@ describe("ManagedTrace operation lifecycle", () => {
     ]);
   });
 
+  it("preserves bigint values in inline operation evidence", async () => {
+    const api = lifecycleApi();
+    const managed = new ManagedTrace(api, { idFactory: () => "id-1" });
+    const input = { id_card: 110101199001152345n };
+    const output = { entries: [{ id_card: 110101199001152345n }] };
+
+    await managed.withInteraction(
+      { mode: "resume_by_id", conversationId: "conversation-1" },
+      async (scope) => {
+        await scope.runOperation({ toolName: "run_sql", input }, async () => output);
+        return completion();
+      },
+    );
+
+    expect(api.ensureOperation.mock.calls[0]?.[2]).toEqual(
+      expect.objectContaining({
+        input: expect.objectContaining({ mode: "inline", inline: input }),
+      }),
+    );
+    expect(api.completeOperationAttempt.mock.calls[0]?.[2]).toEqual(
+      expect.objectContaining({
+        output: expect.objectContaining({ mode: "inline", inline: output }),
+      }),
+    );
+  });
+
   it("records the actual exception and rethrows the same error object", async () => {
     const api = lifecycleApi();
     api.failOperationAttempt.mockRejectedValue(new Error("Trace Core unavailable"));

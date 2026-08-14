@@ -4,7 +4,7 @@
 /**
  * @openbkn/bkn-sdk — library entry.
  * Re-exports the client factory, resource namespaces, and shared types.
- * No side effects on import.
+ * No external side effects on import; required runtime APIs are validated synchronously.
  */
 export { createClient, type BknClient } from "./client.js";
 export type { ClientOptions, RequestContext } from "./types.js";
@@ -14,6 +14,7 @@ export {
   DEFAULT_QUERY_LIMIT,
 } from "./types.js";
 export { HttpError, InputError, ToolError } from "./utils/errors.js";
+export { parseBigIntJSON, stringifyBigIntJSON } from "./utils/json-bigint.js";
 // A long-lived embedder opens managed interactions the same way the CLI does,
 // and needs the same way to hand them back.
 export { releaseLifecycleSessions } from "./api/lifecycle.js";

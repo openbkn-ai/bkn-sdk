@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - run: npm ci
       # A package must never depend on itself: `npm install <own-name>` inside the
@@ -32,18 +32,17 @@ jobs:
       - run: npm test
       - run: npm run build
 
-  # The declared `engines.node` floor, actually exercised. `node-version: 22`
-  # above resolves to the newest 22.x, so without this the floor would be a
-  # number nothing runs — the exact claim-without-evidence this repo's engines
-  # declaration was fixed to stop making. Kept as a separate job so the required
-  # `ci` check keeps its name.
+  # The declared `engines.node` floor, actually exercised. Without this separate
+  # job, the documented lower bound would be a number nothing runs — the exact
+  # claim-without-evidence this repo's engines declaration was fixed to stop
+  # making. Kept separate so the required `ci` check keeps its name.
   engines-floor:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.19.0
+          node-version: 24.19.0
           cache: npm
       - run: npm ci
       - run: npm test

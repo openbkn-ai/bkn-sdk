@@ -20,7 +20,7 @@ npm install -g @openbkn/bkn-sdk   # CLI: `openbkn`
 npm install @openbkn/bkn-sdk
 ```
 
-Requires Node ≥ 22.19.
+Requires Node ≥ 24.19.0.
 
 ## CLI
 
@@ -72,6 +72,10 @@ const raw = await bkn.call("/api/...", { method: "GET" });
 ```
 
 Importing the package has no side effects; `createClient` resolves config explicitly.
+
+Vega dynamic-data responses may contain native `bigint` values for integers
+outside JavaScript's safe range. Serialize such a result with the exported
+`stringifyBigIntJSON()` helper instead of native `JSON.stringify()`.
 
 ## Develop
 

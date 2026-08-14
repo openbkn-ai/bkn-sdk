@@ -1,6 +1,8 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
+import { stringifyBigIntJSON } from "./json-bigint.js";
+
 /** Output helpers: clean JSON for scripts, aligned plain columns for humans. */
 export interface OutputOptions {
   /** Emit machine-readable JSON instead of a table. */
@@ -19,10 +21,9 @@ export interface OutputOptions {
  */
 export function printJson(value: unknown, opts: OutputOptions = {}): void {
   if (opts.json || opts.compact) {
-    // Deletes and other 204-style writes resolve to `undefined`, which
-    // `JSON.stringify` renders as the literal `undefined` — not parseable by
-    // anything downstream. Emit `null` instead.
-    const json = JSON.stringify(value === undefined ? null : value, null, opts.compact ? 0 : 2);
+    // Deletes and other 204-style writes resolve to `undefined`, which is not
+    // a parseable top-level JSON value. Emit `null` instead.
+    const json = stringifyBigIntJSON(value === undefined ? null : value, opts.compact ? 0 : 2);
     process.stdout.write(`${json}\n`);
     return;
   }
@@ -51,7 +52,7 @@ export function printJson(value: unknown, opts: OutputOptions = {}): void {
     process.stdout.write("(no results)\n");
     return;
   }
-  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+  process.stdout.write(`${stringifyBigIntJSON(value, 2)}\n`);
 }
 
 /** True when value is `{ <envelope>: [] }` (an empty list response). */
@@ -204,7 +205,7 @@ function stringifyCell(v: unknown): string {
     Array.isArray(v) && v.every((x) => x === null || typeof x !== "object")
       ? v.join(",")
       : typeof v === "object"
-        ? JSON.stringify(v)
+        ? stringifyBigIntJSON(v)
         : String(v);
   const s = raw.replace(/\s+/g, " ").trim();
   return s.length > CELL_MAX ? `${s.slice(0, CELL_MAX - 1)}…` : s;

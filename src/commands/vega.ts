@@ -13,6 +13,7 @@ import {
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
+import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, csv, outputOptions } from "./_shared.js";
 
@@ -374,7 +375,7 @@ export function vegaCommand(): Command {
       let body: RawQueryRequest;
       if (opts.data) {
         try {
-          body = JSON.parse(opts.data) as RawQueryRequest;
+          body = parseBigIntJSON(opts.data) as RawQueryRequest;
         } catch {
           throw new InputError("--data must be valid JSON");
         }

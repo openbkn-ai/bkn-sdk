@@ -9,4 +9,4 @@
 7. **Errors are actionable.** Every failure maps to a clear message and a non-zero exit code. Auth errors point to `openbkn auth login`.
 8. **Entropy down each PR.** Prefer root-cause fixes; keep diffs scoped; consolidate duplication; update the matching spec in the same change.
 9. **Concise above all.** Fewest moving parts that work. No TUI, no clever abstractions, minimal deps. Prefer a small plain function over a framework. Delete before you add.
-10. **Import must be trivial.** `import { ... } from "@openbkn/bkn-sdk"` gives a typed client with zero side effects on import (no network, no fs, no env reads at module load). The SDK is usable without ever touching the CLI; the CLI is a thin consumer of it.
+10. **Import must be trivial.** `import { ... } from "@openbkn/bkn-sdk"` gives a typed client with no external side effects on import (no network, no fs, no env reads at module load). A synchronous required-runtime capability check is allowed. The SDK is usable without ever touching the CLI; the CLI is a thin consumer of it.

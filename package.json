@@ -1,11 +1,11 @@
 {
   "name": "@openbkn/bkn-sdk",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Unified TypeScript SDK + CLI for the BKN (Business Knowledge Network) platform.",
   "type": "module",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=22.19.0"
+    "node": ">=24.19.0"
   },
   "bin": {
     "openbkn": "./dist/cli.js"
@@ -53,7 +53,7 @@
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^22.13.0",
+    "@types/node": "^24.0.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.0",
     "vitest": "^3.0.0"

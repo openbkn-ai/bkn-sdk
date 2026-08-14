@@ -33,6 +33,12 @@ describe("printJson output mode", () => {
     expect(out).toContain('[{"id":"1"');
   });
 
+  it("serializes native bigint values as JSON number literals", () => {
+    const out = capture(() => printJson({ id_card: 110101199001152345n }, { json: true }));
+    expect(out).toContain('"id_card": 110101199001152345');
+    expect(out).not.toContain('"110101199001152345"');
+  });
+
   it("human mode renders an array of objects as aligned columns (no borders)", () => {
     const out = capture(() => printJson(rows));
     expect(out).not.toContain("┌");
