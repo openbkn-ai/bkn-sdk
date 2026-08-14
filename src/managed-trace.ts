@@ -12,6 +12,7 @@ import type {
   TraceLifecycleApi,
 } from "./api/trace-lifecycle.js";
 import { InputError } from "./utils/errors.js";
+import { parseBigIntJSON, stringifyBigIntJSON } from "./utils/json-bigint.js";
 
 const FORBIDDEN_INPUT_FIELDS = ["generation", "on_behalf_of", "onBehalfOf"] as const;
 
@@ -496,7 +497,7 @@ const MAX_INLINE_PAYLOAD_BYTES = 1 << 20;
 
 function payloadEnvelope(value: unknown): PayloadEnvelope {
   try {
-    const serialized = JSON.stringify(value);
+    const serialized = stringifyBigIntJSON(value);
     if (serialized === undefined) {
       return {
         mode: "omitted",
@@ -514,7 +515,11 @@ function payloadEnvelope(value: unknown): PayloadEnvelope {
         omitted_reason: "payload_too_large",
       };
     }
-    return { mode: "inline", media_type: "application/json", inline: JSON.parse(serialized) };
+    return {
+      mode: "inline",
+      media_type: "application/json",
+      inline: parseBigIntJSON(serialized),
+    };
   } catch {
     return {
       mode: "omitted",
