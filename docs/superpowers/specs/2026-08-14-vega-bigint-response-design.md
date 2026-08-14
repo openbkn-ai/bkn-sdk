@@ -39,3 +39,7 @@ remain unchanged.
   which can misclassify safe integers and reject long fractional values.
 - Converting the value after `JSON.parse`: the original value has already been
   rounded and cannot be recovered.
+- Retaining a Node 22 compatibility implementation: Node 22 supports the
+  required native JSON APIs, but it has entered maintenance. The SDK support
+  baseline is Node 24.19.0 for its active security lifecycle, so maintaining a
+  separate Node 22 path adds complexity without serving a supported runtime.

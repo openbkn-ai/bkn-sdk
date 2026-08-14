@@ -7,7 +7,7 @@ tools; this records what the rewrite picks and why. Update here if a choice chan
 
 | Concern | Choice | Why |
 | ------- | ------ | --- |
-| Language | TypeScript (ESM), Node ≥ 24.19.0 | Node 24.19.0 is the current supported LTS security baseline and provides native JSON source-text access for lossless BIGINT parsing. |
+| Language | TypeScript (ESM), Node ≥ 24.19.0 | Node 22 has entered maintenance; Node 24.19.0 is the SDK's supported security baseline. Lossless BIGINT parsing uses native JSON source-text access, which is available throughout the supported range. |
 | CLI framework | **commander** | Mature, 0 runtime deps, clean command tree, biggest ecosystem. Needs a custom grouped-help renderer (see below) |
 | Interactive prompts | **@clack/prompts** | Pretty modern prompts for login / business-domain selection. Replaces `ink`/`inquirer` — lighter, no TUI |
 | Pretty output | **chalk** + **cli-table3** | Color + aligned tables for human output |

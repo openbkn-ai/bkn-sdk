@@ -13,6 +13,27 @@ type JSONWithRawJSON = typeof JSON & { rawJSON(text: string): unknown };
 const parseWithSource = JSON.parse as JSONParseWithSource;
 const rawJSON = (JSON as JSONWithRawJSON).rawJSON;
 
+function assertNativeJSONSupport(): void {
+  if (typeof rawJSON !== "function") {
+    throw new Error(
+      "Lossless BIGINT JSON support requires Node.js >=24.19.0 (missing JSON.rawJSON).",
+    );
+  }
+
+  let source: string | undefined;
+  parseWithSource('{"value":1}', (key, value, context) => {
+    if (key === "value") source = context?.source;
+    return value;
+  });
+  if (source !== "1") {
+    throw new Error(
+      "Lossless BIGINT JSON support requires Node.js >=24.19.0 (missing JSON.parse source text access).",
+    );
+  }
+}
+
+assertNativeJSONSupport();
+
 /** Parses JSON integers outside the safe range as native bigint values. */
 export function parseBigIntJSON(text: string): unknown {
   return parseWithSource(text, (_key, value, context) => {

@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24.19.0
+          node-version: 24
           cache: npm
       - run: npm ci
       # A package must never depend on itself: `npm install <own-name>` inside the
