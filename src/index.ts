@@ -4,7 +4,7 @@
 /**
  * @openbkn/bkn-sdk — library entry.
  * Re-exports the client factory, resource namespaces, and shared types.
- * No side effects on import.
+ * No external side effects on import; required runtime APIs are validated synchronously.
  */
 export { createClient, type BknClient } from "./client.js";
 export type { ClientOptions, RequestContext } from "./types.js";

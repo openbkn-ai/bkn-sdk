@@ -7,12 +7,12 @@ tools; this records what the rewrite picks and why. Update here if a choice chan
 
 | Concern | Choice | Why |
 | ------- | ------ | --- |
-| Language | TypeScript (ESM), Node ≥ 24.19.0 | Node 22 has entered maintenance; Node 24.19.0 is the SDK's supported security baseline. Lossless BIGINT parsing uses native JSON source-text access, which is available throughout the supported range. |
+| Language | TypeScript (ESM), Node ≥ 24.19.0 | Node 22 has entered maintenance; Node 24.19.0 is the SDK's supported security baseline. Lossless BIGINT parsing uses native JSON source-text access, which is available throughout the supported range. `undici` independently requires Node ≥22.19. |
 | CLI framework | **commander** | Mature, 0 runtime deps, clean command tree, biggest ecosystem. Needs a custom grouped-help renderer (see below) |
 | Interactive prompts | **@clack/prompts** | Pretty modern prompts for login / business-domain selection. Replaces `ink`/`inquirer` — lighter, no TUI |
 | Pretty output | **chalk** + **cli-table3** | Color + aligned tables for human output |
 | Validation | **zod** | Parse at IO boundaries (argv, HTTP responses); already used by the legacy SDK |
-| HTTP | native `fetch` | No axios/node-fetch dep; Node ≥22 has it |
+| HTTP | native `fetch` | No axios/node-fetch dep; available throughout the supported Node ≥24.19 range |
 | Build | **tsup** | Dual output (library + `openbkn` bin) in one config; from the legacy operator CLI. Replaces the legacy SDK's hand-rolled `tsc` + `cp` script |
 | Test | **vitest** | One runner, UT + coverage; from the legacy operator CLI. Replaces the legacy SDK's `node:test` + tsx |
 | Lint + format | **Biome** | Single fast tool, near-zero config; neither legacy repo had a real linter, so no migration cost |

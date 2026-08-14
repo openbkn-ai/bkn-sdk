@@ -18,13 +18,13 @@ JavaScript safe-integer range, without changing the Vega HTTP JSON contract.
 The shared HTTP client already consumes successful responses as raw text. Add
 an optional successful-response parser to it, retaining the standard
 `JSON.parse` default. Vega's `runSql` and `queryResource` pass a parser that
-uses Node 24 JSON source-text access to convert only integer tokens outside the
+uses native JSON source-text access (available in Node ≥22) to convert only integer tokens outside the
 JavaScript safe range to `bigint`. This preserves decimal integers without
 changing the behavior of fractional values, exponent values, or JSON object
 keys.
 
 The parser and serializer live in `utils/`, preserving the existing
-`commands -> resources -> api -> utils` dependency direction. Node 24 native
+`commands -> resources -> api -> utils` dependency direction. Native
 JSON source-text access identifies the original integer token during parsing,
 and `JSON.rawJSON()` emits native `bigint` values as JSON number literals for
 shared HTTP requests and CLI output. Typed control-plane response semantics
