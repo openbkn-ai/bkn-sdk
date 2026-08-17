@@ -7,7 +7,7 @@
  */
 import { refreshAccessToken } from "../auth/oauth.js";
 import type { RequestContext } from "../types.js";
-import { HttpError } from "../utils/errors.js";
+import { HttpError, NonJsonResponseError } from "../utils/errors.js";
 import { stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { buildHeaders } from "./headers.js";
 import { tlsFetch } from "./tls.js";
@@ -78,13 +78,58 @@ export async function request<T = unknown>(
       res = await send();
     }
     const text = await res.text();
+    const contentType = res.headers.get("content-type") ?? "";
     if (!res.ok) {
-      throw new HttpError(res.status, res.statusText, text, hintFor(ctx, res.status, text));
+      // Both hints can apply at once — an auth proxy answers a revoked AppKey
+      // with an HTML 401 — so join them rather than letting either win.
+      const gateway = gatewayHint(url, contentType, text);
+      const hints = [gateway, hintFor(ctx, res.status, text)].filter(Boolean);
+      throw new HttpError(
+        res.status,
+        res.statusText,
+        text,
+        hints.join(" ") || undefined,
+        gateway !== undefined,
+      );
     }
-    return (text ? (init.responseParser ?? JSON.parse)(text) : undefined) as T;
+    if (!text) return undefined as T;
+    try {
+      return (init.responseParser ?? JSON.parse)(text) as T;
+    } catch {
+      // A 2xx can mean either "the service answered in something other than
+      // JSON" or "a proxy answered instead of the service" — an SSO gateway
+      // serves a 200 login page for a dead session. Carry which one it was
+      // rather than flattening it into the message: callers act on it.
+      const gateway = gatewayHint(url, contentType, text);
+      throw new NonJsonResponseError(
+        res.status,
+        contentType,
+        text,
+        gateway ??
+          `${url.pathname} answered HTTP ${res.status} with a non-JSON body (${contentType || "no content-type"}).`,
+        gateway !== undefined,
+      );
+    }
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Recognise a reverse-proxy error page. Every backend here speaks JSON, so an
+ * HTML body means the request died at the gateway — usually the service is not
+ * deployed or not routed on this cluster. Without this the caller sees a bare
+ * `HTTP 404` and reads it as "this record does not exist".
+ */
+function gatewayHint(url: URL, contentType: string, body: string): string | undefined {
+  const looksHtml =
+    contentType.includes("html") || /^\s*(<!doctype html|<html)/i.test(body.slice(0, 200));
+  if (!looksHtml) return undefined;
+  return [
+    "The response is an HTML error page, not JSON — the request did not reach the service",
+    `behind ${url.pathname}. That backend is likely not deployed or not routed on this`,
+    "cluster; check with your platform operator.",
+  ].join(" ");
 }
 
 /**

@@ -9,7 +9,7 @@
 | `connector-type list` / `connector-type get <type>` | Available connector types. |
 | `sql --query "<sql>"` / `sql -d <json>` | Run SQL or OpenSearch DSL directly against a data source. SQL uses a `{{<resource-id>}}` table placeholder; DSL identifies its resource with top-level `resource_id`. See [§ vega sql](#vega-sql--run-sql--dsl-against-a-data-source). |
 | `resource …` | Vega-backend resources (mirror of top-level `resource`). |
-| `dataset build <resource-id> --mode batch\|streaming [--embedding-fields a,b] [--build-key-fields k] [--embedding-model <id>] [--fulltext-fields a,b] [--fulltext-analyzer <n>] [--execute-type incremental\|full] [--wait] [--timeout <s>]` | Create an index BuildTask. **Index build lives on the resource (one resource = one table); there is no KN-level build.** `batch` requires `--build-key-fields` (else `400 build_key_fields is required for batch mode`). |
+| `dataset build <resource-id> --mode batch\|streaming [--embedding-fields a,b] [--build-key-fields k] [--embedding-model <name-or-id>] [--fulltext-fields a,b] [--fulltext-analyzer <n>] [--execute-type incremental\|full] [--wait] [--timeout <s>]` | Create an index BuildTask. **Index build lives on the resource (one resource = one table); there is no KN-level build.** `batch` requires `--build-key-fields` (else `400 build_key_fields is required for batch mode`). `--embedding-model` takes the model name or a numeric id (resolved to the name — the index config only accepts names). |
 | `dataset build-status <task-id>` | BuildTask status + progress. |
 | `dataset build-list [--status pending,running]` | List BuildTasks. Multiple statuses are OR filters; valid states include `cancelled`. |
 
@@ -91,7 +91,7 @@ Build a `name` field on a MySQL table:
 ```bash
 openbkn resource find --name <table> --exact          # → resource_id
 openbkn vega dataset build <resource-id> --mode batch \
-  --embedding-fields name --build-key-fields <pk-or-time-col> [--embedding-model <id>] --wait
+  --embedding-fields name --build-key-fields <pk-or-time-col> [--embedding-model <name-or-id>] --wait
 ```
 
 ## index is NOT auto-built on `bkn push`

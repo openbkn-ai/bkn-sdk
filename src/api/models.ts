@@ -6,7 +6,7 @@ import type { RequestContext } from "../types.js";
  * Model-factory client: management reads (mf-model-manager) + runtime
  * invocation (mf-model-api). Passed through as JSON.
  */
-import { HttpError } from "../utils/errors.js";
+import { HttpError, InputError } from "../utils/errors.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
@@ -46,6 +46,40 @@ export function listSmallModels(
 }
 export function getSmallModel(ctx: RequestContext, modelId: string): Promise<unknown> {
   return request(ctx, `${MANAGER}/small-model/get`, { query: { model_id: modelId } });
+}
+
+/**
+ * Resolve a small-model reference to the NAME the rest of the platform expects.
+ *
+ * Every consumer of a small model (`--embedding-model`, `small embeddings`)
+ * keys off `model_name`, but `small list` / `small get-default` lead with the
+ * numeric `model_id` — so the first value a user copies is the one that fails,
+ * downstream and unhelpfully (`embedding model "…" not found`). Mirror
+ * `resolveLlmModelName`: a numeric arg is an id to look up, anything else is
+ * already a name.
+ */
+export async function resolveSmallModelName(ctx: RequestContext, model: string): Promise<string> {
+  if (!/^\d+$/.test(model)) return model;
+  // Only a genuine "no such id" may fall through to the InputError below. An
+  // expired token, a 5xx, or a deploy without model-factory must keep its own
+  // cause — collapsing those into "you typed a bad id" is the exact failure
+  // mode this resolver exists to remove. A gateway 404 is that last case
+  // wearing the status of the first: nothing behind the route saw the id.
+  const detail = (await getSmallModel(ctx, model).catch((e: unknown) => {
+    if (e instanceof HttpError && e.status === 404 && !e.gateway) return undefined;
+    throw e;
+  })) as { model_name?: string; data?: { model_name?: string } } | undefined;
+  const name = detail?.model_name ?? detail?.data?.model_name;
+  if (!name) {
+    throw new InputError(
+      [
+        `No small model found with id ${model}.`,
+        "This flag takes the model name (`model_name`) or a valid model id —",
+        "list them with `openbkn model small list`.",
+      ].join(" "),
+    );
+  }
+  return name;
 }
 
 export interface ChatMessage {

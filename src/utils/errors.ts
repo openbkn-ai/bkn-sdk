@@ -10,14 +10,61 @@ export class HttpError extends Error {
   readonly body: string;
   /** Optional next-step guidance, overriding the status default (e.g. AppKey re-issue). */
   readonly hint?: string;
+  /**
+   * The response was a proxy error page, so the status describes the gateway,
+   * not the service. Callers that special-case a status — a 404 read as "no
+   * such record" — must not do so when this is set: nothing behind the route
+   * ever saw the request.
+   *
+   * Only `request()` sets it. The handful of sites that construct this error
+   * around a raw `fetch` (streaming chat, uploads, MCP transports) leave it
+   * `false`, so a false value means "not detected", never "definitely not a
+   * gateway" — treat it as a positive signal only.
+   */
+  readonly gateway: boolean;
 
-  constructor(status: number, statusText: string, body: string, hint?: string) {
+  constructor(status: number, statusText: string, body: string, hint?: string, gateway = false) {
     super(`HTTP ${status} ${statusText}`);
     this.name = "HttpError";
     this.status = status;
     this.statusText = statusText;
     this.body = body;
     this.hint = hint;
+    this.gateway = gateway;
+  }
+}
+
+/**
+ * Raised when a response body is not the JSON the API contract promises.
+ *
+ * Usually a gateway/proxy page — the request never reached the service — but
+ * not always: a service may answer a DELETE with `200 text/plain "OK"`. Which
+ * one it was decides whether the status describes anything the service did, so
+ * read {@link NonJsonResponseError.gateway} before acting on it.
+ */
+export class NonJsonResponseError extends Error {
+  readonly status: number;
+  readonly contentType: string;
+  readonly body: string;
+  /**
+   * The body is a proxy error page, so the request never reached the service.
+   * The complement is a service that answered in something other than JSON —
+   * `200 text/plain "OK"` to a DELETE, say — where the status still describes
+   * what the service did. Callers reading a 2xx as "it worked" must check this
+   * first: an SSO proxy answers a dead session with a `200` login page.
+   *
+   * Set by `request()`, the only place with the response in hand; see
+   * {@link HttpError.gateway} for why `false` means "not detected".
+   */
+  readonly gateway: boolean;
+
+  constructor(status: number, contentType: string, body: string, message: string, gateway = false) {
+    super(message);
+    this.name = "NonJsonResponseError";
+    this.status = status;
+    this.contentType = contentType;
+    this.body = body;
+    this.gateway = gateway;
   }
 }
 
@@ -38,8 +85,8 @@ export class ToolError extends Error {
 
 /** Raised for bad CLI/SDK input before any request is made. */
 export class InputError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = "InputError";
   }
 }
@@ -56,6 +103,9 @@ export function toExitCode(err: unknown): number {
 
 /** A short, actionable message for the user. Never leak tokens. */
 export function formatError(err: unknown): string {
+  if (err instanceof NonJsonResponseError) {
+    return `${err.message} Body: ${truncate(err.body.replace(/\s+/g, " ").trim(), 200)}`;
+  }
   if (err instanceof HttpError) {
     const serverMsg = serverError(err.body);
     if (err.status === 401) {
@@ -63,8 +113,11 @@ export function formatError(err: unknown): string {
       return `Not authorized (HTTP 401)${serverMsg ? `: ${serverMsg}` : ""}. ${next}`;
     }
     if (err.status === 403) {
-      // Surface the server reason (e.g. "not an admin", "built-in role read-only").
-      return `Forbidden (HTTP 403)${serverMsg ? `: ${serverMsg}` : " — admin privileges required"}.`;
+      // Surface the server reason (e.g. "not an admin", "built-in role read-only")
+      // — plus any hint, or an HTML 403 from a proxy reads as "you lack rights"
+      // when the truth is that the route never reached a service at all.
+      const next = err.hint ? ` ${err.hint}` : "";
+      return `Forbidden (HTTP 403)${serverMsg ? `: ${serverMsg}` : " — admin privileges required"}.${next}`;
     }
     const detail = err.body ? `: ${truncate(err.body, 500)}` : "";
     // A hint on any other status is the actionable half of the message — a bare

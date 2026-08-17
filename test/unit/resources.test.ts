@@ -8,6 +8,7 @@ import {
   updateResource,
 } from "../../src/api/resources.js";
 import type { RequestContext } from "../../src/types.js";
+import { HttpError } from "../../src/utils/errors.js";
 
 const ctx: RequestContext = {
   baseUrl: "https://demo.example.com",
@@ -141,6 +142,84 @@ describe("updateResource/configureResourceIndex", () => {
       ref_property: "body",
       config: { analyzer: "ik_max_word" },
     });
+  });
+
+  it("resolves a numeric embedding model id to the name the index config takes", async () => {
+    const resource = {
+      entries: [
+        {
+          id: "r-1",
+          catalog_id: "c-1",
+          name: "orders",
+          schema_definition: [{ name: "title", type: "text" }],
+        },
+      ],
+    };
+    const fn = vi.fn(async (input: string) =>
+      new URL(input).pathname.startsWith("/api/mf-model-manager")
+        ? new Response(JSON.stringify({ model_name: "text-embedding-v4" }), { status: 200 })
+        : new Response(JSON.stringify(resource), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fn);
+    await configureResourceIndex(ctx, "r-1", {
+      embeddingFields: ["title"],
+      embeddingModel: "2064382281006583808",
+    });
+    const calls = (fn as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+    const lookup = calls.find(([u]) => String(u).includes("/mf-model-manager"));
+    expect(new URL(lookup?.[0] ?? "").searchParams.get("model_id")).toBe("2064382281006583808");
+    const body = JSON.parse(calls.at(-1)?.[1].body as string);
+    expect(body.index_config.default_embedding_model).toBe("text-embedding-v4");
+    expect(body.schema_definition[0].features[0].config).toEqual({
+      embedding_model: "text-embedding-v4",
+    });
+  });
+
+  it("rejects an unknown embedding model id before touching the resource", async () => {
+    const fn = vi.fn(async (input: string) =>
+      new URL(input).pathname.startsWith("/api/mf-model-manager")
+        ? new Response("{}", { status: 404 })
+        : new Response(JSON.stringify({ entries: [{ id: "r-1" }] }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fn);
+    await expect(configureResourceIndex(ctx, "r-1", { embeddingModel: "999" })).rejects.toThrow(
+      /No small model found with id 999/,
+    );
+    const methods = (fn as unknown as { mock: { calls: CallArgs[] } }).mock.calls.map(
+      ([, init]) => init.method,
+    );
+    expect(methods).not.toContain("PUT");
+  });
+
+  it("keeps a gateway 404 as a routing failure, not as a bad-id InputError", async () => {
+    const fn = vi.fn(async (input: string) =>
+      new URL(input).pathname.startsWith("/api/mf-model-manager")
+        ? new Response("<html><body>404 Not Found</body></html>", {
+            status: 404,
+            headers: { "content-type": "text/html" },
+          })
+        : new Response(JSON.stringify({ entries: [{ id: "r-1" }] }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fn);
+    // A deploy without model-factory answers 404 too — but nothing behind the
+    // route saw the id, so "you typed a bad id" is the wrong conclusion.
+    const err = await configureResourceIndex(ctx, "r-1", { embeddingModel: "999" }).catch((e) => e);
+    expect(err).toBeInstanceOf(HttpError);
+    expect((err as HttpError).gateway).toBe(true);
+    expect((err as HttpError).hint).toMatch(/did not reach the service/);
+  });
+
+  it("keeps a model-factory auth failure as itself, not as a bad-id InputError", async () => {
+    const fn = vi.fn(async (input: string) =>
+      new URL(input).pathname.startsWith("/api/mf-model-manager")
+        ? new Response(JSON.stringify({ error: "token expired" }), { status: 401 })
+        : new Response(JSON.stringify({ entries: [{ id: "r-1" }] }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fn);
+    // Exit code 3 (auth), not 2 (bad input) — "log in again" ≠ "you typed a wrong id".
+    const err = await configureResourceIndex(ctx, "r-1", { embeddingModel: "999" }).catch((e) => e);
+    expect(err).toBeInstanceOf(HttpError);
+    expect((err as HttpError).status).toBe(401);
   });
 });
 
