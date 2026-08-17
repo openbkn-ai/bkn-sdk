@@ -218,7 +218,6 @@ describe("createBuildTask", () => {
           mode: "batch",
           total_count: 10,
           synced_count: 10,
-          vectorized_count: 8,
           synced_mark: "mark-1",
           creator: { id: "u-1", type: "user" },
           create_time: 100,
@@ -242,7 +241,6 @@ describe("createBuildTask", () => {
           mode: "batch",
           total_count: 10,
           synced_count: 10,
-          vectorized_count: 8,
           synced_mark: "mark-1",
           creator: { id: "u-1", type: "user" },
           create_time: 100,
@@ -257,6 +255,29 @@ describe("createBuildTask", () => {
     });
   });
 
+  it("parses summaries without vectorized_count and preserves it from legacy responses", async () => {
+    const summary = {
+      id: "t-1",
+      resource_id: "r-1",
+      catalog_id: "c-1",
+      status: "completed",
+      mode: "batch",
+      total_count: 10,
+      synced_count: 10,
+      synced_mark: "mark-1",
+      creator: { id: "u-1", type: "user" },
+      create_time: 100,
+    };
+
+    mockFetch({ entries: [summary], total_count: 1 });
+    await expect(listBuildTasks(ctx)).resolves.toMatchObject({ entries: [summary] });
+
+    mockFetch({ entries: [{ ...summary, vectorized_count: 8 }], total_count: 1 });
+    await expect(listBuildTasks(ctx)).resolves.toMatchObject({
+      entries: [{ ...summary, vectorized_count: 8 }],
+    });
+  });
+
   it("parses pending summaries without lifecycle timestamps", async () => {
     mockFetch({
       entries: [
@@ -268,7 +289,6 @@ describe("createBuildTask", () => {
           mode: "batch",
           total_count: 0,
           synced_count: 0,
-          vectorized_count: 0,
           synced_mark: "",
           creator: { id: "u-1", type: "user" },
           create_time: 100,

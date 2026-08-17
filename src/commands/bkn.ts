@@ -446,10 +446,7 @@ export function bknCommand(): Command {
     .description("Pack a BKN directory into a tar and import it as a knowledge network")
     .option("--branch <name>", "target branch", "main")
     .option("--build", "submit a Vega build task for each object type declaring a vector index")
-    .option(
-      "--embedding-model <id>",
-      "embedding model id for declared vector indexes (with --build)",
-    )
+    .option("--embedding-model <id>", "small-model ID for declared vector indexes (with --build)")
     .action(async (dir: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).kn.push(dir, {
@@ -501,7 +498,7 @@ export function bknCommand(): Command {
       "--embedding-fields <map>",
       "columns to vectorize per table (with --build): '<table>:<col>[+<col>...][,...]'",
     )
-    .option("--embedding-model <id>", "embedding model id for the vector index (with --build)")
+    .option("--embedding-model <id>", "small-model ID for the vector index (with --build)")
     .option("--no-rollback", "keep a partially-created KN on failure")
     .action(async (catalogId: string, opts, cmd: Command) => {
       printJson(
@@ -545,7 +542,7 @@ export function bknCommand(): Command {
       "--embedding-fields <map>",
       "columns to vectorize per table (with --build): '<table>:<col>[+<col>...][,...]'",
     )
-    .option("--embedding-model <id>", "embedding model id for the vector index (with --build)")
+    .option("--embedding-model <id>", "small-model ID for the vector index (with --build)")
     .option("--no-rollback", "keep a partially-created KN on failure")
     .action(async (catalogId: string, opts, cmd: Command) => {
       printJson(

@@ -35,8 +35,8 @@ snapshots that configuration.
 
 CLI:
 
-- `openbkn vega dataset build <resource-id> --mode batch [--embedding-fields …] [--build-key-fields …] [--embedding-model …] [--fulltext-fields …] [--execute-type incremental|full] [--wait] [--timeout <s>]` — optional index flags update the Resource, then create a BuildTask.
-- `openbkn vega dataset build-status <task-id>` — progress: `status` + `synced_count` / `vectorized_count`.
+- `openbkn vega dataset build <resource-id> --mode batch [--embedding-fields …] [--build-key-fields …] [--embedding-model <model-id>] [--fulltext-fields …] [--execute-type incremental|full] [--wait] [--timeout <s>]` — optional index flags update the Resource, then create a BuildTask. `--embedding-model` is a small-model ID.
+- `openbkn vega dataset build-status <task-id>` — progress: `status` + `synced_count`; a document is counted only after all required index processing, including vectorization, succeeds.
 - `openbkn vega dataset build-list --status pending,running` — filter by one or
   more statuses; the SDK sends repeated `status` query parameters. Use
   `--sort create_time|start_time|finish_time|last_progress_time` and
