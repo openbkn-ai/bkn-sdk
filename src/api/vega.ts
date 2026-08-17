@@ -167,7 +167,6 @@ export const BuildTask = z
     state: z.string().optional(),
     total_count: z.number().optional(),
     synced_count: z.number().optional(),
-    vectorized_count: z.number().optional(),
     start_time: z.number().optional(),
     finish_time: z.number().optional(),
     last_progress_time: z.number().optional(),
@@ -199,7 +198,6 @@ export const BuildTaskSummary = z
     execute_type: BuildTaskExecuteType.optional(),
     total_count: z.number(),
     synced_count: z.number(),
-    vectorized_count: z.number(),
     synced_mark: z.string(),
     error_msg: z.string().optional(),
     creator: z.object({

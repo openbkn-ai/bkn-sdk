@@ -27,12 +27,14 @@ Index build — BuildTask (current/target model)
 - Create: POST /build-tasks   body = CreateBuildTaskRequest
     resource_id      (required)  which resource
     mode             (required)  "streaming" | "batch"
-    embedding_fields (optional)  fields to vectorize
-    build_key_fields (optional)  batch: time field; streaming: unique row id
-    embedding_model  (optional)  default if omitted
-    model_dimensions (optional)  vector dimensions
-- Status/progress: GET /build-tasks/{id}  → state + SyncedCount / VectorizedCount
-- Config persists on the BuildTask entity (not on catalog/resource).
+    execute_type     (optional)  batch only: "incremental" | "full"; rejected for streaming
+- Index configuration: PUT /resources/{id} updates two Resource fields:
+  index_config (build_key_fields; default_embedding_model;
+  default_fulltext_analyzer) and schema_definition (per-property vector feature
+  config.embedding_model as a small-model ID; fulltext feature config.analyzer).
+  The BuildTask snapshots this Resource configuration when created.
+- Status/progress: GET /build-tasks/{id}  → status + synced_count
+- Config persists on the Resource; BuildTask retains the creation-time snapshot.
 - Resource property.feature_type ∈ {keyword, fulltext, vector} declares searchability (schema layer).
 - Resource.index_name is filled back by the build task after the index is built.
 - REPLACES the removed KN-level build (old: POST /api/ontology-manager/v1/knowledge-networks/{id}/jobs {job_type:"full"}).

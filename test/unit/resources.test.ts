@@ -120,7 +120,7 @@ describe("updateResource/configureResourceIndex", () => {
     await configureResourceIndex(ctx, "r-1", {
       buildKeyFields: ["id"],
       embeddingFields: ["title"],
-      embeddingModel: "text-embedding-v4",
+      embeddingModel: "small-model-1",
       fulltextFields: ["body"],
       fulltextAnalyzer: "ik_max_word",
     });
@@ -128,13 +128,13 @@ describe("updateResource/configureResourceIndex", () => {
     const body = JSON.parse(calls[1]?.[1].body as string);
     expect(body.index_config).toEqual({
       build_key_fields: ["id"],
-      default_embedding_model: "text-embedding-v4",
+      default_embedding_model: "small-model-1",
       default_fulltext_analyzer: "ik_max_word",
     });
     expect(body.schema_definition[0].features[0]).toMatchObject({
       feature_type: "vector",
       ref_property: "title",
-      config: { embedding_model: "text-embedding-v4" },
+      config: { embedding_model: "small-model-1" },
     });
     expect(body.schema_definition[1].features[0]).toMatchObject({
       feature_type: "fulltext",
