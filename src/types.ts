@@ -26,6 +26,11 @@ export interface ClientOptions {
    * otherwise a conversation that has been swept, or still holds an active
    * interaction, would fail every later run with no way back except a manual
    * reset.
+   *
+   * Honoured only on a `managed-v2` deploy, for the reason
+   * {@link ClientOptions.onConversationOpened} gives: a v1 interaction cannot be
+   * ended early, so joining one would block the next call for its lease. On v1
+   * this field is ignored and a fresh conversation is opened instead.
    */
   rememberedConversationId?: string;
   /**

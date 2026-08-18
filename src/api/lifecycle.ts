@@ -357,17 +357,20 @@ function ensureSession(
   // later run, and the reopen path in `withManagedLifecycle` cannot help. That
   // path needs a context to retry with, and a handshake that throws leaves
   // `bknContextFor` returning none at all.
-  const remembered =
-    joinTarget(ctx, contract) === ctx.rememberedConversationId
-      ? ctx.rememberedConversationId
-      : undefined;
+  // "This session is joining the remembered conversation" — asked as the reason,
+  // not as a value comparison. A caller that names the same id it also stored
+  // still named it, and a named conversation must never be swapped out from
+  // under them.
+  const remembered = callerNamedConversation(ctx) ? undefined : joinTarget(ctx, contract);
   const opening = remembered
     ? openSession(ctx, knId, contract, question).catch((err: unknown) => {
-        // Only a refusal of this tool call can be about the conversation.
-        // An expired credential or an unreachable deploy fails the retry the
-        // same way, and each handshake opens its own MCP session — so retrying
-        // those would double the cost of every command once anything is stored.
-        if (!(err instanceof ToolError)) throw err;
+        // A credential the deploy rejects will reject the retry identically, so
+        // that one is not worth a second handshake. Everything else might be
+        // about the conversation: a refusal arrives as a `ToolError`, but a
+        // gateway that validates arguments before dispatch answers 4xx, and a
+        // JSON-RPC error surfaces as a plain `Error`. Guessing narrowly there
+        // would leave an unusable id unusable, which is what this exists to fix.
+        if (isAuthFailure(err)) throw err;
         const { rememberedConversationId: _dropped, ...fresh } = ctx;
         return openSession(fresh, knId, contract, question);
       })

@@ -265,6 +265,67 @@ describe("managed lifecycle on semantic search", () => {
     expect(seen).toEqual(["conv_1"]);
   });
 
+  it("never swaps out a conversation the caller named, even if it is also stored", async () => {
+    const recorded = mockDeploy({
+      catalog: V2_CATALOG,
+      toolErrorsOnce: { bkn_start_interaction: "conversation_required" },
+    });
+    await semanticSearch(
+      freshCtx({
+        trace: { requestId: "req_x", traceparent: "00-x-y-01", conversationId: "conv_same" },
+        rememberedConversationId: "conv_same",
+      }),
+      "kn-managed",
+      "物料",
+    ).catch(() => {});
+    // Naming it makes it the caller's intent; that the same id is also stored
+    // does not turn its failure into ours to paper over. One attempt, no retry.
+    expect(recorded.toolCalls.filter((c) => c.name === "bkn_start_interaction")).toHaveLength(1);
+  });
+
+  it("does not report a conversation it only joined", async () => {
+    const seen: string[] = [];
+    mockDeploy({ catalog: V2_CATALOG });
+    await semanticSearch(
+      freshCtx({
+        rememberedConversationId: "conv_kept",
+        onConversationOpened: (id) => seen.push(id),
+      }),
+      "kn-managed",
+      "物料",
+    );
+    // Joining returns the id that was passed in. Reporting it would restamp the
+    // thread's age on every command, turning "opened at" into "last used at".
+    expect(seen).toEqual([]);
+  });
+
+  it("ignores a remembered conversation on v1, where joining one traps the next call", async () => {
+    const recorded = mockDeploy({ catalog: V1_CATALOG });
+    await semanticSearch(freshCtx({ rememberedConversationId: "conv_v1" }), "kn-v1", "物料");
+    // v1 opens its own conversation; the field is public, so an SDK caller must
+    // not be able to reach the hole the CLI's write side already avoids.
+    const start = recorded.toolCalls.find((c) => c.name === "bkn_start_interaction");
+    expect(start?.arguments.conversation_id).not.toBe("conv_v1");
+  });
+
+  it("keeps sessions apart when two callers want different conversations", async () => {
+    const recorded = mockDeploy({ catalog: V2_CATALOG });
+    // Same deploy, same identity, same KN — only the wanted conversation differs.
+    const base = freshCtx();
+    await semanticSearch({ ...base, rememberedConversationId: "conv_a" }, "kn-managed", "物料");
+    await semanticSearch({ ...base, rememberedConversationId: "conv_b" }, "kn-managed", "物料");
+
+    // A caller that asked for B must not be handed the session opened on A —
+    // the guarantee `sessionKey` already documents for a named conversation.
+    // Without that dimension the second call reuses the first session and never
+    // starts an interaction of its own.
+    expect(
+      recorded.toolCalls
+        .filter((c) => c.name === "bkn_start_interaction")
+        .map((c) => c.arguments.conversation_id),
+    ).toEqual(["conv_a", "conv_b"]);
+  });
+
   it("v2: mints both ids in one call and omits operation_key", async () => {
     const recorded = mockDeploy({ catalog: V2_CATALOG });
     await semanticSearch(freshCtx(), "kn-managed", "物料");
