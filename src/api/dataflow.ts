@@ -22,14 +22,15 @@ export function listDataflows(ctx: RequestContext): Promise<unknown> {
  *
  * `listDataflows` fetches every DAG (`limit=-1`); on a deploy with many of them
  * that read is heavy enough that a gateway timeout says "this query was slow",
- * not "nothing is there". A probe that draws that conclusion has to ask for one
- * row and give up early, so a 504 has only one explanation left.
+ * not "nothing is there". Asking for one row removes that reading.
+ *
+ * The request keeps the default deadline on purpose. A shorter one would cut
+ * off the very answer a caller wants: a hung upstream produces 504 only once
+ * the gateway's own read timeout elapses (nginx defaults to 60s, Envoy to 15s),
+ * so giving up first turns a diagnosis into an abort with nothing to say.
  */
 export function pingDataflows(ctx: RequestContext): Promise<unknown> {
-  return request(ctx, `${BASE}/dags`, {
-    query: { type: "data-flow", page: 0, limit: 1 },
-    timeoutMs: 10_000,
-  });
+  return request(ctx, `${BASE}/dags`, { query: { type: "data-flow", page: 0, limit: 1 } });
 }
 
 /** Create a dataflow (DAG) from a full document body. Returns the new DAG id. */
