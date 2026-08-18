@@ -11,23 +11,9 @@ import { InputError } from "../utils/errors.js";
 import type { OutputOptions } from "../utils/output.js";
 
 /**
- * Where a conversation id may come from, strongest first: the flag, the
- * environment, then the one a previous command on this platform opened.
- *
- * The stored one is skipped for a transient identity (`--user` / `BKN_USER`):
- * the store is keyed by the active user, so borrowing it would file one
- * identity's evidence under another's thread.
- */
-function storedConversation(o: Record<string, unknown>): string | undefined {
-  if (o.user ?? process.env.BKN_USER) return undefined;
-  const baseUrl = platformOf(o);
-  return baseUrl ? readPlatformConfig(baseUrl).conversationId : undefined;
-}
-
-/**
  * The platform this command will talk to, normalized the way the store keys it.
- * Resolved here rather than read back off the client so the conversation hook
- * below can be a plain closure over a value that already exists.
+ * Resolved from the options rather than read back off a built client, so the
+ * conversation hook below can close over a value that already exists.
  */
 export function platformOf(o: Record<string, unknown>): string | undefined {
   const baseUrl =
@@ -37,11 +23,43 @@ export function platformOf(o: Record<string, unknown>): string | undefined {
   return baseUrl?.replace(/\/+$/, "");
 }
 
+/**
+ * Whether this command runs as an identity picked for it alone.
+ *
+ * The remembered conversation is keyed by the active user, so a transient
+ * `--user` neither joins that thread nor writes to it — either would file one
+ * identity's evidence under another's. Read and write must agree on the answer,
+ * hence one function: an earlier draft asked `??` on one side and `||` on the
+ * other, so `--user ""` skipped the read and still wrote.
+ */
+function transientIdentity(o: Record<string, unknown>): boolean {
+  return Boolean(o.user || process.env.BKN_USER);
+}
+
+export type ConversationSource = "flag" | "env" | "stored" | "none";
+
+/**
+ * Which conversation this command will use and where it came from — the single
+ * answer `traceOptionsFrom` acts on and `context conversation` reports. Two
+ * copies of this precedence would drift, and the reporting copy is the one a
+ * user consults when the other surprises them.
+ */
+export function conversationSource(o: Record<string, unknown>): {
+  id?: string;
+  source: ConversationSource;
+} {
+  const flag = typeof o.conversationId === "string" ? o.conversationId : undefined;
+  if (flag) return { id: flag, source: "flag" };
+  const env = process.env.BKN_CONVERSATION_ID;
+  if (env) return { id: env, source: "env" };
+  if (o.newConversation || transientIdentity(o)) return { source: "none" };
+  const baseUrl = platformOf(o);
+  const stored = baseUrl ? readPlatformConfig(baseUrl).conversationId : undefined;
+  return stored ? { id: stored, source: "stored" } : { source: "none" };
+}
+
 export function traceOptionsFrom(o: Record<string, unknown>): TraceContextOptions | undefined {
-  const conversationId =
-    (typeof o.conversationId === "string" ? o.conversationId : undefined) ??
-    process.env.BKN_CONVERSATION_ID ??
-    (o.newConversation ? undefined : storedConversation(o));
+  const conversationId = conversationSource(o).id;
   const interactionId =
     (typeof o.interactionId === "string" ? o.interactionId : undefined) ??
     process.env.BKN_INTERACTION_ID;
@@ -67,7 +85,7 @@ export function clientFrom(cmd: Command): BknClient {
     // Remember a conversation this run opens, so the next command continues the
     // same thread instead of starting a new one. Only for the active identity —
     // `storedConversation` explains why a transient `--user` is left out.
-    ...(o.user || process.env.BKN_USER
+    ...(transientIdentity(o)
       ? {}
       : {
           onConversationOpened: (conversationId: string) => {

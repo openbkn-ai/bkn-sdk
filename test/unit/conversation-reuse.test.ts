@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { traceOptionsFrom } from "../../src/commands/_shared.js";
+import { clientFrom, conversationSource, traceOptionsFrom } from "../../src/commands/_shared.js";
 import {
   readPlatformConfig,
   setActivePlatform,
@@ -83,5 +83,47 @@ describe("platform config merge", () => {
     // this pins why callers changing one setting must not reach for it.
     writePlatformConfig(platform, { businessDomain: "bd_x" });
     expect(readPlatformConfig(platform).conversationId).toBeUndefined();
+  });
+});
+
+describe("conversationSource", () => {
+  it("names the layer in force, including the ones that suppress the stored id", () => {
+    updatePlatformConfig(platform, { conversationId: "conv-1" });
+    expect(conversationSource({})).toEqual({ id: "conv-1", source: "stored" });
+    expect(conversationSource({ conversationId: "c" })).toEqual({ id: "c", source: "flag" });
+    // `--new-conversation` and a transient identity both mean "none" — the
+    // reporting command must say so rather than showing an id that will not
+    // be used.
+    expect(conversationSource({ newConversation: true })).toEqual({ source: "none" });
+    expect(conversationSource({ user: "someone" })).toEqual({ source: "none" });
+  });
+});
+
+/** A stand-in for the commander object `clientFrom` reads its options from. */
+function fakeCmd(opts: Record<string, unknown>) {
+  return { optsWithGlobals: () => opts } as unknown as Parameters<typeof clientFrom>[0];
+}
+
+describe("remembering a conversation the run opened", () => {
+  it("writes it under the platform the request went to", () => {
+    const client = clientFrom(fakeCmd({}));
+    client.ctx.onConversationOpened?.("conv-new");
+    expect(readPlatformConfig(platform)).toMatchObject({ conversationId: "conv-new" });
+    expect(readPlatformConfig(platform).conversationOpenedAt).toEqual(expect.any(String));
+  });
+
+  it("is not wired up at all for a transient identity", () => {
+    writeToken(platform, { baseUrl: platform, accessToken: "t2", username: "other" });
+    // Read and write agree: `--user` neither joins the stored thread nor
+    // replaces it.
+    expect(clientFrom(fakeCmd({ user: "other" })).ctx.onConversationOpened).toBeUndefined();
+  });
+
+  it("survives a store it cannot write", () => {
+    const client = clientFrom(fakeCmd({}));
+    process.env.BKN_CONFIG_DIR = "/proc/definitely-not-writable";
+    // Remembering is a convenience; losing it must not fail a command whose
+    // real work already succeeded.
+    expect(() => client.ctx.onConversationOpened?.("conv-x")).not.toThrow();
   });
 });

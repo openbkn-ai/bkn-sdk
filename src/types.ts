@@ -18,8 +18,17 @@ export interface ClientOptions {
   /** Optional BKN Trace phase-one context for request correlation. */
   trace?: TraceContextOptions;
   /**
-   * Called once with the id of a conversation the managed lifecycle opened on
-   * this caller's behalf — never for one the caller named itself.
+   * Called with the id of a conversation the managed lifecycle opened on this
+   * caller's behalf — never for one the caller named itself.
+   *
+   * May fire more than once in a process: sessions are per knowledge network,
+   * and a session that goes stale is reopened. Each call reports a conversation
+   * that now exists; a caller keeping only one decides which (the CLI keeps the
+   * last). Make the handler idempotent.
+   *
+   * Only fires on a `managed-v2` deploy. A v1 interaction cannot be ended
+   * early, and a conversation permits one at a time, so a v1 conversation
+   * handed to a later call would be refused until its lease expired.
    *
    * The hook exists so persistence stays a decision of whoever built the
    * client. The CLI uses it to remember a conversation across invocations; a

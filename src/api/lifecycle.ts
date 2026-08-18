@@ -332,7 +332,14 @@ function ensureSession(
   // Report only a conversation this call minted. One the caller named is
   // already theirs to keep, and echoing it back would let a `--conversation-id`
   // meant for a single command quietly become the stored default.
-  if (!callerNamedConversation(ctx)) {
+  //
+  // And only under v2, because only there can a caller act on it. A
+  // conversation permits one active interaction, and `releaseOne` can end one
+  // early only under v2 — v1's cancel wants a `completion_manifest_version`
+  // with no value to send. So a v1 conversation handed to the next command
+  // would be refused until the five-minute lease expired: reuse would cost
+  // exactly what it set out to give.
+  if (contract === "managed-v2" && !callerNamedConversation(ctx)) {
     opening
       .then((session) => ctx.onConversationOpened?.(session.conversationId))
       .catch(() => {

@@ -7,7 +7,7 @@ import { activePlatform, readPlatformConfig, updatePlatformConfig } from "../con
 import { group } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
-import { clientFrom, outputOptions } from "./_shared.js";
+import { clientFrom, conversationSource, outputOptions, platformOf } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 const collectArg = (v: string, prev: string[]): string[] => {
@@ -143,10 +143,7 @@ export function contextCommand(): Command {
     .option("--forget", "drop it, so the next command opens a fresh conversation")
     .action((opts, cmd: Command) => {
       const o = cmd.optsWithGlobals();
-      const baseUrl = (o.baseUrl ?? process.env.BKN_BASE_URL ?? activePlatform())?.replace(
-        /\/+$/,
-        "",
-      );
+      const baseUrl = platformOf(o);
       if (!baseUrl) throw new InputError("No platform. Run `openbkn auth login` first.");
       if (opts.forget) {
         updatePlatformConfig(baseUrl, {
@@ -156,18 +153,23 @@ export function contextCommand(): Command {
         printJson({ base_url: baseUrl, conversation_id: null }, outputOptions(cmd));
         return;
       }
-      // Report where the id would come from, not just what it is: a flag or env
-      // var silently outranking the stored one is the confusing case.
+      // The same resolution the next command will run, not a second copy of it:
+      // this command exists to explain a surprise, so it must not be able to
+      // disagree with what actually happens. `--new-conversation` and a
+      // transient `--user` both report `none`, because that is what they cause.
+      const { id, source } = conversationSource(o);
       const stored = readPlatformConfig(baseUrl);
-      const flag = typeof o.conversationId === "string" ? o.conversationId : undefined;
-      const env = process.env.BKN_CONVERSATION_ID;
-      const source = flag ? "flag" : env ? "env" : stored.conversationId ? "stored" : "none";
       printJson(
         {
           base_url: baseUrl,
-          conversation_id: flag ?? env ?? stored.conversationId ?? null,
+          conversation_id: id ?? null,
           source,
           ...(stored.conversationOpenedAt ? { stored_opened_at: stored.conversationOpenedAt } : {}),
+          // What is on disk, even when something outranks it — otherwise
+          // `--forget` looks like a no-op to whoever just ran this.
+          ...(stored.conversationId && stored.conversationId !== id
+            ? { stored_conversation_id: stored.conversationId }
+            : {}),
         },
         outputOptions(cmd),
       );

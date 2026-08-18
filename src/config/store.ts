@@ -61,7 +61,7 @@ export interface PlatformConfig {
    * turns as the same one — each command opens its own inside this conversation.
    */
   conversationId?: string;
-  /** When it was opened, so `context show` can say how old the thread is. */
+  /** When it was opened, so `openbkn context conversation` can report its age. */
   conversationOpenedAt?: string;
 }
 
