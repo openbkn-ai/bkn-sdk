@@ -54,6 +54,8 @@ openbkn --help        # 分组命令树
 
 `managed-v2` 部署上，命令会接着上一条开的 conversation，跨命令的一件事因此落在同一个线程里。
 `openbkn context conversation` 显示当前生效的是哪个、来自哪一层；`--forget` 丢掉它。
+显式 `--token` / `BKN_TOKEN` 不参与（那里的身份是 token 本身，不是存下来的用户）——
+这类脚本用 `BKN_CONVERSATION_ID` 把多条命令串起来。
 
 Token 按平台/用户存于 `~/.bkn/`（可用 `BKN_CONFIG_DIR` 覆盖）。
 

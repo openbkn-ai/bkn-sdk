@@ -208,9 +208,17 @@ function callerNamedConversation(ctx: RequestContext): string | undefined {
  * A caller-named one and a remembered one look the same to the server; they
  * differ in what a failure means. `ensureSession` drops the remembered one and
  * tries again, because it offered convenience, not intent.
+ *
+ * A remembered one is honoured only under v2, mirroring the gate on reporting
+ * them. Joining under v1 would produce an interaction nothing can release —
+ * `releaseOne` handles only v2 — so the next call would wait out the lease. The
+ * CLI never stores a v1 conversation, but this field is public, and a caller
+ * passing one must not fall into the hole the write side already avoids.
  */
-function joinTarget(ctx: RequestContext): string | undefined {
-  return callerNamedConversation(ctx) ?? ctx.rememberedConversationId;
+function joinTarget(ctx: RequestContext, contract: Exclude<Contract, "none">): string | undefined {
+  const named = callerNamedConversation(ctx);
+  if (named) return named;
+  return contract === "managed-v2" ? ctx.rememberedConversationId : undefined;
 }
 
 async function openSession(
@@ -220,7 +228,7 @@ async function openSession(
   question: string,
 ): Promise<Session> {
   generation += 1;
-  const named = joinTarget(ctx);
+  const named = joinTarget(ctx, contract);
   if (contract === "managed-v2") {
     // Without a conversation_id the server mints a fresh conversation. Reusing
     // one of our own would be rejected whenever its interaction is still
@@ -322,7 +330,10 @@ function identityOf(ctx: RequestContext): string {
 }
 
 function sessionKey(ctx: RequestContext, knId: string): string {
-  return `${ctx.baseUrl}\0${knId}\0${identityOf(ctx)}\0${ctx.trace?.conversationId ?? ""}`;
+  // Both conversation inputs belong in the key for the same reason: a caller
+  // that asked for one must not be handed an interaction on another.
+  const wanted = ctx.trace?.conversationId ?? ctx.rememberedConversationId ?? "";
+  return `${ctx.baseUrl}\0${knId}\0${identityOf(ctx)}\0${wanted}`;
 }
 
 /**
@@ -346,9 +357,17 @@ function ensureSession(
   // later run, and the reopen path in `withManagedLifecycle` cannot help. That
   // path needs a context to retry with, and a handshake that throws leaves
   // `bknContextFor` returning none at all.
-  const remembered = !callerNamedConversation(ctx) && ctx.rememberedConversationId;
+  const remembered =
+    joinTarget(ctx, contract) === ctx.rememberedConversationId
+      ? ctx.rememberedConversationId
+      : undefined;
   const opening = remembered
-    ? openSession(ctx, knId, contract, question).catch(() => {
+    ? openSession(ctx, knId, contract, question).catch((err: unknown) => {
+        // Only a refusal of this tool call can be about the conversation.
+        // An expired credential or an unreachable deploy fails the retry the
+        // same way, and each handshake opens its own MCP session — so retrying
+        // those would double the cost of every command once anything is stored.
+        if (!(err instanceof ToolError)) throw err;
         const { rememberedConversationId: _dropped, ...fresh } = ctx;
         return openSession(fresh, knId, contract, question);
       })
@@ -365,7 +384,12 @@ function ensureSession(
   // exactly what it set out to give.
   if (contract === "managed-v2" && !callerNamedConversation(ctx)) {
     opening
-      .then((session) => ctx.onConversationOpened?.(session.conversationId))
+      .then((session) => {
+        // Joining a remembered conversation returns the same id; reporting it
+        // would restamp its age and make "opened at" mean "last used at".
+        if (session.conversationId === ctx.rememberedConversationId) return;
+        ctx.onConversationOpened?.(session.conversationId);
+      })
       .catch(() => {
         /* the handshake failure is surfaced by the caller awaiting `opening` */
       });

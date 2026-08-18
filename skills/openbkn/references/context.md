@@ -38,7 +38,14 @@ since an interaction is one turn and carries a short lease. Precedence:
 `--conversation-id` → `BKN_CONVERSATION_ID` → remembered → open a new one.
 `--new-conversation` skips the remembered one for a single command;
 `openbkn context conversation` shows which is in force and where it came from,
-and `--forget` drops it. A transient `--user` never joins the stored thread.
+and `--forget` drops it, and `--new-conversation` leaves it in place for later
+commands. A transient identity — `--user`, or an explicit `--token` /
+`BKN_TOKEN` — neither joins the stored thread nor replaces it: identity here is
+the token, while the store is partitioned by the *active* user, who may be
+someone else. A script exporting `BKN_TOKEN` therefore opens a conversation per
+command, which is the pre-existing behaviour, not a regression — pass
+`--conversation-id` (or export `BKN_CONVERSATION_ID`) to tie such a script's
+commands together.
 A v1 deploy remembers nothing, and `context conversation` reports `none` there:
 a v1 interaction cannot be ended early and a conversation permits one at a time,
 so a remembered v1 conversation would refuse the next command until its lease

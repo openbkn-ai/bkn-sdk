@@ -137,6 +137,14 @@ describe("remembering a conversation the run opened", () => {
     expect(clientFrom(fakeCmd({ token: "raw" })).ctx.onConversationOpened).toBeUndefined();
   });
 
+  it("is not wired up under --new-conversation either", () => {
+    updatePlatformConfig(platform, { conversationId: "conv-1" });
+    // The flag declines to use the remembered thread for one command; ending it
+    // for every later one would be a different, unadvertised thing.
+    expect(clientFrom(fakeCmd({ newConversation: true })).ctx.onConversationOpened).toBeUndefined();
+    expect(readPlatformConfig(platform).conversationId).toBe("conv-1");
+  });
+
   it("survives a store it cannot write", () => {
     const client = clientFrom(fakeCmd({}));
     process.env.BKN_CONFIG_DIR = "/proc/definitely-not-writable";

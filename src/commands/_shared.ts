@@ -98,7 +98,10 @@ export function clientFrom(cmd: Command): BknClient {
     // Remember a conversation this run opens, so the next command continues the
     // same thread instead of starting a new one. Only for the active identity —
     // `transientIdentity` explains which identities are left out.
-    ...(transientIdentity(o)
+    // `--new-conversation` says "for this command", so it must not replace what
+    // it declined to use — otherwise one run with the flag would silently end
+    // the thread every other run was continuing.
+    ...(transientIdentity(o) || o.newConversation
       ? {}
       : {
           onConversationOpened: (conversationId: string) => {

@@ -60,7 +60,9 @@ openbkn --help        # grouped command map
 
 On a `managed-v2` deploy, commands continue the conversation the previous one
 opened, so work spanning several commands lands in one thread. `openbkn context conversation` shows which
-is in force and where it came from; `--forget` drops it.
+is in force and where it came from; `--forget` drops it. An explicit `--token` /
+`BKN_TOKEN` opts out (identity there is the token, not the stored user) — use
+`BKN_CONVERSATION_ID` to thread such a script's commands together.
 
 Tokens are stored per platform/user under `~/.bkn/` (override: `BKN_CONFIG_DIR`).
 
