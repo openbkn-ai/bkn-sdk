@@ -150,13 +150,15 @@ export function contextCommand(): Command {
           conversationId: undefined,
           conversationOpenedAt: undefined,
         });
-        printJson({ baseUrl, conversationId: null }, outputOptions(cmd));
-        return;
       }
       // The same resolution the next command will run, not a second copy of it:
       // this command exists to explain a surprise, so it must not be able to
       // disagree with what actually happens. `--new-conversation` and a
       // transient `--user` both report `none`, because that is what they cause.
+      // That holds after `--forget` too: dropping what was stored does not
+      // silence a `--conversation-id` or `BKN_CONVERSATION_ID` still in force,
+      // and reporting `null` there would state the opposite. One shape for both
+      // branches, for the same reason.
       const { id, source } = conversationSource(o);
       const stored = readPlatformConfig(baseUrl);
       printJson(

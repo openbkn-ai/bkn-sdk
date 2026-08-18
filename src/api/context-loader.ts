@@ -329,8 +329,18 @@ export async function callMethod(
     params: Object.keys(params).length > 0 ? params : undefined,
     id: nextId(),
   });
-  const parsed = parseBody(text) as { result?: unknown; error?: { message: string } };
-  if (parsed.error) throw new Error(`Context-loader error: ${parsed.error.message}`);
+  const parsed = parseBody(text) as {
+    result?: unknown;
+    error?: { message: string; code?: unknown };
+  };
+  // Same shape, same answer as `unwrapToolResult`: a JSON-RPC error is the
+  // server refusing this call, not a failure to reach it.
+  if (parsed.error) {
+    throw new ToolError(
+      `Context-loader error: ${parsed.error.message}`,
+      typeof parsed.error.code === "string" ? parsed.error.code : undefined,
+    );
+  }
   return parsed.result;
 }
 

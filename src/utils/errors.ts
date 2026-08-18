@@ -69,9 +69,12 @@ export class NonJsonResponseError extends Error {
 }
 
 /**
- * Raised when an MCP tool answers with `isError`. The transport call succeeded,
- * so this is not an {@link HttpError} — but the server's error `code` is what
- * decides whether a caller can recover, so it travels with the error.
+ * Raised when the server refuses a call it received: an MCP tool answering with
+ * `isError`, or a JSON-RPC top-level `error` from a gateway that validates
+ * before dispatch. Both mean the deploy answered *about this call*, which is
+ * what separates them from a transport failure — hence not an
+ * {@link HttpError} — and the server's error `code` is what decides whether a
+ * caller can recover, so it travels with the error.
  */
 export class ToolError extends Error {
   readonly code?: string;

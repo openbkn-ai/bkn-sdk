@@ -473,7 +473,15 @@ export async function bknContextFor(
 
 /**
  * The server's error code, wherever it landed: an HTTP `/kn/*` call carries it
- * in the response body, an MCP tool call in the `isError` result.
+ * in the response body, an MCP call in an `isError` result or a JSON-RPC
+ * top-level error — both reach here as a `ToolError`.
+ *
+ * Including the JSON-RPC channel is deliberate and reaches past this PR's
+ * subject: any managed tool call whose refusal names a stale-session code now
+ * takes the same recovery as one reported through `isError`. Same meaning, same
+ * path. It is bounded — one reopen, and a top-level error means the call was
+ * never dispatched, so resending has nothing to undo — and a caller-owned
+ * session is still never swapped out.
  */
 function serverErrorCode(err: unknown): string | undefined {
   if (err instanceof ToolError) return err.code;

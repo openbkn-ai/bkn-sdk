@@ -153,3 +153,14 @@ describe("remembering a conversation the run opened", () => {
     expect(() => client.ctx.onConversationOpened?.("conv-x")).not.toThrow();
   });
 });
+
+describe("context conversation --forget", () => {
+  it("reports what the next command will use, not a blanket null", () => {
+    updatePlatformConfig(platform, { conversationId: "conv-1" });
+    process.env.BKN_CONVERSATION_ID = "conv-env";
+    // Dropping what was stored does not silence an id still in force; saying
+    // `null` here would contradict the very next command.
+    expect(conversationSource({})).toEqual({ id: "conv-env", source: "env" });
+    expect(readPlatformConfig(platform).conversationId).toBe("conv-1");
+  });
+});
