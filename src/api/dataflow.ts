@@ -26,8 +26,12 @@ export function listDataflows(ctx: RequestContext): Promise<unknown> {
  *
  * The request keeps the default deadline on purpose. A shorter one would cut
  * off the very answer a caller wants: a hung upstream produces 504 only once
- * the gateway's own read timeout elapses (nginx defaults to 60s, Envoy to 15s),
- * so giving up first turns a diagnosis into an abort with nothing to say.
+ * the gateway's own read timeout elapses, and giving up first turns a diagnosis
+ * into an abort with nothing to say. Envoy's 15s default fits inside the 30s
+ * deadline; nginx's 60s does not, so on such a deploy a hung upstream still
+ * aborts client-side and the caller falls back to whatever it does when the
+ * probe says nothing. That is the safe direction — a probe that cannot tell
+ * lets the real call speak — but it is a boundary, not full coverage.
  */
 export function pingDataflows(ctx: RequestContext): Promise<unknown> {
   return request(ctx, `${BASE}/dags`, { query: { type: "data-flow", page: 0, limit: 1 } });

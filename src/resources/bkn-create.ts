@@ -643,10 +643,10 @@ export interface ImportCsvResult {
  * in `models.ts`). A 500 also steps aside: the service handled the request
  * badly, which is not the same as not being there.
  *
- * Reading 504 that way only holds because the probe asks for one row and gives
- * up early (`pingDataflows`). Against the full listing a gateway timeout would
- * as easily mean "that query was slow", and the costs are not symmetric: this
- * branch aborts the command, while stepping aside costs one wasted attempt.
+ * Reading 504 that way only holds because the probe asks for one row
+ * (`pingDataflows`). Against the full listing a gateway timeout would as easily
+ * mean "that query was slow", and the costs are not symmetric: this branch
+ * aborts the command, while stepping aside costs one wasted attempt.
  */
 async function ensureDataflowAvailable(
   ctx: RequestContext,
