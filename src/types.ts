@@ -18,6 +18,17 @@ export interface ClientOptions {
   /** Optional BKN Trace phase-one context for request correlation. */
   trace?: TraceContextOptions;
   /**
+   * A conversation this caller opened earlier and is willing to continue.
+   *
+   * Distinct from `trace.conversationId`, which names someone else's: that one
+   * is taken at its word and its failures are the caller's to see. This one is
+   * a convenience, so a session that cannot join it is opened fresh instead —
+   * otherwise a conversation that has been swept, or still holds an active
+   * interaction, would fail every later run with no way back except a manual
+   * reset.
+   */
+  rememberedConversationId?: string;
+  /**
    * Called with the id of a conversation the managed lifecycle opened on this
    * caller's behalf — never for one the caller named itself.
    *
@@ -63,6 +74,8 @@ export interface RequestContext {
     clientId?: string;
     persist: (tokens: RefreshableTokens) => void;
   };
+  /** See {@link ClientOptions.rememberedConversationId}. */
+  rememberedConversationId?: string;
   /** See {@link ClientOptions.onConversationOpened}. */
   onConversationOpened?: (conversationId: string) => void;
 }

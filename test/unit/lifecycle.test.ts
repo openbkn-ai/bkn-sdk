@@ -33,6 +33,8 @@ interface MockOptions {
   catalog?: unknown;
   /** Server replies for the retrieval POST, in order; a string body means an error. */
   retrieval?: Array<{ status: number; body: unknown }>;
+  /** Tool name → error code the deploy answers with on its first call only. */
+  toolErrorsOnce?: Record<string, string>;
 }
 
 interface Recorded {
@@ -49,6 +51,7 @@ function mockDeploy(opts: MockOptions = {}): Recorded {
   let retrievalIndex = 0;
   let conversationSeq = 0;
   let interactionSeq = 0;
+  const failedOnce = new Set<string>();
 
   vi.stubGlobal(
     "fetch",
@@ -73,6 +76,20 @@ function mockDeploy(opts: MockOptions = {}): Recorded {
           });
         }
         recorded.toolCalls.push(rpc.params);
+        const failOnce = opts.toolErrorsOnce?.[rpc.params.name];
+        if (failOnce && !failedOnce.has(rpc.params.name)) {
+          failedOnce.add(rpc.params.name);
+          return new Response(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              result: {
+                isError: true,
+                content: [{ type: "text", text: JSON.stringify({ error: { code: failOnce } }) }],
+              },
+            }),
+            { status: 200, headers },
+          );
+        }
         let structuredContent: Record<string, unknown>;
         if (!rpc.params.name.startsWith("bkn_")) {
           // A business tool answers with its payload as JSON text.
@@ -208,6 +225,44 @@ describe("managed lifecycle on semantic search", () => {
       "物料",
     );
     expect(borrowed).toEqual([]);
+  });
+
+  it("stays silent on v1, where a later command could not use the conversation", async () => {
+    const seen: string[] = [];
+    mockDeploy({ catalog: V1_CATALOG });
+    await semanticSearch(
+      freshCtx({ onConversationOpened: (id) => seen.push(id) }),
+      "kn-v1",
+      "物料",
+    );
+    // A v1 interaction cannot be ended early and a conversation permits one at
+    // a time, so handing this on would block the next command for the lease.
+    expect(seen).toEqual([]);
+  });
+
+  it("opens a fresh conversation when the remembered one cannot be joined", async () => {
+    const seen: string[] = [];
+    const recorded = mockDeploy({
+      catalog: V2_CATALOG,
+      // The stored conversation was swept, or still holds an interaction.
+      toolErrorsOnce: { bkn_start_interaction: "conversation_required" },
+    });
+    await semanticSearch(
+      freshCtx({
+        rememberedConversationId: "conv_stale",
+        onConversationOpened: (id) => seen.push(id),
+      }),
+      "kn-managed",
+      "物料",
+    );
+    // First attempt joins the remembered one; the retry asks for a new one.
+    expect(recorded.toolCalls.map((c) => c.arguments.conversation_id)).toEqual([
+      "conv_stale",
+      undefined,
+    ]);
+    // And the replacement is reported, so a caller storing it recovers on its
+    // own rather than staying broken until someone clears it by hand.
+    expect(seen).toEqual(["conv_1"]);
   });
 
   it("v2: mints both ids in one call and omits operation_key", async () => {

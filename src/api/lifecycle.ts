@@ -202,6 +202,17 @@ function callerNamedConversation(ctx: RequestContext): string | undefined {
   return ctx.trace?.interactionId ? undefined : ctx.trace?.conversationId;
 }
 
+/**
+ * The conversation a fresh session should join, if any.
+ *
+ * A caller-named one and a remembered one look the same to the server; they
+ * differ in what a failure means. `ensureSession` drops the remembered one and
+ * tries again, because it offered convenience, not intent.
+ */
+function joinTarget(ctx: RequestContext): string | undefined {
+  return callerNamedConversation(ctx) ?? ctx.rememberedConversationId;
+}
+
 async function openSession(
   ctx: RequestContext,
   knId: string,
@@ -209,7 +220,7 @@ async function openSession(
   question: string,
 ): Promise<Session> {
   generation += 1;
-  const named = callerNamedConversation(ctx);
+  const named = joinTarget(ctx);
   if (contract === "managed-v2") {
     // Without a conversation_id the server mints a fresh conversation. Reusing
     // one of our own would be rejected whenever its interaction is still
@@ -328,7 +339,20 @@ function ensureSession(
   const key = sessionKey(ctx, knId);
   const cached = sessions.get(key);
   if (cached) return cached;
-  const opening = openSession(ctx, knId, contract, question);
+  // A remembered conversation may have been swept, or may still hold an active
+  // interaction — a conversation permits one at a time. Either way it is this
+  // caller's own convenience failing, so drop it and open a fresh one rather
+  // than failing the command: without this, one unusable id would break every
+  // later run, and the reopen path in `withManagedLifecycle` cannot help. That
+  // path needs a context to retry with, and a handshake that throws leaves
+  // `bknContextFor` returning none at all.
+  const remembered = !callerNamedConversation(ctx) && ctx.rememberedConversationId;
+  const opening = remembered
+    ? openSession(ctx, knId, contract, question).catch(() => {
+        const { rememberedConversationId: _dropped, ...fresh } = ctx;
+        return openSession(fresh, knId, contract, question);
+      })
+    : openSession(ctx, knId, contract, question);
   // Report only a conversation this call minted. One the caller named is
   // already theirs to keep, and echoing it back would let a `--conversation-id`
   // meant for a single command quietly become the stored default.

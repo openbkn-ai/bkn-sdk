@@ -45,7 +45,7 @@ program
   .option("--interaction-id <id>", "BKN Trace interaction id (env: BKN_INTERACTION_ID)")
   .option(
     "--new-conversation",
-    "ignore the remembered conversation and open a fresh one (see `openbkn context conversation`)",
+    "ignore the remembered conversation for this command (see `openbkn context conversation`)",
   )
   .option("-k, --insecure", "skip TLS verification (dev / self-signed only)")
   .showHelpAfterError();

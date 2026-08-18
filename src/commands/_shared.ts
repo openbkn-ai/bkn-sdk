@@ -27,13 +27,18 @@ export function platformOf(o: Record<string, unknown>): string | undefined {
  * Whether this command runs as an identity picked for it alone.
  *
  * The remembered conversation is keyed by the active user, so a transient
- * `--user` neither joins that thread nor writes to it — either would file one
+ * identity neither joins that thread nor writes to it — either would file one
  * identity's evidence under another's. Read and write must agree on the answer,
  * hence one function: an earlier draft asked `??` on one side and `||` on the
  * other, so `--user ""` skipped the read and still wrote.
+ *
+ * `--token` counts too. Identity here is the token — `resolveContext` uses an
+ * explicit one instead of any stored credential, and the session cache keys on
+ * its hash — while the store is partitioned by the *active user*, who may be
+ * someone else entirely.
  */
 function transientIdentity(o: Record<string, unknown>): boolean {
-  return Boolean(o.user || process.env.BKN_USER);
+  return Boolean(o.user || process.env.BKN_USER || o.token || process.env.BKN_TOKEN);
 }
 
 export type ConversationSource = "flag" | "env" | "stored" | "none";
@@ -59,7 +64,11 @@ export function conversationSource(o: Record<string, unknown>): {
 }
 
 export function traceOptionsFrom(o: Record<string, unknown>): TraceContextOptions | undefined {
-  const conversationId = conversationSource(o).id;
+  // Only a conversation the caller named. A remembered one travels as
+  // `rememberedConversationId`, which the lifecycle may drop and replace — a
+  // named one it must not.
+  const found = conversationSource(o);
+  const conversationId = found.source === "stored" ? undefined : found.id;
   const interactionId =
     (typeof o.interactionId === "string" ? o.interactionId : undefined) ??
     process.env.BKN_INTERACTION_ID;
@@ -75,6 +84,7 @@ export function clientFrom(cmd: Command): BknClient {
   const o = cmd.optsWithGlobals();
   const trace = traceOptionsFrom(o);
   const storeBaseUrl = platformOf(o);
+  const remembered = conversationSource(o);
   const client = createClient({
     baseUrl: o.baseUrl,
     token: o.token,
@@ -82,9 +92,12 @@ export function clientFrom(cmd: Command): BknClient {
     businessDomain: o.bizDomain,
     insecure: o.insecure,
     ...(trace ? { trace } : {}),
+    ...(remembered.source === "stored" && remembered.id
+      ? { rememberedConversationId: remembered.id }
+      : {}),
     // Remember a conversation this run opens, so the next command continues the
     // same thread instead of starting a new one. Only for the active identity —
-    // `storedConversation` explains why a transient `--user` is left out.
+    // `transientIdentity` explains which identities are left out.
     ...(transientIdentity(o)
       ? {}
       : {

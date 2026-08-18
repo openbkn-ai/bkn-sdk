@@ -58,8 +58,8 @@ openbkn call /api/ontology-manager/v1/knowledge-networks
 openbkn --help        # grouped command map
 ```
 
-Commands continue the conversation the previous one opened, so work spanning
-several commands lands in one thread. `openbkn context conversation` shows which
+On a `managed-v2` deploy, commands continue the conversation the previous one
+opened, so work spanning several commands lands in one thread. `openbkn context conversation` shows which
 is in force and where it came from; `--forget` drops it.
 
 Tokens are stored per platform/user under `~/.bkn/` (override: `BKN_CONFIG_DIR`).

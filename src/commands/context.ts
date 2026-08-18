@@ -3,7 +3,7 @@
 
 /** `openbkn context …` (alias of legacy context-loader) — MCP retrieval. */
 import { Command } from "commander";
-import { activePlatform, readPlatformConfig, updatePlatformConfig } from "../config/store.js";
+import { readPlatformConfig, updatePlatformConfig } from "../config/store.js";
 import { group } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
@@ -150,7 +150,7 @@ export function contextCommand(): Command {
           conversationId: undefined,
           conversationOpenedAt: undefined,
         });
-        printJson({ base_url: baseUrl, conversation_id: null }, outputOptions(cmd));
+        printJson({ baseUrl, conversationId: null }, outputOptions(cmd));
         return;
       }
       // The same resolution the next command will run, not a second copy of it:
@@ -161,14 +161,14 @@ export function contextCommand(): Command {
       const stored = readPlatformConfig(baseUrl);
       printJson(
         {
-          base_url: baseUrl,
-          conversation_id: id ?? null,
+          baseUrl,
+          conversationId: id ?? null,
           source,
-          ...(stored.conversationOpenedAt ? { stored_opened_at: stored.conversationOpenedAt } : {}),
+          ...(stored.conversationOpenedAt ? { storedOpenedAt: stored.conversationOpenedAt } : {}),
           // What is on disk, even when something outranks it — otherwise
           // `--forget` looks like a no-op to whoever just ran this.
           ...(stored.conversationId && stored.conversationId !== id
-            ? { stored_conversation_id: stored.conversationId }
+            ? { storedConversationId: stored.conversationId }
             : {}),
         },
         outputOptions(cmd),

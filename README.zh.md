@@ -52,7 +52,7 @@ openbkn call /api/ontology-manager/v1/knowledge-networks
 openbkn --help        # 分组命令树
 ```
 
-命令会接着上一条开的 conversation，跨命令的一件事因此落在同一个线程里。
+`managed-v2` 部署上，命令会接着上一条开的 conversation，跨命令的一件事因此落在同一个线程里。
 `openbkn context conversation` 显示当前生效的是哪个、来自哪一层；`--forget` 丢掉它。
 
 Token 按平台/用户存于 `~/.bkn/`（可用 `BKN_CONFIG_DIR` 覆盖）。
