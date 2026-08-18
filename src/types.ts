@@ -17,6 +17,16 @@ export interface ClientOptions {
   evidenceIngestToken?: string;
   /** Optional BKN Trace phase-one context for request correlation. */
   trace?: TraceContextOptions;
+  /**
+   * Called once with the id of a conversation the managed lifecycle opened on
+   * this caller's behalf — never for one the caller named itself.
+   *
+   * The hook exists so persistence stays a decision of whoever built the
+   * client. The CLI uses it to remember a conversation across invocations; a
+   * library consumer that omits it gets a fresh conversation per process and
+   * nothing written to disk.
+   */
+  onConversationOpened?: (conversationId: string) => void;
 }
 
 /** Fully resolved request context — every field is known. */
@@ -44,6 +54,8 @@ export interface RequestContext {
     clientId?: string;
     persist: (tokens: RefreshableTokens) => void;
   };
+  /** See {@link ClientOptions.onConversationOpened}. */
+  onConversationOpened?: (conversationId: string) => void;
 }
 
 export interface TraceContextOptions {

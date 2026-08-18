@@ -5,14 +5,43 @@
 import { readFileSync } from "node:fs";
 import type { Command } from "commander";
 import { type BknClient, createClient } from "../client.js";
+import { activePlatform, readPlatformConfig, updatePlatformConfig } from "../config/store.js";
 import type { TraceContextOptions } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import type { OutputOptions } from "../utils/output.js";
 
+/**
+ * Where a conversation id may come from, strongest first: the flag, the
+ * environment, then the one a previous command on this platform opened.
+ *
+ * The stored one is skipped for a transient identity (`--user` / `BKN_USER`):
+ * the store is keyed by the active user, so borrowing it would file one
+ * identity's evidence under another's thread.
+ */
+function storedConversation(o: Record<string, unknown>): string | undefined {
+  if (o.user ?? process.env.BKN_USER) return undefined;
+  const baseUrl = platformOf(o);
+  return baseUrl ? readPlatformConfig(baseUrl).conversationId : undefined;
+}
+
+/**
+ * The platform this command will talk to, normalized the way the store keys it.
+ * Resolved here rather than read back off the client so the conversation hook
+ * below can be a plain closure over a value that already exists.
+ */
+export function platformOf(o: Record<string, unknown>): string | undefined {
+  const baseUrl =
+    (typeof o.baseUrl === "string" ? o.baseUrl : undefined) ??
+    process.env.BKN_BASE_URL ??
+    activePlatform();
+  return baseUrl?.replace(/\/+$/, "");
+}
+
 export function traceOptionsFrom(o: Record<string, unknown>): TraceContextOptions | undefined {
   const conversationId =
     (typeof o.conversationId === "string" ? o.conversationId : undefined) ??
-    process.env.BKN_CONVERSATION_ID;
+    process.env.BKN_CONVERSATION_ID ??
+    (o.newConversation ? undefined : storedConversation(o));
   const interactionId =
     (typeof o.interactionId === "string" ? o.interactionId : undefined) ??
     process.env.BKN_INTERACTION_ID;
@@ -27,14 +56,35 @@ export function traceOptionsFrom(o: Record<string, unknown>): TraceContextOption
 export function clientFrom(cmd: Command): BknClient {
   const o = cmd.optsWithGlobals();
   const trace = traceOptionsFrom(o);
-  return createClient({
+  const storeBaseUrl = platformOf(o);
+  const client = createClient({
     baseUrl: o.baseUrl,
     token: o.token,
     user: o.user,
     businessDomain: o.bizDomain,
     insecure: o.insecure,
     ...(trace ? { trace } : {}),
+    // Remember a conversation this run opens, so the next command continues the
+    // same thread instead of starting a new one. Only for the active identity —
+    // `storedConversation` explains why a transient `--user` is left out.
+    ...(o.user || process.env.BKN_USER
+      ? {}
+      : {
+          onConversationOpened: (conversationId: string) => {
+            if (!storeBaseUrl) return;
+            try {
+              updatePlatformConfig(storeBaseUrl, {
+                conversationId,
+                conversationOpenedAt: new Date().toISOString(),
+              });
+            } catch {
+              // Remembering is a convenience; a read-only or full disk must not
+              // fail a command that otherwise worked.
+            }
+          },
+        }),
   });
+  return client;
 }
 
 export function outputOptions(cmd: Command): OutputOptions {

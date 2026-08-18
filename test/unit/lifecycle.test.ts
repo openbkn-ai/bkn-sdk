@@ -185,6 +185,31 @@ describe("managed lifecycle on semantic search", () => {
     expect(context.operation_key).toMatch(/^op:/);
   });
 
+  it("reports a conversation it minted, and one it did not", async () => {
+    const minted: string[] = [];
+    mockDeploy({ catalog: V2_CATALOG });
+    await semanticSearch(
+      freshCtx({ onConversationOpened: (id) => minted.push(id) }),
+      "kn-managed",
+      "物料",
+    );
+    expect(minted).toEqual(["conv_1"]);
+
+    // A conversation the caller named is already theirs. Echoing it back would
+    // let a `--conversation-id` meant for one command become the stored default.
+    const borrowed: string[] = [];
+    mockDeploy({ catalog: V2_CATALOG });
+    await semanticSearch(
+      freshCtx({
+        onConversationOpened: (id) => borrowed.push(id),
+        trace: { requestId: "req_x", traceparent: "00-x-y-01", conversationId: "conv_theirs" },
+      }),
+      "kn-managed",
+      "物料",
+    );
+    expect(borrowed).toEqual([]);
+  });
+
   it("v2: mints both ids in one call and omits operation_key", async () => {
     const recorded = mockDeploy({ catalog: V2_CATALOG });
     await semanticSearch(freshCtx(), "kn-managed", "物料");

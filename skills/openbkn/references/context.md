@@ -30,6 +30,17 @@ same object. The same holds for
 `BKN_INTERACTION_ID`) on the CLI. Given only a conversation, the SDK opens its
 interaction inside that conversation rather than starting a new one.
 
+The CLI remembers a conversation it opened, per platform and active identity, so
+consecutive commands continue one thread instead of starting a new one each
+time. Only the conversation — every command still opens its own interaction,
+since an interaction is one turn and carries a short lease. Precedence:
+`--conversation-id` → `BKN_CONVERSATION_ID` → remembered → open a new one.
+`--new-conversation` skips the remembered one for a single command;
+`openbkn context conversation` shows which is in force and where it came from,
+and `--forget` drops it. A transient `--user` never joins the stored thread.
+The SDK writes nothing on its own: persistence is the CLI passing
+`onConversationOpened` to `createClient`.
+
 1. For the first business question in a chat, call `bkn_start_interaction` with
    the complete `question`, optional display-only `agent_name`, and no
    `conversation_id`. Context Loader creates or

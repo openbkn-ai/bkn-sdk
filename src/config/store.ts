@@ -51,6 +51,18 @@ export interface TokenConfig {
 /** Per-platform, per-user non-auth settings. */
 export interface PlatformConfig {
   businessDomain?: string;
+  /**
+   * The last conversation the managed lifecycle opened for this identity, so
+   * consecutive commands file their evidence under one thread instead of a new
+   * one each time.
+   *
+   * Only the conversation. An interaction is one turn and carries a short
+   * lease, so reusing one across commands would both expire and file separate
+   * turns as the same one — each command opens its own inside this conversation.
+   */
+  conversationId?: string;
+  /** When it was opened, so `context show` can say how old the thread is. */
+  conversationOpenedAt?: string;
 }
 
 interface StoreState {
@@ -196,6 +208,25 @@ export function readPlatformConfig(
 export function writePlatformConfig(baseUrl: string, config: PlatformConfig): void {
   const userId = activeUserId(baseUrl) ?? "default";
   writeJson(join(userDir(baseUrl, userId), "config.json"), config);
+}
+
+/**
+ * Merge one field into the stored config, leaving the rest alone.
+ *
+ * `writePlatformConfig` replaces the whole file, which was harmless while it
+ * held a single field: the moment a second one exists, setting either would
+ * erase the other. Callers changing one setting want this.
+ *
+ * A field set to `undefined` is removed, so a caller can forget one without
+ * rewriting the file itself.
+ */
+export function updatePlatformConfig(baseUrl: string, patch: PlatformConfig): void {
+  const userId = activeUserId(baseUrl) ?? "default";
+  const merged = { ...readPlatformConfig(baseUrl, userId), ...patch };
+  for (const [k, v] of Object.entries(merged)) {
+    if (v === undefined) delete (merged as Record<string, unknown>)[k];
+  }
+  writeJson(join(userDir(baseUrl, userId), "config.json"), merged);
 }
 
 // ---- enumeration -----------------------------------------------------------

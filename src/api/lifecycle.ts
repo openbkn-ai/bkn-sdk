@@ -329,6 +329,16 @@ function ensureSession(
   const cached = sessions.get(key);
   if (cached) return cached;
   const opening = openSession(ctx, knId, contract, question);
+  // Report only a conversation this call minted. One the caller named is
+  // already theirs to keep, and echoing it back would let a `--conversation-id`
+  // meant for a single command quietly become the stored default.
+  if (!callerNamedConversation(ctx)) {
+    opening
+      .then((session) => ctx.onConversationOpened?.(session.conversationId))
+      .catch(() => {
+        /* the handshake failure is surfaced by the caller awaiting `opening` */
+      });
+  }
   sessions.set(key, opening);
   // A failed handshake must not poison the cache for the rest of the process.
   opening.catch(() => sessions.delete(key));

@@ -97,5 +97,6 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
     // ambient interaction id it would then freeze for its whole lifetime.
     trace: createTraceContext(opts.trace),
     ...(refresh ? { refresh } : {}),
+    ...(opts.onConversationOpened ? { onConversationOpened: opts.onConversationOpened } : {}),
   };
 }

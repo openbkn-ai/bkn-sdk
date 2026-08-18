@@ -3,6 +3,7 @@
 
 /** `openbkn context …` (alias of legacy context-loader) — MCP retrieval. */
 import { Command } from "commander";
+import { activePlatform, readPlatformConfig, updatePlatformConfig } from "../config/store.js";
 import { group } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
@@ -134,6 +135,42 @@ export function contextCommand(): Command {
     .description("Full definitions for the given relation-type ids (unmatched → `missing`)")
     .action(async (knId: string, ids: string[], _opts, cmd: Command) => {
       printJson(await clientFrom(cmd).context.relationTypes(knId, ids), outputOptions(cmd));
+    });
+
+  cmd
+    .command("conversation")
+    .description("Show the remembered conversation, or forget it with --forget")
+    .option("--forget", "drop it, so the next command opens a fresh conversation")
+    .action((opts, cmd: Command) => {
+      const o = cmd.optsWithGlobals();
+      const baseUrl = (o.baseUrl ?? process.env.BKN_BASE_URL ?? activePlatform())?.replace(
+        /\/+$/,
+        "",
+      );
+      if (!baseUrl) throw new InputError("No platform. Run `openbkn auth login` first.");
+      if (opts.forget) {
+        updatePlatformConfig(baseUrl, {
+          conversationId: undefined,
+          conversationOpenedAt: undefined,
+        });
+        printJson({ base_url: baseUrl, conversation_id: null }, outputOptions(cmd));
+        return;
+      }
+      // Report where the id would come from, not just what it is: a flag or env
+      // var silently outranking the stored one is the confusing case.
+      const stored = readPlatformConfig(baseUrl);
+      const flag = typeof o.conversationId === "string" ? o.conversationId : undefined;
+      const env = process.env.BKN_CONVERSATION_ID;
+      const source = flag ? "flag" : env ? "env" : stored.conversationId ? "stored" : "none";
+      printJson(
+        {
+          base_url: baseUrl,
+          conversation_id: flag ?? env ?? stored.conversationId ?? null,
+          source,
+          ...(stored.conversationOpenedAt ? { stored_opened_at: stored.conversationOpenedAt } : {}),
+        },
+        outputOptions(cmd),
+      );
     });
 
   cmd
