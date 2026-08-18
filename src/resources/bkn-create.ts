@@ -634,11 +634,14 @@ export interface ImportCsvResult {
  * one identical 404 per table, hundreds of rows in — long past the point where
  * the user can tell "this deploy can't do that" from "my data is wrong".
  *
- * Only a gateway page or a 5xx counts as "no service": the probe reads
- * `automation/v2`, while the import runs on `v1`, so a plain JSON 404 means the
- * service answered — it just does not serve this listing. Blocking on that
- * would ground an import whose own endpoints are fine, so the probe steps
- * aside and lets the real call speak (see the same rule in `models.ts`).
+ * What counts as "no service" is narrow: a gateway page, or a status the
+ * gateway itself produces when nothing answers behind the route — 501, 502,
+ * 503, 504. The probe reads `automation/v2` while the import runs on `v1`, so a
+ * plain JSON 404 means the service answered and simply does not serve this
+ * listing; blocking on that would ground an import whose own endpoints are
+ * fine, so the probe steps aside and lets the real call speak (the same rule as
+ * in `models.ts`). A 500 also steps aside: the service handled the request
+ * badly, which is not the same as not being there.
  */
 async function ensureDataflowAvailable(
   ctx: RequestContext,
@@ -653,9 +656,14 @@ async function ensureDataflowAvailable(
     // something other than JSON (it is there; this listing just is not JSON).
     // Treating the second as an absent service is the JSON-404 false positive
     // again, wearing a different body.
+    // 504 belongs with 502/503, not with 500: the gateway routed the request
+    // and nothing answered. Every import batch would then wait out the full
+    // client timeout before failing, so twelve tables cost minutes of silence
+    // and twelve identical errors — the exact shape the preflight exists to
+    // prevent, one status code over.
     const missing =
       (e instanceof NonJsonResponseError && e.gateway) ||
-      (e instanceof HttpError && (e.gateway || [501, 502, 503].includes(e.status)));
+      (e instanceof HttpError && (e.gateway || [501, 502, 503, 504].includes(e.status)));
     if (!missing) {
       // An auth refusal is as conclusive as an absent service and just as
       // wasteful to discover per batch — surface it now, with its own cause and
