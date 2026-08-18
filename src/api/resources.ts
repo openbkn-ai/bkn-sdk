@@ -8,6 +8,7 @@
 import type { RequestContext } from "../types.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { request } from "./http.js";
+import { resolveSmallModelName } from "./models.js";
 
 const BASE = "/api/vega-backend/v1/resources";
 
@@ -154,17 +155,32 @@ export interface ConfigureResourceIndexOptions {
   fulltextAnalyzer?: string;
 }
 
+/**
+ * Write index intent onto a resource: build keys, vector/fulltext features, and
+ * the analyzer/model defaults.
+ *
+ * Deliberately reaches into mf-model-manager to resolve `embeddingModel`, which
+ * ARCHITECTURE.md would place in `resources/`. The exception is intentional:
+ * all four build entry points (`bkn push --build`, `create-from-catalog
+ * --build`, `create-from-csv --build`, `vega dataset build`) funnel through
+ * here, so resolving once beats four call sites drifting apart. Keep it here.
+ */
 export async function configureResourceIndex(
   ctx: RequestContext,
   id: string,
   opts: ConfigureResourceIndexOptions,
 ): Promise<unknown> {
   const current = firstResource(await getResource(ctx, id));
+  // The index config stores a model NAME; an id gets rejected at build time with
+  // `embedding model "…" not found`, so resolve before it reaches the resource.
+  const embeddingModel = opts.embeddingModel
+    ? await resolveSmallModelName(ctx, opts.embeddingModel)
+    : undefined;
   const schema = (current.schema_definition ?? []).map((prop) => ({ ...prop }));
   const indexConfig: ResourceIndexConfig = {
     ...(current.index_config ?? {}),
     ...(opts.buildKeyFields?.length ? { build_key_fields: opts.buildKeyFields } : {}),
-    ...(opts.embeddingModel ? { default_embedding_model: opts.embeddingModel } : {}),
+    ...(embeddingModel ? { default_embedding_model: embeddingModel } : {}),
     ...(opts.fulltextAnalyzer ? { default_fulltext_analyzer: opts.fulltextAnalyzer } : {}),
   };
 
@@ -173,7 +189,7 @@ export async function configureResourceIndex(
       schema,
       field,
       "vector",
-      opts.embeddingModel ? { embedding_model: opts.embeddingModel } : undefined,
+      embeddingModel ? { embedding_model: embeddingModel } : undefined,
     );
   }
   for (const field of opts.fulltextFields ?? []) {
@@ -246,13 +262,19 @@ function ensureFeature(
   prop.features = features;
 }
 
-function firstResource(result: unknown): ResourceLike {
+/**
+ * Unwrap a single-resource response. `GET /resources/{id}` answers with the same
+ * `{entries:[…]}` envelope as the list endpoint, so reading the response as the
+ * resource itself silently yields a nameless, column-less object — callers must
+ * go through here.
+ */
+export function firstResource<T extends object = ResourceLike>(result: unknown): T {
   if (result && typeof result === "object") {
     const o = result as Record<string, unknown>;
-    if (Array.isArray(o.entries)) return (o.entries[0] ?? {}) as ResourceLike;
-    return o as ResourceLike;
+    if (Array.isArray(o.entries)) return (o.entries[0] ?? {}) as T;
+    return o as T;
   }
-  return {};
+  return {} as T;
 }
 
 export interface DeleteResourceOptions {

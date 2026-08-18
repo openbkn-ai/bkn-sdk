@@ -485,7 +485,10 @@ export function vegaCommand(): Command {
       "--build-key-fields <list>",
       "comma-separated key fields (batch: time; streaming: row id)",
     )
-    .option("--embedding-model <id>", "small-model ID for the vector index")
+    .option(
+      "--embedding-model <name-or-id>",
+      "default small-model name (a numeric ID is resolved to its name)",
+    )
     .option("--fulltext-fields <list>", "comma-separated fields for fulltext index")
     .option("--fulltext-analyzer <name>", "fulltext analyzer")
     .option("--execute-type <type>", "batch execution type: incremental | full")
