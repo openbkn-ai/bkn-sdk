@@ -203,6 +203,28 @@ function callerNamedConversation(ctx: RequestContext): string | undefined {
 }
 
 /**
+ * Could this failure be the deploy rejecting *this conversation*?
+ *
+ * The retry below is worth a second handshake only then. The rule is that a
+ * failure which will repeat identically must not be paid for twice, and each
+ * handshake opens its own MCP session — so with something stored, a deploy that
+ * is down or a credential that has expired would otherwise cost every command
+ * double.
+ *
+ * A refusal reaches here either as a `ToolError` (the MCP `isError` result) or
+ * as a 4xx, from a gateway that validates arguments before dispatch. Auth is
+ * excluded even though it is 4xx: the credential is the same on the retry.
+ * Everything else — 5xx, a transport failure, a malformed body, a missing
+ * session id — is about reaching the deploy at all, never about which
+ * conversation was named.
+ */
+function refusesThisConversation(err: unknown): boolean {
+  if (err instanceof ToolError) return true;
+  if (!(err instanceof HttpError) || isAuthFailure(err)) return false;
+  return err.status >= 400 && err.status < 500;
+}
+
+/**
  * The conversation a fresh session should join, if any.
  *
  * A caller-named one and a remembered one look the same to the server; they
@@ -364,13 +386,7 @@ function ensureSession(
   const remembered = callerNamedConversation(ctx) ? undefined : joinTarget(ctx, contract);
   const opening = remembered
     ? openSession(ctx, knId, contract, question).catch((err: unknown) => {
-        // A credential the deploy rejects will reject the retry identically, so
-        // that one is not worth a second handshake. Everything else might be
-        // about the conversation: a refusal arrives as a `ToolError`, but a
-        // gateway that validates arguments before dispatch answers 4xx, and a
-        // JSON-RPC error surfaces as a plain `Error`. Guessing narrowly there
-        // would leave an unusable id unusable, which is what this exists to fix.
-        if (isAuthFailure(err)) throw err;
+        if (!refusesThisConversation(err)) throw err;
         const { rememberedConversationId: _dropped, ...fresh } = ctx;
         return openSession(fresh, knId, contract, question);
       })

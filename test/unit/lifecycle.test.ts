@@ -35,6 +35,8 @@ interface MockOptions {
   retrieval?: Array<{ status: number; body: unknown }>;
   /** Tool name → error code the deploy answers with on its first call only. */
   toolErrorsOnce?: Record<string, string>;
+  /** Tool name → HTTP status the transport answers with on its first call only. */
+  toolHttpOnce?: Record<string, number>;
 }
 
 interface Recorded {
@@ -76,6 +78,11 @@ function mockDeploy(opts: MockOptions = {}): Recorded {
           });
         }
         recorded.toolCalls.push(rpc.params);
+        const httpOnce = opts.toolHttpOnce?.[rpc.params.name];
+        if (httpOnce && !failedOnce.has(`http:${rpc.params.name}`)) {
+          failedOnce.add(`http:${rpc.params.name}`);
+          return new Response(JSON.stringify({ error: "nope" }), { status: httpOnce, headers });
+        }
         const failOnce = opts.toolErrorsOnce?.[rpc.params.name];
         if (failOnce && !failedOnce.has(rpc.params.name)) {
           failedOnce.add(rpc.params.name);
@@ -281,6 +288,29 @@ describe("managed lifecycle on semantic search", () => {
     // Naming it makes it the caller's intent; that the same id is also stored
     // does not turn its failure into ours to paper over. One attempt, no retry.
     expect(recorded.toolCalls.filter((c) => c.name === "bkn_start_interaction")).toHaveLength(1);
+  });
+
+  it.each([
+    // A gateway that validates arguments before dispatch answers 4xx; that can
+    // be about the conversation, so it earns the second handshake.
+    { label: "a 4xx refusal", status: 404, attempts: 2 },
+    // The same credential fails the retry the same way.
+    { label: "an auth failure", status: 401, attempts: 1 },
+    // So does a deploy that is down: nothing here is about the conversation.
+    { label: "a 5xx", status: 503, attempts: 1 },
+  ])("retries a remembered conversation past $label", async ({ status, attempts }) => {
+    const recorded = mockDeploy({
+      catalog: V2_CATALOG,
+      toolHttpOnce: { bkn_start_interaction: status },
+    });
+    await semanticSearch(
+      freshCtx({ rememberedConversationId: "conv_stale" }),
+      "kn-managed",
+      "物料",
+    ).catch(() => {});
+    expect(recorded.toolCalls.filter((c) => c.name === "bkn_start_interaction")).toHaveLength(
+      attempts,
+    );
   });
 
   it("does not report a conversation it only joined", async () => {
