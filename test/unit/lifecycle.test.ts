@@ -298,6 +298,11 @@ describe("managed lifecycle on semantic search", () => {
     { label: "an auth failure", status: 401, attempts: 1 },
     // So does a deploy that is down: nothing here is about the conversation.
     { label: "a 5xx", status: 503, attempts: 1 },
+    // 408/429 describe the request, not its arguments — and they are the only
+    // 4xx whose retry can succeed, which would trade a working conversation for
+    // a new one and overwrite what the caller had stored.
+    { label: "a rate limit", status: 429, attempts: 1 },
+    { label: "a request timeout", status: 408, attempts: 1 },
   ])("retries a remembered conversation past $label", async ({ status, attempts }) => {
     const recorded = mockDeploy({
       catalog: V2_CATALOG,

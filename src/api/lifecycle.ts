@@ -211,9 +211,14 @@ function callerNamedConversation(ctx: RequestContext): string | undefined {
  * is down or a credential that has expired would otherwise cost every command
  * double.
  *
- * A refusal reaches here either as a `ToolError` (the MCP `isError` result) or
- * as a 4xx, from a gateway that validates arguments before dispatch. Auth is
- * excluded even though it is 4xx: the credential is the same on the retry.
+ * A refusal reaches here as a `ToolError` — an MCP `isError` result, or a
+ * JSON-RPC error from a gateway that validates before dispatch — or as a 4xx.
+ * Three 4xx are excluded: auth, because the credential is unchanged on the
+ * retry, and 408/429, because they describe the request rather than its
+ * arguments. Those two are also the only 4xx where a retry can *succeed*, which
+ * would trade a conversation that was fine for a new one and overwrite whatever
+ * the caller had stored.
+ *
  * Everything else — 5xx, a transport failure, a malformed body, a missing
  * session id — is about reaching the deploy at all, never about which
  * conversation was named.
@@ -221,6 +226,7 @@ function callerNamedConversation(ctx: RequestContext): string | undefined {
 function refusesThisConversation(err: unknown): boolean {
   if (err instanceof ToolError) return true;
   if (!(err instanceof HttpError) || isAuthFailure(err)) return false;
+  if (err.status === 408 || err.status === 429) return false;
   return err.status >= 400 && err.status < 500;
 }
 
