@@ -16,6 +16,22 @@ export function listDataflows(ctx: RequestContext): Promise<unknown> {
   return request(ctx, `${BASE}/dags`, { query: { type: "data-flow", page: 0, limit: -1 } });
 }
 
+/**
+ * Reach the dataflow service without asking it for anything, for callers that
+ * only need to know whether it answers.
+ *
+ * `listDataflows` fetches every DAG (`limit=-1`); on a deploy with many of them
+ * that read is heavy enough that a gateway timeout says "this query was slow",
+ * not "nothing is there". A probe that draws that conclusion has to ask for one
+ * row and give up early, so a 504 has only one explanation left.
+ */
+export function pingDataflows(ctx: RequestContext): Promise<unknown> {
+  return request(ctx, `${BASE}/dags`, {
+    query: { type: "data-flow", page: 0, limit: 1 },
+    timeoutMs: 10_000,
+  });
+}
+
 /** Create a dataflow (DAG) from a full document body. Returns the new DAG id. */
 export function createDataflow(ctx: RequestContext, body: unknown): Promise<unknown> {
   return request(ctx, `${BASE_V1}/data-flow/flow`, { method: "POST", body });

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
-import { executeDataflow, listDataflows } from "../api/dataflow.js";
+import { executeDataflow, pingDataflows } from "../api/dataflow.js";
 /**
  * `bkn create-from-catalog` orchestration. Build a knowledge network from a
  * Vega catalog's tables:
@@ -642,13 +642,18 @@ export interface ImportCsvResult {
  * fine, so the probe steps aside and lets the real call speak (the same rule as
  * in `models.ts`). A 500 also steps aside: the service handled the request
  * badly, which is not the same as not being there.
+ *
+ * Reading 504 that way only holds because the probe asks for one row and gives
+ * up early (`pingDataflows`). Against the full listing a gateway timeout would
+ * as easily mean "that query was slow", and the costs are not symmetric: this
+ * branch aborts the command, while stepping aside costs one wasted attempt.
  */
 async function ensureDataflowAvailable(
   ctx: RequestContext,
   log: (m: string) => void,
 ): Promise<void> {
   try {
-    await listDataflows(ctx);
+    await pingDataflows(ctx);
   } catch (e) {
     // Both halves ask the same question — was it the service that answered?
     // `request()` raises `NonJsonResponseError` only for a 2xx, so here it

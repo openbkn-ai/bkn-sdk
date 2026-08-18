@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getDataflowLogs, listDataflowRuns, listDataflows } from "../../src/api/dataflow.js";
+import {
+  getDataflowLogs,
+  listDataflowRuns,
+  listDataflows,
+  pingDataflows,
+} from "../../src/api/dataflow.js";
 import type { RequestContext } from "../../src/types.js";
 
 const ctx: RequestContext = {
@@ -30,6 +35,16 @@ describe("dataflow read endpoints (automation v2)", () => {
     expect(u.pathname).toBe("/api/automation/v2/dags");
     expect(u.searchParams.get("type")).toBe("data-flow");
     expect(u.searchParams.get("limit")).toBe("-1");
+  });
+
+  it("ping asks for one row, not the whole listing", async () => {
+    const f = mockFetch();
+    await pingDataflows(ctx);
+    const u = url(f);
+    expect(u.pathname).toBe("/api/automation/v2/dags");
+    // A gateway timeout on the full listing would as easily mean "slow query"
+    // as "nobody answered"; callers reading 504 as absence need the bounded ask.
+    expect(u.searchParams.get("limit")).toBe("1");
   });
 
   it("runs hits /dag/{id}/results", async () => {
