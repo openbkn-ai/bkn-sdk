@@ -140,11 +140,19 @@ export function contextCommand(): Command {
   cmd
     .command("conversation")
     .description("Show the remembered conversation, or forget it with --forget")
-    .option("--forget", "drop it, so the next command opens a fresh conversation")
+    .option(
+      "--forget",
+      "drop it, so the next command opens a fresh conversation (acts on this machine's store for the active user, whatever identity the request would use)",
+    )
     .action((opts, cmd: Command) => {
       const o = cmd.optsWithGlobals();
       const baseUrl = platformOf(o);
       if (!baseUrl) throw new InputError("No platform. Run `openbkn auth login` first.");
+      // Read before dropping, so the output can name what was dropped. With a
+      // flag or env var in force the rest of this payload is identical to a
+      // plain read, and `storedConversationId` is gone by then — without this,
+      // `--forget` would be indistinguishable from doing nothing.
+      const forgot = opts.forget ? readPlatformConfig(baseUrl).conversationId : undefined;
       if (opts.forget) {
         updatePlatformConfig(baseUrl, {
           conversationId: undefined,
@@ -172,6 +180,7 @@ export function contextCommand(): Command {
           ...(stored.conversationId && stored.conversationId !== id
             ? { storedConversationId: stored.conversationId }
             : {}),
+          ...(opts.forget ? { forgot: forgot ?? null } : {}),
         },
         outputOptions(cmd),
       );

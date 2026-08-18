@@ -1,8 +1,10 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { Command } from "commander";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clientFrom, conversationSource, traceOptionsFrom } from "../../src/commands/_shared.js";
+import { contextCommand } from "../../src/commands/context.js";
 import {
   readPlatformConfig,
   setActivePlatform,
@@ -154,13 +156,52 @@ describe("remembering a conversation the run opened", () => {
   });
 });
 
-describe("context conversation --forget", () => {
-  it("reports what the next command will use, not a blanket null", () => {
+/** The command itself, not the resolver underneath it. */
+function run(...argv: string[]): unknown {
+  const out: unknown[] = [];
+  const spy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string) => {
+    out.push(JSON.parse(String(chunk)));
+    return true;
+  }) as typeof process.stdout.write);
+  try {
+    new Command("openbkn")
+      .exitOverride()
+      .option("--json")
+      .option("--conversation-id <id>")
+      .addCommand(contextCommand())
+      .parse(["node", "openbkn", "--json", ...argv]);
+  } finally {
+    spy.mockRestore();
+  }
+  return out[0];
+}
+
+describe("openbkn context conversation", () => {
+  it("reports the layer in force and what is on disk behind it", () => {
     updatePlatformConfig(platform, { conversationId: "conv-1" });
-    process.env.BKN_CONVERSATION_ID = "conv-env";
-    // Dropping what was stored does not silence an id still in force; saying
-    // `null` here would contradict the very next command.
-    expect(conversationSource({})).toEqual({ id: "conv-env", source: "env" });
-    expect(readPlatformConfig(platform).conversationId).toBe("conv-1");
+    expect(run("context", "conversation")).toMatchObject({
+      conversationId: "conv-1",
+      source: "stored",
+    });
+    expect(run("--conversation-id", "conv-flag", "context", "conversation")).toMatchObject({
+      conversationId: "conv-flag",
+      source: "flag",
+      storedConversationId: "conv-1",
+    });
+  });
+
+  it("--forget names what it dropped and still reports what comes next", () => {
+    updatePlatformConfig(platform, { conversationId: "conv-1" });
+    // With an id still in force the rest of this payload matches a plain read,
+    // so without `forgot` the command would look like it did nothing.
+    const out = run("--conversation-id", "conv-flag", "context", "conversation", "--forget");
+    expect(out).toMatchObject({ forgot: "conv-1", conversationId: "conv-flag", source: "flag" });
+    expect(readPlatformConfig(platform).conversationId).toBeUndefined();
+    // And it says so rather than claiming null, which the next command would
+    // contradict.
+    const after = run("context", "conversation");
+    expect(after).toMatchObject({ conversationId: null, source: "none" });
+    // A plain read never claims to have forgotten anything.
+    expect(after).not.toHaveProperty("forgot");
   });
 });

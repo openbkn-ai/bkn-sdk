@@ -303,20 +303,23 @@ describe("managed lifecycle on semantic search", () => {
     // a new one and overwrite what the caller had stored.
     { label: "a rate limit", status: 429, attempts: 1 },
     { label: "a request timeout", status: 408, attempts: 1 },
-  ])("retries a remembered conversation past $label", async ({ status, attempts }) => {
-    const recorded = mockDeploy({
-      catalog: V2_CATALOG,
-      toolHttpOnce: { bkn_start_interaction: status },
-    });
-    await semanticSearch(
-      freshCtx({ rememberedConversationId: "conv_stale" }),
-      "kn-managed",
-      "物料",
-    ).catch(() => {});
-    expect(recorded.toolCalls.filter((c) => c.name === "bkn_start_interaction")).toHaveLength(
-      attempts,
-    );
-  });
+  ])(
+    "makes $attempts attempt(s) when a remembered conversation meets $label",
+    async ({ status, attempts }) => {
+      const recorded = mockDeploy({
+        catalog: V2_CATALOG,
+        toolHttpOnce: { bkn_start_interaction: status },
+      });
+      await semanticSearch(
+        freshCtx({ rememberedConversationId: "conv_stale" }),
+        "kn-managed",
+        "物料",
+      ).catch(() => {});
+      expect(recorded.toolCalls.filter((c) => c.name === "bkn_start_interaction")).toHaveLength(
+        attempts,
+      );
+    },
+  );
 
   it("does not report a conversation it only joined", async () => {
     const seen: string[] = [];
