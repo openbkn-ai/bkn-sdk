@@ -202,6 +202,53 @@ function callerNamedConversation(ctx: RequestContext): string | undefined {
   return ctx.trace?.interactionId ? undefined : ctx.trace?.conversationId;
 }
 
+/**
+ * Could this failure be the deploy rejecting *this conversation*?
+ *
+ * The retry below is worth a second handshake only then. The rule is that a
+ * failure which will repeat identically must not be paid for twice, and each
+ * handshake opens its own MCP session — so with something stored, a deploy that
+ * is down or a credential that has expired would otherwise cost every command
+ * double.
+ *
+ * A refusal reaches here as a `ToolError` — an MCP `isError` result, or a
+ * JSON-RPC error from a gateway that validates before dispatch — or as a 4xx.
+ * Three 4xx are excluded: auth, because the credential is unchanged on the
+ * retry, and 408/429, because they describe the request rather than its
+ * arguments. Those two are also the only 4xx where a retry can *succeed*, which
+ * would trade a conversation that was fine for a new one and overwrite whatever
+ * the caller had stored.
+ *
+ * Everything else — 5xx, a transport failure, a malformed body, a missing
+ * session id — is about reaching the deploy at all, never about which
+ * conversation was named.
+ */
+function refusesThisConversation(err: unknown): boolean {
+  if (err instanceof ToolError) return true;
+  if (!(err instanceof HttpError) || isAuthFailure(err)) return false;
+  if (err.status === 408 || err.status === 429) return false;
+  return err.status >= 400 && err.status < 500;
+}
+
+/**
+ * The conversation a fresh session should join, if any.
+ *
+ * A caller-named one and a remembered one look the same to the server; they
+ * differ in what a failure means. `ensureSession` drops the remembered one and
+ * tries again, because it offered convenience, not intent.
+ *
+ * A remembered one is honoured only under v2, mirroring the gate on reporting
+ * them. Joining under v1 would produce an interaction nothing can release —
+ * `releaseOne` handles only v2 — so the next call would wait out the lease. The
+ * CLI never stores a v1 conversation, but this field is public, and a caller
+ * passing one must not fall into the hole the write side already avoids.
+ */
+function joinTarget(ctx: RequestContext, contract: Exclude<Contract, "none">): string | undefined {
+  const named = callerNamedConversation(ctx);
+  if (named) return named;
+  return contract === "managed-v2" ? ctx.rememberedConversationId : undefined;
+}
+
 async function openSession(
   ctx: RequestContext,
   knId: string,
@@ -209,7 +256,7 @@ async function openSession(
   question: string,
 ): Promise<Session> {
   generation += 1;
-  const named = callerNamedConversation(ctx);
+  const named = joinTarget(ctx, contract);
   if (contract === "managed-v2") {
     // Without a conversation_id the server mints a fresh conversation. Reusing
     // one of our own would be rejected whenever its interaction is still
@@ -311,7 +358,10 @@ function identityOf(ctx: RequestContext): string {
 }
 
 function sessionKey(ctx: RequestContext, knId: string): string {
-  return `${ctx.baseUrl}\0${knId}\0${identityOf(ctx)}\0${ctx.trace?.conversationId ?? ""}`;
+  // Both conversation inputs belong in the key for the same reason: a caller
+  // that asked for one must not be handed an interaction on another.
+  const wanted = ctx.trace?.conversationId ?? ctx.rememberedConversationId ?? "";
+  return `${ctx.baseUrl}\0${knId}\0${identityOf(ctx)}\0${wanted}`;
 }
 
 /**
@@ -328,7 +378,47 @@ function ensureSession(
   const key = sessionKey(ctx, knId);
   const cached = sessions.get(key);
   if (cached) return cached;
-  const opening = openSession(ctx, knId, contract, question);
+  // A remembered conversation may have been swept, or may still hold an active
+  // interaction — a conversation permits one at a time. Either way it is this
+  // caller's own convenience failing, so drop it and open a fresh one rather
+  // than failing the command: without this, one unusable id would break every
+  // later run, and the reopen path in `withManagedLifecycle` cannot help. That
+  // path needs a context to retry with, and a handshake that throws leaves
+  // `bknContextFor` returning none at all.
+  // "This session is joining the remembered conversation" — asked as the reason,
+  // not as a value comparison. A caller that names the same id it also stored
+  // still named it, and a named conversation must never be swapped out from
+  // under them.
+  const remembered = callerNamedConversation(ctx) ? undefined : joinTarget(ctx, contract);
+  const opening = remembered
+    ? openSession(ctx, knId, contract, question).catch((err: unknown) => {
+        if (!refusesThisConversation(err)) throw err;
+        const { rememberedConversationId: _dropped, ...fresh } = ctx;
+        return openSession(fresh, knId, contract, question);
+      })
+    : openSession(ctx, knId, contract, question);
+  // Report only a conversation this call minted. One the caller named is
+  // already theirs to keep, and echoing it back would let a `--conversation-id`
+  // meant for a single command quietly become the stored default.
+  //
+  // And only under v2, because only there can a caller act on it. A
+  // conversation permits one active interaction, and `releaseOne` can end one
+  // early only under v2 — v1's cancel wants a `completion_manifest_version`
+  // with no value to send. So a v1 conversation handed to the next command
+  // would be refused until the five-minute lease expired: reuse would cost
+  // exactly what it set out to give.
+  if (contract === "managed-v2" && !callerNamedConversation(ctx)) {
+    opening
+      .then((session) => {
+        // Joining a remembered conversation returns the same id; reporting it
+        // would restamp its age and make "opened at" mean "last used at".
+        if (session.conversationId === ctx.rememberedConversationId) return;
+        ctx.onConversationOpened?.(session.conversationId);
+      })
+      .catch(() => {
+        /* the handshake failure is surfaced by the caller awaiting `opening` */
+      });
+  }
   sessions.set(key, opening);
   // A failed handshake must not poison the cache for the rest of the process.
   opening.catch(() => sessions.delete(key));
@@ -383,7 +473,15 @@ export async function bknContextFor(
 
 /**
  * The server's error code, wherever it landed: an HTTP `/kn/*` call carries it
- * in the response body, an MCP tool call in the `isError` result.
+ * in the response body, an MCP call in an `isError` result or a JSON-RPC
+ * top-level error — both reach here as a `ToolError`.
+ *
+ * Including the JSON-RPC channel is deliberate and reaches past this PR's
+ * subject: any managed tool call whose refusal names a stale-session code now
+ * takes the same recovery as one reported through `isError`. Same meaning, same
+ * path. It is bounded — one reopen, and a top-level error means the call was
+ * never dispatched, so resending has nothing to undo — and a caller-owned
+ * session is still never swapped out.
  */
 function serverErrorCode(err: unknown): string | undefined {
   if (err instanceof ToolError) return err.code;

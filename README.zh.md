@@ -48,8 +48,14 @@ openbkn call /api/ontology-manager/v1/knowledge-networks
 
 # 全局参数：--base-url --token --user --json/--compact -bd/--biz-domain -k/--insecure
 #           --conversation-id/--interaction-id（BKN Trace 关联，等价 env：BKN_CONVERSATION_ID/BKN_INTERACTION_ID）
+#           --new-conversation（这条命令不沿用记住的 conversation）
 openbkn --help        # 分组命令树
 ```
+
+`managed-v2` 部署上，命令会接着上一条开的 conversation，跨命令的一件事因此落在同一个线程里。
+`openbkn context conversation` 显示当前生效的是哪个、来自哪一层；`--forget` 丢掉它。
+显式 `--token` / `BKN_TOKEN` 不参与（那里的身份是 token 本身，不是存下来的用户）——
+这类脚本用 `BKN_CONVERSATION_ID` 把多条命令串起来。
 
 Token 按平台/用户存于 `~/.bkn/`（可用 `BKN_CONFIG_DIR` 覆盖）。
 

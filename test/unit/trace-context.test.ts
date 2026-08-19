@@ -1,9 +1,23 @@
-import { describe, expect, it, vi } from "vitest";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildHeaders } from "../../src/api/headers.js";
 import { traceOptionsFrom } from "../../src/commands/_shared.js";
 import { resolveContext } from "../../src/config/resolve.js";
 import { createOperationTraceContext } from "../../src/trace-context.js";
 import type { RequestContext } from "../../src/types.js";
+
+// `traceOptionsFrom` consults the config store for a remembered conversation,
+// so without an isolated store these read the developer's own `~/.bkn` — green
+// on a fresh CI runner, red on any machine that has run `openbkn`.
+const savedEnv = { ...process.env };
+beforeEach(() => {
+  process.env.BKN_CONFIG_DIR = mkdtempSync(join(tmpdir(), "bkn-trace-ctx-"));
+});
+afterEach(() => {
+  process.env = { ...savedEnv };
+});
 
 const ctx: RequestContext = {
   baseUrl: "https://demo.example.com",

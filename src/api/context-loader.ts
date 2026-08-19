@@ -148,8 +148,18 @@ function toolErrorCode(structuredContent: unknown): string | undefined {
 
 /** Unwrap a JSON-RPC result without discarding its trusted lifecycle receipt. */
 function unwrapToolResult(parsed: unknown): UnwrappedToolResult {
-  const rpc = parsed as { result?: unknown; error?: { message: string } };
-  if (rpc.error) throw new Error(`Context-loader error: ${rpc.error.message}`);
+  const rpc = parsed as { result?: unknown; error?: { message: string; code?: unknown } };
+  // A JSON-RPC top-level error is the server refusing this call — the same kind
+  // of answer as an `isError` result, just delivered a layer lower by a gateway
+  // that validates before dispatch. Raising it as a `ToolError` keeps that
+  // distinguishable from the plain `Error`s here, which all mean the deploy was
+  // never reached properly (bad JSON, no session id).
+  if (rpc.error) {
+    throw new ToolError(
+      `Context-loader error: ${rpc.error.message}`,
+      typeof rpc.error.code === "string" ? rpc.error.code : undefined,
+    );
+  }
   const result = rpc.result as Record<string, unknown> | undefined;
   if (result === undefined) return { value: parsed };
   const structuredContent = result.structuredContent;
@@ -319,8 +329,18 @@ export async function callMethod(
     params: Object.keys(params).length > 0 ? params : undefined,
     id: nextId(),
   });
-  const parsed = parseBody(text) as { result?: unknown; error?: { message: string } };
-  if (parsed.error) throw new Error(`Context-loader error: ${parsed.error.message}`);
+  const parsed = parseBody(text) as {
+    result?: unknown;
+    error?: { message: string; code?: unknown };
+  };
+  // Same shape, same answer as `unwrapToolResult`: a JSON-RPC error is the
+  // server refusing this call, not a failure to reach it.
+  if (parsed.error) {
+    throw new ToolError(
+      `Context-loader error: ${parsed.error.message}`,
+      typeof parsed.error.code === "string" ? parsed.error.code : undefined,
+    );
+  }
   return parsed.result;
 }
 

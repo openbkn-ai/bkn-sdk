@@ -43,6 +43,10 @@ program
   .option("--biz-domain <s>", "business domain (alias: -bd)")
   .option("--conversation-id <id>", "BKN Trace conversation id (env: BKN_CONVERSATION_ID)")
   .option("--interaction-id <id>", "BKN Trace interaction id (env: BKN_INTERACTION_ID)")
+  .option(
+    "--new-conversation",
+    "ignore the remembered conversation for this command (see `openbkn context conversation`)",
+  )
   .option("-k, --insecure", "skip TLS verification (dev / self-signed only)")
   .showHelpAfterError();
 

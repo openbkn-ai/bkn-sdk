@@ -30,6 +30,31 @@ same object. The same holds for
 `BKN_INTERACTION_ID`) on the CLI. Given only a conversation, the SDK opens its
 interaction inside that conversation rather than starting a new one.
 
+The CLI remembers a conversation it opened **on a `managed-v2` deploy**, per
+platform and active identity, so
+consecutive commands continue one thread instead of starting a new one each
+time. Only the conversation — every command still opens its own interaction,
+since an interaction is one turn and carries a short lease. Precedence:
+`--conversation-id` → `BKN_CONVERSATION_ID` → remembered → open a new one.
+`--new-conversation` skips the remembered one for a single command;
+`openbkn context conversation` shows which is in force and where it came from,
+and `--forget` drops it, and `--new-conversation` leaves it in place for later
+commands. A transient identity — `--user`, or an explicit `--token` /
+`BKN_TOKEN` — neither joins the stored thread nor replaces it: identity here is
+the token, while the store is partitioned by the *active* user, who may be
+someone else. A script exporting `BKN_TOKEN` therefore opens a conversation per
+command, which is the pre-existing behaviour, not a regression — pass
+`--conversation-id` (or export `BKN_CONVERSATION_ID`) to tie such a script's
+commands together.
+A v1 deploy remembers nothing, and `context conversation` reports `none` there:
+a v1 interaction cannot be ended early and a conversation permits one at a time,
+so a remembered v1 conversation would refuse the next command until its lease
+expired. A remembered conversation that can no longer be joined is replaced
+rather than reported — the run opens a fresh one and stores that instead.
+The SDK writes nothing on its own: persistence is the CLI passing
+`onConversationOpened` to `createClient`, and a conversation it may replace
+travels as `rememberedConversationId`, not as `trace.conversationId`.
+
 1. For the first business question in a chat, call `bkn_start_interaction` with
    the complete `question`, optional display-only `agent_name`, and no
    `conversation_id`. Context Loader creates or

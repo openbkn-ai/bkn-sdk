@@ -1,9 +1,11 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
+import { ToolError } from "../../src/utils/errors.js";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   callManagedTool,
+  callMethod,
   callTool,
   getKnDetail,
   getObjectTypes,
@@ -250,6 +252,47 @@ describe("managed MCP tool calls", () => {
     ).rejects.toThrow(
       "Context-loader error: conversation_required: call bkn_start_interaction first",
     );
+  });
+
+  it("raises a JSON-RPC error from callMethod as a refusal too", async () => {
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      error: { code: "invalid_params", message: "no such prompt" },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(body, { status: 200, headers: { "mcp-session-id": "m-s1" } })),
+    );
+
+    // Same shape as the tool path answers to; one module must not give two
+    // answers for it.
+    const err = await callMethod(ctx, "kn-error", "prompts/get").catch((e) => e);
+    expect(err).toBeInstanceOf(ToolError);
+    expect((err as ToolError).code).toBe("invalid_params");
+  });
+
+  it("raises a JSON-RPC error as a refusal, not as a transport failure", async () => {
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      error: { code: "conversation_required", message: "no such conversation" },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () => new Response(body, { status: 200, headers: { "mcp-session-id": "error-s2" } }),
+      ),
+    );
+
+    // A gateway that validates arguments before dispatch answers here rather
+    // than with an `isError` result. Callers deciding whether a failure is
+    // about their arguments cannot tell the two apart if this is a plain Error.
+    const err = await callManagedTool(ctx, "kn-error", "search_schema", { query: "q" }).catch(
+      (e) => e,
+    );
+    expect(err).toBeInstanceOf(ToolError);
+    expect((err as ToolError).code).toBe("conversation_required");
   });
 
   it("rejects managed tool responses without a trusted operation receipt", async () => {

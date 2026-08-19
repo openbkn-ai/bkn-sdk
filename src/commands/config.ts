@@ -7,7 +7,7 @@ import {
   activePlatform,
   readPlatformConfig,
   setActivePlatform,
-  writePlatformConfig,
+  updatePlatformConfig,
 } from "../config/store.js";
 import { group } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
@@ -44,7 +44,7 @@ export function configCommand(): Command {
       if (key === "baseUrl") {
         setActivePlatform(value.replace(/\/+$/, ""));
       } else if (key === "businessDomain") {
-        writePlatformConfig(requireActive(), { businessDomain: value });
+        updatePlatformConfig(requireActive(), { businessDomain: value });
       } else {
         throw new InputError(`Unknown config key: ${key} (expected baseUrl | businessDomain)`);
       }
@@ -56,7 +56,7 @@ export function configCommand(): Command {
     .description("Set the default business domain for the active platform")
     .action((value: string, _opts, cmd: Command) => {
       const baseUrl = requireActive();
-      writePlatformConfig(baseUrl, { businessDomain: value });
+      updatePlatformConfig(baseUrl, { businessDomain: value });
       printJson({ baseUrl, businessDomain: value }, outputOptions(cmd));
     });
 

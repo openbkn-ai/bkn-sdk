@@ -33,6 +33,10 @@ interface MockOptions {
   catalog?: unknown;
   /** Server replies for the retrieval POST, in order; a string body means an error. */
   retrieval?: Array<{ status: number; body: unknown }>;
+  /** Tool name → error code the deploy answers with on its first call only. */
+  toolErrorsOnce?: Record<string, string>;
+  /** Tool name → HTTP status the transport answers with on its first call only. */
+  toolHttpOnce?: Record<string, number>;
 }
 
 interface Recorded {
@@ -49,6 +53,7 @@ function mockDeploy(opts: MockOptions = {}): Recorded {
   let retrievalIndex = 0;
   let conversationSeq = 0;
   let interactionSeq = 0;
+  const failedOnce = new Set<string>();
 
   vi.stubGlobal(
     "fetch",
@@ -73,6 +78,25 @@ function mockDeploy(opts: MockOptions = {}): Recorded {
           });
         }
         recorded.toolCalls.push(rpc.params);
+        const httpOnce = opts.toolHttpOnce?.[rpc.params.name];
+        if (httpOnce && !failedOnce.has(`http:${rpc.params.name}`)) {
+          failedOnce.add(`http:${rpc.params.name}`);
+          return new Response(JSON.stringify({ error: "nope" }), { status: httpOnce, headers });
+        }
+        const failOnce = opts.toolErrorsOnce?.[rpc.params.name];
+        if (failOnce && !failedOnce.has(rpc.params.name)) {
+          failedOnce.add(rpc.params.name);
+          return new Response(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              result: {
+                isError: true,
+                content: [{ type: "text", text: JSON.stringify({ error: { code: failOnce } }) }],
+              },
+            }),
+            { status: 200, headers },
+          );
+        }
         let structuredContent: Record<string, unknown>;
         if (!rpc.params.name.startsWith("bkn_")) {
           // A business tool answers with its payload as JSON text.
@@ -183,6 +207,161 @@ describe("managed lifecycle on semantic search", () => {
     expect(context.conversation_id).toBe("conv_1");
     expect(context.interaction_id).toBe("int_1");
     expect(context.operation_key).toMatch(/^op:/);
+  });
+
+  it("reports a conversation it minted, and one it did not", async () => {
+    const minted: string[] = [];
+    mockDeploy({ catalog: V2_CATALOG });
+    await semanticSearch(
+      freshCtx({ onConversationOpened: (id) => minted.push(id) }),
+      "kn-managed",
+      "物料",
+    );
+    expect(minted).toEqual(["conv_1"]);
+
+    // A conversation the caller named is already theirs. Echoing it back would
+    // let a `--conversation-id` meant for one command become the stored default.
+    const borrowed: string[] = [];
+    mockDeploy({ catalog: V2_CATALOG });
+    await semanticSearch(
+      freshCtx({
+        onConversationOpened: (id) => borrowed.push(id),
+        trace: { requestId: "req_x", traceparent: "00-x-y-01", conversationId: "conv_theirs" },
+      }),
+      "kn-managed",
+      "物料",
+    );
+    expect(borrowed).toEqual([]);
+  });
+
+  it("stays silent on v1, where a later command could not use the conversation", async () => {
+    const seen: string[] = [];
+    mockDeploy({ catalog: V1_CATALOG });
+    await semanticSearch(
+      freshCtx({ onConversationOpened: (id) => seen.push(id) }),
+      "kn-v1",
+      "物料",
+    );
+    // A v1 interaction cannot be ended early and a conversation permits one at
+    // a time, so handing this on would block the next command for the lease.
+    expect(seen).toEqual([]);
+  });
+
+  it("opens a fresh conversation when the remembered one cannot be joined", async () => {
+    const seen: string[] = [];
+    const recorded = mockDeploy({
+      catalog: V2_CATALOG,
+      // The stored conversation was swept, or still holds an interaction.
+      toolErrorsOnce: { bkn_start_interaction: "conversation_required" },
+    });
+    await semanticSearch(
+      freshCtx({
+        rememberedConversationId: "conv_stale",
+        onConversationOpened: (id) => seen.push(id),
+      }),
+      "kn-managed",
+      "物料",
+    );
+    // First attempt joins the remembered one; the retry asks for a new one.
+    expect(recorded.toolCalls.map((c) => c.arguments.conversation_id)).toEqual([
+      "conv_stale",
+      undefined,
+    ]);
+    // And the replacement is reported, so a caller storing it recovers on its
+    // own rather than staying broken until someone clears it by hand.
+    expect(seen).toEqual(["conv_1"]);
+  });
+
+  it("never swaps out a conversation the caller named, even if it is also stored", async () => {
+    const recorded = mockDeploy({
+      catalog: V2_CATALOG,
+      toolErrorsOnce: { bkn_start_interaction: "conversation_required" },
+    });
+    await semanticSearch(
+      freshCtx({
+        trace: { requestId: "req_x", traceparent: "00-x-y-01", conversationId: "conv_same" },
+        rememberedConversationId: "conv_same",
+      }),
+      "kn-managed",
+      "物料",
+    ).catch(() => {});
+    // Naming it makes it the caller's intent; that the same id is also stored
+    // does not turn its failure into ours to paper over. One attempt, no retry.
+    expect(recorded.toolCalls.filter((c) => c.name === "bkn_start_interaction")).toHaveLength(1);
+  });
+
+  it.each([
+    // A gateway that validates arguments before dispatch answers 4xx; that can
+    // be about the conversation, so it earns the second handshake.
+    { label: "a 4xx refusal", status: 404, attempts: 2 },
+    // The same credential fails the retry the same way.
+    { label: "an auth failure", status: 401, attempts: 1 },
+    // So does a deploy that is down: nothing here is about the conversation.
+    { label: "a 5xx", status: 503, attempts: 1 },
+    // 408/429 describe the request, not its arguments — and they are the only
+    // 4xx whose retry can succeed, which would trade a working conversation for
+    // a new one and overwrite what the caller had stored.
+    { label: "a rate limit", status: 429, attempts: 1 },
+    { label: "a request timeout", status: 408, attempts: 1 },
+  ])(
+    "makes $attempts attempt(s) when a remembered conversation meets $label",
+    async ({ status, attempts }) => {
+      const recorded = mockDeploy({
+        catalog: V2_CATALOG,
+        toolHttpOnce: { bkn_start_interaction: status },
+      });
+      await semanticSearch(
+        freshCtx({ rememberedConversationId: "conv_stale" }),
+        "kn-managed",
+        "物料",
+      ).catch(() => {});
+      expect(recorded.toolCalls.filter((c) => c.name === "bkn_start_interaction")).toHaveLength(
+        attempts,
+      );
+    },
+  );
+
+  it("does not report a conversation it only joined", async () => {
+    const seen: string[] = [];
+    mockDeploy({ catalog: V2_CATALOG });
+    await semanticSearch(
+      freshCtx({
+        rememberedConversationId: "conv_kept",
+        onConversationOpened: (id) => seen.push(id),
+      }),
+      "kn-managed",
+      "物料",
+    );
+    // Joining returns the id that was passed in. Reporting it would restamp the
+    // thread's age on every command, turning "opened at" into "last used at".
+    expect(seen).toEqual([]);
+  });
+
+  it("ignores a remembered conversation on v1, where joining one traps the next call", async () => {
+    const recorded = mockDeploy({ catalog: V1_CATALOG });
+    await semanticSearch(freshCtx({ rememberedConversationId: "conv_v1" }), "kn-v1", "物料");
+    // v1 opens its own conversation; the field is public, so an SDK caller must
+    // not be able to reach the hole the CLI's write side already avoids.
+    const start = recorded.toolCalls.find((c) => c.name === "bkn_start_interaction");
+    expect(start?.arguments.conversation_id).not.toBe("conv_v1");
+  });
+
+  it("keeps sessions apart when two callers want different conversations", async () => {
+    const recorded = mockDeploy({ catalog: V2_CATALOG });
+    // Same deploy, same identity, same KN — only the wanted conversation differs.
+    const base = freshCtx();
+    await semanticSearch({ ...base, rememberedConversationId: "conv_a" }, "kn-managed", "物料");
+    await semanticSearch({ ...base, rememberedConversationId: "conv_b" }, "kn-managed", "物料");
+
+    // A caller that asked for B must not be handed the session opened on A —
+    // the guarantee `sessionKey` already documents for a named conversation.
+    // Without that dimension the second call reuses the first session and never
+    // starts an interaction of its own.
+    expect(
+      recorded.toolCalls
+        .filter((c) => c.name === "bkn_start_interaction")
+        .map((c) => c.arguments.conversation_id),
+    ).toEqual(["conv_a", "conv_b"]);
   });
 
   it("v2: mints both ids in one call and omits operation_key", async () => {

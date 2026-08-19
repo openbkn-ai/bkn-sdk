@@ -54,8 +54,15 @@ openbkn call /api/ontology-manager/v1/knowledge-networks
 
 # Global flags: --base-url, --token, --user, --json/--compact, -bd/--biz-domain, -k/--insecure,
 #               --conversation-id/--interaction-id (BKN Trace correlation; also BKN_CONVERSATION_ID/BKN_INTERACTION_ID)
+#               --new-conversation (ignore the remembered conversation for this command)
 openbkn --help        # grouped command map
 ```
+
+On a `managed-v2` deploy, commands continue the conversation the previous one
+opened, so work spanning several commands lands in one thread. `openbkn context conversation` shows which
+is in force and where it came from; `--forget` drops it. An explicit `--token` /
+`BKN_TOKEN` opts out (identity there is the token, not the stored user) — use
+`BKN_CONVERSATION_ID` to thread such a script's commands together.
 
 Tokens are stored per platform/user under `~/.bkn/` (override: `BKN_CONFIG_DIR`).
 

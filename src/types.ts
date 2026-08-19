@@ -17,6 +17,41 @@ export interface ClientOptions {
   evidenceIngestToken?: string;
   /** Optional BKN Trace phase-one context for request correlation. */
   trace?: TraceContextOptions;
+  /**
+   * A conversation this caller opened earlier and is willing to continue.
+   *
+   * Distinct from `trace.conversationId`, which names someone else's: that one
+   * is taken at its word and its failures are the caller's to see. This one is
+   * a convenience, so a session that cannot join it is opened fresh instead —
+   * otherwise a conversation that has been swept, or still holds an active
+   * interaction, would fail every later run with no way back except a manual
+   * reset.
+   *
+   * Honoured only on a `managed-v2` deploy, for the reason
+   * {@link ClientOptions.onConversationOpened} gives: a v1 interaction cannot be
+   * ended early, so joining one would block the next call for its lease. On v1
+   * this field is ignored and a fresh conversation is opened instead.
+   */
+  rememberedConversationId?: string;
+  /**
+   * Called with the id of a conversation the managed lifecycle opened on this
+   * caller's behalf — never for one the caller named itself.
+   *
+   * May fire more than once in a process: sessions are per knowledge network,
+   * and a session that goes stale is reopened. Each call reports a conversation
+   * that now exists; a caller keeping only one decides which (the CLI keeps the
+   * last). Make the handler idempotent.
+   *
+   * Only fires on a `managed-v2` deploy. A v1 interaction cannot be ended
+   * early, and a conversation permits one at a time, so a v1 conversation
+   * handed to a later call would be refused until its lease expired.
+   *
+   * The hook exists so persistence stays a decision of whoever built the
+   * client. The CLI uses it to remember a conversation across invocations; a
+   * library consumer that omits it gets a fresh conversation per process and
+   * nothing written to disk.
+   */
+  onConversationOpened?: (conversationId: string) => void;
 }
 
 /** Fully resolved request context — every field is known. */
@@ -44,6 +79,10 @@ export interface RequestContext {
     clientId?: string;
     persist: (tokens: RefreshableTokens) => void;
   };
+  /** See {@link ClientOptions.rememberedConversationId}. */
+  rememberedConversationId?: string;
+  /** See {@link ClientOptions.onConversationOpened}. */
+  onConversationOpened?: (conversationId: string) => void;
 }
 
 export interface TraceContextOptions {

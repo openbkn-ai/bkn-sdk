@@ -3,10 +3,11 @@
 
 /** `openbkn context …` (alias of legacy context-loader) — MCP retrieval. */
 import { Command } from "commander";
+import { readPlatformConfig, updatePlatformConfig } from "../config/store.js";
 import { group } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
-import { clientFrom, outputOptions } from "./_shared.js";
+import { clientFrom, conversationSource, outputOptions, platformOf } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 const collectArg = (v: string, prev: string[]): string[] => {
@@ -134,6 +135,55 @@ export function contextCommand(): Command {
     .description("Full definitions for the given relation-type ids (unmatched → `missing`)")
     .action(async (knId: string, ids: string[], _opts, cmd: Command) => {
       printJson(await clientFrom(cmd).context.relationTypes(knId, ids), outputOptions(cmd));
+    });
+
+  cmd
+    .command("conversation")
+    .description("Show the remembered conversation, or forget it with --forget")
+    .option(
+      "--forget",
+      "drop it, so the next command opens a fresh conversation (acts on this machine's store for the active user, whatever identity the request would use)",
+    )
+    .action((opts, cmd: Command) => {
+      const o = cmd.optsWithGlobals();
+      const baseUrl = platformOf(o);
+      if (!baseUrl) throw new InputError("No platform. Run `openbkn auth login` first.");
+      // Read before dropping, so the output can name what was dropped. With a
+      // flag or env var in force the rest of this payload is identical to a
+      // plain read, and `storedConversationId` is gone by then — without this,
+      // `--forget` would be indistinguishable from doing nothing.
+      const forgot = opts.forget ? readPlatformConfig(baseUrl).conversationId : undefined;
+      if (opts.forget) {
+        updatePlatformConfig(baseUrl, {
+          conversationId: undefined,
+          conversationOpenedAt: undefined,
+        });
+      }
+      // The same resolution the next command will run, not a second copy of it:
+      // this command exists to explain a surprise, so it must not be able to
+      // disagree with what actually happens. `--new-conversation` and a
+      // transient `--user` both report `none`, because that is what they cause.
+      // That holds after `--forget` too: dropping what was stored does not
+      // silence a `--conversation-id` or `BKN_CONVERSATION_ID` still in force,
+      // and reporting `null` there would state the opposite. One shape for both
+      // branches, for the same reason.
+      const { id, source } = conversationSource(o);
+      const stored = readPlatformConfig(baseUrl);
+      printJson(
+        {
+          baseUrl,
+          conversationId: id ?? null,
+          source,
+          ...(stored.conversationOpenedAt ? { storedOpenedAt: stored.conversationOpenedAt } : {}),
+          // What is on disk, even when something outranks it — otherwise
+          // `--forget` looks like a no-op to whoever just ran this.
+          ...(stored.conversationId && stored.conversationId !== id
+            ? { storedConversationId: stored.conversationId }
+            : {}),
+          ...(opts.forget ? { forgot: forgot ?? null } : {}),
+        },
+        outputOptions(cmd),
+      );
     });
 
   cmd
