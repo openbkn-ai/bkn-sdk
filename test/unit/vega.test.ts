@@ -7,6 +7,7 @@ import {
   createCatalog,
   deleteBuildTasks,
   deleteCatalog,
+  firstCatalog,
   getBuildTask,
   getCatalog,
   getCatalogHealthCheckSchedule,
@@ -33,7 +34,7 @@ const ctx: RequestContext = {
 };
 
 type CallArgs = [string, RequestInit];
-function mockFetch(body: unknown = {}): typeof fetch {
+function mockFetch(body: unknown = { entries: [], total_count: 0 }): typeof fetch {
   const fn = vi.fn(async () => new Response(JSON.stringify(body), { status: 200 }));
   vi.stubGlobal("fetch", fn);
   return fn as unknown as typeof fetch;
@@ -59,8 +60,7 @@ describe("vega uses the vega-backend base path", () => {
     expect(u.pathname).toBe("/api/vega-backend/v1/resources");
     expect(u.searchParams.get("catalog_id")).toBe("c-1");
     expect(u.searchParams.get("category")).toBe("table");
-    // No explicit limit → backend applies its own default (DEFAULT_LIMIT=20).
-    expect(u.searchParams.has("limit")).toBe(false);
+    expect(u.searchParams.get("limit")).toBe("30");
   });
 
   it("catalogResources forwards limit/offset (limit=-1 fetches all)", async () => {
@@ -71,10 +71,10 @@ describe("vega uses the vega-backend base path", () => {
     expect(u.searchParams.get("offset")).toBe("40");
   });
 
-  it("catalogResources drops a NaN limit (never sends limit=NaN)", async () => {
+  it("catalogResources uses the SDK default for a NaN limit", async () => {
     const f = mockFetch();
     await listCatalogResources(ctx, "c-1", undefined, Number.NaN);
-    expect(new URL(firstCall(f)[0]).searchParams.has("limit")).toBe(false);
+    expect(new URL(firstCall(f)[0]).searchParams.get("limit")).toBe("30");
   });
 
   it("catalogHealthStatus gets and parses one catalog", async () => {
@@ -109,6 +109,7 @@ describe("vega uses the vega-backend base path", () => {
       name: "prod",
       tag: "crm",
       type: "physical",
+      connectorType: "mysql",
       enabled: true,
       healthCheckStatus: "healthy",
       includeExtensions: true,
@@ -124,6 +125,7 @@ describe("vega uses the vega-backend base path", () => {
     expect(u.searchParams.get("name")).toBe("prod");
     expect(u.searchParams.get("tag")).toBe("crm");
     expect(u.searchParams.get("type")).toBe("physical");
+    expect(u.searchParams.get("connector_type")).toBe("mysql");
     expect(u.searchParams.get("enabled")).toBe("true");
     expect(u.searchParams.get("health_check_status")).toBe("healthy");
     expect(u.searchParams.get("include_extensions")).toBe("true");
@@ -132,6 +134,58 @@ describe("vega uses the vega-backend base path", () => {
     expect(u.searchParams.getAll("extension_value")).toEqual(["data", "prod"]);
     expect(u.searchParams.get("sort")).toBe("name");
     expect(u.searchParams.get("direction")).toBe("asc");
+  });
+
+  it("parses typed catalog responses with update_time", async () => {
+    const catalog = {
+      id: "c-1",
+      name: "orders",
+      type: "physical",
+      enabled: true,
+      connector_type: "mysql",
+      update_time: 1720000000123,
+    };
+    mockFetch({ entries: [catalog], total_count: 1 });
+    await expect(listCatalogs(ctx)).resolves.toMatchObject({
+      entries: [{ id: "c-1", update_time: 1720000000123 }],
+      total_count: 1,
+    });
+
+    mockFetch({ entries: [catalog] });
+    await expect(getCatalog(ctx, "c-1")).resolves.toMatchObject({
+      entries: [{ id: "c-1", update_time: 1720000000123 }],
+    });
+  });
+
+  it("rejects the obsolete unwrapped catalog detail shape", async () => {
+    mockFetch({
+      id: "c-1",
+      name: "orders",
+      type: "physical",
+      enabled: true,
+      connector_type: "mysql",
+    });
+    await expect(getCatalog(ctx, "c-1")).rejects.toThrow();
+  });
+
+  it("requires update_time on catalog responses used for optimistic updates", async () => {
+    mockFetch({
+      entries: [
+        {
+          id: "c-1",
+          name: "orders",
+          type: "physical",
+          enabled: true,
+          connector_type: "mysql",
+        },
+      ],
+      total_count: 1,
+    });
+    await expect(listCatalogs(ctx)).rejects.toThrow(/update_time/);
+  });
+
+  it("rejects an empty catalog detail envelope instead of returning an empty object", () => {
+    expect(() => firstCatalog({ entries: [] })).toThrow(/contains no entries/);
   });
 });
 
@@ -536,6 +590,7 @@ describe("updateCatalog", () => {
         tags: [],
         description: "",
         extensions: {},
+        expectedUpdateTime: 1720000000123,
       },
       { allowUnhealthy: true },
     );
@@ -553,6 +608,7 @@ describe("updateCatalog", () => {
       tags: [],
       description: "",
       extensions: {},
+      expected_update_time: 1720000000123,
     });
   });
 });
@@ -598,6 +654,7 @@ describe("catalog health-check schedule", () => {
     cron_expr: "0 */2 * * *",
     last_run: 100,
     next_run: 200,
+    update_time: 150,
   };
 
   it("gets and parses the dedicated schedule", async () => {
@@ -610,9 +667,15 @@ describe("catalog health-check schedule", () => {
 
   it("updates the schedule without sending cron outside enabled mode", async () => {
     const f = mockFetch({ ...response, mode: "disabled", next_run: 0 });
-    await updateCatalogHealthCheckSchedule(ctx, "c-9", { mode: "disabled" });
+    await updateCatalogHealthCheckSchedule(ctx, "c-9", {
+      mode: "disabled",
+      expectedUpdateTime: 150,
+    });
     const call = firstCall(f);
     expect(call[1].method).toBe("PUT");
-    expect(JSON.parse(call[1].body as string)).toEqual({ mode: "disabled" });
+    expect(JSON.parse(call[1].body as string)).toEqual({
+      mode: "disabled",
+      expected_update_time: 150,
+    });
   });
 });

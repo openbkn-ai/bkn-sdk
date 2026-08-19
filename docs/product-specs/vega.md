@@ -15,6 +15,10 @@ Browse the Vega catalog — data sources, views, atomic views, connector types �
   tasks, running blockers, and schedules affected by deletion. Omit `--dry-run`
   to perform the real deletion.
 - `openbkn vega resource list` — resources (limit 30); `openbkn vega resource preview <id>` — sample (limit 50).
+- `openbkn vega discover-schedule …` — create/list/get/update/delete discovery schedules and enable or disable them explicitly. Full updates require the current `catalog_id`, `enabled`, `strategy`, both time-window bounds, and `--expected-update-time` for optimistic locking.
+- `openbkn vega discover-task list|get|delete` — inspect and clean up discovery-task history.
+- `openbkn vega semantic-task create|list|get|delete` — manage semantic-understanding task lifecycles for a Catalog or Resource.
+- `openbkn vega resource document-*` — create, read, upsert, and delete dataset documents. Batch create/delete-by-filter use Vega's required method-override header internally.
 - Health / inspection: connector-type listing and health checks across catalog resources.
 - Index build → see **Index build (BuildTask)** below. This is the platform's build task; it replaces the removed KN-level `bkn build` (see [knowledge-networks.md](knowledge-networks.md)).
 
@@ -52,8 +56,14 @@ determines what is indexed; the BuildTask uses its snapshot.
 - `resources/vega.ts` over `api/vega.ts`. BuildTask create/status map to `POST /build-tasks` and `GET /build-tasks/{id}`. The create response contains only `id`; obtain task state and its persisted `execute_type` through the status endpoint.
 - `vega.testCatalogConnectionConfig(request)` calls `POST /catalogs/test-connection`; it never persists a Catalog or health state.
 - `vega.testCatalogConnection(id)` calls the persisted-Catalog endpoint. Both connection-test methods return `{ success, message? }`; `success: false` is a completed probe, not an HTTP failure.
-- `vega.createCatalog(request, { allowUnhealthy })` accepts an optional `healthCheckSchedule`. `vega.updateCatalog(id, request, { allowUnhealthy })` follows the backend's full PUT contract and always injects the path ID into the body.
-- `vega.catalogHealthCheckSchedule(id)` and `vega.updateCatalogHealthCheckSchedule(id, request)` use the dedicated GET/PUT endpoint. Modes are `inherit`, `enabled`, and `disabled`; only `enabled` accepts `cronExpr`.
+- `vega.createCatalog(request, { allowUnhealthy })` accepts an optional `healthCheckSchedule`. `vega.updateCatalog(id, request, { allowUnhealthy })` follows the backend's full PUT contract, always injects the path ID into the body, and requires `expectedUpdateTime`, mapped to `expected_update_time` for optimistic locking.
+- `vega.catalogHealthCheckSchedule(id)` and `vega.updateCatalogHealthCheckSchedule(id, request)` use the dedicated GET/PUT endpoint. Modes are `inherit`, `enabled`, and `disabled`; only `enabled` accepts `cronExpr`. Schedule updates require `expectedUpdateTime` from the latest response.
+- `resource.update` and `resource.configureIndex` read the current Resource before issuing the backend's full PUT and automatically send its `update_time` as `expected_update_time`. An explicit `expectedUpdateTime` on `resource.update` overrides the freshly read value.
+- Catalog and Resource list/get/create responses are typed at the HTTP boundary. Detail GETs preserve the backend batch envelope (`{ entries }`), and their `update_time` values can be passed directly to optimistic updates.
+- `vega.discoverSchedules`, `get/create/update/deleteDiscoverSchedule`, and the enable/disable actions cover the full DiscoverSchedule contract. Schedule updates require `catalogId`, `enabled`, `startTime`, `endTime`, `strategy`, and `expectedUpdateTime`, mapped to the backend's strict replacement fields.
+- `vega.discoverCatalog`, `discoverTasks`, `getDiscoverTask`, and `deleteDiscoverTasks` cover asynchronous manual triggering plus task history. `discoverCatalog` returns the new task ID and accepts an optional strategy. `vega.create/semanticUnderstandingTasks/get/deleteSemanticUnderstandingTask(s)` cover semantic task lifecycles.
+- `resource.create` is the typed creation API for user-creatable `dataset` and `logicview` resources. `resource.query`, `createDocuments`, `upsertDocument(s)`, `getDocument`, `deleteDocuments`, and `deleteDocumentsByFilter` cover ResourceData. Dynamic document reads retain unsafe integers as native `bigint`.
+- Resource list filtering uses the protocol field `schema` and `catalogId`, mapped to `catalog_id` on the wire. Resource updates expose only user-owned fields; catalog/category are read from the current Resource for the strict PUT precondition, while discovery-owned metadata is not sent as mutable input.
 - `vega.deleteCatalog(id, { dryRun: true })` returns a typed
   `CatalogDeletionImpact`; `vega.deleteCatalog(id)` performs the real deletion
   and returns `undefined`.
@@ -69,6 +79,9 @@ determines what is indexed; the BuildTask uses its snapshot.
 - Health checks summarize per-resource status; a partial failure is reported per resource, not as a single opaque error.
 - Catalog connection probes have a 60-second SDK timeout. Writes and connection tests are never automatically retried.
 - Health-check schedules exist only for physical Catalogs. The Catalog list/get responses do not embed them.
+- DiscoverSchedule PUT is a strict replacement. Callers must send the unchanged `catalogId`, current `enabled`, `strategy`, and both time-window bounds (`0` means unbounded); enable/disable transitions use the action methods.
+- Pending or running discovery/semantic tasks cannot be deleted. Batch task deletion is transactional and supports `ignoreMissing`; dataset document deletion by ID is best-effort instead.
+- ResourceData write/delete/single-document operations apply only to `category=dataset`. Delete-by-filter requires a non-empty filter.
 - Custom health-check Cron expressions must not run more frequently than hourly; the backend remains the authority for validating the expression.
 - Build is **not** freely re-runnable — it kicks a task and returns a `task-id`; never auto-retry, surface the id for `build-status` polling.
 - BuildTask statuses are `pending`, `running`, `stopping`, `stopped`,

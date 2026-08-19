@@ -64,6 +64,401 @@ describe("vega catalog delete", () => {
   });
 });
 
+describe("vega optimistic updates", () => {
+  it("requires an optimistic-lock version for every Vega PUT command", async () => {
+    suppressOutput();
+    const base = ["--base-url", "https://demo.example.com", "--token", "t", "vega"];
+
+    await expect(
+      cli().parseAsync(
+        [
+          ...base,
+          "catalog",
+          "update",
+          "c-1",
+          "--name",
+          "catalog",
+          "--connector-type",
+          "mysql",
+          "--enabled",
+          "false",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow();
+    await expect(
+      cli().parseAsync(
+        [...base, "catalog", "set-health-check-schedule", "c-1", "--mode", "disabled"],
+        {
+          from: "user",
+        },
+      ),
+    ).rejects.toThrow();
+    await expect(
+      cli().parseAsync(
+        [
+          ...base,
+          "discover-schedule",
+          "update",
+          "s-1",
+          "--name",
+          "hourly",
+          "--catalog-id",
+          "c-1",
+          "--cron",
+          "0 * * * *",
+          "--enabled",
+          "false",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow();
+    await expect(
+      cli().parseAsync(
+        [
+          ...base,
+          "discover-schedule",
+          "update",
+          "s-1",
+          "--name",
+          "hourly",
+          "--catalog-id",
+          "c-1",
+          "--cron",
+          "0 * * * *",
+          "--enabled",
+          "false",
+          "--start-time",
+          "0",
+          "--end-time",
+          "0",
+          "--expected-update-time",
+          "1720000000789",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("forwards the catalog update version", async () => {
+    const fetchMock = mockFetch();
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "catalog",
+        "update",
+        "c-1",
+        "--name",
+        "catalog",
+        "--connector-type",
+        "mysql",
+        "--enabled",
+        "false",
+        "--expected-update-time",
+        "1720000000123",
+      ],
+      { from: "user" },
+    );
+
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+      expected_update_time: 1720000000123,
+    });
+  });
+
+  it("forwards the health-check schedule update version", async () => {
+    const fetchMock = mockFetch({
+      catalog_id: "c-1",
+      mode: "disabled",
+      last_run: 0,
+      next_run: 0,
+      update_time: 1720000000456,
+    });
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "catalog",
+        "set-health-check-schedule",
+        "c-1",
+        "--mode",
+        "disabled",
+        "--expected-update-time",
+        "1720000000456",
+      ],
+      { from: "user" },
+    );
+
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      mode: "disabled",
+      expected_update_time: 1720000000456,
+    });
+  });
+
+  it("forwards the discover schedule update version and immutable state", async () => {
+    const fetchMock = mockFetch();
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "discover-schedule",
+        "update",
+        "s-1",
+        "--name",
+        "hourly",
+        "--catalog-id",
+        "c-1",
+        "--cron",
+        "0 * * * *",
+        "--enabled",
+        "false",
+        "--start-time",
+        "0",
+        "--end-time",
+        "0",
+        "--strategy",
+        "create_only",
+        "--expected-update-time",
+        "1720000000789",
+      ],
+      { from: "user" },
+    );
+
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+      catalog_id: "c-1",
+      enabled: false,
+      start_time: 0,
+      end_time: 0,
+      strategy: "create_only",
+      expected_update_time: 1720000000789,
+    });
+  });
+
+  it("reports an invalid required discover schedule strategy as input error", async () => {
+    suppressOutput();
+    await expect(
+      cli().parseAsync(
+        [
+          "--base-url",
+          "https://demo.example.com",
+          "--token",
+          "t",
+          "vega",
+          "discover-schedule",
+          "update",
+          "s-1",
+          "--name",
+          "hourly",
+          "--catalog-id",
+          "c-1",
+          "--cron",
+          "0 * * * *",
+          "--enabled",
+          "false",
+          "--start-time",
+          "0",
+          "--end-time",
+          "0",
+          "--strategy",
+          "unknown",
+          "--expected-update-time",
+          "1720000000789",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toMatchObject({
+      name: "InputError",
+      message: expect.stringMatching(/invalid discover strategy/),
+    });
+  });
+});
+
+describe("vega lifecycle and document commands", () => {
+  it("rejects invalid task filters before making a request", async () => {
+    suppressOutput();
+    await expect(
+      cli().parseAsync(
+        [
+          "--base-url",
+          "https://demo.example.com",
+          "--token",
+          "t",
+          "vega",
+          "discover-task",
+          "list",
+          "--status",
+          "unknown",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow(/invalid task status/);
+    await expect(
+      cli().parseAsync(
+        [
+          "--base-url",
+          "https://demo.example.com",
+          "--token",
+          "t",
+          "vega",
+          "discover-task",
+          "list",
+          "--trigger-type",
+          "automatic",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow(/invalid discover task trigger type/);
+    await expect(
+      cli().parseAsync(
+        [
+          "--base-url",
+          "https://demo.example.com",
+          "--token",
+          "t",
+          "vega",
+          "semantic-task",
+          "list",
+          "--sort",
+          "updated_at",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow(/invalid semantic task sort/);
+  });
+
+  it("rejects invalid numeric arguments before serializing them", async () => {
+    suppressOutput();
+    await expect(
+      cli().parseAsync(
+        [
+          "--base-url",
+          "https://demo.example.com",
+          "--token",
+          "t",
+          "vega",
+          "semantic-task",
+          "create",
+          "--scope",
+          "catalog",
+          "--catalog-id",
+          "c-1",
+          "--confidence-threshold",
+          "not-a-number",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow(/confidence-threshold/);
+    await expect(
+      cli().parseAsync(
+        [
+          "--base-url",
+          "https://demo.example.com",
+          "--token",
+          "t",
+          "vega",
+          "discover-schedule",
+          "list",
+          "--limit",
+          "not-an-integer",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow(/expected an integer/);
+  });
+
+  it("triggers asynchronous discovery with a strategy and no legacy wait query", async () => {
+    const fetchMock = mockFetch({ id: "task-1" });
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "catalog",
+        "discover",
+        "c-1",
+        "--strategy",
+        "create_only",
+      ],
+      { from: "user" },
+    );
+
+    const url = new URL(fetchMock.mock.calls[0]?.[0] as string);
+    expect(url.searchParams.has("wait")).toBe(false);
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      strategy: "create_only",
+    });
+  });
+
+  it("lists discovery tasks with repeated statuses", async () => {
+    const fetchMock = mockFetch({ entries: [], total_count: 0 });
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "discover-task",
+        "list",
+        "--status",
+        "pending,running",
+      ],
+      { from: "user" },
+    );
+
+    expect(new URL(fetchMock.mock.calls[0]?.[0] as string).searchParams.getAll("status")).toEqual([
+      "pending",
+      "running",
+    ]);
+  });
+
+  it("creates dataset documents with the POST override", async () => {
+    const fetchMock = mockFetch({ ids: ["d-1"] });
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "resource",
+        "document-create",
+        "r-1",
+        "--data",
+        '[{"title":"hello"}]',
+      ],
+      { from: "user" },
+    );
+
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("X-HTTP-Method-Override")).toBe(
+      "POST",
+    );
+  });
+});
+
 describe("vega sql", () => {
   it("preserves an unsafe BIGINT in --data", async () => {
     const fetchMock = mockFetch({ entries: [] });
