@@ -7,6 +7,7 @@ import {
   deleteResourceDocuments,
   deleteResourceDocumentsByFilter,
   findResource,
+  firstResource,
   getResourceDocument,
   listResources,
   queryResource,
@@ -103,13 +104,24 @@ describe("listResources", () => {
     mockFetch({ entries: [{ id: "r-1", name: "orders" }], total_count: 1 });
     await expect(listResources(ctx)).rejects.toThrow();
 
+    mockFetch({ entries: [resourceFixture({ name: "" })], total_count: 1 });
+    await expect(listResources(ctx)).rejects.toThrow();
+
     mockFetch({
-      entries: [resourceFixture({ category: "warehouse", status: "archived" })],
+      entries: [
+        resourceFixture({ category: "warehouse", status: "archived", logic_type: "materialized" }),
+      ],
       total_count: 1,
     });
     await expect(listResources(ctx)).resolves.toMatchObject({
-      entries: [{ category: "warehouse", status: "archived" }],
+      entries: [{ category: "warehouse", status: "archived", logic_type: "materialized" }],
     });
+  });
+
+  it("rejects an empty resource detail envelope", () => {
+    expect(() => firstResource({ entries: [] })).toThrow(
+      "resource detail response contains no entries",
+    );
   });
 });
 

@@ -697,7 +697,6 @@ function mapCatalogHealthCheckScheduleConfig(req: CatalogHealthCheckScheduleConf
   };
 }
 
-/** Trigger a catalog metadata scan (discover). `wait=true` blocks until done. */
 /** Resources under a catalog (optionally filtered by category). */
 export function listCatalogResources(
   ctx: RequestContext,

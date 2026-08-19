@@ -7,6 +7,7 @@ import { z } from "zod";
  * Responses passed through as parsed JSON.
  */
 import { DEFAULT_LIST_LIMIT, type RequestContext } from "../types.js";
+import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { request } from "./http.js";
 import { resolveSmallModelName } from "./models.js";
@@ -115,7 +116,7 @@ export const Resource = z
   .object({
     id: z.string(),
     catalog_id: z.string(),
-    name: z.string(),
+    name: z.string().min(1),
     tags: z.array(z.string()).optional(),
     description: z.string().optional(),
     // Responses remain forward-compatible when the backend adds a category or
@@ -140,7 +141,7 @@ export const Resource = z
     index_name: z.string().optional(),
     column_count: z.number().optional(),
     row_count: z.number().optional(),
-    logic_type: z.enum(["derived", "composite"]).optional(),
+    logic_type: z.string().optional(),
     logic_definition: z.unknown().optional(),
     creator: ResourceAccountInfo,
     create_time: z.number(),
@@ -418,7 +419,9 @@ function ensureFeature(
  * go through here.
  */
 export function firstResource<T extends object = Resource>(result: BatchResourcesResponse): T {
-  return (result.entries[0] ?? {}) as T;
+  const resource = result.entries[0];
+  if (!resource) throw new InputError("resource detail response contains no entries");
+  return resource as T;
 }
 
 export interface DeleteResourceOptions {
