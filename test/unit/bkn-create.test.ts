@@ -1001,6 +1001,40 @@ describe("createFromCsv dependency preflight", () => {
     expect(logs.join("\n")).toMatch(/preflight inconclusive/);
   });
 
+  it("stops on a 504, but not on a 500", async () => {
+    // 504: the gateway routed the request and nothing answered. Left to the
+    // import, every batch waits out the full client timeout before failing.
+    const gone = mockFetch([
+      [
+        /^\/api\/automation\/v2\/dags$/,
+        () => new Response(JSON.stringify({ error: "upstream timeout" }), { status: 504 }),
+      ],
+    ]);
+    await expect(
+      createFromCsv(ctx, { catalogId: "c-1", name: "kn", files: "/tmp/none.csv" }),
+    ).rejects.toThrow(/dataflow service is not available.*create-from-catalog/s);
+    expect(paths(gone)).toEqual(["/api/automation/v2/dags"]);
+
+    // 500: the service handled the request badly, which is not the same as not
+    // being there — the probe must step aside and let the real call speak.
+    const logs: string[] = [];
+    mockFetch([
+      [
+        /^\/api\/automation\/v2\/dags$/,
+        () => new Response(JSON.stringify({ error: "boom" }), { status: 500 }),
+      ],
+    ]);
+    await expect(
+      createFromCsv(ctx, {
+        catalogId: "c-1",
+        name: "kn",
+        files: "/tmp/none.csv",
+        onProgress: (m) => logs.push(m),
+      }),
+    ).rejects.not.toThrow(/dataflow service is not available/);
+    expect(logs.join("\n")).toMatch(/preflight inconclusive/);
+  });
+
   it("stops when a proxy answers the probe with a 200 login page", async () => {
     const f = mockFetch([
       // Session expired: an SSO proxy replies 200 with a sign-in page. The

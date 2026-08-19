@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getDataflowLogs, listDataflowRuns, listDataflows } from "../../src/api/dataflow.js";
+import {
+  getDataflowLogs,
+  listDataflowRuns,
+  listDataflows,
+  pingDataflows,
+} from "../../src/api/dataflow.js";
 import type { RequestContext } from "../../src/types.js";
 
 const ctx: RequestContext = {
@@ -30,6 +35,42 @@ describe("dataflow read endpoints (automation v2)", () => {
     expect(u.pathname).toBe("/api/automation/v2/dags");
     expect(u.searchParams.get("type")).toBe("data-flow");
     expect(u.searchParams.get("limit")).toBe("-1");
+  });
+
+  it("ping keeps the default deadline, so a gateway can still answer 504", async () => {
+    vi.useFakeTimers();
+    try {
+      let signal: AbortSignal | undefined;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_i: string, init: RequestInit = {}) => {
+          signal = init.signal ?? undefined;
+          // Never settles: the point is what happens while the request is open.
+          return new Promise<Response>(() => {});
+        }),
+      );
+      void pingDataflows(ctx);
+      await Promise.resolve();
+      // A hung upstream yields 504 only once the gateway's own read timeout
+      // elapses. Giving up before then would abort with nothing to report, and
+      // the preflight reading 504 as absence would never see one.
+      vi.advanceTimersByTime(20_000);
+      expect(signal?.aborted).toBe(false);
+      vi.advanceTimersByTime(11_000);
+      expect(signal?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ping asks for one row, not the whole listing", async () => {
+    const f = mockFetch();
+    await pingDataflows(ctx);
+    const u = url(f);
+    expect(u.pathname).toBe("/api/automation/v2/dags");
+    // A gateway timeout on the full listing would as easily mean "slow query"
+    // as "nobody answered"; callers reading 504 as absence need the bounded ask.
+    expect(u.searchParams.get("limit")).toBe("1");
   });
 
   it("runs hits /dag/{id}/results", async () => {
