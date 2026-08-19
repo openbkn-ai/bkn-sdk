@@ -375,9 +375,9 @@ describe("typed Resource and document APIs", () => {
     });
   });
 
-  it("rejects an empty document deletion filter before making a request", () => {
+  it("rejects an empty document deletion filter before making a request", async () => {
     const filterFetch = mockFetch();
-    expect(() => deleteResourceDocumentsByFilter(ctx, "r-1", {})).toThrow(InputError);
+    await expect(deleteResourceDocumentsByFilter(ctx, "r-1", {})).rejects.toThrow(InputError);
     expect(filterFetch).not.toHaveBeenCalled();
   });
 });

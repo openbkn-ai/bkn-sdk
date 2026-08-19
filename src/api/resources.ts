@@ -621,7 +621,7 @@ export function deleteResourceDocuments(
   );
 }
 
-export function deleteResourceDocumentsByFilter(
+export async function deleteResourceDocumentsByFilter(
   ctx: RequestContext,
   resourceId: string,
   filterCondition: Record<string, unknown>,
