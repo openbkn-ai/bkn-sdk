@@ -88,7 +88,8 @@ export interface UpdateDiscoverScheduleRequest {
   startTime: number;
   /** End of the active window; use 0 for no upper bound. */
   endTime: number;
-  strategy?: DiscoverStrategy;
+  /** Persisted discovery strategy. */
+  strategy: DiscoverStrategy;
   /** Required optimistic-lock version from the latest schedule `update_time`. */
   expectedUpdateTime: number;
 }
@@ -149,7 +150,7 @@ export function updateDiscoverSchedule(
       enabled: req.enabled,
       start_time: req.startTime,
       end_time: req.endTime,
-      ...(req.strategy !== undefined ? { strategy: req.strategy } : {}),
+      strategy: req.strategy,
       expected_update_time: req.expectedUpdateTime,
     },
   });

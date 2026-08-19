@@ -560,7 +560,7 @@ export function vegaCommand(): Command {
     .requiredOption("--enabled <bool>", "current enabled state", bool)
     .requiredOption("--start-time <ms>", "start time (0 = no lower bound)", int)
     .requiredOption("--end-time <ms>", "end time (0 = no upper bound)", int)
-    .option("--strategy <strategy>", `strategy: ${DiscoverStrategy.options.join(" | ")}`)
+    .requiredOption("--strategy <strategy>", `strategy: ${DiscoverStrategy.options.join(" | ")}`)
     .requiredOption(
       "--expected-update-time <ms>",
       "optimistic-lock update time",
@@ -575,7 +575,7 @@ export function vegaCommand(): Command {
           enabled: opts.enabled,
           startTime: opts.startTime,
           endTime: opts.endTime,
-          strategy: discoverStrategy(opts.strategy),
+          strategy: DiscoverStrategy.parse(opts.strategy),
           expectedUpdateTime: opts.expectedUpdateTime,
         }),
         outputOptions(cmd),

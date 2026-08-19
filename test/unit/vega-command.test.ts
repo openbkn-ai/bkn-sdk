@@ -113,6 +113,31 @@ describe("vega optimistic updates", () => {
         { from: "user" },
       ),
     ).rejects.toThrow();
+    await expect(
+      cli().parseAsync(
+        [
+          ...base,
+          "discover-schedule",
+          "update",
+          "s-1",
+          "--name",
+          "hourly",
+          "--catalog-id",
+          "c-1",
+          "--cron",
+          "0 * * * *",
+          "--enabled",
+          "false",
+          "--start-time",
+          "0",
+          "--end-time",
+          "0",
+          "--expected-update-time",
+          "1720000000789",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow();
   });
 
   it("forwards the catalog update version", async () => {
@@ -206,6 +231,8 @@ describe("vega optimistic updates", () => {
         "0",
         "--end-time",
         "0",
+        "--strategy",
+        "create_only",
         "--expected-update-time",
         "1720000000789",
       ],
@@ -217,6 +244,7 @@ describe("vega optimistic updates", () => {
       enabled: false,
       start_time: 0,
       end_time: 0,
+      strategy: "create_only",
       expected_update_time: 1720000000789,
     });
   });
