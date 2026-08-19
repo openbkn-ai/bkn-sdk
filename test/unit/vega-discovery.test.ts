@@ -85,6 +85,8 @@ describe("DiscoverSchedule APIs", () => {
       catalogId: "c-1",
       cronExpr: "0 0 * * *",
       enabled: false,
+      startTime: 0,
+      endTime: 0,
       strategy: "create_only",
       expectedUpdateTime: 20,
     });
@@ -93,6 +95,8 @@ describe("DiscoverSchedule APIs", () => {
       catalog_id: "c-1",
       cron_expr: "0 0 * * *",
       enabled: false,
+      start_time: 0,
+      end_time: 0,
       strategy: "create_only",
       expected_update_time: 20,
     });

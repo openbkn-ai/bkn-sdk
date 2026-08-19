@@ -38,20 +38,24 @@ function normalizeVegaResponse(url: URL, body: unknown): unknown {
   if (
     /^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/.test(url.pathname) &&
     body &&
-    typeof body === "object" &&
-    !("entries" in body)
+    typeof body === "object"
   ) {
+    const response = body as Record<string, unknown>;
+    const entries = Array.isArray(response.entries)
+      ? response.entries
+      : [
+          {
+            id: "c-1",
+            name: "catalog",
+            type: "physical",
+            enabled: true,
+            connector_type: "mysql",
+            ...response,
+          },
+        ];
     return {
-      entries: [
-        {
-          id: "c-1",
-          name: "catalog",
-          type: "physical",
-          enabled: true,
-          connector_type: "mysql",
-          ...body,
-        },
-      ],
+      ...response,
+      entries: entries.map((entry) => ({ update_time: 1, ...(entry as Record<string, unknown>) })),
     };
   }
   if (
@@ -133,6 +137,40 @@ describe("createFromCatalog table identifiers", () => {
     expect(out.object_types).toEqual([{ name: "document", pk: "id" }]);
     // No rollback DELETE — the run succeeded.
     expect(paths(f)).not.toContain("/api/ontology-manager/v1/knowledge-networks/kn-1");
+  });
+
+  it("waits for asynchronous discovery before listing an empty catalog again", async () => {
+    const table = { id: "r-1", name: "document", columns: ["id"], pk: "id" };
+    let listCount = 0;
+    const f = mockFetch([
+      [
+        /^\/api\/vega-backend\/v1\/resources$/,
+        () => ({ entries: listCount++ === 0 ? [] : [{ id: table.id, name: table.name }] }),
+      ],
+      [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({ id: "task-1" })],
+      [
+        /^\/api\/vega-backend\/v1\/discover-tasks\/task-1$/,
+        () => ({
+          id: "task-1",
+          catalog_id: "c-1",
+          schedule_id: "",
+          strategy: "full_sync",
+          trigger_type: "manual",
+          status: "completed",
+          progress: 100,
+          message: "done",
+          creator: { id: "u-1", type: "user" },
+          create_time: 1,
+        }),
+      ],
+      ...catalogRoutes([table]),
+    ]);
+
+    await expect(createFromCatalog(ctx, { catalogId: "c-1", name: "kn" })).resolves.toMatchObject({
+      object_types: [{ name: "document" }],
+    });
+    expect(paths(f)).toContain("/api/vega-backend/v1/discover-tasks/task-1");
+    expect(listCount).toBe(2);
   });
 
   it("asks for every table, not the backend's default page", async () => {

@@ -43,7 +43,7 @@ export const DiscoverSchedule = z
     start_time: z.number().optional(),
     end_time: z.number().optional(),
     enabled: z.boolean(),
-    strategy: DiscoverStrategy,
+    strategy: z.string(),
     last_run: z.number().optional(),
     next_run: z.number().optional(),
     creator: VegaAccountInfo,
@@ -84,8 +84,10 @@ export interface UpdateDiscoverScheduleRequest {
   catalogId: string;
   cronExpr: string;
   enabled: boolean;
-  startTime?: number;
-  endTime?: number;
+  /** Start of the active window; use 0 for no lower bound. */
+  startTime: number;
+  /** End of the active window; use 0 for no upper bound. */
+  endTime: number;
   strategy?: DiscoverStrategy;
   /** Required optimistic-lock version from the latest schedule `update_time`. */
   expectedUpdateTime: number;
@@ -141,8 +143,13 @@ export function updateDiscoverSchedule(
   return request(ctx, `${VEGA_BASE}/discover-schedules/${encodeURIComponent(id)}`, {
     method: "PUT",
     body: {
-      ...mapDiscoverScheduleRequest(req),
+      name: req.name,
+      catalog_id: req.catalogId,
+      cron_expr: req.cronExpr,
       enabled: req.enabled,
+      start_time: req.startTime,
+      end_time: req.endTime,
+      ...(req.strategy !== undefined ? { strategy: req.strategy } : {}),
       expected_update_time: req.expectedUpdateTime,
     },
   });
@@ -198,9 +205,9 @@ export const DiscoverTask = z
     catalog_id: z.string(),
     catalog_name: z.string().optional(),
     schedule_id: z.string(),
-    strategy: DiscoverStrategy,
-    trigger_type: z.enum(["manual", "scheduled"]),
-    status: VegaTaskStatus,
+    strategy: z.string(),
+    trigger_type: z.string(),
+    status: z.string(),
     progress: z.number(),
     message: z.string(),
     start_time: z.number().optional(),

@@ -7,6 +7,7 @@ import {
   createCatalog,
   deleteBuildTasks,
   deleteCatalog,
+  firstCatalog,
   getBuildTask,
   getCatalog,
   getCatalogHealthCheckSchedule,
@@ -165,6 +166,26 @@ describe("vega uses the vega-backend base path", () => {
       connector_type: "mysql",
     });
     await expect(getCatalog(ctx, "c-1")).rejects.toThrow();
+  });
+
+  it("requires update_time on catalog responses used for optimistic updates", async () => {
+    mockFetch({
+      entries: [
+        {
+          id: "c-1",
+          name: "orders",
+          type: "physical",
+          enabled: true,
+          connector_type: "mysql",
+        },
+      ],
+      total_count: 1,
+    });
+    await expect(listCatalogs(ctx)).rejects.toThrow(/update_time/);
+  });
+
+  it("rejects an empty catalog detail envelope instead of returning an empty object", () => {
+    expect(() => firstCatalog({ entries: [] })).toThrow(/contains no entries/);
   });
 });
 

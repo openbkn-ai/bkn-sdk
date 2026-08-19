@@ -29,7 +29,7 @@ import {
   listResources,
   queryResource,
 } from "../api/resources.js";
-import { discoverCatalog } from "../api/vega-discovery.js";
+import { discoverCatalog, getDiscoverTask } from "../api/vega-discovery.js";
 import { createBuildTask, firstCatalog, getCatalog } from "../api/vega.js";
 import type { RequestContext } from "../types.js";
 import {
@@ -82,6 +82,27 @@ export interface CreateFromCatalogOptions {
   /** Pre-fetched row samples per table (e.g. from a CSV import) for PK detection. */
   sampleRows?: Record<string, Array<Record<string, string | null>>>;
   onProgress?: (msg: string) => void;
+}
+
+const DISCOVER_TASK_TIMEOUT_MS = 120_000;
+const DISCOVER_TASK_POLL_INTERVAL_MS = 2_000;
+
+async function discoverCatalogAndWait(ctx: RequestContext, catalogId: string): Promise<void> {
+  const { id: taskId } = await discoverCatalog(ctx, catalogId);
+  const deadline = Date.now() + DISCOVER_TASK_TIMEOUT_MS;
+  for (;;) {
+    const task = await getDiscoverTask(ctx, taskId);
+    if (task.status === "completed") return;
+    if (task.status === "failed" || task.status === "cancelled") {
+      throw new Error(
+        `Catalog discovery task ${taskId} ${task.status}${task.message ? `: ${task.message}` : ""}.`,
+      );
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(`Catalog discovery task ${taskId} did not complete within 120 seconds.`);
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, DISCOVER_TASK_POLL_INTERVAL_MS));
+  }
 }
 
 /**
@@ -310,7 +331,7 @@ export async function createFromCatalog(
   let summaries = await listTables();
   if (summaries.length === 0) {
     log("No tables found; scanning catalog metadata...");
-    await discoverCatalog(ctx, opts.catalogId);
+    await discoverCatalogAndWait(ctx, opts.catalogId);
     summaries = await listTables();
   }
   if (summaries.length === 0) throw new Error("No tables available in catalog after scan.");
@@ -718,8 +739,9 @@ export async function importCsvToCatalog(
       failed.push(tableName);
     }
   }
-  // Best-effort: refresh catalog metadata so the new tables are visible.
-  await discoverCatalog(ctx, opts.catalogId).catch(() => {});
+  // Best-effort: refresh catalog metadata so the new tables are visible to the
+  // following create-from-catalog step.
+  await discoverCatalogAndWait(ctx, opts.catalogId).catch(() => {});
   return { tables, failed, sampleRows };
 }
 

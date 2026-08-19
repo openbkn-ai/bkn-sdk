@@ -99,9 +99,17 @@ describe("listResources", () => {
     expect(new URL(firstCall(f)[0]).searchParams.get("limit")).toBe("30");
   });
 
-  it("rejects resource entries that do not satisfy the current protocol", async () => {
+  it("requires resource identity fields while accepting future enum values", async () => {
     mockFetch({ entries: [{ id: "r-1", name: "orders" }], total_count: 1 });
     await expect(listResources(ctx)).rejects.toThrow();
+
+    mockFetch({
+      entries: [resourceFixture({ category: "warehouse", status: "archived" })],
+      total_count: 1,
+    });
+    await expect(listResources(ctx)).resolves.toMatchObject({
+      entries: [{ category: "warehouse", status: "archived" }],
+    });
   });
 });
 

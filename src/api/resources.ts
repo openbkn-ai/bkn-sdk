@@ -65,8 +65,8 @@ export interface ResourceLike {
   name?: string;
   tags?: string[];
   description?: string;
-  category?: ResourceCategory;
-  status?: ResourceStatus;
+  category?: string;
+  status?: string;
   schema?: string;
   source_identifier?: string;
   source_metadata?: Record<string, unknown>;
@@ -118,8 +118,10 @@ export const Resource = z
     name: z.string(),
     tags: z.array(z.string()).optional(),
     description: z.string().optional(),
-    category: ResourceCategory,
-    status: ResourceStatus,
+    // Responses remain forward-compatible when the backend adds a category or
+    // status; request options below remain constrained to known values.
+    category: z.string(),
+    status: z.string(),
     status_message: z.string().optional(),
     last_discover_status: z.string().optional(),
     schema: z.string().optional(),
@@ -185,8 +187,8 @@ export async function listResources(
       status: opts.status || undefined,
       schema: opts.schema || undefined,
       // Same `/resources` endpoint as `catalogResources`: limit=-1 (NO_LIMIT)
-      // fetches every row; any other non-positive/invalid value falls back to
-      // the backend default.
+      // fetches every row; any other non-positive/invalid value uses the SDK
+      // list default.
       limit:
         opts.limit === undefined
           ? DEFAULT_LIST_LIMIT

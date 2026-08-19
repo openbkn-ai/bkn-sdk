@@ -29,11 +29,24 @@ import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, csv, outputOptions } from "./_shared.js";
 
-const int = (v: string) => Number.parseInt(v, 10);
+const int = (value: string): number => {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new InputError(`expected an integer, received "${value}"`);
+  }
+  return parsed;
+};
 const expectedUpdateTime = (value: string): number => {
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) {
     throw new InputError("--expected-update-time must be a positive integer timestamp");
+  }
+  return parsed;
+};
+const confidenceThreshold = (value: string): number => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+    throw new InputError("--confidence-threshold must be a number between 0 and 1");
   }
   return parsed;
 };
@@ -255,8 +268,8 @@ export function vegaCommand(): Command {
   catalog
     .command("list")
     .description("List catalog entries")
-    .option("--limit <n>", "page size", (v) => Number.parseInt(v, 10), DEFAULT_LIST_LIMIT)
-    .option("--offset <n>", "page offset", (v) => Number.parseInt(v, 10), 0)
+    .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
+    .option("--offset <n>", "page offset", int, 0)
     .option("--name <s>", "filter by name")
     .option("--tag <s>", "filter by tag")
     .option("--type <type>", "filter by catalog type: physical | logical")
@@ -488,6 +501,7 @@ export function vegaCommand(): Command {
     .description("Resource discovery schedules");
   discoverSchedule
     .command("list")
+    .description("List discovery schedules")
     .option("--name <s>", "filter by name")
     .option("--catalog-id <id>", "filter by catalog id")
     .option("--enabled <bool>", "filter by enabled state", bool)
@@ -509,9 +523,12 @@ export function vegaCommand(): Command {
         outputOptions(cmd),
       );
     });
-  discoverSchedule.command("get <id>").action(async (id: string, _opts, cmd: Command) => {
-    printJson(await clientFrom(cmd).vega.getDiscoverSchedule(id), outputOptions(cmd));
-  });
+  discoverSchedule
+    .command("get <id>")
+    .description("Get a discovery schedule")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.getDiscoverSchedule(id), outputOptions(cmd));
+    });
   discoverSchedule
     .command("create")
     .requiredOption("--name <s>", "schedule name")
@@ -541,8 +558,8 @@ export function vegaCommand(): Command {
     .requiredOption("--catalog-id <id>", "current catalog id")
     .requiredOption("--cron <expr>", "five-field cron expression")
     .requiredOption("--enabled <bool>", "current enabled state", bool)
-    .option("--start-time <ms>", "start time", int)
-    .option("--end-time <ms>", "end time", int)
+    .requiredOption("--start-time <ms>", "start time (0 = no lower bound)", int)
+    .requiredOption("--end-time <ms>", "end time (0 = no upper bound)", int)
     .option("--strategy <strategy>", `strategy: ${DiscoverStrategy.options.join(" | ")}`)
     .requiredOption(
       "--expected-update-time <ms>",
@@ -565,21 +582,25 @@ export function vegaCommand(): Command {
       );
     });
   for (const action of ["enable", "disable", "delete"] as const) {
-    discoverSchedule.command(`${action} <id>`).action(async (id: string, _opts, cmd: Command) => {
-      const api = clientFrom(cmd).vega;
-      const result =
-        action === "enable"
-          ? await api.enableDiscoverSchedule(id)
-          : action === "disable"
-            ? await api.disableDiscoverSchedule(id)
-            : await api.deleteDiscoverSchedule(id);
-      printJson(result, outputOptions(cmd));
-    });
+    discoverSchedule
+      .command(`${action} <id>`)
+      .description(`${action[0]?.toUpperCase()}${action.slice(1)} a discovery schedule`)
+      .action(async (id: string, _opts, cmd: Command) => {
+        const api = clientFrom(cmd).vega;
+        const result =
+          action === "enable"
+            ? await api.enableDiscoverSchedule(id)
+            : action === "disable"
+              ? await api.disableDiscoverSchedule(id)
+              : await api.deleteDiscoverSchedule(id);
+        printJson(result, outputOptions(cmd));
+      });
   }
 
   const discoverTask = vega.command("discover-task").description("Resource discovery tasks");
   discoverTask
     .command("list")
+    .description("List discovery tasks")
     .option("--catalog-id <id>", "filter by catalog id")
     .option("--schedule-id <id>", "filter by schedule id")
     .option("--status <status>", `comma-separated: ${VegaTaskStatus.options.join(" | ")}`)
@@ -605,11 +626,15 @@ export function vegaCommand(): Command {
         outputOptions(cmd),
       );
     });
-  discoverTask.command("get <id>").action(async (id: string, _opts, cmd: Command) => {
-    printJson(await clientFrom(cmd).vega.getDiscoverTask(id), outputOptions(cmd));
-  });
+  discoverTask
+    .command("get <id>")
+    .description("Get a discovery task")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.getDiscoverTask(id), outputOptions(cmd));
+    });
   discoverTask
     .command("delete <ids...>")
+    .description("Delete completed discovery tasks")
     .option("--ignore-missing", "ignore missing task ids")
     .action(async (ids: string[], opts, cmd: Command) => {
       printJson(
@@ -623,6 +648,7 @@ export function vegaCommand(): Command {
   const semanticTask = vega.command("semantic-task").description("Semantic-understanding tasks");
   semanticTask
     .command("list")
+    .description("List semantic-understanding tasks")
     .option("--scope <scope>", `scope: ${SemanticUnderstandingScope.options.join(" | ")}`)
     .option("--catalog-id <id>", "filter by catalog id")
     .option("--resource-id <id>", "filter by resource id")
@@ -659,7 +685,7 @@ export function vegaCommand(): Command {
     .option("--catalog-id <id>", "catalog id")
     .option("--resource-id <id>", "resource id")
     .option("--apply-mode <mode>", "dry_run | fill_empty | force")
-    .option("--confidence-threshold <n>", "minimum confidence", Number.parseFloat)
+    .option("--confidence-threshold <n>", "minimum confidence (0..1)", confidenceThreshold)
     .option("--include-sample-rows", "include resource sample rows")
     .option("--sample-max-rows <n>", "sample row limit", int)
     .action(async (opts, cmd: Command) => {
@@ -706,11 +732,15 @@ export function vegaCommand(): Command {
         outputOptions(cmd),
       );
     });
-  semanticTask.command("get <id>").action(async (id: string, _opts, cmd: Command) => {
-    printJson(await clientFrom(cmd).vega.getSemanticUnderstandingTask(id), outputOptions(cmd));
-  });
+  semanticTask
+    .command("get <id>")
+    .description("Get a semantic-understanding task")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.getSemanticUnderstandingTask(id), outputOptions(cmd));
+    });
   semanticTask
     .command("delete <ids...>")
+    .description("Delete completed semantic-understanding tasks")
     .option("--ignore-missing", "ignore missing task ids")
     .action(async (ids: string[], opts, cmd: Command) => {
       printJson(
@@ -814,7 +844,7 @@ export function vegaCommand(): Command {
     .option("--category <category>", "alias of --type")
     .option("--status <status>", "filter by status")
     .option("--schema <name>", "filter by source schema")
-    .option("--limit <n>", "page size", (v) => Number.parseInt(v, 10), DEFAULT_LIST_LIMIT)
+    .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
     .option("--offset <n>", "page offset", int, 0)
     .option("--include-extensions", "include all extension key/value pairs")
     .option("--include-extension-keys <keys>", "include selected extension keys")
@@ -848,8 +878,8 @@ export function vegaCommand(): Command {
   resource
     .command("query <id>")
     .description("Fetch data rows from a resource")
-    .option("--limit <n>", "row limit", (v) => Number.parseInt(v, 10), 50)
-    .option("--offset <n>", "row offset", (v) => Number.parseInt(v, 10), 0)
+    .option("--limit <n>", "row limit", int, 50)
+    .option("--offset <n>", "row offset", int, 0)
     .action(async (id: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).resource.query(id, { limit: opts.limit, offset: opts.offset }),

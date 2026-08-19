@@ -65,14 +65,14 @@ export const Catalog = z
     name: z.string(),
     tags: z.array(z.string()).optional(),
     description: z.string().optional(),
-    type: z.enum(["physical", "logical"]),
+    type: z.string(),
     enabled: z.boolean(),
     internal: z.boolean().optional(),
     connector_type: z.string(),
     connector_config: z.record(z.unknown()).optional(),
     metadata: z.record(z.unknown()).optional(),
     extensions: z.record(z.string()).optional(),
-    health_check_status: CatalogHealthCheckStatus.optional(),
+    health_check_status: z.string().optional(),
     last_check_time: z.number().optional(),
     health_check_result: z.string().optional(),
     creator: z
@@ -92,7 +92,7 @@ export const Catalog = z
       })
       .passthrough()
       .optional(),
-    update_time: z.number().optional(),
+    update_time: z.number(),
     operations: z.array(z.string()).optional(),
   })
   .passthrough();
@@ -114,7 +114,7 @@ export type CatalogRef = z.infer<typeof CatalogRef>;
 export const CatalogHealthStatus = z
   .object({
     id: z.string(),
-    health_check_status: CatalogHealthCheckStatus,
+    health_check_status: z.string(),
     last_check_time: z.number().optional(),
     health_check_result: z.string().optional(),
   })
@@ -133,11 +133,11 @@ export type CatalogHealthCheckScheduleRequest = CatalogHealthCheckScheduleConfig
 export const CatalogHealthCheckSchedule = z
   .object({
     catalog_id: z.string(),
-    mode: CatalogHealthCheckScheduleMode,
+    mode: z.string(),
     cron_expr: z.string().optional(),
     last_run: z.number(),
     next_run: z.number(),
-    update_time: z.number().optional(),
+    update_time: z.number(),
   })
   .passthrough();
 export type CatalogHealthCheckSchedule = z.infer<typeof CatalogHealthCheckSchedule>;
@@ -503,7 +503,9 @@ export async function getCatalog(
 
 /** Unwrap the first Catalog from the detail endpoint's batch envelope. */
 export function firstCatalog(result: BatchCatalogsResponse): Catalog {
-  return result.entries[0] ?? ({} as Catalog);
+  const catalog = result.entries[0];
+  if (!catalog) throw new InputError("catalog detail response contains no entries");
+  return catalog;
 }
 
 /** POST /catalogs body. `connector_config` shape varies by connector (raw passthrough). */

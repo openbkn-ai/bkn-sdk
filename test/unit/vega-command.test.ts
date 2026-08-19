@@ -202,6 +202,10 @@ describe("vega optimistic updates", () => {
         "0 * * * *",
         "--enabled",
         "false",
+        "--start-time",
+        "0",
+        "--end-time",
+        "0",
         "--expected-update-time",
         "1720000000789",
       ],
@@ -211,6 +215,8 @@ describe("vega optimistic updates", () => {
     expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
       catalog_id: "c-1",
       enabled: false,
+      start_time: 0,
+      end_time: 0,
       expected_update_time: 1720000000789,
     });
   });
@@ -267,6 +273,46 @@ describe("vega lifecycle and document commands", () => {
         { from: "user" },
       ),
     ).rejects.toThrow(/invalid semantic task sort/);
+  });
+
+  it("rejects invalid numeric arguments before serializing them", async () => {
+    suppressOutput();
+    await expect(
+      cli().parseAsync(
+        [
+          "--base-url",
+          "https://demo.example.com",
+          "--token",
+          "t",
+          "vega",
+          "semantic-task",
+          "create",
+          "--scope",
+          "catalog",
+          "--catalog-id",
+          "c-1",
+          "--confidence-threshold",
+          "not-a-number",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow(/confidence-threshold/);
+    await expect(
+      cli().parseAsync(
+        [
+          "--base-url",
+          "https://demo.example.com",
+          "--token",
+          "t",
+          "vega",
+          "discover-schedule",
+          "list",
+          "--limit",
+          "not-an-integer",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow(/expected an integer/);
   });
 
   it("triggers asynchronous discovery with a strategy and no legacy wait query", async () => {

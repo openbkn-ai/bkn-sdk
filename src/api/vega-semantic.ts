@@ -5,7 +5,7 @@
 import { z } from "zod";
 import { DEFAULT_LIST_LIMIT, type RequestContext } from "../types.js";
 import { request } from "./http.js";
-import { VegaAccountInfo, VegaTaskStatus } from "./vega-discovery.js";
+import { VegaAccountInfo, type VegaTaskStatus } from "./vega-discovery.js";
 
 const BASE = "/api/vega-backend/v1/semantic-understanding-tasks";
 
@@ -21,7 +21,7 @@ export type SemanticUnderstandingTaskSort = z.infer<typeof SemanticUnderstanding
 export const SemanticUnderstandingTask = z
   .object({
     id: z.string(),
-    scope: SemanticUnderstandingScope,
+    scope: z.string(),
     catalog_id: z.string(),
     catalog_name: z.string().optional(),
     resource_id: z.string().optional(),
@@ -30,8 +30,8 @@ export const SemanticUnderstandingTask = z
     agent_id: z.string(),
     input: z.string(),
     input_hash: z.string(),
-    status: VegaTaskStatus,
-    apply_mode: SemanticUnderstandingApplyMode,
+    status: z.string(),
+    apply_mode: z.string(),
     result_json: z.string().optional(),
     confidence_threshold: z.number(),
     confidence: z.number(),
