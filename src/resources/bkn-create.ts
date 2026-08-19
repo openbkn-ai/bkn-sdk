@@ -29,7 +29,8 @@ import {
   listResources,
   queryResource,
 } from "../api/resources.js";
-import { createBuildTask, discoverCatalog, getCatalog } from "../api/vega.js";
+import { discoverCatalog } from "../api/vega-discovery.js";
+import { createBuildTask, firstCatalog, getCatalog } from "../api/vega.js";
 import type { RequestContext } from "../types.js";
 import {
   buildFieldMappings,
@@ -268,16 +269,6 @@ function canonicalizeTableMap<T>(
   return out;
 }
 
-function asArray(v: unknown): unknown[] {
-  if (Array.isArray(v)) return v;
-  if (v && typeof v === "object") {
-    const o = v as Record<string, unknown>;
-    if (Array.isArray(o.entries)) return o.entries;
-    if (Array.isArray(o.data)) return o.data;
-  }
-  return [];
-}
-
 /** Best-effort row sample for cardinality-based PK detection. */
 async function sampleRows(
   ctx: RequestContext,
@@ -285,7 +276,7 @@ async function sampleRows(
 ): Promise<Array<Record<string, string | null>>> {
   try {
     const res = await queryResource(ctx, resourceId, { limit: 100 });
-    return asArray(res) as Array<Record<string, string | null>>;
+    return res.entries as Array<Record<string, string | null>>;
   } catch {
     return [];
   }
@@ -313,13 +304,13 @@ export async function createFromCatalog(
   //    "tables in this run" message below, so a truncated page would drop the
   //    21st table from the network without a word and then deny it exists.
   const listTables = () =>
-    listResources(ctx, { datasourceId: opts.catalogId, category: "table", limit: -1 }).then(
-      asArray,
+    listResources(ctx, { catalogId: opts.catalogId, category: "table", limit: -1 }).then(
+      (result) => result.entries,
     );
   let summaries = await listTables();
   if (summaries.length === 0) {
     log("No tables found; scanning catalog metadata...");
-    await discoverCatalog(ctx, opts.catalogId, true);
+    await discoverCatalog(ctx, opts.catalogId);
     summaries = await listTables();
   }
   if (summaries.length === 0) throw new Error("No tables available in catalog after scan.");
@@ -349,27 +340,7 @@ export async function createFromCatalog(
   for (const batch of splitBatches(summaries, DETAIL_READ_BATCH)) {
     details.push(...(await Promise.all(batch.map(readDetail))));
   }
-  // An empty identifier must not travel any further: everything downstream keys
-  // off the table name, and a blank one poisons --tables, --pk-map and PK
-  // detection alike with errors that never mention the real cause. Drop those
-  // resources with a warning rather than aborting — one half-discovered row in
-  // a catalog should not block every other table from becoming a KN.
-  const named = details.filter((t) => t.name);
-  const unnamedIds = details.filter((t) => !t.name).map((t) => t.resourceId ?? "?");
-  const unnamedNote = unnamedIds.length
-    ? ` ${unnamedIds.length} nameless table resource(s) were ignored (ids: ${unnamedIds.join(", ")}); re-run \`openbkn vega catalog discover\` if a table you need is missing.`
-    : "";
-  if (unnamedIds.length > 0) log(`Ignoring nameless table resource(s): ${unnamedIds.join(", ")}.`);
-  if (named.length === 0) {
-    throw new Error(
-      [
-        `Catalog ${opts.catalogId} returned ${details.length} table resource(s), none with a name`,
-        `(ids: ${unnamedIds.join(", ")}).`,
-        "Re-run `openbkn vega catalog discover` for this catalog and retry.",
-      ].join(" "),
-    );
-  }
-  const allNames = named.map((t) => t.name);
+  const allNames = details.map((table) => table.name);
 
   // Filter to --tables if given; accept schema-qualified names. Two kinds of
   // miss are forgiven: any miss under a caller-derived list (the CSV path,
@@ -396,10 +367,10 @@ export async function createFromCatalog(
   if (missing.length > 0) {
     log(`Skipping ${missing.length} table(s) not in the catalog: ${missing.join(", ")}.`);
   }
-  const targets = opts.tables?.length ? named.filter((t) => selected.has(t.name)) : named;
+  const targets = opts.tables?.length ? details.filter((t) => selected.has(t.name)) : details;
   if (targets.length === 0) {
     throw new Error(
-      `No matching tables to build from.${missing.length ? ` Not in the catalog: ${missing.join(", ")}.` : ""}${unnamedNote}`,
+      `No matching tables to build from.${missing.length ? ` Not in the catalog: ${missing.join(", ")}.` : ""}`,
     );
   }
   const targetNames = targets.map((t) => t.name);
@@ -703,7 +674,7 @@ export async function importCsvToCatalog(
   const paths = await resolveFiles(opts.files);
 
   // The database-write step needs the catalog's connector type.
-  const catalog = (await getCatalog(ctx, opts.catalogId)) as {
+  const catalog = firstCatalog(await getCatalog(ctx, opts.catalogId)) as {
     connector_type?: string;
     type?: string;
   };
@@ -748,7 +719,7 @@ export async function importCsvToCatalog(
     }
   }
   // Best-effort: refresh catalog metadata so the new tables are visible.
-  await discoverCatalog(ctx, opts.catalogId, true).catch(() => {});
+  await discoverCatalog(ctx, opts.catalogId).catch(() => {});
   return { tables, failed, sampleRows };
 }
 

@@ -2,6 +2,33 @@
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 import {
+  type CreateDiscoverScheduleRequest,
+  type DeleteDiscoverTasksOptions,
+  type ListDiscoverSchedulesOptions,
+  type ListDiscoverTasksOptions,
+  type UpdateDiscoverScheduleRequest,
+  createDiscoverSchedule,
+  deleteDiscoverSchedule,
+  deleteDiscoverTasks,
+  disableDiscoverSchedule,
+  discoverCatalog,
+  enableDiscoverSchedule,
+  getDiscoverSchedule,
+  getDiscoverTask,
+  listDiscoverSchedules,
+  listDiscoverTasks,
+  updateDiscoverSchedule,
+} from "../api/vega-discovery.js";
+import {
+  type CreateSemanticUnderstandingTaskRequest,
+  type DeleteSemanticUnderstandingTasksOptions,
+  type ListSemanticUnderstandingTasksOptions,
+  createSemanticUnderstandingTask,
+  deleteSemanticUnderstandingTasks,
+  getSemanticUnderstandingTask,
+  listSemanticUnderstandingTasks,
+} from "../api/vega-semantic.js";
+import {
   type BuildTask,
   type CatalogConnectionTestRequest,
   type CatalogHealthCheckScheduleRequest,
@@ -20,7 +47,6 @@ import {
   deleteBuildTasks,
   deleteCatalog,
   disableCatalog,
-  discoverCatalog,
   enableCatalog,
   getBuildTask,
   getCatalog,
@@ -56,7 +82,7 @@ const TERMINAL_STATES = new Set([
 export function vega(ctx: RequestContext) {
   return {
     catalogs: (opts?: ListCatalogsOptions) => listCatalogs(ctx, opts),
-    getCatalog: (id: string) => getCatalog(ctx, id),
+    getCatalog: (id: string | string[]) => getCatalog(ctx, id),
     createCatalog: (req: CreateCatalogRequest, opts?: CatalogWriteOptions) =>
       createCatalog(ctx, req, opts),
     updateCatalog: (id: string, req: UpdateCatalogRequest, opts?: CatalogWriteOptions) =>
@@ -71,7 +97,8 @@ export function vega(ctx: RequestContext) {
     catalogHealthCheckSchedule: (id: string) => getCatalogHealthCheckSchedule(ctx, id),
     updateCatalogHealthCheckSchedule: (id: string, req: CatalogHealthCheckScheduleRequest) =>
       updateCatalogHealthCheckSchedule(ctx, id, req),
-    discoverCatalog: (id: string, wait = false) => discoverCatalog(ctx, id, wait),
+    discoverCatalog: (catalogId: string, req?: Parameters<typeof discoverCatalog>[2]) =>
+      discoverCatalog(ctx, catalogId, req),
     catalogResources: (id: string, category?: string, limit?: number, offset?: number) =>
       listCatalogResources(ctx, id, category, limit, offset),
     catalogHealth: (id: string) => catalogHealthStatus(ctx, id),
@@ -98,6 +125,31 @@ export function vega(ctx: RequestContext) {
     startBuildTask: (taskId: string, opts?: { reset?: boolean }) =>
       startBuildTask(ctx, taskId, opts),
     stopBuildTask: (taskId: string) => stopBuildTask(ctx, taskId),
+
+    discoverSchedules: (opts?: ListDiscoverSchedulesOptions) => listDiscoverSchedules(ctx, opts),
+    getDiscoverSchedule: (id: string) => getDiscoverSchedule(ctx, id),
+    createDiscoverSchedule: (req: CreateDiscoverScheduleRequest) =>
+      createDiscoverSchedule(ctx, req),
+    updateDiscoverSchedule: (id: string, req: UpdateDiscoverScheduleRequest) =>
+      updateDiscoverSchedule(ctx, id, req),
+    deleteDiscoverSchedule: (id: string) => deleteDiscoverSchedule(ctx, id),
+    enableDiscoverSchedule: (id: string) => enableDiscoverSchedule(ctx, id),
+    disableDiscoverSchedule: (id: string) => disableDiscoverSchedule(ctx, id),
+
+    discoverTasks: (opts?: ListDiscoverTasksOptions) => listDiscoverTasks(ctx, opts),
+    getDiscoverTask: (id: string) => getDiscoverTask(ctx, id),
+    deleteDiscoverTasks: (ids: string | string[], opts?: DeleteDiscoverTasksOptions) =>
+      deleteDiscoverTasks(ctx, ids, opts),
+
+    createSemanticUnderstandingTask: (req: CreateSemanticUnderstandingTaskRequest) =>
+      createSemanticUnderstandingTask(ctx, req),
+    semanticUnderstandingTasks: (opts?: ListSemanticUnderstandingTasksOptions) =>
+      listSemanticUnderstandingTasks(ctx, opts),
+    getSemanticUnderstandingTask: (id: string) => getSemanticUnderstandingTask(ctx, id),
+    deleteSemanticUnderstandingTasks: (
+      ids: string | string[],
+      opts?: DeleteSemanticUnderstandingTasksOptions,
+    ) => deleteSemanticUnderstandingTasks(ctx, ids, opts),
   };
 }
 

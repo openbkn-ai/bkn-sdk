@@ -30,11 +30,10 @@ export function resourceCommand(): Command {
     .command("list")
     .description("List resources under a catalog")
     .option("--catalog-id <id>", "filter by catalog id")
-    .option("--datasource-id <id>", "alias of --catalog-id")
     .option("--category <c>", "resource category (table | logicview | dataset)")
     .option("--type <c>", "alias of --category")
     .option("--status <status>", "filter by status")
-    .option("--database <name>", "filter by database")
+    .option("--schema <name>", "filter by source schema")
     .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
     .option("--offset <n>", "page offset", int, 0)
     .option("--include-extensions", "include all extension key/value pairs")
@@ -44,10 +43,10 @@ export function resourceCommand(): Command {
     .option("--direction <dir>", "sort direction: asc | desc")
     .action(async (opts, cmd: Command) => {
       const data = await clientFrom(cmd).resource.list({
-        datasourceId: opts.catalogId ?? opts.datasourceId,
+        catalogId: opts.catalogId,
         category: opts.category ?? opts.type,
         status: opts.status,
-        database: opts.database,
+        schema: opts.schema,
         limit: opts.limit,
         offset: opts.offset,
         includeExtensions: opts.includeExtensions,
@@ -65,12 +64,11 @@ export function resourceCommand(): Command {
     .requiredOption("--name <name>", "resource name to search")
     .option("--exact", "exact name match")
     .option("--catalog-id <id>", "limit to a catalog")
-    .option("--datasource-id <id>", "alias of --catalog-id")
     .option("--limit <n>", "rows to scan before filtering", int, DEFAULT_LIST_LIMIT)
     .action(async (opts, cmd: Command) => {
       const data = await clientFrom(cmd).resource.find(opts.name, {
         exact: opts.exact,
-        datasourceId: opts.catalogId ?? opts.datasourceId,
+        catalogId: opts.catalogId,
         limit: opts.limit,
       });
       printJson(data, outputOptions(cmd));

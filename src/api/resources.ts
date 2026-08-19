@@ -1,11 +1,12 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
+import { z } from "zod";
 /**
  * Vega-backend resource client (list/find/get/query/delete).
  * Responses passed through as parsed JSON.
  */
-import type { RequestContext } from "../types.js";
+import { DEFAULT_LIST_LIMIT, type RequestContext } from "../types.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { request } from "./http.js";
 import { resolveSmallModelName } from "./models.js";
@@ -42,57 +43,156 @@ export interface ResourceIndexConfig {
   default_embedding_model?: string;
 }
 
+export const ResourceCategory = z.enum([
+  "table",
+  "file",
+  "fileset",
+  "api",
+  "metric",
+  "topic",
+  "index",
+  "logicview",
+  "dataset",
+]);
+export type ResourceCategory = z.infer<typeof ResourceCategory>;
+
+export const ResourceStatus = z.enum(["active", "disabled", "deprecated", "stale"]);
+export type ResourceStatus = z.infer<typeof ResourceStatus>;
+
 export interface ResourceLike {
   id?: string;
   catalog_id?: string;
   name?: string;
   tags?: string[];
   description?: string;
-  category?: string;
-  status?: string;
-  database?: string;
+  category?: ResourceCategory;
+  status?: ResourceStatus;
+  schema?: string;
   source_identifier?: string;
   source_metadata?: Record<string, unknown>;
   schema_definition?: ResourceProperty[];
   index_config?: ResourceIndexConfig;
   logic_definition?: unknown;
   extensions?: Record<string, string>;
+  update_time?: number;
 }
 
+const ResourceAccountInfo = z
+  .object({ id: z.string(), type: z.string(), name: z.string().optional() })
+  .passthrough();
+
+const ResourcePropertySchema: z.ZodType<ResourceProperty> = z
+  .object({
+    name: z.string(),
+    display_name: z.string().optional(),
+    type: z.string().optional(),
+    description: z.string().optional(),
+    original_name: z.string().optional(),
+    original_type: z.string().optional(),
+    original_description: z.string().optional(),
+    features: z
+      .array(
+        z
+          .object({
+            name: z.string().optional(),
+            display_name: z.string().optional(),
+            feature_type: z.string(),
+            description: z.string().optional(),
+            ref_property: z.string().optional(),
+            is_default: z.boolean().optional(),
+            is_native: z.boolean().optional(),
+            config: z.record(z.unknown()).optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
+    attributes: z.record(z.unknown()).optional(),
+    extensions: z.record(z.string()).optional(),
+  })
+  .passthrough();
+
+export const Resource = z
+  .object({
+    id: z.string(),
+    catalog_id: z.string(),
+    name: z.string(),
+    tags: z.array(z.string()).optional(),
+    description: z.string().optional(),
+    category: ResourceCategory,
+    status: ResourceStatus,
+    status_message: z.string().optional(),
+    last_discover_status: z.string().optional(),
+    schema: z.string().optional(),
+    source_identifier: z.string(),
+    source_metadata: z.record(z.unknown()).optional(),
+    extensions: z.record(z.string()).optional(),
+    schema_definition: z.array(ResourcePropertySchema).optional(),
+    index_config: z
+      .object({
+        build_key_fields: z.array(z.string()).optional(),
+        default_fulltext_analyzer: z.string().optional(),
+        default_embedding_model: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
+    index_name: z.string().optional(),
+    column_count: z.number().optional(),
+    row_count: z.number().optional(),
+    logic_type: z.enum(["derived", "composite"]).optional(),
+    logic_definition: z.unknown().optional(),
+    creator: ResourceAccountInfo,
+    create_time: z.number(),
+    updater: ResourceAccountInfo,
+    update_time: z.number(),
+    operations: z.array(z.string()).optional(),
+  })
+  .passthrough();
+export type Resource = z.infer<typeof Resource>;
+
+export const ListResourcesResponse = z
+  .object({ entries: z.array(Resource), total_count: z.number() })
+  .passthrough();
+export type ListResourcesResponse = z.infer<typeof ListResourcesResponse>;
+
+export const BatchResourcesResponse = z.object({ entries: z.array(Resource) }).passthrough();
+export type BatchResourcesResponse = z.infer<typeof BatchResourcesResponse>;
+
 export interface ListResourcesOptions {
-  datasourceId?: string;
+  catalogId?: string;
   name?: string;
   /** Resource category, e.g. table | logicview. */
-  category?: string;
-  status?: string;
-  database?: string;
+  category?: ResourceCategory;
+  status?: ResourceStatus;
+  schema?: string;
   limit?: number;
   offset?: number;
-  sort?: "name" | "create_time" | "update_time" | string;
+  sort?: "name" | "create_time" | "update_time";
   direction?: "asc" | "desc";
   includeExtensions?: boolean;
   includeExtensionKeys?: string;
   extensionPairs?: Array<{ key: string; value: string }>;
 }
 
-export function listResources(
+export async function listResources(
   ctx: RequestContext,
   opts: ListResourcesOptions = {},
-): Promise<unknown> {
-  return request(ctx, BASE, {
+): Promise<ListResourcesResponse> {
+  const result = await request<unknown>(ctx, BASE, {
     query: {
-      catalog_id: opts.datasourceId || undefined,
+      catalog_id: opts.catalogId || undefined,
       name: opts.name || undefined,
       category: opts.category || undefined,
       status: opts.status || undefined,
-      database: opts.database || undefined,
+      schema: opts.schema || undefined,
       // Same `/resources` endpoint as `catalogResources`: limit=-1 (NO_LIMIT)
       // fetches every row; any other non-positive/invalid value falls back to
       // the backend default.
       limit:
-        Number.isFinite(opts.limit) && (opts.limit! > 0 || opts.limit === -1)
-          ? opts.limit
-          : undefined,
+        opts.limit === undefined
+          ? DEFAULT_LIST_LIMIT
+          : Number.isFinite(opts.limit) && (opts.limit > 0 || opts.limit === -1)
+            ? opts.limit
+            : DEFAULT_LIST_LIMIT,
       offset: opts.offset,
       sort: opts.sort,
       direction: opts.direction,
@@ -103,10 +203,21 @@ export function listResources(
       extension_value: opts.extensionPairs?.map((p) => p.value),
     },
   });
+  return ListResourcesResponse.parse(result);
 }
 
-export function getResource(ctx: RequestContext, id: string): Promise<unknown> {
-  return request(ctx, `${BASE}/${encodeURIComponent(id)}`);
+export async function getResource(
+  ctx: RequestContext,
+  id: string | string[],
+  opts: { ignoreMissing?: boolean } = {},
+): Promise<BatchResourcesResponse> {
+  const ids = Array.isArray(id) ? id : [id];
+  const result = await request<unknown>(ctx, `${BASE}/${ids.map(encodeURIComponent).join(",")}`, {
+    query: {
+      ignore_missing: opts.ignoreMissing === undefined ? undefined : String(opts.ignoreMissing),
+    },
+  });
+  return BatchResourcesResponse.parse(result);
 }
 
 /** Create a vega-backend resource from a fully-formed body (e.g. a rendered template). */
@@ -114,20 +225,56 @@ export function createResourceRaw(ctx: RequestContext, body: unknown): Promise<u
   return request(ctx, BASE, { method: "POST", body });
 }
 
-export interface UpdateResourceOptions {
-  name?: string;
-  catalogId?: string;
+export interface CreateResourceRequest {
+  catalogId: string;
+  name: string;
+  category: Extract<ResourceCategory, "dataset" | "logicview">;
+  id?: string;
   tags?: string[];
   description?: string;
-  category?: string;
-  status?: string;
-  database?: string;
+  status?: ResourceStatus;
+  schema?: string;
   sourceIdentifier?: string;
   sourceMetadata?: Record<string, unknown>;
+  extensions?: Record<string, string>;
   schemaDefinition?: ResourceProperty[];
-  indexConfig?: ResourceIndexConfig | null;
+  indexConfig?: ResourceIndexConfig;
+  logicDefinition?: unknown;
+}
+
+export async function createResource(
+  ctx: RequestContext,
+  req: CreateResourceRequest,
+): Promise<Resource> {
+  const result = await createResourceRaw(ctx, {
+    ...(req.id !== undefined ? { id: req.id } : {}),
+    catalog_id: req.catalogId,
+    name: req.name,
+    category: req.category,
+    ...(req.tags !== undefined ? { tags: req.tags } : {}),
+    ...(req.description !== undefined ? { description: req.description } : {}),
+    ...(req.status !== undefined ? { status: req.status } : {}),
+    ...(req.schema !== undefined ? { schema: req.schema } : {}),
+    ...(req.sourceIdentifier !== undefined ? { source_identifier: req.sourceIdentifier } : {}),
+    ...(req.sourceMetadata !== undefined ? { source_metadata: req.sourceMetadata } : {}),
+    ...(req.extensions !== undefined ? { extensions: req.extensions } : {}),
+    ...(req.schemaDefinition !== undefined ? { schema_definition: req.schemaDefinition } : {}),
+    ...(req.indexConfig !== undefined ? { index_config: req.indexConfig } : {}),
+    ...(req.logicDefinition !== undefined ? { logic_definition: req.logicDefinition } : {}),
+  });
+  return Resource.parse(result);
+}
+
+export interface UpdateResourceOptions {
+  name?: string;
+  tags?: string[];
+  description?: string;
+  schemaDefinition?: ResourceProperty[];
+  indexConfig?: ResourceIndexConfig;
   logicDefinition?: unknown;
   extensions?: Record<string, string>;
+  /** Optimistic-lock version from an earlier Resource `update_time`. */
+  expectedUpdateTime?: number;
 }
 
 export function updateResourceRaw(
@@ -216,20 +363,20 @@ function resourceUpdateBody(
   const body: Record<string, unknown> = {
     id,
     name: patch.name ?? current.name,
-    catalog_id: patch.catalogId ?? current.catalog_id,
+    catalog_id: current.catalog_id,
     tags: patch.tags ?? current.tags ?? [],
     description: patch.description ?? current.description ?? "",
-    category: patch.category ?? current.category,
-    status: patch.status ?? current.status,
-    database: patch.database ?? current.database,
-    source_identifier: patch.sourceIdentifier ?? current.source_identifier,
-    source_metadata: patch.sourceMetadata ?? current.source_metadata,
+    category: current.category,
     schema_definition: patch.schemaDefinition ?? current.schema_definition,
     index_config: patch.indexConfig === undefined ? current.index_config : patch.indexConfig,
     logic_definition: patch.logicDefinition ?? current.logic_definition,
   };
   if (patch.extensions !== undefined || current.extensions !== undefined) {
     body.extensions = patch.extensions ?? current.extensions;
+  }
+  const expectedUpdateTime = patch.expectedUpdateTime ?? current.update_time;
+  if (expectedUpdateTime !== undefined) {
+    body.expected_update_time = expectedUpdateTime;
   }
   return body;
 }
@@ -268,13 +415,8 @@ function ensureFeature(
  * resource itself silently yields a nameless, column-less object — callers must
  * go through here.
  */
-export function firstResource<T extends object = ResourceLike>(result: unknown): T {
-  if (result && typeof result === "object") {
-    const o = result as Record<string, unknown>;
-    if (Array.isArray(o.entries)) return (o.entries[0] ?? {}) as T;
-    return o as T;
-  }
-  return {} as T;
+export function firstResource<T extends object = Resource>(result: BatchResourcesResponse): T {
+  return (result.entries[0] ?? {}) as T;
 }
 
 export interface DeleteResourceOptions {
@@ -296,7 +438,7 @@ export function deleteResource(
 }
 
 export interface FindResourceOptions {
-  datasourceId?: string;
+  catalogId?: string;
   /** Exact name match instead of fuzzy. */
   exact?: boolean;
   /** Rows to fetch before filtering; `-1` = all. Defaults to the list default. */
@@ -308,14 +450,13 @@ export async function findResource(
   ctx: RequestContext,
   name: string,
   opts: FindResourceOptions = {},
-): Promise<unknown> {
-  const result = (await listResources(ctx, {
+): Promise<Resource[]> {
+  const result = await listResources(ctx, {
     name,
-    datasourceId: opts.datasourceId,
+    catalogId: opts.catalogId,
     limit: opts.limit,
-  })) as { entries?: Array<{ name?: string }> } | Array<{ name?: string }>;
-  const list = Array.isArray(result) ? result : (result.entries ?? []);
-  return opts.exact ? list.filter((r) => r.name === name) : list;
+  });
+  return opts.exact ? result.entries.filter((resource) => resource.name === name) : result.entries;
 }
 
 export interface QueryResourceOptions {
@@ -326,31 +467,163 @@ export interface QueryResourceOptions {
   keepAliveSec?: number;
   /** Opaque cursor returned by the preceding resource data page. */
   cursor?: string;
+  filterCondition?: Record<string, unknown>;
+  sort?: Array<{ field: string; direction: "asc" | "desc" }>;
+  outputFields?: string[];
+  aggregation?: {
+    property: string;
+    aggr: "count" | "count_distinct" | "sum" | "max" | "min" | "avg";
+    alias?: string;
+  };
+  groupBy?: Array<{
+    property: string;
+    description?: string;
+    calendarInterval?: "minute" | "hour" | "day" | "week" | "month" | "quarter" | "year";
+  }>;
+  having?: {
+    field: "__value" | "count(*)";
+    operation: "==" | "!=" | ">" | ">=" | "<" | "<=" | "in" | "not_in" | "range" | "out_range";
+    value: unknown;
+  };
+}
+
+export type ResourceDocument = Record<string, unknown> & { id?: string };
+
+export interface ResourceDataPaging {
+  next_cursor: string | null;
+  expires_at_sec: number | null;
+}
+
+export interface QueryResourceResponse {
+  entries: ResourceDocument[];
+  total_count?: number;
+  paging?: ResourceDataPaging;
+  warnings?: string[];
+  [key: string]: unknown;
 }
 
 export function queryResource(
   ctx: RequestContext,
   id: string,
   opts: QueryResourceOptions = {},
-): Promise<unknown> {
+): Promise<QueryResourceResponse> {
   const body = opts.cursor
     ? {
         paging: { cursor: opts.cursor },
         need_total: opts.needTotal ?? false,
       }
     : {
+        ...(opts.filterCondition !== undefined ? { filter_condition: opts.filterCondition } : {}),
         paging: {
           mode: opts.pagingMode ?? "single",
           limit: opts.limit ?? 50,
           offset: opts.offset ?? 0,
           ...(opts.keepAliveSec !== undefined ? { keep_alive_sec: opts.keepAliveSec } : {}),
         },
+        ...(opts.sort !== undefined ? { sort: opts.sort } : {}),
+        ...(opts.outputFields !== undefined ? { output_fields: opts.outputFields } : {}),
         need_total: opts.needTotal ?? false,
+        ...(opts.aggregation !== undefined ? { aggregation: opts.aggregation } : {}),
+        ...(opts.groupBy !== undefined
+          ? {
+              group_by: opts.groupBy.map((item) => ({
+                property: item.property,
+                ...(item.description !== undefined ? { description: item.description } : {}),
+                ...(item.calendarInterval !== undefined
+                  ? { calendar_interval: item.calendarInterval }
+                  : {}),
+              })),
+            }
+          : {}),
+        ...(opts.having !== undefined ? { having: opts.having } : {}),
       };
-  return request(ctx, `${BASE}/${encodeURIComponent(id)}/data`, {
+  return request<QueryResourceResponse>(ctx, `${BASE}/${encodeURIComponent(id)}/data`, {
     method: "POST",
     headers: { "X-HTTP-Method-Override": "GET" },
     body,
     responseParser: parseBigIntJSON,
+  });
+}
+
+export async function createResourceDocuments(
+  ctx: RequestContext,
+  resourceId: string,
+  documents: ResourceDocument[],
+): Promise<{ ids: string[] }> {
+  const result = await request<unknown>(ctx, `${BASE}/${encodeURIComponent(resourceId)}/data`, {
+    method: "POST",
+    headers: { "X-HTTP-Method-Override": "POST" },
+    body: documents,
+  });
+  return z
+    .object({ ids: z.array(z.string()) })
+    .passthrough()
+    .parse(result);
+}
+
+export async function upsertResourceDocuments(
+  ctx: RequestContext,
+  resourceId: string,
+  documents: Array<ResourceDocument & { id: string }>,
+): Promise<{ ids: string[] }> {
+  const result = await request<unknown>(ctx, `${BASE}/${encodeURIComponent(resourceId)}/data`, {
+    method: "PUT",
+    body: documents,
+  });
+  return z
+    .object({ ids: z.array(z.string()) })
+    .passthrough()
+    .parse(result);
+}
+
+export async function getResourceDocument(
+  ctx: RequestContext,
+  resourceId: string,
+  documentId: string,
+): Promise<ResourceDocument> {
+  const result = await request<unknown>(
+    ctx,
+    `${BASE}/${encodeURIComponent(resourceId)}/data/${encodeURIComponent(documentId)}`,
+    { responseParser: parseBigIntJSON },
+  );
+  return z.record(z.unknown()).parse(result);
+}
+
+export async function upsertResourceDocument(
+  ctx: RequestContext,
+  resourceId: string,
+  documentId: string,
+  document: ResourceDocument,
+): Promise<{ id: string }> {
+  const result = await request<unknown>(
+    ctx,
+    `${BASE}/${encodeURIComponent(resourceId)}/data/${encodeURIComponent(documentId)}`,
+    { method: "PUT", body: document },
+  );
+  return z.object({ id: z.string() }).passthrough().parse(result);
+}
+
+export function deleteResourceDocuments(
+  ctx: RequestContext,
+  resourceId: string,
+  documentIds: string | string[],
+): Promise<unknown> {
+  const ids = Array.isArray(documentIds) ? documentIds : [documentIds];
+  return request(
+    ctx,
+    `${BASE}/${encodeURIComponent(resourceId)}/data/${ids.map(encodeURIComponent).join(",")}`,
+    { method: "DELETE" },
+  );
+}
+
+export function deleteResourceDocumentsByFilter(
+  ctx: RequestContext,
+  resourceId: string,
+  filterCondition: Record<string, unknown>,
+): Promise<unknown> {
+  return request(ctx, `${BASE}/${encodeURIComponent(resourceId)}/data`, {
+    method: "POST",
+    headers: { "X-HTTP-Method-Override": "DELETE" },
+    body: { filter_condition: filterCondition },
   });
 }

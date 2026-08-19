@@ -119,17 +119,21 @@ export type {
   BuildTaskSort,
   BuildTaskStatus,
   BuildTaskSummary,
+  BatchCatalogsResponse,
+  Catalog,
   CatalogConnectionTestRequest,
   CatalogConnectionTestResult,
   CatalogDeletionBlocker,
   CatalogDeletionImpact,
   CatalogDeletionTaskImpact,
   CatalogHealthCheckSchedule,
+  CatalogHealthCheckScheduleConfig,
   CatalogHealthCheckScheduleMode,
   CatalogHealthCheckScheduleRequest,
   CatalogHealthCheckStatus,
   CatalogHealthStatus,
   CatalogWriteOptions,
+  CatalogRef,
   CreateBuildTaskRequest,
   CreateCatalogRequest,
   DeleteCatalogOptions,
@@ -138,6 +142,7 @@ export type {
   QueryPagingMode,
   ListBuildTasksOptions,
   ListBuildTasksResponse,
+  ListCatalogsResponse,
   RawQueryContinuationRequest,
   RawQueryPaging,
   RawQueryRequest,
@@ -145,6 +150,50 @@ export type {
   SortDirection,
   UpdateCatalogRequest,
 } from "./api/vega.js";
+
+export type {
+  CreateDiscoverScheduleRequest,
+  DeleteDiscoverTasksOptions,
+  DiscoverResult,
+  DiscoverSchedule,
+  DiscoverStrategy,
+  DiscoverTask,
+  DiscoverTaskSummary,
+  ListDiscoverSchedulesOptions,
+  ListDiscoverSchedulesResponse,
+  ListDiscoverTasksOptions,
+  ListDiscoverTasksResponse,
+  UpdateDiscoverScheduleRequest,
+  VegaAccountInfo,
+  VegaTaskStatus,
+} from "./api/vega-discovery.js";
+
+export type {
+  CreateSemanticUnderstandingTaskRequest,
+  DeleteSemanticUnderstandingTasksOptions,
+  ListSemanticUnderstandingTasksOptions,
+  ListSemanticUnderstandingTasksResponse,
+  SemanticUnderstandingApplyMode,
+  SemanticUnderstandingScope,
+  SemanticUnderstandingTask,
+  SemanticUnderstandingTaskSummary,
+} from "./api/vega-semantic.js";
+
+export type {
+  BatchResourcesResponse,
+  CreateResourceRequest,
+  DeleteResourceOptions,
+  ListResourcesOptions,
+  ListResourcesResponse,
+  QueryResourceOptions,
+  QueryResourceResponse,
+  Resource,
+  ResourceCategory,
+  ResourceDataPaging,
+  ResourceDocument,
+  ResourceStatus,
+  UpdateResourceOptions,
+} from "./api/resources.js";
 
 // Low-level escape hatch for endpoints not yet wrapped.
 export { request } from "./api/http.js";
