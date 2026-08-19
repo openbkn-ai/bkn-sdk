@@ -1,7 +1,7 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
-import { executeDataflow, listDataflows } from "../api/dataflow.js";
+import { executeDataflow, pingDataflows } from "../api/dataflow.js";
 /**
  * `bkn create-from-catalog` orchestration. Build a knowledge network from a
  * Vega catalog's tables:
@@ -29,7 +29,8 @@ import {
   listResources,
   queryResource,
 } from "../api/resources.js";
-import { createBuildTask, discoverCatalog, getCatalog } from "../api/vega.js";
+import { discoverCatalog, getDiscoverTask } from "../api/vega-discovery.js";
+import { createBuildTask, firstCatalog, getCatalog } from "../api/vega.js";
 import type { RequestContext } from "../types.js";
 import {
   buildFieldMappings,
@@ -81,6 +82,32 @@ export interface CreateFromCatalogOptions {
   /** Pre-fetched row samples per table (e.g. from a CSV import) for PK detection. */
   sampleRows?: Record<string, Array<Record<string, string | null>>>;
   onProgress?: (msg: string) => void;
+}
+
+const DISCOVER_TASK_TIMEOUT_MS = 120_000;
+const DISCOVER_TASK_POLL_INTERVAL_MS = 2_000;
+
+async function discoverCatalogAndWait(ctx: RequestContext, catalogId: string): Promise<void> {
+  const { id: taskId } = await discoverCatalog(ctx, catalogId);
+  const deadline = Date.now() + DISCOVER_TASK_TIMEOUT_MS;
+  for (;;) {
+    const task = await getDiscoverTask(ctx, taskId);
+    if (task.status === "completed") return;
+    if (task.status === "failed" || task.status === "cancelled") {
+      throw new Error(
+        `Catalog discovery task ${taskId} ${task.status}${task.message ? `: ${task.message}` : ""}.`,
+      );
+    }
+    if (task.status !== "pending" && task.status !== "running") {
+      throw new Error(
+        `Catalog discovery task ${taskId} ended in unexpected status "${task.status}".`,
+      );
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(`Catalog discovery task ${taskId} did not complete within 120 seconds.`);
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, DISCOVER_TASK_POLL_INTERVAL_MS));
+  }
 }
 
 /**
@@ -268,16 +295,6 @@ function canonicalizeTableMap<T>(
   return out;
 }
 
-function asArray(v: unknown): unknown[] {
-  if (Array.isArray(v)) return v;
-  if (v && typeof v === "object") {
-    const o = v as Record<string, unknown>;
-    if (Array.isArray(o.entries)) return o.entries;
-    if (Array.isArray(o.data)) return o.data;
-  }
-  return [];
-}
-
 /** Best-effort row sample for cardinality-based PK detection. */
 async function sampleRows(
   ctx: RequestContext,
@@ -285,7 +302,7 @@ async function sampleRows(
 ): Promise<Array<Record<string, string | null>>> {
   try {
     const res = await queryResource(ctx, resourceId, { limit: 100 });
-    return asArray(res) as Array<Record<string, string | null>>;
+    return Array.isArray(res.entries) ? (res.entries as Array<Record<string, string | null>>) : [];
   } catch {
     return [];
   }
@@ -308,18 +325,18 @@ export async function createFromCatalog(
       : opts.embeddingModel;
 
   // 1. List catalog tables, scanning once if the catalog is empty.
-  //    `limit: -1` (NO_LIMIT), not the backend's default page of 20: this list
+  //    `limit: -1` (NO_LIMIT), not the backend's default page: this list
   //    decides which tables become object types AND is the source of every
   //    "tables in this run" message below, so a truncated page would drop the
   //    21st table from the network without a word and then deny it exists.
   const listTables = () =>
-    listResources(ctx, { datasourceId: opts.catalogId, category: "table", limit: -1 }).then(
-      asArray,
+    listResources(ctx, { catalogId: opts.catalogId, category: "table", limit: -1 }).then(
+      (result) => result.entries,
     );
   let summaries = await listTables();
   if (summaries.length === 0) {
     log("No tables found; scanning catalog metadata...");
-    await discoverCatalog(ctx, opts.catalogId, true);
+    await discoverCatalogAndWait(ctx, opts.catalogId);
     summaries = await listTables();
   }
   if (summaries.length === 0) throw new Error("No tables available in catalog after scan.");
@@ -328,7 +345,7 @@ export async function createFromCatalog(
   // same `{entries:[…]}` envelope as the list — unwrap it, or every table ends
   // up nameless and column-less and only fails much later, in PK detection.
   //
-  // In batches, not one `Promise.all` over the catalog: the default page of 20
+  // In batches, not one `Promise.all` over the catalog: the default page
   // dropped above was also what kept this fan-out small, and a few hundred
   // simultaneous reads earn a rate-limit or a pool timeout whose message says
   // nothing about how many tables were asked for at once.
@@ -349,27 +366,7 @@ export async function createFromCatalog(
   for (const batch of splitBatches(summaries, DETAIL_READ_BATCH)) {
     details.push(...(await Promise.all(batch.map(readDetail))));
   }
-  // An empty identifier must not travel any further: everything downstream keys
-  // off the table name, and a blank one poisons --tables, --pk-map and PK
-  // detection alike with errors that never mention the real cause. Drop those
-  // resources with a warning rather than aborting — one half-discovered row in
-  // a catalog should not block every other table from becoming a KN.
-  const named = details.filter((t) => t.name);
-  const unnamedIds = details.filter((t) => !t.name).map((t) => t.resourceId ?? "?");
-  const unnamedNote = unnamedIds.length
-    ? ` ${unnamedIds.length} nameless table resource(s) were ignored (ids: ${unnamedIds.join(", ")}); re-run \`openbkn vega catalog discover\` if a table you need is missing.`
-    : "";
-  if (unnamedIds.length > 0) log(`Ignoring nameless table resource(s): ${unnamedIds.join(", ")}.`);
-  if (named.length === 0) {
-    throw new Error(
-      [
-        `Catalog ${opts.catalogId} returned ${details.length} table resource(s), none with a name`,
-        `(ids: ${unnamedIds.join(", ")}).`,
-        "Re-run `openbkn vega catalog discover` for this catalog and retry.",
-      ].join(" "),
-    );
-  }
-  const allNames = named.map((t) => t.name);
+  const allNames = details.map((table) => table.name);
 
   // Filter to --tables if given; accept schema-qualified names. Two kinds of
   // miss are forgiven: any miss under a caller-derived list (the CSV path,
@@ -396,10 +393,10 @@ export async function createFromCatalog(
   if (missing.length > 0) {
     log(`Skipping ${missing.length} table(s) not in the catalog: ${missing.join(", ")}.`);
   }
-  const targets = opts.tables?.length ? named.filter((t) => selected.has(t.name)) : named;
+  const targets = opts.tables?.length ? details.filter((t) => selected.has(t.name)) : details;
   if (targets.length === 0) {
     throw new Error(
-      `No matching tables to build from.${missing.length ? ` Not in the catalog: ${missing.join(", ")}.` : ""}${unnamedNote}`,
+      `No matching tables to build from.${missing.length ? ` Not in the catalog: ${missing.join(", ")}.` : ""}`,
     );
   }
   const targetNames = targets.map((t) => t.name);
@@ -634,18 +631,26 @@ export interface ImportCsvResult {
  * one identical 404 per table, hundreds of rows in — long past the point where
  * the user can tell "this deploy can't do that" from "my data is wrong".
  *
- * Only a gateway page or a 5xx counts as "no service": the probe reads
- * `automation/v2`, while the import runs on `v1`, so a plain JSON 404 means the
- * service answered — it just does not serve this listing. Blocking on that
- * would ground an import whose own endpoints are fine, so the probe steps
- * aside and lets the real call speak (see the same rule in `models.ts`).
+ * What counts as "no service" is narrow: a gateway page, or a status the
+ * gateway itself produces when nothing answers behind the route — 501, 502,
+ * 503, 504. The probe reads `automation/v2` while the import runs on `v1`, so a
+ * plain JSON 404 means the service answered and simply does not serve this
+ * listing; blocking on that would ground an import whose own endpoints are
+ * fine, so the probe steps aside and lets the real call speak (the same rule as
+ * in `models.ts`). A 500 also steps aside: the service handled the request
+ * badly, which is not the same as not being there.
+ *
+ * Reading 504 that way only holds because the probe asks for one row
+ * (`pingDataflows`). Against the full listing a gateway timeout would as easily
+ * mean "that query was slow", and the costs are not symmetric: this branch
+ * aborts the command, while stepping aside costs one wasted attempt.
  */
 async function ensureDataflowAvailable(
   ctx: RequestContext,
   log: (m: string) => void,
 ): Promise<void> {
   try {
-    await listDataflows(ctx);
+    await pingDataflows(ctx);
   } catch (e) {
     // Both halves ask the same question — was it the service that answered?
     // `request()` raises `NonJsonResponseError` only for a 2xx, so here it
@@ -653,9 +658,14 @@ async function ensureDataflowAvailable(
     // something other than JSON (it is there; this listing just is not JSON).
     // Treating the second as an absent service is the JSON-404 false positive
     // again, wearing a different body.
+    // 504 belongs with 502/503, not with 500: the gateway routed the request
+    // and nothing answered. Every import batch would then wait out the full
+    // client timeout before failing, so twelve tables cost minutes of silence
+    // and twelve identical errors — the exact shape the preflight exists to
+    // prevent, one status code over.
     const missing =
       (e instanceof NonJsonResponseError && e.gateway) ||
-      (e instanceof HttpError && (e.gateway || [501, 502, 503].includes(e.status)));
+      (e instanceof HttpError && (e.gateway || [501, 502, 503, 504].includes(e.status)));
     if (!missing) {
       // An auth refusal is as conclusive as an absent service and just as
       // wasteful to discover per batch — surface it now, with its own cause and
@@ -703,7 +713,7 @@ export async function importCsvToCatalog(
   const paths = await resolveFiles(opts.files);
 
   // The database-write step needs the catalog's connector type.
-  const catalog = (await getCatalog(ctx, opts.catalogId)) as {
+  const catalog = firstCatalog(await getCatalog(ctx, opts.catalogId)) as {
     connector_type?: string;
     type?: string;
   };
@@ -747,8 +757,9 @@ export async function importCsvToCatalog(
       failed.push(tableName);
     }
   }
-  // Best-effort: refresh catalog metadata so the new tables are visible.
-  await discoverCatalog(ctx, opts.catalogId, true).catch(() => {});
+  // Best-effort: refresh catalog metadata so the new tables are visible to the
+  // following create-from-catalog step.
+  await discoverCatalogAndWait(ctx, opts.catalogId).catch(() => {});
   return { tables, failed, sampleRows };
 }
 

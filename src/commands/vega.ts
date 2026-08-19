@@ -4,9 +4,21 @@
 /** `openbkn vega …` — Catalog reads + index BuildTask. */
 import { Command } from "commander";
 import {
+  DiscoverScheduleSort,
+  DiscoverStrategy,
+  DiscoverTaskSort,
+  DiscoverTaskTriggerType,
+  VegaTaskStatus,
+} from "../api/vega-discovery.js";
+import {
+  SemanticUnderstandingApplyMode,
+  SemanticUnderstandingScope,
+  SemanticUnderstandingTaskSort,
+} from "../api/vega-semantic.js";
+import {
   BuildTaskSort,
   BuildTaskStatus,
-  type CatalogHealthCheckScheduleRequest,
+  type CatalogHealthCheckScheduleConfig,
   type RawQueryRequest,
   SortDirection,
 } from "../api/vega.js";
@@ -17,7 +29,27 @@ import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, csv, outputOptions } from "./_shared.js";
 
-const int = (v: string) => Number.parseInt(v, 10);
+const int = (value: string): number => {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new InputError(`expected an integer, received "${value}"`);
+  }
+  return parsed;
+};
+const expectedUpdateTime = (value: string): number => {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new InputError("--expected-update-time must be a positive integer timestamp");
+  }
+  return parsed;
+};
+const confidenceThreshold = (value: string): number => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+    throw new InputError("--confidence-threshold must be a number between 0 and 1");
+  }
+  return parsed;
+};
 const bool = (value: string): boolean => {
   if (value === "true") return true;
   if (value === "false") return false;
@@ -45,10 +77,26 @@ const parseStringRecord = (value: string, flag: string): Record<string, string> 
   return parsed as Record<string, string>;
 };
 
+const parseJsonArray = (value: string, flag: string): Record<string, unknown>[] => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new InputError(`${flag} must be valid JSON`);
+  }
+  if (
+    !Array.isArray(parsed) ||
+    parsed.some((item) => typeof item !== "object" || item === null || Array.isArray(item))
+  ) {
+    throw new InputError(`${flag} must be a JSON array of objects`);
+  }
+  return parsed as Record<string, unknown>[];
+};
+
 const healthCheckSchedule = (
   mode?: string,
   cronExpr?: string,
-): CatalogHealthCheckScheduleRequest | undefined => {
+): CatalogHealthCheckScheduleConfig | undefined => {
   if (!mode) {
     if (cronExpr) throw new InputError("a health-check cron expression requires enabled mode");
     return undefined;
@@ -108,6 +156,101 @@ const buildTaskSort = (raw?: string): BuildTaskSort | undefined => {
   return parsed.data;
 };
 
+const discoverStrategy = (raw?: string): DiscoverStrategy | undefined => {
+  if (raw === undefined) return undefined;
+  const parsed = DiscoverStrategy.safeParse(raw);
+  if (!parsed.success) {
+    throw new InputError(
+      `invalid discover strategy "${raw}"; expected one of ${DiscoverStrategy.options.join(", ")}`,
+    );
+  }
+  return parsed.data;
+};
+
+const requiredDiscoverStrategy = (raw: string): DiscoverStrategy =>
+  discoverStrategy(raw) as DiscoverStrategy;
+
+const taskStatuses = (raw?: string): VegaTaskStatus[] | undefined => {
+  if (raw === undefined) return undefined;
+  const values = csv(raw);
+  if (!values?.length) throw new InputError("--status must include at least one task status");
+  return values.map((value) => {
+    const parsed = VegaTaskStatus.safeParse(value);
+    if (!parsed.success) {
+      throw new InputError(
+        `invalid task status "${value}"; expected one of ${VegaTaskStatus.options.join(", ")}`,
+      );
+    }
+    return parsed.data;
+  });
+};
+
+const semanticScope = (raw?: string): SemanticUnderstandingScope | undefined => {
+  if (raw === undefined) return undefined;
+  const parsed = SemanticUnderstandingScope.safeParse(raw);
+  if (!parsed.success) {
+    throw new InputError(
+      `invalid semantic task scope "${raw}"; expected one of ${SemanticUnderstandingScope.options.join(", ")}`,
+    );
+  }
+  return parsed.data;
+};
+
+const semanticApplyMode = (raw?: string): SemanticUnderstandingApplyMode | undefined => {
+  if (raw === undefined) return undefined;
+  const parsed = SemanticUnderstandingApplyMode.safeParse(raw);
+  if (!parsed.success) {
+    throw new InputError(
+      `invalid semantic apply mode "${raw}"; expected one of ${SemanticUnderstandingApplyMode.options.join(", ")}`,
+    );
+  }
+  return parsed.data;
+};
+
+const discoverScheduleSort = (raw?: string): DiscoverScheduleSort | undefined => {
+  if (raw === undefined) return undefined;
+  const parsed = DiscoverScheduleSort.safeParse(raw);
+  if (!parsed.success) {
+    throw new InputError(
+      `invalid discover schedule sort "${raw}"; expected one of ${DiscoverScheduleSort.options.join(", ")}`,
+    );
+  }
+  return parsed.data;
+};
+
+const discoverTaskSort = (raw?: string): DiscoverTaskSort | undefined => {
+  if (raw === undefined) return undefined;
+  const parsed = DiscoverTaskSort.safeParse(raw);
+  if (!parsed.success) {
+    throw new InputError(
+      `invalid discover task sort "${raw}"; expected one of ${DiscoverTaskSort.options.join(", ")}`,
+    );
+  }
+  return parsed.data;
+};
+
+const discoverTaskTriggerType = (raw?: string): DiscoverTaskTriggerType | undefined => {
+  if (raw === undefined) return undefined;
+  const parsed = DiscoverTaskTriggerType.safeParse(raw);
+  if (!parsed.success) {
+    throw new InputError(
+      `invalid discover task trigger type "${raw}"; expected one of ${DiscoverTaskTriggerType.options.join(", ")}`,
+    );
+  }
+  return parsed.data;
+};
+
+const semanticTaskSort = (raw?: string): SemanticUnderstandingTaskSort | undefined => {
+  if (raw === undefined) return undefined;
+  const parsed = SemanticUnderstandingTaskSort.safeParse(raw);
+  if (!parsed.success) {
+    throw new InputError(
+      `invalid semantic task sort "${raw}"; expected one of ${SemanticUnderstandingTaskSort.options.join(", ")}`,
+    );
+  }
+  return parsed.data;
+};
+
 const sortDirection = (raw?: string): SortDirection | undefined => {
   if (raw === undefined) return undefined;
   const parsed = SortDirection.safeParse(raw);
@@ -128,11 +271,12 @@ export function vegaCommand(): Command {
   catalog
     .command("list")
     .description("List catalog entries")
-    .option("--limit <n>", "page size", (v) => Number.parseInt(v, 10), DEFAULT_LIST_LIMIT)
-    .option("--offset <n>", "page offset", (v) => Number.parseInt(v, 10), 0)
+    .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
+    .option("--offset <n>", "page offset", int, 0)
     .option("--name <s>", "filter by name")
     .option("--tag <s>", "filter by tag")
     .option("--type <type>", "filter by catalog type: physical | logical")
+    .option("--connector-type <type>", "filter by connector type")
     .option("--enabled <bool>", "filter by enabled state")
     .option("--health-check-status <s>", "filter by health status")
     .option("--include-extensions", "include all extension key/value pairs")
@@ -148,6 +292,7 @@ export function vegaCommand(): Command {
         name: o.name,
         tag: o.tag,
         type: o.type,
+        connectorType: o.connectorType,
         enabled: o.enabled === undefined ? undefined : o.enabled === "true",
         healthCheckStatus: o.healthCheckStatus,
         includeExtensions: o.includeExtensions,
@@ -168,7 +313,7 @@ export function vegaCommand(): Command {
     .command("resources <id>")
     .description("List resources under a catalog")
     .option("--category <c>", "filter by category (e.g. table)")
-    .option("--limit <n>", "page size (backend default 20, max 1000; -1 = all)", int)
+    .option("--limit <n>", "page size (default 30, max 1000; -1 = all)", int)
     .option("--offset <n>", "page offset", int, 0)
     .action(async (id: string, opts, cmd: Command) => {
       printJson(
@@ -236,6 +381,11 @@ export function vegaCommand(): Command {
     .option("--tags <t1,t2>", "comma-separated tags")
     .option("--description <s>", "description")
     .option("--extensions <json>", "extension key/value JSON object")
+    .requiredOption(
+      "--expected-update-time <ms>",
+      "optimistic-lock update time",
+      expectedUpdateTime,
+    )
     .option("--allow-unhealthy", "save the update when its connection test fails")
     .action(async (id: string, opts, cmd: Command) => {
       const connectorConfig = opts.connectorConfig
@@ -260,6 +410,7 @@ export function vegaCommand(): Command {
             description: opts.description,
             enabled: opts.enabled,
             extensions,
+            expectedUpdateTime: opts.expectedUpdateTime,
           },
           { allowUnhealthy: opts.allowUnhealthy ? true : undefined },
         ),
@@ -319,21 +470,289 @@ export function vegaCommand(): Command {
     .description("Update a catalog health-check schedule")
     .requiredOption("--mode <mode>", "health schedule: inherit | enabled | disabled")
     .option("--cron <expr>", "cron expression for enabled health checks")
+    .requiredOption(
+      "--expected-update-time <ms>",
+      "optimistic-lock update time",
+      expectedUpdateTime,
+    )
     .action(async (id: string, opts, cmd: Command) => {
       const schedule = healthCheckSchedule(opts.mode, opts.cron);
       if (!schedule) throw new InputError("--mode is required");
       printJson(
-        await clientFrom(cmd).vega.updateCatalogHealthCheckSchedule(id, schedule),
+        await clientFrom(cmd).vega.updateCatalogHealthCheckSchedule(id, {
+          ...schedule,
+          expectedUpdateTime: opts.expectedUpdateTime,
+        }),
         outputOptions(cmd),
       );
     });
   catalog
     .command("discover <id>")
     .description("Trigger catalog resource discovery")
-    .option("--wait", "wait for discovery to complete")
+    .option("--strategy <strategy>", `strategy: ${DiscoverStrategy.options.join(" | ")}`)
     .action(async (id: string, opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).vega.discoverCatalog(id, Boolean(opts.wait)),
+        await clientFrom(cmd).vega.discoverCatalog(id, {
+          strategy: discoverStrategy(opts.strategy),
+        }),
+        outputOptions(cmd),
+      );
+    });
+
+  const discoverSchedule = vega
+    .command("discover-schedule")
+    .description("Resource discovery schedules");
+  discoverSchedule
+    .command("list")
+    .description("List discovery schedules")
+    .option("--name <s>", "filter by name")
+    .option("--catalog-id <id>", "filter by catalog id")
+    .option("--enabled <bool>", "filter by enabled state", bool)
+    .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
+    .option("--offset <n>", "page offset", int, 0)
+    .option("--sort <field>", "name | create_time | update_time | next_run")
+    .option("--direction <dir>", "asc | desc")
+    .action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).vega.discoverSchedules({
+          name: opts.name,
+          catalogId: opts.catalogId,
+          enabled: opts.enabled,
+          limit: opts.limit,
+          offset: opts.offset,
+          sort: discoverScheduleSort(opts.sort),
+          direction: sortDirection(opts.direction),
+        }),
+        outputOptions(cmd),
+      );
+    });
+  discoverSchedule
+    .command("get <id>")
+    .description("Get a discovery schedule")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.getDiscoverSchedule(id), outputOptions(cmd));
+    });
+  discoverSchedule
+    .command("create")
+    .description("Create a discovery schedule")
+    .requiredOption("--name <s>", "schedule name")
+    .requiredOption("--catalog-id <id>", "catalog id")
+    .requiredOption("--cron <expr>", "five-field cron expression")
+    .option("--start-time <ms>", "start time", int)
+    .option("--end-time <ms>", "end time", int)
+    .option("--enabled", "create enabled")
+    .option("--strategy <strategy>", `strategy: ${DiscoverStrategy.options.join(" | ")}`)
+    .action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).vega.createDiscoverSchedule({
+          name: opts.name,
+          catalogId: opts.catalogId,
+          cronExpr: opts.cron,
+          startTime: opts.startTime,
+          endTime: opts.endTime,
+          enabled: opts.enabled ? true : undefined,
+          strategy: discoverStrategy(opts.strategy),
+        }),
+        outputOptions(cmd),
+      );
+    });
+  discoverSchedule
+    .command("update <id>")
+    .description("Fully update a discovery schedule")
+    .requiredOption("--name <s>", "schedule name")
+    .requiredOption("--catalog-id <id>", "current catalog id")
+    .requiredOption("--cron <expr>", "five-field cron expression")
+    .requiredOption("--enabled <bool>", "current enabled state", bool)
+    .requiredOption("--start-time <ms>", "start time (0 = no lower bound)", int)
+    .requiredOption("--end-time <ms>", "end time (0 = no upper bound)", int)
+    .requiredOption("--strategy <strategy>", `strategy: ${DiscoverStrategy.options.join(" | ")}`)
+    .requiredOption(
+      "--expected-update-time <ms>",
+      "optimistic-lock update time",
+      expectedUpdateTime,
+    )
+    .action(async (id: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).vega.updateDiscoverSchedule(id, {
+          name: opts.name,
+          catalogId: opts.catalogId,
+          cronExpr: opts.cron,
+          enabled: opts.enabled,
+          startTime: opts.startTime,
+          endTime: opts.endTime,
+          strategy: requiredDiscoverStrategy(opts.strategy),
+          expectedUpdateTime: opts.expectedUpdateTime,
+        }),
+        outputOptions(cmd),
+      );
+    });
+  for (const action of ["enable", "disable", "delete"] as const) {
+    discoverSchedule
+      .command(`${action} <id>`)
+      .description(`${action[0]?.toUpperCase()}${action.slice(1)} a discovery schedule`)
+      .action(async (id: string, _opts, cmd: Command) => {
+        const api = clientFrom(cmd).vega;
+        const result =
+          action === "enable"
+            ? await api.enableDiscoverSchedule(id)
+            : action === "disable"
+              ? await api.disableDiscoverSchedule(id)
+              : await api.deleteDiscoverSchedule(id);
+        printJson(result, outputOptions(cmd));
+      });
+  }
+
+  const discoverTask = vega.command("discover-task").description("Resource discovery tasks");
+  discoverTask
+    .command("list")
+    .description("List discovery tasks")
+    .option("--catalog-id <id>", "filter by catalog id")
+    .option("--schedule-id <id>", "filter by schedule id")
+    .option("--status <status>", `comma-separated: ${VegaTaskStatus.options.join(" | ")}`)
+    .option("--strategy <strategy>", `strategy: ${DiscoverStrategy.options.join(" | ")}`)
+    .option("--trigger-type <type>", "manual | scheduled")
+    .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
+    .option("--offset <n>", "page offset", int, 0)
+    .option("--sort <field>", "create_time | start_time | finish_time | last_progress_time")
+    .option("--direction <dir>", "asc | desc")
+    .action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).vega.discoverTasks({
+          catalogId: opts.catalogId,
+          scheduleId: opts.scheduleId,
+          status: taskStatuses(opts.status),
+          strategy: discoverStrategy(opts.strategy),
+          triggerType: discoverTaskTriggerType(opts.triggerType),
+          limit: opts.limit,
+          offset: opts.offset,
+          sort: discoverTaskSort(opts.sort),
+          direction: sortDirection(opts.direction),
+        }),
+        outputOptions(cmd),
+      );
+    });
+  discoverTask
+    .command("get <id>")
+    .description("Get a discovery task")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.getDiscoverTask(id), outputOptions(cmd));
+    });
+  discoverTask
+    .command("delete <ids...>")
+    .description("Delete completed discovery tasks")
+    .option("--ignore-missing", "ignore missing task ids")
+    .action(async (ids: string[], opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).vega.deleteDiscoverTasks(ids, {
+          ignoreMissing: opts.ignoreMissing,
+        }),
+        outputOptions(cmd),
+      );
+    });
+
+  const semanticTask = vega.command("semantic-task").description("Semantic-understanding tasks");
+  semanticTask
+    .command("list")
+    .description("List semantic-understanding tasks")
+    .option("--scope <scope>", `scope: ${SemanticUnderstandingScope.options.join(" | ")}`)
+    .option("--catalog-id <id>", "filter by catalog id")
+    .option("--resource-id <id>", "filter by resource id")
+    .option("--status <status>", `comma-separated: ${VegaTaskStatus.options.join(" | ")}`)
+    .option(
+      "--apply-mode <mode>",
+      `apply mode: ${SemanticUnderstandingApplyMode.options.join(" | ")}`,
+    )
+    .option("--applied <bool>", "filter by applied state", bool)
+    .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
+    .option("--offset <n>", "page offset", int, 0)
+    .option("--sort <field>", "create_time | start_time | finish_time")
+    .option("--direction <dir>", "asc | desc")
+    .action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).vega.semanticUnderstandingTasks({
+          scope: semanticScope(opts.scope),
+          catalogId: opts.catalogId,
+          resourceId: opts.resourceId,
+          status: taskStatuses(opts.status),
+          applyMode: semanticApplyMode(opts.applyMode),
+          applied: opts.applied,
+          limit: opts.limit,
+          offset: opts.offset,
+          sort: semanticTaskSort(opts.sort),
+          direction: sortDirection(opts.direction),
+        }),
+        outputOptions(cmd),
+      );
+    });
+  semanticTask
+    .command("create")
+    .description("Create a semantic-understanding task")
+    .requiredOption("--scope <scope>", "resource | catalog")
+    .option("--catalog-id <id>", "catalog id")
+    .option("--resource-id <id>", "resource id")
+    .option("--apply-mode <mode>", "dry_run | fill_empty | force")
+    .option("--confidence-threshold <n>", "minimum confidence (0..1)", confidenceThreshold)
+    .option("--include-sample-rows", "include resource sample rows")
+    .option("--sample-max-rows <n>", "sample row limit", int)
+    .action(async (opts, cmd: Command) => {
+      const scope = semanticScope(opts.scope);
+      if (!scope) throw new InputError("--scope is required");
+      const applyMode = semanticApplyMode(opts.applyMode);
+      if (scope === "catalog" && !opts.catalogId) {
+        throw new InputError("--catalog-id is required for catalog scope");
+      }
+      if (scope === "resource" && !opts.resourceId) {
+        throw new InputError("--resource-id is required for resource scope");
+      }
+      if (scope === "catalog" && (opts.includeSampleRows || opts.sampleMaxRows !== undefined)) {
+        throw new InputError("sample row options are only valid for resource scope");
+      }
+      if (scope === "resource" && opts.includeSampleRows && opts.sampleMaxRows === undefined) {
+        throw new InputError("--sample-max-rows is required with --include-sample-rows");
+      }
+      if (scope === "resource" && !opts.includeSampleRows && opts.sampleMaxRows !== undefined) {
+        throw new InputError("--sample-max-rows requires --include-sample-rows");
+      }
+      if (opts.sampleMaxRows !== undefined && (opts.sampleMaxRows < 1 || opts.sampleMaxRows > 20)) {
+        throw new InputError("--sample-max-rows must be between 1 and 20");
+      }
+      const common = {
+        applyMode,
+        confidenceThreshold: opts.confidenceThreshold,
+      };
+      const request =
+        scope === "catalog"
+          ? { scope: "catalog" as const, catalogId: opts.catalogId, ...common }
+          : {
+              scope: "resource" as const,
+              resourceId: opts.resourceId,
+              includeSampleRows: opts.includeSampleRows ? true : undefined,
+              samplePolicy:
+                opts.sampleMaxRows === undefined
+                  ? undefined
+                  : { masked: false as const, maxRows: opts.sampleMaxRows },
+              ...common,
+            };
+      printJson(
+        await clientFrom(cmd).vega.createSemanticUnderstandingTask(request),
+        outputOptions(cmd),
+      );
+    });
+  semanticTask
+    .command("get <id>")
+    .description("Get a semantic-understanding task")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.getSemanticUnderstandingTask(id), outputOptions(cmd));
+    });
+  semanticTask
+    .command("delete <ids...>")
+    .description("Delete completed semantic-understanding tasks")
+    .option("--ignore-missing", "ignore missing task ids")
+    .action(async (ids: string[], opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).vega.deleteSemanticUnderstandingTasks(ids, {
+          ignoreMissing: opts.ignoreMissing,
+        }),
         outputOptions(cmd),
       );
     });
@@ -426,13 +845,12 @@ export function vegaCommand(): Command {
   resource
     .command("list")
     .description("List resources")
-    .option("--datasource-id <id>", "filter by catalog/datasource id")
-    .option("--catalog-id <id>", "alias of --datasource-id")
+    .option("--catalog-id <id>", "filter by catalog id")
     .option("--type <category>", "resource category")
     .option("--category <category>", "alias of --type")
     .option("--status <status>", "filter by status")
-    .option("--database <name>", "filter by database")
-    .option("--limit <n>", "page size", (v) => Number.parseInt(v, 10), DEFAULT_LIST_LIMIT)
+    .option("--schema <name>", "filter by source schema")
+    .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
     .option("--offset <n>", "page offset", int, 0)
     .option("--include-extensions", "include all extension key/value pairs")
     .option("--include-extension-keys <keys>", "include selected extension keys")
@@ -442,10 +860,10 @@ export function vegaCommand(): Command {
     .action(async (opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).resource.list({
-          datasourceId: opts.datasourceId ?? opts.catalogId,
+          catalogId: opts.catalogId,
           category: opts.type ?? opts.category,
           status: opts.status,
-          database: opts.database,
+          schema: opts.schema,
           limit: opts.limit,
           offset: opts.offset,
           includeExtensions: opts.includeExtensions,
@@ -466,11 +884,68 @@ export function vegaCommand(): Command {
   resource
     .command("query <id>")
     .description("Fetch data rows from a resource")
-    .option("--limit <n>", "row limit", (v) => Number.parseInt(v, 10), 50)
-    .option("--offset <n>", "row offset", (v) => Number.parseInt(v, 10), 0)
+    .option("--limit <n>", "row limit", int, 50)
+    .option("--offset <n>", "row offset", int, 0)
     .action(async (id: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).resource.query(id, { limit: opts.limit, offset: opts.offset }),
+        outputOptions(cmd),
+      );
+    });
+  resource
+    .command("document-get <resource-id> <document-id>")
+    .description("Get one dataset document")
+    .action(async (resourceId: string, documentId: string, _opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).resource.getDocument(resourceId, documentId),
+        outputOptions(cmd),
+      );
+    });
+  resource
+    .command("document-create <resource-id>")
+    .description("Create dataset documents")
+    .requiredOption("--data <json>", "JSON array of documents")
+    .action(async (resourceId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).resource.createDocuments(
+          resourceId,
+          parseJsonArray(opts.data, "--data"),
+        ),
+        outputOptions(cmd),
+      );
+    });
+  resource
+    .command("document-upsert <resource-id>")
+    .description("Upsert dataset documents; every document must have an id")
+    .requiredOption("--data <json>", "JSON array of documents")
+    .action(async (resourceId: string, opts, cmd: Command) => {
+      const documents = parseJsonArray(opts.data, "--data");
+      if (documents.some((document) => typeof document.id !== "string")) {
+        throw new InputError("every document in --data must have a string id");
+      }
+      printJson(
+        await clientFrom(cmd).resource.upsertDocuments(resourceId, documents as never),
+        outputOptions(cmd),
+      );
+    });
+  resource
+    .command("document-delete <resource-id> <document-ids...>")
+    .description("Delete dataset documents by id")
+    .action(async (resourceId: string, documentIds: string[], _opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).resource.deleteDocuments(resourceId, documentIds),
+        outputOptions(cmd),
+      );
+    });
+  resource
+    .command("document-delete-filter <resource-id>")
+    .description("Delete dataset documents by a non-empty filter")
+    .requiredOption("--filter <json>", "filter_condition JSON object")
+    .action(async (resourceId: string, opts, cmd: Command) => {
+      const filter = parseJsonObject(opts.filter, "--filter");
+      if (!Object.keys(filter).length) throw new InputError("--filter must not be empty");
+      printJson(
+        await clientFrom(cmd).resource.deleteDocumentsByFilter(resourceId, filter),
         outputOptions(cmd),
       );
     });

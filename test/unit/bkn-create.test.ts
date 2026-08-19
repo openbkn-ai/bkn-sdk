@@ -21,7 +21,7 @@ function mockFetch(routes: Array<[RegExp, Route]>): typeof fetch {
     const url = new URL(input);
     for (const [pattern, handler] of routes) {
       if (!pattern.test(url.pathname)) continue;
-      const body = handler(url, init);
+      const body = normalizeVegaResponse(url, handler(url, init));
       if (body instanceof Response) return body;
       return new Response(JSON.stringify(body ?? {}), { status: 200 });
     }
@@ -29,6 +29,60 @@ function mockFetch(routes: Array<[RegExp, Route]>): typeof fetch {
   });
   vi.stubGlobal("fetch", fn);
   return fn as unknown as typeof fetch;
+}
+
+function normalizeVegaResponse(url: URL, body: unknown): unknown {
+  if (/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/.test(url.pathname)) {
+    return { id: "discover-task-1", ...(body as Record<string, unknown>) };
+  }
+  if (
+    /^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/.test(url.pathname) &&
+    body &&
+    typeof body === "object"
+  ) {
+    const response = body as Record<string, unknown>;
+    const entries = Array.isArray(response.entries)
+      ? response.entries
+      : [
+          {
+            id: "c-1",
+            name: "catalog",
+            type: "physical",
+            enabled: true,
+            connector_type: "mysql",
+            ...response,
+          },
+        ];
+    return {
+      ...response,
+      entries: entries.map((entry) => ({ update_time: 1, ...(entry as Record<string, unknown>) })),
+    };
+  }
+  if (
+    !url.pathname.startsWith("/api/vega-backend/v1/resources") ||
+    !body ||
+    typeof body !== "object" ||
+    !("entries" in body) ||
+    !Array.isArray(body.entries)
+  ) {
+    return body;
+  }
+  const entries = body.entries.map((entry) => ({
+    catalog_id: "c-1",
+    category: "table",
+    status: "active",
+    source_identifier: "table",
+    creator: { id: "u-1", type: "user" },
+    create_time: 1,
+    updater: { id: "u-1", type: "user" },
+    update_time: 1,
+    ...(entry as Record<string, unknown>),
+  }));
+  return {
+    ...body,
+    entries,
+    ...(url.pathname.endsWith("/resources") ? { total_count: entries.length } : {}),
+  };
 }
 
 function paths(fetchMock: typeof fetch): string[] {
@@ -83,6 +137,66 @@ describe("createFromCatalog table identifiers", () => {
     expect(out.object_types).toEqual([{ name: "document", pk: "id" }]);
     // No rollback DELETE — the run succeeded.
     expect(paths(f)).not.toContain("/api/ontology-manager/v1/knowledge-networks/kn-1");
+  });
+
+  it("waits for asynchronous discovery before listing an empty catalog again", async () => {
+    const table = { id: "r-1", name: "document", columns: ["id"], pk: "id" };
+    let listCount = 0;
+    const f = mockFetch([
+      [
+        /^\/api\/vega-backend\/v1\/resources$/,
+        () => ({ entries: listCount++ === 0 ? [] : [{ id: table.id, name: table.name }] }),
+      ],
+      [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({ id: "task-1" })],
+      [
+        /^\/api\/vega-backend\/v1\/discover-tasks\/task-1$/,
+        () => ({
+          id: "task-1",
+          catalog_id: "c-1",
+          schedule_id: "",
+          strategy: "full_sync",
+          trigger_type: "manual",
+          status: "completed",
+          progress: 100,
+          message: "done",
+          creator: { id: "u-1", type: "user" },
+          create_time: 1,
+        }),
+      ],
+      ...catalogRoutes([table]),
+    ]);
+
+    await expect(createFromCatalog(ctx, { catalogId: "c-1", name: "kn" })).resolves.toMatchObject({
+      object_types: [{ name: "document" }],
+    });
+    expect(paths(f)).toContain("/api/vega-backend/v1/discover-tasks/task-1");
+    expect(listCount).toBe(2);
+  });
+
+  it("reports an unknown discovery task status instead of waiting for timeout", async () => {
+    mockFetch([
+      [/^\/api\/vega-backend\/v1\/resources$/, () => ({ entries: [] })],
+      [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({ id: "task-1" })],
+      [
+        /^\/api\/vega-backend\/v1\/discover-tasks\/task-1$/,
+        () => ({
+          id: "task-1",
+          catalog_id: "c-1",
+          schedule_id: "",
+          strategy: "full_sync",
+          trigger_type: "manual",
+          status: "stopped",
+          progress: 0,
+          message: "",
+          creator: { id: "u-1", type: "user" },
+          create_time: 1,
+        }),
+      ],
+    ]);
+
+    await expect(createFromCatalog(ctx, { catalogId: "c-1", name: "kn" })).rejects.toThrow(
+      /task-1 ended in unexpected status "stopped"/,
+    );
   });
 
   it("asks for every table, not the backend's default page", async () => {
@@ -171,52 +285,6 @@ describe("createFromCatalog table identifiers", () => {
     ).rejects.toThrow(/--pk-map has two entries for table 'document'/);
   });
 
-  it("ignores a nameless resource instead of blocking every other table", async () => {
-    const logs: string[] = [];
-    mockFetch([
-      [
-        /^\/api\/vega-backend\/v1\/resources$/,
-        () => ({ entries: [{ id: "r-1", name: "document" }, { id: "r-2" }] }),
-      ],
-      [
-        /^\/api\/vega-backend\/v1\/resources\/[^/]+$/,
-        (url) =>
-          url.pathname.endsWith("r-1")
-            ? {
-                entries: [
-                  {
-                    id: "r-1",
-                    name: "document",
-                    source_metadata: { columns: [{ name: "id", type: "varchar" }] },
-                    primary_keys: ["id"],
-                  },
-                ],
-              }
-            : { entries: [{ id: "r-2" }] },
-      ],
-      [/^\/api\/ontology-manager\/v1\/knowledge-networks$/, () => ({ id: "kn-1" })],
-      [/^\/api\/ontology-manager\/v1\/knowledge-networks\/[^/]+\/object-types$/, () => ({})],
-    ]);
-    const out = (await createFromCatalog(ctx, {
-      catalogId: "c-1",
-      name: "kn",
-      onProgress: (m) => logs.push(m),
-    })) as { object_types: Array<{ name: string }> };
-    expect(out.object_types.map((o) => o.name)).toEqual(["document"]);
-    expect(logs.join("\n")).toMatch(/Ignoring nameless table resource\(s\): r-2/);
-  });
-
-  it("still fails when no table resource has a name, naming the ids", async () => {
-    mockFetch([
-      [/^\/api\/vega-backend\/v1\/resources$/, () => ({ entries: [{ id: "r-1" }] })],
-      // A deploy that answers the detail read with a bare, nameless resource.
-      [/^\/api\/vega-backend\/v1\/resources\/[^/]+$/, () => ({ entries: [{ id: "r-1" }] })],
-    ]);
-    await expect(createFromCatalog(ctx, { catalogId: "c-1", name: "kn" })).rejects.toThrow(
-      /none with a name \(ids: r-1\)/,
-    );
-  });
-
   it("drops a --pk-map entry for an undiscovered table under skip, keeps it fatal otherwise", async () => {
     const logs: string[] = [];
     const routes = catalogRoutes([{ id: "r-1", name: "document", columns: ["id"], pk: "id" }]);
@@ -287,7 +355,20 @@ describe("createFromCatalog table identifiers", () => {
       ],
       [/^\/api\/automation\/v1\/data-flow\/flow\/[^/]+$/, () => ({})],
       [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({})],
-      [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/, () => ({ connector_type: "mysql" })],
+      [
+        /^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/,
+        () => ({
+          entries: [
+            {
+              id: "c-1",
+              name: "catalog",
+              type: "physical",
+              enabled: true,
+              connector_type: "mysql",
+            },
+          ],
+        }),
+      ],
       ...catalogRoutes([{ id: "r-1", name: "document", columns: ["id", "body"], pk: "id" }]),
     ]);
     // The check runs in Phase 2, so the CSV rows are written by the time it
@@ -324,7 +405,20 @@ describe("createFromCatalog table identifiers", () => {
       ],
       [/^\/api\/automation\/v1\/data-flow\/flow\/[^/]+$/, () => ({})],
       [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({})],
-      [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/, () => ({ connector_type: "mysql" })],
+      [
+        /^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/,
+        () => ({
+          entries: [
+            {
+              id: "c-1",
+              name: "catalog",
+              type: "physical",
+              enabled: true,
+              connector_type: "mysql",
+            },
+          ],
+        }),
+      ],
       ...catalogRoutes([{ id: "r-1", name: "document", columns: ["id", "body"], pk: "id" }]),
     ]);
     // Every Phase 2 failure, not a chosen few: once the rows are in, "fix it
@@ -356,7 +450,20 @@ describe("createFromCatalog table identifiers", () => {
       ],
       [/^\/api\/automation\/v1\/data-flow\/flow\/[^/]+$/, () => ({})],
       [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({})],
-      [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/, () => ({ connector_type: "mysql" })],
+      [
+        /^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/,
+        () => ({
+          entries: [
+            {
+              id: "c-1",
+              name: "catalog",
+              type: "physical",
+              enabled: true,
+              connector_type: "mysql",
+            },
+          ],
+        }),
+      ],
     ];
     const table = { id: "r-1", name: "document", columns: ["id", "body"], pk: "id" };
 
@@ -891,6 +998,40 @@ describe("createFromCsv dependency preflight", () => {
       onProgress: (m) => logs.push(m),
     })) as { object_types: Array<{ name: string }> };
     expect(out.object_types.map((o) => o.name)).toEqual(["document"]);
+    expect(logs.join("\n")).toMatch(/preflight inconclusive/);
+  });
+
+  it("stops on a 504, but not on a 500", async () => {
+    // 504: the gateway routed the request and nothing answered. Left to the
+    // import, every batch waits out the full client timeout before failing.
+    const gone = mockFetch([
+      [
+        /^\/api\/automation\/v2\/dags$/,
+        () => new Response(JSON.stringify({ error: "upstream timeout" }), { status: 504 }),
+      ],
+    ]);
+    await expect(
+      createFromCsv(ctx, { catalogId: "c-1", name: "kn", files: "/tmp/none.csv" }),
+    ).rejects.toThrow(/dataflow service is not available.*create-from-catalog/s);
+    expect(paths(gone)).toEqual(["/api/automation/v2/dags"]);
+
+    // 500: the service handled the request badly, which is not the same as not
+    // being there — the probe must step aside and let the real call speak.
+    const logs: string[] = [];
+    mockFetch([
+      [
+        /^\/api\/automation\/v2\/dags$/,
+        () => new Response(JSON.stringify({ error: "boom" }), { status: 500 }),
+      ],
+    ]);
+    await expect(
+      createFromCsv(ctx, {
+        catalogId: "c-1",
+        name: "kn",
+        files: "/tmp/none.csv",
+        onProgress: (m) => logs.push(m),
+      }),
+    ).rejects.not.toThrow(/dataflow service is not available/);
     expect(logs.join("\n")).toMatch(/preflight inconclusive/);
   });
 

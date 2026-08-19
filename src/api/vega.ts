@@ -7,10 +7,14 @@
  * index_config when the BuildTask is created.
  */
 import { z } from "zod";
-import type { RequestContext } from "../types.js";
+import { DEFAULT_LIST_LIMIT, type RequestContext } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { request } from "./http.js";
+import {
+  ListResourcesResponse,
+  type ListResourcesResponse as ListResourcesResult,
+} from "./resources.js";
 
 // Vega backend base path.
 const VEGA_BASE = "/api/vega-backend/v1";
@@ -55,27 +59,85 @@ export const CatalogHealthCheckStatus = z.enum([
 ]);
 export type CatalogHealthCheckStatus = z.infer<typeof CatalogHealthCheckStatus>;
 
+export const Catalog = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    tags: z.array(z.string()).optional(),
+    description: z.string().optional(),
+    type: z.string(),
+    enabled: z.boolean(),
+    internal: z.boolean().optional(),
+    connector_type: z.string(),
+    connector_config: z.record(z.unknown()).optional(),
+    metadata: z.record(z.unknown()).optional(),
+    extensions: z.record(z.string()).optional(),
+    health_check_status: z.string().optional(),
+    last_check_time: z.number().optional(),
+    health_check_result: z.string().optional(),
+    creator: z
+      .object({
+        id: z.string().optional(),
+        type: z.string().optional(),
+        name: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
+    create_time: z.number().optional(),
+    updater: z
+      .object({
+        id: z.string().optional(),
+        type: z.string().optional(),
+        name: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
+    update_time: z.number(),
+    operations: z.array(z.string()).optional(),
+  })
+  .passthrough();
+export type Catalog = z.infer<typeof Catalog>;
+
+export const ListCatalogsResponse = z
+  .object({ entries: z.array(Catalog), total_count: z.number() })
+  .passthrough();
+export type ListCatalogsResponse = z.infer<typeof ListCatalogsResponse>;
+
+export const BatchCatalogsResponse = z.object({ entries: z.array(Catalog) }).passthrough();
+export type BatchCatalogsResponse = z.infer<typeof BatchCatalogsResponse>;
+
+export const CatalogRef = z
+  .object({ id: z.string(), extensions: z.record(z.string()).optional() })
+  .passthrough();
+export type CatalogRef = z.infer<typeof CatalogRef>;
+
 export const CatalogHealthStatus = z
   .object({
     id: z.string(),
-    health_check_status: CatalogHealthCheckStatus,
+    health_check_status: z.string(),
     last_check_time: z.number().optional(),
     health_check_result: z.string().optional(),
   })
   .passthrough();
 export type CatalogHealthStatus = z.infer<typeof CatalogHealthStatus>;
 
-export type CatalogHealthCheckScheduleRequest =
+export type CatalogHealthCheckScheduleConfig =
   | { mode: "enabled"; cronExpr: string }
   | { mode: "inherit" | "disabled"; cronExpr?: never };
+
+export type CatalogHealthCheckScheduleRequest = CatalogHealthCheckScheduleConfig & {
+  /** Required optimistic-lock version from the latest schedule `update_time`. */
+  expectedUpdateTime: number;
+};
 
 export const CatalogHealthCheckSchedule = z
   .object({
     catalog_id: z.string(),
-    mode: CatalogHealthCheckScheduleMode,
+    mode: z.string(),
     cron_expr: z.string().optional(),
     last_run: z.number(),
     next_run: z.number(),
+    update_time: z.number(),
   })
   .passthrough();
 export type CatalogHealthCheckSchedule = z.infer<typeof CatalogHealthCheckSchedule>;
@@ -272,7 +334,7 @@ export async function listBuildTasks(
   }
   const res = await request<unknown>(ctx, `${VEGA_BASE}/build-tasks`, {
     query: {
-      limit: opts.limit,
+      limit: opts.limit ?? DEFAULT_LIST_LIMIT,
       offset: opts.offset,
       resource_id: opts.resourceId || undefined,
       catalog_id: opts.catalogId || undefined,
@@ -390,28 +452,29 @@ export interface ListCatalogsOptions {
   offset?: number;
   name?: string;
   tag?: string;
-  type?: "physical" | "logical" | string;
+  type?: "physical" | "logical";
+  connectorType?: string;
   enabled?: boolean;
   healthCheckStatus?: CatalogHealthCheckStatus;
   includeExtensions?: boolean;
   includeExtensionKeys?: string;
   extensionPairs?: Array<{ key: string; value: string }>;
-  sort?: "name" | "create_time" | "update_time" | string;
+  sort?: "name" | "create_time" | "update_time";
   direction?: "asc" | "desc";
 }
 
-/** List catalog entries (raw passthrough — shape varies by backend). */
 export async function listCatalogs(
   ctx: RequestContext,
   opts: ListCatalogsOptions = {},
-): Promise<unknown> {
-  return request(ctx, `${VEGA_BASE}/catalogs`, {
+): Promise<ListCatalogsResponse> {
+  const result = await request<unknown>(ctx, `${VEGA_BASE}/catalogs`, {
     query: {
-      limit: opts.limit,
+      limit: opts.limit ?? DEFAULT_LIST_LIMIT,
       offset: opts.offset,
       name: opts.name || undefined,
       tag: opts.tag || undefined,
       type: opts.type || undefined,
+      connector_type: opts.connectorType || undefined,
       enabled: opts.enabled === undefined ? undefined : String(opts.enabled),
       health_check_status: opts.healthCheckStatus || undefined,
       include_extensions:
@@ -423,10 +486,26 @@ export async function listCatalogs(
       direction: opts.direction,
     },
   });
+  return ListCatalogsResponse.parse(result);
 }
 
-export function getCatalog(ctx: RequestContext, id: string): Promise<unknown> {
-  return request(ctx, `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}`);
+export async function getCatalog(
+  ctx: RequestContext,
+  id: string | string[],
+): Promise<BatchCatalogsResponse> {
+  const ids = Array.isArray(id) ? id : [id];
+  const result = await request<unknown>(
+    ctx,
+    `${VEGA_BASE}/catalogs/${ids.map(encodeURIComponent).join(",")}`,
+  );
+  return BatchCatalogsResponse.parse(result);
+}
+
+/** Unwrap the first Catalog from the detail endpoint's batch envelope. */
+export function firstCatalog(result: BatchCatalogsResponse): Catalog {
+  const catalog = result.entries[0];
+  if (!catalog) throw new InputError("catalog detail response contains no entries");
+  return catalog;
 }
 
 /** POST /catalogs body. `connector_config` shape varies by connector (raw passthrough). */
@@ -440,7 +519,7 @@ export interface CreateCatalogRequest {
   id?: string;
   internal?: boolean;
   extensions?: Record<string, string>;
-  healthCheckSchedule?: CatalogHealthCheckScheduleRequest | null;
+  healthCheckSchedule?: CatalogHealthCheckScheduleConfig | null;
 }
 
 /** Full PUT /catalogs/{id} body; the path id is injected by the API client. */
@@ -452,6 +531,8 @@ export interface UpdateCatalogRequest {
   tags?: string[];
   description?: string;
   extensions?: Record<string, string>;
+  /** Required optimistic-lock version from the latest Catalog `update_time`. */
+  expectedUpdateTime: number;
 }
 
 /** Create a Vega catalog (data source). Returns the created catalog (with its id). */
@@ -459,8 +540,8 @@ export function createCatalog(
   ctx: RequestContext,
   req: CreateCatalogRequest,
   opts: CatalogWriteOptions = {},
-): Promise<unknown> {
-  return request(ctx, `${VEGA_BASE}/catalogs`, {
+): Promise<CatalogRef> {
+  return request<unknown>(ctx, `${VEGA_BASE}/catalogs`, {
     method: "POST",
     query: {
       allow_unhealthy: opts.allowUnhealthy === undefined ? undefined : String(opts.allowUnhealthy),
@@ -480,12 +561,12 @@ export function createCatalog(
             health_check_schedule:
               req.healthCheckSchedule === null
                 ? null
-                : mapCatalogHealthCheckScheduleRequest(req.healthCheckSchedule),
+                : mapCatalogHealthCheckScheduleConfig(req.healthCheckSchedule),
           }
         : {}),
     },
     timeoutMs: 60_000,
-  });
+  }).then((result) => CatalogRef.parse(result));
 }
 
 export function updateCatalog(
@@ -508,6 +589,7 @@ export function updateCatalog(
       ...(req.tags !== undefined ? { tags: req.tags } : {}),
       ...(req.description !== undefined ? { description: req.description } : {}),
       ...(req.extensions !== undefined ? { extensions: req.extensions } : {}),
+      expected_update_time: req.expectedUpdateTime,
     },
     timeoutMs: 60_000,
   });
@@ -599,26 +681,20 @@ export async function updateCatalogHealthCheckSchedule(
     `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}/health-check-schedule`,
     {
       method: "PUT",
-      body: mapCatalogHealthCheckScheduleRequest(req),
+      body: {
+        ...mapCatalogHealthCheckScheduleConfig(req),
+        expected_update_time: req.expectedUpdateTime,
+      },
     },
   );
   return CatalogHealthCheckSchedule.parse(result);
 }
 
-function mapCatalogHealthCheckScheduleRequest(req: CatalogHealthCheckScheduleRequest) {
+function mapCatalogHealthCheckScheduleConfig(req: CatalogHealthCheckScheduleConfig) {
   return {
     mode: req.mode,
     ...(req.mode === "enabled" ? { cron_expr: req.cronExpr } : {}),
   };
-}
-
-/** Trigger a catalog metadata scan (discover). `wait=true` blocks until done. */
-export function discoverCatalog(ctx: RequestContext, id: string, wait = true): Promise<unknown> {
-  return request(ctx, `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}/discover`, {
-    method: "POST",
-    query: { wait },
-    timeoutMs: 120_000,
-  });
 }
 
 /** Resources under a catalog (optionally filtered by category). */
@@ -628,20 +704,25 @@ export function listCatalogResources(
   category?: string,
   limit?: number,
   offset?: number,
-): Promise<unknown> {
+): Promise<ListResourcesResult> {
   // The backend has no `/catalogs/:id/resources` route — resources are listed
   // via `/resources?catalog_id=…` (same endpoint as `resource list`). Without an
-  // explicit `limit` the backend defaults to DEFAULT_LIMIT=20 (range [1,1000]);
+  // explicit `limit` this client sends its list default (30; backend range [1,1000]);
   // pass limit=-1 (NO_LIMIT) to fetch every resource.
-  return request(ctx, `${VEGA_BASE}/resources`, {
+  return request<unknown>(ctx, `${VEGA_BASE}/resources`, {
     query: {
       catalog_id: id,
       category: category || undefined,
-      // limit=-1 (NO_LIMIT) fetches all; NaN / 0 fall back to the backend default.
-      limit: Number.isFinite(limit) && (limit! > 0 || limit === -1) ? limit : undefined,
+      // limit=-1 (NO_LIMIT) fetches all; invalid values use the SDK list default.
+      limit:
+        limit === undefined
+          ? DEFAULT_LIST_LIMIT
+          : Number.isFinite(limit) && (limit > 0 || limit === -1)
+            ? limit
+            : DEFAULT_LIST_LIMIT,
       offset: offset || undefined,
     },
-  });
+  }).then((result) => ListResourcesResponse.parse(result));
 }
 
 /** Fetch the latest health-check status for one catalog. */

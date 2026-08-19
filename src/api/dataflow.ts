@@ -16,6 +16,27 @@ export function listDataflows(ctx: RequestContext): Promise<unknown> {
   return request(ctx, `${BASE}/dags`, { query: { type: "data-flow", page: 0, limit: -1 } });
 }
 
+/**
+ * Reach the dataflow service without asking it for anything, for callers that
+ * only need to know whether it answers.
+ *
+ * `listDataflows` fetches every DAG (`limit=-1`); on a deploy with many of them
+ * that read is heavy enough that a gateway timeout says "this query was slow",
+ * not "nothing is there". Asking for one row removes that reading.
+ *
+ * The request keeps the default deadline on purpose. A shorter one would cut
+ * off the very answer a caller wants: a hung upstream produces 504 only once
+ * the gateway's own read timeout elapses, and giving up first turns a diagnosis
+ * into an abort with nothing to say. Envoy's 15s default fits inside the 30s
+ * deadline; nginx's 60s does not, so on such a deploy a hung upstream still
+ * aborts client-side and the caller falls back to whatever it does when the
+ * probe says nothing. That is the safe direction — a probe that cannot tell
+ * lets the real call speak — but it is a boundary, not full coverage.
+ */
+export function pingDataflows(ctx: RequestContext): Promise<unknown> {
+  return request(ctx, `${BASE}/dags`, { query: { type: "data-flow", page: 0, limit: 1 } });
+}
+
 /** Create a dataflow (DAG) from a full document body. Returns the new DAG id. */
 export function createDataflow(ctx: RequestContext, body: unknown): Promise<unknown> {
   return request(ctx, `${BASE_V1}/data-flow/flow`, { method: "POST", body });
