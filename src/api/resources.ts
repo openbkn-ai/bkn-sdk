@@ -626,6 +626,9 @@ export function deleteResourceDocumentsByFilter(
   resourceId: string,
   filterCondition: Record<string, unknown>,
 ): Promise<unknown> {
+  if (Object.keys(filterCondition).length === 0) {
+    throw new InputError("delete-by-filter requires a non-empty filter condition");
+  }
   return request(ctx, `${BASE}/${encodeURIComponent(resourceId)}/data`, {
     method: "POST",
     headers: { "X-HTTP-Method-Override": "DELETE" },

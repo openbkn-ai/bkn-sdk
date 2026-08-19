@@ -248,6 +248,44 @@ describe("vega optimistic updates", () => {
       expected_update_time: 1720000000789,
     });
   });
+
+  it("reports an invalid required discover schedule strategy as input error", async () => {
+    suppressOutput();
+    await expect(
+      cli().parseAsync(
+        [
+          "--base-url",
+          "https://demo.example.com",
+          "--token",
+          "t",
+          "vega",
+          "discover-schedule",
+          "update",
+          "s-1",
+          "--name",
+          "hourly",
+          "--catalog-id",
+          "c-1",
+          "--cron",
+          "0 * * * *",
+          "--enabled",
+          "false",
+          "--start-time",
+          "0",
+          "--end-time",
+          "0",
+          "--strategy",
+          "unknown",
+          "--expected-update-time",
+          "1720000000789",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toMatchObject({
+      name: "InputError",
+      message: expect.stringMatching(/invalid discover strategy/),
+    });
+  });
 });
 
 describe("vega lifecycle and document commands", () => {

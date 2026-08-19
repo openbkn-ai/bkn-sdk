@@ -98,6 +98,11 @@ async function discoverCatalogAndWait(ctx: RequestContext, catalogId: string): P
         `Catalog discovery task ${taskId} ${task.status}${task.message ? `: ${task.message}` : ""}.`,
       );
     }
+    if (task.status !== "pending" && task.status !== "running") {
+      throw new Error(
+        `Catalog discovery task ${taskId} ended in unexpected status "${task.status}".`,
+      );
+    }
     if (Date.now() >= deadline) {
       throw new Error(`Catalog discovery task ${taskId} did not complete within 120 seconds.`);
     }
@@ -297,7 +302,7 @@ async function sampleRows(
 ): Promise<Array<Record<string, string | null>>> {
   try {
     const res = await queryResource(ctx, resourceId, { limit: 100 });
-    return res.entries as Array<Record<string, string | null>>;
+    return Array.isArray(res.entries) ? (res.entries as Array<Record<string, string | null>>) : [];
   } catch {
     return [];
   }
@@ -320,7 +325,7 @@ export async function createFromCatalog(
       : opts.embeddingModel;
 
   // 1. List catalog tables, scanning once if the catalog is empty.
-  //    `limit: -1` (NO_LIMIT), not the backend's default page of 20: this list
+  //    `limit: -1` (NO_LIMIT), not the backend's default page: this list
   //    decides which tables become object types AND is the source of every
   //    "tables in this run" message below, so a truncated page would drop the
   //    21st table from the network without a word and then deny it exists.
@@ -340,7 +345,7 @@ export async function createFromCatalog(
   // same `{entries:[…]}` envelope as the list — unwrap it, or every table ends
   // up nameless and column-less and only fails much later, in PK detection.
   //
-  // In batches, not one `Promise.all` over the catalog: the default page of 20
+  // In batches, not one `Promise.all` over the catalog: the default page
   // dropped above was also what kept this fan-out small, and a few hundred
   // simultaneous reads earn a rate-limit or a pool timeout whose message says
   // nothing about how many tables were asked for at once.

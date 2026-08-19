@@ -167,6 +167,9 @@ const discoverStrategy = (raw?: string): DiscoverStrategy | undefined => {
   return parsed.data;
 };
 
+const requiredDiscoverStrategy = (raw: string): DiscoverStrategy =>
+  discoverStrategy(raw) as DiscoverStrategy;
+
 const taskStatuses = (raw?: string): VegaTaskStatus[] | undefined => {
   if (raw === undefined) return undefined;
   const values = csv(raw);
@@ -531,6 +534,7 @@ export function vegaCommand(): Command {
     });
   discoverSchedule
     .command("create")
+    .description("Create a discovery schedule")
     .requiredOption("--name <s>", "schedule name")
     .requiredOption("--catalog-id <id>", "catalog id")
     .requiredOption("--cron <expr>", "five-field cron expression")
@@ -554,6 +558,7 @@ export function vegaCommand(): Command {
     });
   discoverSchedule
     .command("update <id>")
+    .description("Fully update a discovery schedule")
     .requiredOption("--name <s>", "schedule name")
     .requiredOption("--catalog-id <id>", "current catalog id")
     .requiredOption("--cron <expr>", "five-field cron expression")
@@ -575,7 +580,7 @@ export function vegaCommand(): Command {
           enabled: opts.enabled,
           startTime: opts.startTime,
           endTime: opts.endTime,
-          strategy: DiscoverStrategy.parse(opts.strategy),
+          strategy: requiredDiscoverStrategy(opts.strategy),
           expectedUpdateTime: opts.expectedUpdateTime,
         }),
         outputOptions(cmd),
@@ -681,6 +686,7 @@ export function vegaCommand(): Command {
     });
   semanticTask
     .command("create")
+    .description("Create a semantic-understanding task")
     .requiredOption("--scope <scope>", "resource | catalog")
     .option("--catalog-id <id>", "catalog id")
     .option("--resource-id <id>", "resource id")

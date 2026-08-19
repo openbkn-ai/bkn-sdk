@@ -173,6 +173,32 @@ describe("createFromCatalog table identifiers", () => {
     expect(listCount).toBe(2);
   });
 
+  it("reports an unknown discovery task status instead of waiting for timeout", async () => {
+    mockFetch([
+      [/^\/api\/vega-backend\/v1\/resources$/, () => ({ entries: [] })],
+      [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({ id: "task-1" })],
+      [
+        /^\/api\/vega-backend\/v1\/discover-tasks\/task-1$/,
+        () => ({
+          id: "task-1",
+          catalog_id: "c-1",
+          schedule_id: "",
+          strategy: "full_sync",
+          trigger_type: "manual",
+          status: "stopped",
+          progress: 0,
+          message: "",
+          creator: { id: "u-1", type: "user" },
+          create_time: 1,
+        }),
+      ],
+    ]);
+
+    await expect(createFromCatalog(ctx, { catalogId: "c-1", name: "kn" })).rejects.toThrow(
+      /task-1 ended in unexpected status "stopped"/,
+    );
+  });
+
   it("asks for every table, not the backend's default page", async () => {
     const f = mockFetch(
       catalogRoutes([{ id: "r-1", name: "document", columns: ["id"], pk: "id" }]),

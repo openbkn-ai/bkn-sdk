@@ -16,7 +16,7 @@ import {
   upsertResourceDocuments,
 } from "../../src/api/resources.js";
 import type { RequestContext } from "../../src/types.js";
-import { HttpError } from "../../src/utils/errors.js";
+import { HttpError, InputError } from "../../src/utils/errors.js";
 
 const ctx: RequestContext = {
   baseUrl: "https://demo.example.com",
@@ -373,6 +373,12 @@ describe("typed Resource and document APIs", () => {
     expect(JSON.parse(firstCall(filterFetch)[1].body as string)).toEqual({
       filter_condition: { status: { eq: "stale" } },
     });
+  });
+
+  it("rejects an empty document deletion filter before making a request", () => {
+    const filterFetch = mockFetch();
+    expect(() => deleteResourceDocumentsByFilter(ctx, "r-1", {})).toThrow(InputError);
+    expect(filterFetch).not.toHaveBeenCalled();
   });
 });
 
