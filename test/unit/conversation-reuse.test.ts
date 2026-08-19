@@ -18,7 +18,17 @@ const platform = "https://demo.example.com";
 
 beforeEach(() => {
   process.env.BKN_CONFIG_DIR = mkdtempSync(join(tmpdir(), "bkn-conv-"));
-  for (const k of ["BKN_BASE_URL", "BKN_USER", "BKN_CONVERSATION_ID", "BKN_INTERACTION_ID"]) {
+  // Every input the resolution reads, including `BKN_TOKEN`: `transientIdentity`
+  // treats an explicit token as another identity, so leaving one set turns off
+  // the whole feature and flips four of these assertions — green on a bare CI
+  // runner, red on a machine following the README.
+  for (const k of [
+    "BKN_BASE_URL",
+    "BKN_USER",
+    "BKN_TOKEN",
+    "BKN_CONVERSATION_ID",
+    "BKN_INTERACTION_ID",
+  ]) {
     delete process.env[k];
   }
   writeToken(platform, { baseUrl: platform, accessToken: "t" });
