@@ -1,12 +1,7 @@
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { resolveContext } from "../../src/config/resolve.js";
 import { attachToken } from "../../src/resources/auth.js";
 import { InputError } from "../../src/utils/errors.js";
-
-const saved = { ...process.env };
 
 function jwt(claims: Record<string, unknown>): string {
   const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
@@ -18,18 +13,6 @@ function subOf(token: string): unknown {
   const payload = token.split(".")[1] as string;
   return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")).sub;
 }
-
-beforeEach(() => {
-  // Isolate the store to an empty temp dir so only env/opts feed resolution.
-  process.env.BKN_CONFIG_DIR = mkdtempSync(join(tmpdir(), "bkn-test-"));
-  delete process.env.BKN_BASE_URL;
-  delete process.env.BKN_TOKEN;
-  delete process.env.BKN_USER;
-});
-
-afterEach(() => {
-  process.env = { ...saved };
-});
 
 describe("resolveContext", () => {
   it("uses explicit options over env", () => {
