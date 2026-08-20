@@ -10,6 +10,16 @@ import {
   writeToken,
 } from "../../src/config/store.js";
 
+/** Filled by the `printJson` mock below; one entry per print. */
+const printed: unknown[] = [];
+
+vi.mock("../../src/utils/output.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/utils/output.js")>()),
+  printJson: (value: unknown) => {
+    printed.push(value);
+  },
+}));
+
 const platform = "https://demo.example.com";
 
 beforeEach(() => {
@@ -151,36 +161,23 @@ describe("remembering a conversation the run opened", () => {
 /**
  * The command itself, not the resolver underneath it.
  *
- * Chunks are collected raw and parsed after the spy is gone. Parsing inside the
- * replacement made `process.stdout.write` throw on anything that was not the
- * command's JSON — and the reporter writes there too, whenever it feels like
- * it. That never interleaved on a TTY and always did on CI, where the file hung
- * until the job's six-hour limit.
+ * The payload is taken from `printJson`, never from `process.stdout`. Two
+ * earlier versions replaced `process.stdout.write` and this file then hung
+ * every CI run to the job's six-hour limit — 48 of 49 files reported, this one
+ * never did. A worker's stdout belongs to the runner as much as to the test,
+ * and neither swallowing chunks nor throwing on the ones that are not JSON
+ * showed up locally, where the reporter had nothing to say in that window.
+ * Mocking the module the command prints through leaves that plumbing alone.
  */
 function run(...argv: string[]): unknown {
-  const chunks: string[] = [];
-  const spy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: unknown) => {
-    chunks.push(String(chunk));
-    return true;
-  }) as typeof process.stdout.write);
-  try {
-    new Command("openbkn")
-      .exitOverride()
-      .option("--json")
-      .option("--conversation-id <id>")
-      .addCommand(contextCommand())
-      .parse(["node", "openbkn", "--json", ...argv]);
-  } finally {
-    spy.mockRestore();
-  }
-  for (const chunk of chunks) {
-    try {
-      return JSON.parse(chunk);
-    } catch {
-      // Reporter noise that landed in the same window.
-    }
-  }
-  return undefined;
+  printed.length = 0;
+  new Command("openbkn")
+    .exitOverride()
+    .option("--json")
+    .option("--conversation-id <id>")
+    .addCommand(contextCommand())
+    .parse(["node", "openbkn", "--json", ...argv]);
+  return printed[0];
 }
 
 describe("openbkn context conversation", () => {
