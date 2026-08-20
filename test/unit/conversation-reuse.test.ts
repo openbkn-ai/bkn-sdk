@@ -1,6 +1,3 @@
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clientFrom, conversationSource, traceOptionsFrom } from "../../src/commands/_shared.js";
@@ -13,29 +10,14 @@ import {
   writeToken,
 } from "../../src/config/store.js";
 
-const saved = { ...process.env };
 const platform = "https://demo.example.com";
 
 beforeEach(() => {
-  process.env.BKN_CONFIG_DIR = mkdtempSync(join(tmpdir(), "bkn-conv-"));
-  // Every input the resolution reads, including `BKN_TOKEN`: `transientIdentity`
-  // treats an explicit token as another identity, so leaving one set turns off
-  // the whole feature and flips four of these assertions — green on a bare CI
-  // runner, red on a machine following the README.
-  for (const k of [
-    "BKN_BASE_URL",
-    "BKN_USER",
-    "BKN_TOKEN",
-    "BKN_CONVERSATION_ID",
-    "BKN_INTERACTION_ID",
-  ]) {
-    delete process.env[k];
-  }
+  // An empty store and no ambient `BKN_*` come from `test/setup/isolated-env.ts`
+  // — including `BKN_TOKEN`, which `transientIdentity` reads: left set, the
+  // feature switches itself off and four assertions here invert.
   writeToken(platform, { baseUrl: platform, accessToken: "t" });
   setActivePlatform(platform);
-});
-afterEach(() => {
-  process.env = { ...saved };
 });
 
 /** A stand-in for the commander object `clientFrom` reads its options from. */
