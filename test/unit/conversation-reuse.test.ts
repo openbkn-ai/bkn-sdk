@@ -148,11 +148,19 @@ describe("remembering a conversation the run opened", () => {
   });
 });
 
-/** The command itself, not the resolver underneath it. */
+/**
+ * The command itself, not the resolver underneath it.
+ *
+ * Chunks are collected raw and parsed after the spy is gone. Parsing inside the
+ * replacement made `process.stdout.write` throw on anything that was not the
+ * command's JSON — and the reporter writes there too, whenever it feels like
+ * it. That never interleaved on a TTY and always did on CI, where the file hung
+ * until the job's six-hour limit.
+ */
 function run(...argv: string[]): unknown {
-  const out: unknown[] = [];
-  const spy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string) => {
-    out.push(JSON.parse(String(chunk)));
+  const chunks: string[] = [];
+  const spy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: unknown) => {
+    chunks.push(String(chunk));
     return true;
   }) as typeof process.stdout.write);
   try {
@@ -165,7 +173,14 @@ function run(...argv: string[]): unknown {
   } finally {
     spy.mockRestore();
   }
-  return out[0];
+  for (const chunk of chunks) {
+    try {
+      return JSON.parse(chunk);
+    } catch {
+      // Reporter noise that landed in the same window.
+    }
+  }
+  return undefined;
 }
 
 describe("openbkn context conversation", () => {
