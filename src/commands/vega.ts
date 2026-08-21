@@ -59,7 +59,7 @@ const bool = (value: string): boolean => {
 const parseJsonObject = (value: string, flag: string): Record<string, unknown> => {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(value);
+    parsed = parseBigIntJSON(value);
   } catch {
     throw new InputError(`${flag} must be valid JSON`);
   }
@@ -80,7 +80,7 @@ const parseStringRecord = (value: string, flag: string): Record<string, string> 
 const parseJsonArray = (value: string, flag: string): Record<string, unknown>[] => {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(value);
+    parsed = parseBigIntJSON(value);
   } catch {
     throw new InputError(`${flag} must be valid JSON`);
   }

@@ -7,6 +7,7 @@ import type { RequestContext } from "../types.js";
  * invocation (mf-model-api). Passed through as JSON.
  */
 import { HttpError, InputError } from "../utils/errors.js";
+import { parseBigIntJSON, stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
@@ -125,7 +126,7 @@ export async function chatCompletionsStream(
         "content-type": "application/json",
         accept: "text/event-stream",
       },
-      body: JSON.stringify({ model, messages, stream: true }),
+      body: stringifyBigIntJSON({ model, messages, stream: true }),
     }),
   );
   if (!res.ok) throw new HttpError(res.status, res.statusText, await res.text());
@@ -142,7 +143,7 @@ export async function chatCompletionsStream(
     const payload = trimmed.slice(5).trim();
     if (payload === "[DONE]" || payload === "") return;
     try {
-      const text = deltaContent(JSON.parse(payload) as Record<string, unknown>);
+      const text = deltaContent(parseBigIntJSON(payload) as Record<string, unknown>);
       if (text) {
         out += text;
         onDelta(text);

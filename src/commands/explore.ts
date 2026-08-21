@@ -10,6 +10,7 @@ import { type IncomingMessage, type ServerResponse, createServer } from "node:ht
 import { Command } from "commander";
 import type { BknClient } from "../client.js";
 import { group } from "../help/grouped-help.js";
+import { parseBigIntJSON, stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { clientFrom } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
@@ -56,7 +57,7 @@ function readBody(reqMsg: IncomingMessage): Promise<Record<string, unknown>> {
     reqMsg.on("end", () => {
       if (!data.trim()) return resolve({});
       try {
-        resolve(JSON.parse(data) as Record<string, unknown>);
+        resolve(parseBigIntJSON(data) as Record<string, unknown>);
       } catch {
         reject(new Error("invalid JSON body"));
       }
@@ -114,7 +115,7 @@ async function handle(
     const body = method === "GET" ? {} : await readBody(reqMsg);
     const data = await handler(client, url.searchParams, body);
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify(data ?? null));
+    res.end(stringifyBigIntJSON(data ?? null));
   } catch (err) {
     res.writeHead(500, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));

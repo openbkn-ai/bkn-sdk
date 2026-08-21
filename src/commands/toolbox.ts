@@ -6,6 +6,7 @@ import { Command } from "commander";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
+import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, outputOptions } from "./_shared.js";
 
@@ -147,14 +148,14 @@ export function toolCommand(): Command {
   const parseJson = (s: string | undefined, label: string): Record<string, unknown> | undefined => {
     if (!s) return undefined;
     try {
-      return JSON.parse(s);
+      return parseBigIntJSON(s) as Record<string, unknown>;
     } catch {
       throw new InputError(`--${label} must be valid JSON`);
     }
   };
 
   const buildEnvelope = (opts: Record<string, string | undefined>) => ({
-    body: opts.body ? JSON.parse(opts.body) : undefined,
+    body: opts.body ? parseBigIntJSON(opts.body) : undefined,
     header: parseJson(opts.header, "header"),
     query: parseJson(opts.query, "query"),
     path: parseJson(opts.path, "path"),

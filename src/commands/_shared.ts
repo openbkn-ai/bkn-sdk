@@ -8,6 +8,7 @@ import { type BknClient, createClient } from "../client.js";
 import { activePlatform, readPlatformConfig, updatePlatformConfig } from "../config/store.js";
 import type { TraceContextOptions } from "../types.js";
 import { InputError } from "../utils/errors.js";
+import { parseBigIntJSON } from "../utils/json-bigint.js";
 import type { OutputOptions } from "../utils/output.js";
 
 /**
@@ -140,7 +141,7 @@ export function readBody(opts: { body?: string; bodyFile?: string }): unknown {
   const raw = opts.bodyFile ? readFileSync(opts.bodyFile, "utf8") : opts.body;
   if (!raw) throw new InputError("Provide --body '<json>' or --body-file <path>.");
   try {
-    return JSON.parse(raw);
+    return parseBigIntJSON(raw);
   } catch {
     throw new InputError("Request body is not valid JSON.");
   }

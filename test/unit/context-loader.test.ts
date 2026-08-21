@@ -163,6 +163,25 @@ describe("drill-down (get_object_types / get_relation_types)", () => {
 });
 
 describe("managed MCP tool calls", () => {
+  it("preserves unsafe integers in tool arguments and text results", async () => {
+    const body =
+      '{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"{\\"id_card\\":110101199001152345}"}]}}';
+    const fetchMock = vi.fn(
+      async () => new Response(body, { status: 200, headers: { "mcp-session-id": "bigint-s1" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      callTool(ctx, "kn-bigint", "query_object_instance", { id_card: 110101199001152345n }),
+    ).resolves.toEqual({
+      id_card: 110101199001152345n,
+    });
+
+    const calls = (fetchMock as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls;
+    const toolCall = calls.find(([, init]) => String(init.body).includes("query_object_instance"));
+    expect(toolCall?.[1].body).toContain("110101199001152345");
+  });
+
   it("sends host lifecycle hints as MCP metadata, never as model tool arguments", async () => {
     const f = mockMcp();
 

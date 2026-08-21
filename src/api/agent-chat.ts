@@ -11,6 +11,7 @@ import type { RequestContext } from "../types.js";
  * may be removed in a future release. Avoid building new integrations on it.
  */
 import { HttpError } from "../utils/errors.js";
+import { parseBigIntJSON, stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
@@ -132,7 +133,7 @@ export async function sendChat(
         accept: opts.stream ? "text/event-stream" : "application/json",
         "x-language": "zh-CN",
       },
-      body: JSON.stringify(body),
+      body: stringifyBigIntJSON(body),
     }),
   );
   if (!res.ok) throw new HttpError(res.status, res.statusText, await res.text());
@@ -141,7 +142,7 @@ export async function sendChat(
   if (opts.stream && contentType.includes("text/event-stream")) {
     return consumeStream(res, opts.onDelta);
   }
-  const result = JSON.parse(await res.text()) as Record<string, unknown>;
+  const result = parseBigIntJSON(await res.text()) as Record<string, unknown>;
   return { text: extractText(result), conversationId: conversationIdOf(result) };
 }
 
@@ -165,7 +166,7 @@ async function consumeStream(res: Response, onDelta?: (text: string) => void): P
     if (payload === "" || payload === "[DONE]") return;
     let data: { key?: string[]; content?: unknown; action?: string };
     try {
-      data = JSON.parse(payload);
+      data = parseBigIntJSON(payload) as typeof data;
     } catch {
       return;
     }

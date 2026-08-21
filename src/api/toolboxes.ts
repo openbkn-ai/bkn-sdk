@@ -9,6 +9,7 @@ import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import type { RequestContext } from "../types.js";
 import { HttpError } from "../utils/errors.js";
+import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
@@ -57,7 +58,7 @@ export async function importConfig(
   );
   const text = await res.text();
   if (!res.ok) throw new HttpError(res.status, res.statusText, text);
-  return text ? JSON.parse(text) : text;
+  return text ? parseBigIntJSON(text) : text;
 }
 
 /**
@@ -83,7 +84,7 @@ export async function uploadTool(
   );
   const text = await res.text();
   if (!res.ok) throw new HttpError(res.status, res.statusText, text);
-  return text ? JSON.parse(text) : text;
+  return text ? parseBigIntJSON(text) : text;
 }
 
 export interface ListToolboxesOptions {

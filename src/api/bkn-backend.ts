@@ -7,6 +7,7 @@ import type { RequestContext } from "../types.js";
  * Passed through as parsed JSON.
  */
 import { HttpError } from "../utils/errors.js";
+import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
@@ -43,7 +44,7 @@ export async function uploadBkn(
   );
   const text = await res.text();
   if (!res.ok) throw new HttpError(res.status, res.statusText, text);
-  return text ? JSON.parse(text) : undefined;
+  return text ? parseBigIntJSON(text) : undefined;
 }
 
 /**

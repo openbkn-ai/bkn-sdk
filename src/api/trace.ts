@@ -7,6 +7,7 @@
  */
 import type { RequestContext } from "../types.js";
 import { InputError } from "../utils/errors.js";
+import { parseBigIntJSON, stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { request } from "./http.js";
 import type { OperationCallFact, OperationReceipt } from "./trace-lifecycle.js";
 
@@ -426,7 +427,9 @@ export function getTechnicalTrace(
   ctx: RequestContext,
   traceId: string,
 ): Promise<TechnicalTraceDetail> {
-  return request<TechnicalTraceDetail>(ctx, `${TRACES}/${encodeURIComponent(traceId)}`);
+  return request<TechnicalTraceDetail>(ctx, `${TRACES}/${encodeURIComponent(traceId)}`, {
+    responseParser: parseBigIntJSON,
+  });
 }
 
 /** Submit BKN Trace phase-two claim/evidence/business events. */
@@ -466,7 +469,9 @@ export function getEvidenceArtifact(
   ctx: RequestContext,
   artifactId: string,
 ): Promise<EvidenceArtifact> {
-  return request<EvidenceArtifact>(ctx, `${EVIDENCE_ARTIFACTS}/${encodeURIComponent(artifactId)}`);
+  return request<EvidenceArtifact>(ctx, `${EVIDENCE_ARTIFACTS}/${encodeURIComponent(artifactId)}`, {
+    responseParser: parseBigIntJSON,
+  });
 }
 
 /** List product-facing business request summaries. */
@@ -519,6 +524,7 @@ export function getEvidenceChain(
   const target = traceTarget(scope, "evidence-chain");
   return request<EvidenceChainResponse>(ctx, target.path, {
     query: queryWithLimit(target.query, opts),
+    responseParser: parseBigIntJSON,
   });
 }
 
@@ -530,6 +536,7 @@ export function getBusinessGraph(
   const target = traceTarget(scope, "business-graph");
   return request<BusinessGraphResponse>(ctx, target.path, {
     query: queryWithLimit(target.query, opts),
+    responseParser: parseBigIntJSON,
   });
 }
 
@@ -541,6 +548,7 @@ export function getSnapshotPreview(
   const target = traceTarget(scope, "snapshot-preview");
   return request<SnapshotPreviewResponse>(ctx, target.path, {
     query: queryWithLimit(target.query, opts),
+    responseParser: parseBigIntJSON,
   });
 }
 
@@ -635,11 +643,12 @@ function operationAttributes(operation: TechnicalTraceOperation): Record<string,
 }
 
 function payloadText(value: unknown): string {
-  return typeof value === "string" ? value : JSON.stringify(value);
+  return typeof value === "string" ? value : stringifyBigIntJSON(value);
 }
 
 function safeNanoString(value: unknown): string | undefined {
   if (typeof value === "string" && /^\d+$/.test(value)) return value;
+  if (typeof value === "bigint" && value >= 0n) return value.toString();
   if (
     typeof value === "number" &&
     Number.isFinite(value) &&

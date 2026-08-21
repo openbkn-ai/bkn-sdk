@@ -15,12 +15,13 @@ import { validateFixturePath } from "../bkn-trace/fixture-validate.js";
 import { validateSchemaFile } from "../bkn-trace/schema-validate.js";
 import { group } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
+import { parseBigIntJSON, stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, outputOptions, readBody } from "./_shared.js";
 
 function renderPayload(payload: PayloadEnvelope | undefined): string {
   if (!payload) return "-";
-  if (payload.mode === "inline") return JSON.stringify(payload.inline);
+  if (payload.mode === "inline") return stringifyBigIntJSON(payload.inline);
   if (payload.mode === "referenced") return `[referenced] ${payload.ref ?? "-"}`;
   return `[omitted] ${payload.omitted_reason ?? "unknown"}`;
 }
@@ -337,10 +338,10 @@ export function traceCommand(): Command {
     .description("Build eval cases from a queries JSON file")
     .option("--out <file>", "write the cases JSON here (default: stdout)")
     .action(async (queriesFile: string, opts, cmd: Command) => {
-      const raw = JSON.parse(readFileSync(queriesFile, "utf8"));
+      const raw = parseBigIntJSON(readFileSync(queriesFile, "utf8"));
       const cases = clientFrom(cmd).trace.evalSetBuild(raw);
       if (opts.out) {
-        writeFileSync(opts.out, JSON.stringify({ cases }, null, 2));
+        writeFileSync(opts.out, stringifyBigIntJSON({ cases }, 2));
         printJson({ out: opts.out, cases: cases.length }, outputOptions(cmd));
       } else {
         printJson({ cases }, outputOptions(cmd));
@@ -353,7 +354,7 @@ export function traceCommand(): Command {
     .option("--version <v>", "agent version", "v0")
     .option("--llm", "enable semantic_match assertions via the local `claude` CLI")
     .action(async (casesFile: string, opts, cmd: Command) => {
-      const raw = JSON.parse(readFileSync(casesFile, "utf8"));
+      const raw = parseBigIntJSON(readFileSync(casesFile, "utf8"));
       const cases = clientFrom(cmd).trace.evalSetBuild(raw);
       const result = await clientFrom(cmd).trace.evalSetTest(opts.agent, cases, {
         version: opts.version,

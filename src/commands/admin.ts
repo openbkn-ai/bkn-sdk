@@ -14,6 +14,7 @@ import { activePlatform, setActivePlatform } from "../config/store.js";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
+import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { renderOrgTree } from "../utils/org-tree.js";
 import { printJson } from "../utils/output.js";
 import { promptLine } from "../utils/prompt.js";
@@ -636,7 +637,7 @@ export function adminCommand(): Command {
       );
       const out = outputOptions(cmd);
       try {
-        printJson(JSON.parse(res.body), out);
+        printJson(parseBigIntJSON(res.body), out);
       } catch {
         process.stdout.write(res.body.endsWith("\n") ? res.body : `${res.body}\n`);
       }

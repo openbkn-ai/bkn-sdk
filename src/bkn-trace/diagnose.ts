@@ -8,6 +8,7 @@
  * `scan` is the remaining piece (see docs/exec-plans/tech-debt-tracker.md).
  */
 import type { RawSpan } from "../api/trace.js";
+import { stringifyBigIntJSON } from "../utils/json-bigint.js";
 
 export type SpanKind = "tool" | "llm" | "retrieval" | "reasoning" | "unknown";
 
@@ -172,7 +173,8 @@ const toolLoopNoStateChange: Predicate = (trace, params) => {
     while (
       j < tools.length &&
       toolName(tools[j] as Span) === name &&
-      JSON.stringify((tools[j] as Span).attributes["gen_ai.tool.args"]) === JSON.stringify(args) &&
+      stringifyBigIntJSON((tools[j] as Span).attributes["gen_ai.tool.args"]) ===
+        stringifyBigIntJSON(args) &&
       (tools[j] as Span).attributes[STATE] === state
     )
       j++;
@@ -414,7 +416,7 @@ function buildRubricPrompt(rule: RubricRule, tree: TraceTree): string {
     `USER INTENT: ${userIntent(tree) || "(unknown)"}`,
     "",
     "SPAN SEQUENCE (tool + llm steps, chronological):",
-    JSON.stringify(spanSequence(tree), null, 2),
+    stringifyBigIntJSON(spanSequence(tree), 2),
     "",
     "Respond with ONLY a JSON object (no prose, no code fence) of exactly this shape:",
     '{"category": "legitimate_retry|stale_results|prompt_confusion|other", "reasoning": "<one or two sentences>", "severity": "low|medium|high", "confidence": "low|medium|high", "first_violating_step_id": "<span_id>", "evidence_span_ids": ["<span_id>", ...]}',
@@ -483,7 +485,7 @@ export async function synthesizeFindings(
   const prompt = [
     "You are a trace-diagnosis synthesizer. Given these findings, write a concise summary.",
     "FINDINGS:",
-    JSON.stringify(
+    stringifyBigIntJSON(
       findings.map((f) => ({
         rule: f.ruleId,
         severity: f.severity,
@@ -491,7 +493,6 @@ export async function synthesizeFindings(
         evidence: f.evidence.excerpt,
         fix: f.suggestedFix,
       })),
-      null,
       2,
     ),
     "",

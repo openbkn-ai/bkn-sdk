@@ -52,6 +52,28 @@ function session(overrides: Partial<ConstructorParameters<typeof TraceSession>[0
 }
 
 describe("TraceSession", () => {
+  it("clones bigint evidence payloads without throwing or losing precision", () => {
+    const { value } = session();
+    const interaction = value.startInteraction({
+      operationName: "agent.run",
+      intentHash: `sha256:${"1".repeat(64)}`,
+      mode: "task",
+      agentId: "agent_1",
+    });
+    const event = value.observeOperation("data.query.observed", {
+      operationName: "data.query",
+      causationEventId: interaction.event_id,
+      payload: {
+        query_hash: `sha256:${"1".repeat(64)}`,
+        query_type: "aggregate",
+        row_count: 9223372036854775807n as unknown as number,
+      },
+    });
+
+    expect(event.payload.row_count).toBe(9223372036854775807n);
+    expect(value.pendingEvents().at(-1)?.payload.row_count).toBe(9223372036854775807n);
+  });
+
   it("preserves a caller-owned conversation across the evidence interaction", async () => {
     const { value, emit } = session({ conversationId: "conversation_supply_chain" });
     value.startInteraction({
