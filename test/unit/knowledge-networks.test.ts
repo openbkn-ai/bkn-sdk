@@ -4,7 +4,9 @@ import {
   dryRunMetric,
   executeActionType,
   getActionExecution,
+  getActionLog,
   getKnowledgeNetwork,
+  listActionLogs,
   listKnowledgeNetworks,
   listObjectTypes,
   listRelationTypes,
@@ -200,6 +202,10 @@ describe("reads tunnelled over POST", () => {
       value: 9223372036854775807n,
     });
     await expect(getActionExecution(ctx, "kn-1", "ae-1")).resolves.toEqual({
+      value: 9223372036854775807n,
+    });
+    await expect(listActionLogs(ctx, "kn-1")).resolves.toEqual({ value: 9223372036854775807n });
+    await expect(getActionLog(ctx, "kn-1", "log-1")).resolves.toEqual({
       value: 9223372036854775807n,
     });
     await expect(queryMetricData(ctx, "kn-1", "m-1", {})).resolves.toEqual({

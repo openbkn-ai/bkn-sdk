@@ -131,6 +131,7 @@ export function listActionLogs(
       limit: opts.limit ?? 30,
       need_total: opts.needTotal ? "true" : undefined,
     },
+    responseParser: parseBigIntJSON,
   });
 }
 
@@ -138,6 +139,7 @@ export function getActionLog(ctx: RequestContext, knId: string, logId: string): 
   return request(
     ctx,
     `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-logs/${encodeURIComponent(logId)}`,
+    { responseParser: parseBigIntJSON },
   );
 }
 

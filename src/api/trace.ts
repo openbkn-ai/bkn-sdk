@@ -284,9 +284,9 @@ export interface TraceGraphNode {
   service_name?: string;
   status: string;
   error_message?: string;
-  start_nano: number | string;
-  end_nano: number | string;
-  duration_nano: number;
+  start_nano: number | string | bigint;
+  end_nano: number | string | bigint;
+  duration_nano: number | bigint;
 }
 
 export interface TraceGraphEdge {
@@ -299,7 +299,7 @@ export interface TraceGraphEdge {
 export interface TraceGraphResponse {
   trace_id: string;
   status: string;
-  duration_nano: number;
+  duration_nano: number | bigint;
   partial: boolean;
   partial_reason: string[];
   page: GraphPage;
