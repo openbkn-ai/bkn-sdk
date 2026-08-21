@@ -3,6 +3,7 @@
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { parseBigIntJSON } from "../utils/json-bigint.js";
 
 const CONTRACT_VERSIONS = new Set(["1.0.0", "2.0.0", "2.1.0"]);
 const BUSINESS_CONTRACT_VERSION = "2.1.0";
@@ -843,7 +844,7 @@ function checkAllowedKeys(
 export function validateFixturePath(path: string): FixturePathValidationResult {
   const results = jsonFiles(path).map((file) => {
     try {
-      return validateFixture(JSON.parse(readFileSync(file, "utf8")));
+      return validateFixture(parseBigIntJSON(readFileSync(file, "utf8")));
     } catch (e) {
       return {
         fixtureId: file,

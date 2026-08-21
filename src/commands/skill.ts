@@ -6,6 +6,7 @@ import { Command } from "commander";
 import { group } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
+import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
 import { classifyPath, filesUnder, renderTree } from "../utils/skill-tree.js";
 import { clientFrom, outputOptions, readBody } from "./_shared.js";
@@ -272,7 +273,7 @@ export function skillCommand(): Command {
     .option("--source <s>", `source tag: ${SKILL_SOURCES.join(" | ")}`, "custom")
     .option("--extend-info <json>", "extra metadata as JSON")
     .action(async (dir: string, opts, cmd: Command) => {
-      const extendInfo = opts.extendInfo ? JSON.parse(opts.extendInfo) : undefined;
+      const extendInfo = opts.extendInfo ? parseBigIntJSON(opts.extendInfo) : undefined;
       printJson(
         await clientFrom(cmd).skills.register(dir, {
           source: checkSource(opts.source),

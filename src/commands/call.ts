@@ -7,6 +7,7 @@ import { rawCall } from "../api/call.js";
 import { lifecycleHint } from "../api/http.js";
 import { resolveContext } from "../config/resolve.js";
 import { group } from "../help/grouped-help.js";
+import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
 import { outputOptions, traceOptionsFrom } from "./_shared.js";
 
@@ -54,7 +55,7 @@ export function callCommand(): Command {
       // Pretty-print JSON bodies; pass anything else through verbatim.
       const out = outputOptions(cmd);
       try {
-        printJson(JSON.parse(res.body), out);
+        printJson(parseBigIntJSON(res.body), out);
       } catch {
         process.stdout.write(res.body.endsWith("\n") ? res.body : `${res.body}\n`);
       }

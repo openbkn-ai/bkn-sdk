@@ -64,6 +64,8 @@ Community 制品不分发 2.x Evidence 写入 Session、Artifact 正文读写、
 
 Interaction 终止 manifest 和 Operation retry fencing 字段通过受保护的 `--body-file` 提交。lease token 不进入命令行参数，避免出现在 shell history 或进程列表。
 
+动态 JSON 证据值中的不安全十进制整数会保留为原生 `bigint`；Trace Session 的 JSON clone 与 CLI JSON 输出不会把它们转为 `number` 或导致序列化失败。
+
 ## 完成标准
 
 - 稳定外部会话键的并发 ensure 只形成一个 Core generation，调用方自报 generation 或身份字段被拒绝。

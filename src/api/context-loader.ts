@@ -10,6 +10,7 @@
 import { createOperationTraceContext } from "../trace-context.js";
 import type { RequestContext } from "../types.js";
 import { HttpError, ToolError } from "../utils/errors.js";
+import { parseBigIntJSON, stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
@@ -59,14 +60,14 @@ function headers(ctx: RequestContext, knId: string, sessionId?: string): Record<
 /** Parse a JSON-RPC response body that may be plain JSON or an SSE stream. */
 function parseBody(text: string): unknown {
   try {
-    return JSON.parse(text);
+    return parseBigIntJSON(text);
   } catch {
     const data = text
       .split("\n")
       .filter((l) => l.startsWith("data:"))
       .map((l) => l.slice(5).trim())
       .join("");
-    if (data) return JSON.parse(data);
+    if (data) return parseBigIntJSON(data);
     throw new Error(`Context-loader returned invalid JSON: ${text.slice(0, 200)}`);
   }
 }
@@ -89,7 +90,7 @@ async function post(
       tlsFetch(ctx.insecure, mcpUrl(ctx), {
         method: "POST",
         headers: headers(ctx, knId, sessionId),
-        body: JSON.stringify(body),
+        body: stringifyBigIntJSON(body),
         ...(controller ? { signal: controller.signal } : {}),
       }),
     );
@@ -178,7 +179,7 @@ function unwrapToolResult(parsed: unknown): UnwrappedToolResult {
   }
   if (Array.isArray(content) && content[0] && typeof content[0].text === "string") {
     try {
-      return { value: JSON.parse(content[0].text), receipt };
+      return { value: parseBigIntJSON(content[0].text), receipt };
     } catch {
       if (structuredContent !== undefined) {
         return { value: structuredContent, receipt };

@@ -9,6 +9,7 @@ import type {
   EvidenceIngestResponse,
   EvidenceTraceContext,
 } from "./api/trace.js";
+import { parseBigIntJSON, stringifyBigIntJSON } from "./utils/json-bigint.js";
 
 type EvidenceEmitter = (body: EvidenceIngestRequest) => Promise<EvidenceIngestResponse>;
 type IDFactory = () => string;
@@ -420,7 +421,7 @@ function assertSessionOptions(options: TraceSessionOptions): void {
 }
 
 function clone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
+  return parseBigIntJSON(stringifyBigIntJSON(value)) as T;
 }
 
 function assertSafePayload(

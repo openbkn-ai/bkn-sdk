@@ -7,6 +7,7 @@
  * (shapes vary by backend version — validate at higher layers as needed).
  */
 import type { RequestContext } from "../types.js";
+import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { request } from "./http.js";
 import { type BknContext, withManagedLifecycle } from "./lifecycle.js";
 
@@ -105,6 +106,7 @@ export function querySubgraph(ctx: RequestContext, knId: string, body: unknown):
     method: "POST",
     headers: QUERY_OVER_POST,
     body,
+    responseParser: parseBigIntJSON,
   });
 }
 
@@ -129,6 +131,7 @@ export function listActionLogs(
       limit: opts.limit ?? 30,
       need_total: opts.needTotal ? "true" : undefined,
     },
+    responseParser: parseBigIntJSON,
   });
 }
 
@@ -136,6 +139,7 @@ export function getActionLog(ctx: RequestContext, knId: string, logId: string): 
   return request(
     ctx,
     `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-logs/${encodeURIComponent(logId)}`,
+    { responseParser: parseBigIntJSON },
   );
 }
 
@@ -161,7 +165,7 @@ export function queryObjectTypeInstances(
   return request(
     ctx,
     `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/object-types/${encodeURIComponent(otId)}`,
-    { method: "POST", headers: QUERY_OVER_POST, body },
+    { method: "POST", headers: QUERY_OVER_POST, body, responseParser: parseBigIntJSON },
   );
 }
 
@@ -175,7 +179,7 @@ export function queryActionType(
   return request(
     ctx,
     `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-types/${encodeURIComponent(atId)}/`,
-    { method: "POST", body },
+    { method: "POST", body, responseParser: parseBigIntJSON },
   );
 }
 
@@ -189,7 +193,7 @@ export function executeActionType(
   return request(
     ctx,
     `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-types/${encodeURIComponent(atId)}/execute`,
-    { method: "POST", body },
+    { method: "POST", body, responseParser: parseBigIntJSON },
   );
 }
 
@@ -213,6 +217,7 @@ export function getActionExecution(
   return request(
     ctx,
     `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-executions/${encodeURIComponent(executionId)}`,
+    { responseParser: parseBigIntJSON },
   );
 }
 
@@ -226,7 +231,7 @@ export function queryMetricData(
   return request(
     ctx,
     `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/metrics/${encodeURIComponent(metricId)}/data`,
-    { method: "POST", body },
+    { method: "POST", body, responseParser: parseBigIntJSON },
   );
 }
 
@@ -235,6 +240,7 @@ export function dryRunMetric(ctx: RequestContext, knId: string, body: unknown): 
   return request(ctx, `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/metrics/dry-run`, {
     method: "POST",
     body,
+    responseParser: parseBigIntJSON,
   });
 }
 

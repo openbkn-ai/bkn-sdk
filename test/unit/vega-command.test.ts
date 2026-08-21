@@ -64,6 +64,31 @@ describe("vega catalog delete", () => {
   });
 });
 
+describe("vega resource document input", () => {
+  it("preserves unsafe integers in document-create data", async () => {
+    const fetchMock = mockFetch({ ids: [] });
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "resource",
+        "document-create",
+        "r-1",
+        "--data",
+        '[{"id":"doc-1","id_card":110101199001152345}]',
+      ],
+      { from: "user" },
+    );
+
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toContain("110101199001152345");
+  });
+});
+
 describe("vega optimistic updates", () => {
   it("requires an optimistic-lock version for every Vega PUT command", async () => {
     suppressOutput();

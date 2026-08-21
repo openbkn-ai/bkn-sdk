@@ -1,15 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { relationTypePaths } from "../../src/api/bkn-backend.js";
 import {
+  dryRunMetric,
+  executeActionType,
+  getActionExecution,
+  getActionLog,
   getKnowledgeNetwork,
+  listActionLogs,
   listKnowledgeNetworks,
   listObjectTypes,
   listRelationTypes,
+  queryActionType,
+  queryMetricData,
   queryObjectTypeInstances,
   querySubgraph,
   semanticSearch,
 } from "../../src/api/knowledge-networks.js";
 import { resetLifecycleCaches } from "../../src/api/lifecycle.js";
+import { readBody } from "../../src/commands/_shared.js";
 import type { RequestContext } from "../../src/types.js";
 
 const ctx: RequestContext = {
@@ -142,6 +150,68 @@ describe("reads tunnelled over POST", () => {
       "/api/ontology-query/v1/knowledge-networks/kn-1/object-types/ot-1",
     );
     expect(header(init, "X-HTTP-Method-Override")).toBe("GET");
+  });
+
+  it("preserves object-query integer boundaries in responses", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            '{"values":[9007199254740991,9007199254740992,9223372036854775807,-9223372036854775808,18446744073709551615]}',
+            { status: 200 },
+          ),
+      ),
+    );
+
+    await expect(queryObjectTypeInstances(ctx, "kn-1", "ot-1", { limit: 1 })).resolves.toEqual({
+      values: [
+        9007199254740991,
+        9007199254740992n,
+        9223372036854775807n,
+        -9223372036854775808n,
+        18446744073709551615n,
+      ],
+    });
+  });
+
+  it("sends an unsafe object-query condition without rounding", async () => {
+    const fetchMock = mockFetch();
+    const body = readBody({
+      body: '{"condition":{"field":"id_card","operation":"==","value":110101199001152345}}',
+    });
+
+    await queryObjectTypeInstances(ctx, "kn-1", "ot-1", body);
+
+    expect(firstCall(fetchMock)[1].body).toBe(
+      '{"condition":{"field":"id_card","operation":"==","value":110101199001152345}}',
+    );
+  });
+
+  it("preserves unsafe integers in other dynamic ontology-query responses", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response('{"value":9223372036854775807}', { status: 200 })),
+    );
+
+    await expect(querySubgraph(ctx, "kn-1", {})).resolves.toEqual({ value: 9223372036854775807n });
+    await expect(queryActionType(ctx, "kn-1", "at-1", {})).resolves.toEqual({
+      value: 9223372036854775807n,
+    });
+    await expect(executeActionType(ctx, "kn-1", "at-1", {})).resolves.toEqual({
+      value: 9223372036854775807n,
+    });
+    await expect(getActionExecution(ctx, "kn-1", "ae-1")).resolves.toEqual({
+      value: 9223372036854775807n,
+    });
+    await expect(listActionLogs(ctx, "kn-1")).resolves.toEqual({ value: 9223372036854775807n });
+    await expect(getActionLog(ctx, "kn-1", "log-1")).resolves.toEqual({
+      value: 9223372036854775807n,
+    });
+    await expect(queryMetricData(ctx, "kn-1", "m-1", {})).resolves.toEqual({
+      value: 9223372036854775807n,
+    });
+    await expect(dryRunMetric(ctx, "kn-1", {})).resolves.toEqual({ value: 9223372036854775807n });
   });
 
   it("relation-type-paths sends the GET override", async () => {

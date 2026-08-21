@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 import yaml from "js-yaml";
 import { z } from "zod";
+import { parseBigIntJSON } from "../utils/json-bigint.js";
 
 const Assertion = z
   .object({
@@ -62,7 +63,7 @@ function parseFile(file: string): unknown {
   const text = readFileSync(file, "utf8");
   const ext = extname(file).toLowerCase();
   if (ext === ".yaml" || ext === ".yml") return yaml.load(text);
-  return JSON.parse(text);
+  return parseBigIntJSON(text);
 }
 
 /** Infer the schema kind from the parsed shape when not given explicitly. */

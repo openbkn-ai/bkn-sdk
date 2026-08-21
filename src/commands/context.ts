@@ -6,6 +6,7 @@ import { Command } from "commander";
 import { readPlatformConfig, updatePlatformConfig } from "../config/store.js";
 import { group } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
+import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, conversationSource, outputOptions, platformOf } from "./_shared.js";
 
@@ -26,7 +27,7 @@ function buildArgs(opts: { args?: string; arg?: string[] }): Record<string, unkn
   let out: Record<string, unknown> = {};
   if (opts.args) {
     try {
-      out = JSON.parse(opts.args);
+      out = parseBigIntJSON(opts.args) as Record<string, unknown>;
     } catch {
       throw new InputError("--args must be valid JSON");
     }
@@ -37,7 +38,7 @@ function buildArgs(opts: { args?: string; arg?: string[] }): Record<string, unkn
     const key = pair.slice(0, idx);
     const raw = pair.slice(idx + 1);
     try {
-      out[key] = JSON.parse(raw);
+      out[key] = parseBigIntJSON(raw);
     } catch {
       out[key] = raw;
     }
@@ -96,7 +97,7 @@ export function contextCommand(): Command {
     .action(async (knId: string, opts, cmd: Command) => {
       let args: Record<string, unknown>;
       try {
-        args = JSON.parse(opts.args);
+        args = parseBigIntJSON(opts.args) as Record<string, unknown>;
       } catch {
         throw new InputError("--args must be valid JSON");
       }
@@ -268,7 +269,7 @@ export function contextCommand(): Command {
       let args: Record<string, unknown> | undefined;
       if (opts.args) {
         try {
-          args = JSON.parse(opts.args);
+          args = parseBigIntJSON(opts.args) as Record<string, unknown>;
         } catch {
           throw new InputError("--args must be valid JSON");
         }
@@ -278,7 +279,7 @@ export function contextCommand(): Command {
 
   const jsonArgs = (raw: string): Record<string, unknown> => {
     try {
-      return JSON.parse(raw);
+      return parseBigIntJSON(raw) as Record<string, unknown>;
     } catch {
       throw new InputError("--args must be valid JSON");
     }

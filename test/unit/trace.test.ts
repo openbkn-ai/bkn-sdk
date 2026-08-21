@@ -91,6 +91,28 @@ describe("typed technical Trace APIs", () => {
     expect(detail.summary.trace_id).toBe("trace/1");
   });
 
+  it("preserves unsafe nanosecond values in trace details", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            '{"summary":{"trace_id":"trace-1","request_id":"req-1","status":"completed"},"graph":{"trace_id":"trace-1","status":"completed","duration_nano":9223372036854775807,"partial":false,"partial_reason":[],"page":{"node_count":1,"edge_count":0},"data":{"nodes":[{"span_id":"span-1","name":"span","kind":"internal","status":"ok","start_nano":1786000000123456789,"end_nano":1786000000123456799,"duration_nano":9223372036854775807}],"edges":[]}},"operations":[],"partial":false}',
+            { status: 200 },
+          ),
+      ),
+    );
+
+    const detail = await getTechnicalTrace(ctx, "trace-1");
+
+    expect(detail.graph?.duration_nano).toBe(9223372036854775807n);
+    expect(detail.graph?.data.nodes[0]).toMatchObject({
+      start_nano: 1786000000123456789n,
+      end_nano: 1786000000123456799n,
+      duration_nano: 9223372036854775807n,
+    });
+  });
+
   it("rejects unknown list filters instead of silently returning an unfiltered page", async () => {
     const f = mockFetchSeq([]);
 
