@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clientFrom, conversationSource, traceOptionsFrom } from "../../src/commands/_shared.js";
@@ -151,7 +154,13 @@ describe("remembering a conversation the run opened", () => {
 
   it("survives a store it cannot write", () => {
     const client = clientFrom(fakeCmd({}));
-    process.env.BKN_CONFIG_DIR = "/proc/definitely-not-writable";
+    // A regular file where a directory has to go: `mkdir` fails with ENOTDIR on
+    // every platform, immediately. The earlier `/proc/...` path only failed
+    // that way on Linux, and left this test asserting a different thing
+    // depending on who ran it.
+    const blocked = join(mkdtempSync(join(tmpdir(), "bkn-blocked-")), "not-a-dir");
+    writeFileSync(blocked, "");
+    process.env.BKN_CONFIG_DIR = blocked;
     // Remembering is a convenience; losing it must not fail a command whose
     // real work already succeeded.
     expect(() => client.ctx.onConversationOpened?.("conv-x")).not.toThrow();
