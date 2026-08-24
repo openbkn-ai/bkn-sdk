@@ -1,49 +1,17 @@
 #!/usr/bin/env bash
 #
-# Broad live suite for `openbkn` against a real platform — wider than
-# `live-smoke.sh`: auth/config, every KN read, vega, resources, models, skills,
-# toolboxes, the MCP (context) surface, admin reads, and the passthrough.
-# Read-only: it creates nothing and deletes nothing.
+# Broad read-only live suite for `openbkn` against a real platform — auth/config,
+# every KN read, vega, resources, models, skills, toolboxes, the MCP (context)
+# surface, admin reads, and the passthrough. Creates nothing, deletes nothing.
 #
-#   BKN_TOKEN=$(openbkn auth token) BKN_BASE_URL=https://host BKN_KN_ID=<kn> \
-#     test/e2e/live-suite.sh
+# Write paths live in `live-write.sh`, behind their own switch.
 #
-# Pass BKN_TOKEN explicitly: `auth token` refreshes opaque tokens on every call,
-# and the rotation revokes a token captured by an earlier call.
+#   BKN_BASE_URL=https://host BKN_TOKEN=$(openbkn auth token) BKN_KN_ID=<kn> \
+#     [BKN_INSECURE=1] test/e2e/live-suite.sh
+#
 # Not part of `npm test` (real backend).
-set -uo pipefail
-export NODE_TLS_REJECT_UNAUTHORIZED=0
-
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-CLI="node $ROOT/dist/cli.js"
-BASE="${BKN_BASE_URL:-https://10.211.55.4}"
-TOKEN="${BKN_TOKEN:-$($CLI auth token 2>/dev/null)}"
-KN="${BKN_KN_ID:-}"
-
-if [ -z "$TOKEN" ]; then
-  echo "No token. Log in first (or set BKN_TOKEN)." >&2
-  exit 1
-fi
-if [ -z "$KN" ]; then
-  echo "Set BKN_KN_ID to a knowledge network on the target platform." >&2
-  exit 1
-fi
-
-pass=0; fail=0; failed=()
-# --json is explicit: the human table is the default output.
-run() { $CLI --base-url "$BASE" --token "$TOKEN" -k --json "$@" 2>&1 | grep -v -i -E 'NODE_TLS_REJECT_UNAUTHORIZED|trace-warnings'; }
-chk() {
-  local label="$1"; shift
-  local out; out="$(run "$@")"
-  # Match from a here-string: `grep -q` exits on the first match, and the
-  # writer's SIGPIPE would trip `pipefail` on large payloads.
-  if grep -qiE '^(Request failed|Not authorized|Forbidden|error:|Input error|Context-loader error)' <<< "$out"; then
-    echo "FAIL  $label :: $(head -c 140 <<< "$out" | tr '\n' ' ')"
-    fail=$((fail + 1)); failed+=("$label")
-  else
-    echo "PASS  $label"; pass=$((pass + 1))
-  fi
-}
+# shellcheck source=test/e2e/_env.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_env.sh"
 
 echo "### auth / config"
 chk "auth whoami" auth whoami
@@ -53,20 +21,20 @@ chk "appkey list" appkey list
 
 echo "### knowledge networks"
 chk "bkn list" bkn list --limit 100
-chk "bkn get --stats" bkn get "$KN" --stats
-chk "bkn search" bkn search "$KN" "team"
-chk "bkn object-type list" bkn object-type list "$KN"
-chk "bkn relation-type list" bkn relation-type list "$KN"
-chk "bkn action-type list" bkn action-type list "$KN"
-chk "bkn metric list" bkn metric list "$KN"
-chk "bkn concept-group list" bkn concept-group list "$KN"
-chk "bkn action-schedule list" bkn action-schedule list "$KN"
-chk "bkn action-log list" bkn action-log list "$KN"
+chk "bkn get --stats" bkn get "$BKN_KN_ID" --stats
+chk "bkn search" bkn search "$BKN_KN_ID" "team"
+chk "bkn object-type list" bkn object-type list "$BKN_KN_ID"
+chk "bkn relation-type list" bkn relation-type list "$BKN_KN_ID"
+chk "bkn action-type list" bkn action-type list "$BKN_KN_ID"
+chk "bkn metric list" bkn metric list "$BKN_KN_ID"
+chk "bkn concept-group list" bkn concept-group list "$BKN_KN_ID"
+chk "bkn action-schedule list" bkn action-schedule list "$BKN_KN_ID"
+chk "bkn action-log list" bkn action-log list "$BKN_KN_ID"
 chk "bkn resources" bkn resources
 # Reads tunnelled over POST — they need the X-HTTP-Method-Override header.
-chk "bkn relation-type-paths" bkn relation-type-paths "$KN" \
+chk "bkn relation-type-paths" bkn relation-type-paths "$BKN_KN_ID" \
   --body '{"source_object_type_id":"'"${BKN_OT_ID:-}"'","direction":"forward","path_length":1}'
-chk "bkn subgraph" bkn subgraph "$KN" \
+chk "bkn subgraph" bkn subgraph "$BKN_KN_ID" \
   --body '{"source_object_type_id":"'"${BKN_OT_ID:-}"'","direction":"forward","path_length":1,"limit":1}'
 
 echo "### vega / resources"
@@ -85,13 +53,49 @@ chk "model small get-default" model small get-default --type embedding
 echo "### skills / toolboxes"
 chk "skill list" skill list
 chk "skill market" skill market --limit 5
+# Read paths that need a skill to exist. `SKILL_KEY` names one already on the
+# platform; without it the identity-scoped reads are skipped rather than failed,
+# since "no skills installed" is a fact about the platform, not a defect.
+if [ -n "${BKN_SKILL_KEY:-}" ]; then
+  chk "skill get" skill get "$BKN_SKILL_KEY"
+  chk "skill names" skill names "$BKN_SKILL_KEY"
+  chk "skill files" skill files "$BKN_SKILL_KEY"
+  chk "skill content" skill content "$BKN_SKILL_KEY"
+  chk "skill history" skill history "$BKN_SKILL_KEY"
+  chk "skill publish-history" skill publish-history "$BKN_SKILL_KEY"
+else
+  echo "SKIP  skill get/names/files/content/history/publish-history (set BKN_SKILL_KEY)"
+fi
 chk "toolbox list" toolbox list
 
 echo "### context (MCP)"
-chk "context info" context info
-chk "context tools" context tools "$KN"
-chk "context kn-detail" context kn-detail "$KN"
-chk "context search-schema" context search-schema "$KN" "team"
+# The tool catalog is the contract every other call here is checked against, so
+# assert it actually lists tools rather than merely answering.
+chk_has "context info" '"(tools|name)"' context info
+chk_has "context tools" '"(tools|name)"' context tools "$BKN_KN_ID"
+chk "context kn-detail" context kn-detail "$BKN_KN_ID"
+chk "context search-schema" context search-schema "$BKN_KN_ID" "team"
+chk "context object-types" context object-types "$BKN_KN_ID" --limit 3
+chk "context relation-types" context relation-types "$BKN_KN_ID" --limit 3
+chk "context resources" context resources "$BKN_KN_ID"
+chk "context templates" context templates "$BKN_KN_ID"
+chk "context prompts" context prompts "$BKN_KN_ID"
+chk "context get-logic-properties" context get-logic-properties "$BKN_KN_ID"
+chk "context get-action-info" context get-action-info "$BKN_KN_ID"
+chk "context query-object-instance" context query-object-instance "$BKN_KN_ID" --limit 1
+chk "context query-instance-subgraph" context query-instance-subgraph "$BKN_KN_ID" --limit 1
+# The generic entry points every business call goes through. `tools/list` over
+# `call-method` and a read-only tool over `tool-call` exercise the managed
+# lifecycle — a deploy from 0.1.3 on refuses both without a `bkn_context`, so a
+# regression there shows up here and nowhere else in this file.
+chk_has "context call-method tools/list" '"(tools|name)"' context call-method "$BKN_KN_ID" tools/list
+chk "context tool-call search_schema" context tool-call "$BKN_KN_ID" search_schema --arg query=team
+chk "context conversation" context conversation
+
+echo "### conversation reuse"
+# `--new-conversation` must not disturb what is remembered; the id reported
+# after it has to be the one still in force.
+chk "context conversation --new-conversation" --new-conversation context conversation
 
 echo "### trace"
 chk "trace validate-fixture" trace validate-fixture "$ROOT/fixtures/bkn-trace/positive.json"
@@ -106,7 +110,4 @@ chk "admin license fingerprint" admin license fingerprint
 echo "### passthrough"
 chk "call ontology KN list" call "/api/ontology-manager/v1/knowledge-networks?page=1&size=1"
 
-echo "---"
-echo "passed=$pass failed=$fail"
-if [ ${#failed[@]} -gt 0 ]; then printf 'failed: %s\n' "${failed[@]}"; fi
-[ "$fail" -eq 0 ]
+report

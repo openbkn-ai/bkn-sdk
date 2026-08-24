@@ -36,6 +36,9 @@
     "format": "biome format --write .",
     "test": "vitest run",
     "test:e2e:trace-business": "npm run build && node test/e2e/bkn-trace-business-interaction.mjs",
+    "test:e2e:smoke": "npm run build && test/e2e/live-smoke.sh",
+    "test:e2e:suite": "npm run build && test/e2e/live-suite.sh",
+    "test:e2e:write": "npm run build && test/e2e/live-write.sh",
     "test:cover": "vitest run --coverage",
     "ci": "npm run lint && npm test",
     "prepublishOnly": "npm run ci && npm run build"
