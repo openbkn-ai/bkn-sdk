@@ -27,9 +27,9 @@
  * - `managed-v2` — one `bkn_start_interaction` mints both ids, and `bkn_context`
  *   accepts *only* the two ids; anything else is `invalid_business_context`.
  *
- * Everything here degrades to `undefined` rather than throwing. A deploy that
- * predates the middleware has neither tool and needs no context; sending none
- * must keep working exactly as before.
+ * A deploy that predates the middleware has neither tool and needs no context;
+ * sending none keeps working exactly as before. Once a managed contract is
+ * advertised, however, a failed handshake is authoritative and is surfaced.
  */
 import { createHash, randomUUID } from "node:crypto";
 import type { RequestContext } from "../types.js";
@@ -319,15 +319,8 @@ async function openSession(
     const started = await callToolRaw(ctx, knId, V2_MARKER, {
       question,
       ...mode(Boolean(named)),
-      // The name is fixed when the conversation is created, so it belongs only
-      // on the call that creates one. Joining a conversation the caller named
-      // and relabelling it `openbkn-sdk` would rewrite their attribution — the
-      // v1 join below has always omitted it, and this is the same decision.
-      ...(named
-        ? { conversation_id: named }
-        : // Display-only, but the only thing separating a session the SDK
-          // opened from a real agent's in a Trace listing.
-          { agent_name: AGENT_NAME }),
+      agent_name: AGENT_NAME,
+      ...(named ? { conversation_id: named } : {}),
     });
     return {
       contract,
@@ -441,8 +434,8 @@ function ensureSession(
   // caller's own convenience failing, so drop it and open a fresh one rather
   // than failing the command: without this, one unusable id would break every
   // later run, and the reopen path in `withManagedLifecycle` cannot help. That
-  // path needs a context to retry with, and a handshake that throws leaves
-  // `bknContextFor` returning none at all.
+  // path needs a context to retry with, and a handshake that throws prevents
+  // `bknContextFor` from returning one to retry with.
   // "This session is joining the remembered conversation" — asked as the reason,
   // not as a value comparison. A caller that names the same id it also stored
   // still named it, and a named conversation must never be swapped out from
@@ -508,7 +501,7 @@ function contextFor(
   };
 }
 
-/** Resolve a `bkn_context` for one call, or `undefined` when none is needed or reachable. */
+/** Resolve a `bkn_context` for one call, or `undefined` when no managed contract exists. */
 export async function bknContextFor(
   ctx: RequestContext,
   knId: string,
@@ -521,14 +514,8 @@ export async function bknContextFor(
   const owned = callerOwnedSession(ctx);
   if (owned) return contextFor(owned, contract);
 
-  try {
-    const session = await ensureSession(ctx, knId, { ...lifecycle, contract }, question);
-    return contextFor(session, contract);
-  } catch {
-    // Fall through with no context: the server's own error names the missing
-    // piece far better than a handshake failure would.
-    return undefined;
-  }
+  const session = await ensureSession(ctx, knId, { ...lifecycle, contract }, question);
+  return contextFor(session, contract);
 }
 
 /**

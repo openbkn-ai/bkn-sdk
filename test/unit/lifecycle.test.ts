@@ -429,6 +429,18 @@ describe("managed lifecycle on semantic search", () => {
     expect(Object.keys(context).sort()).toEqual(["conversation_id", "interaction_id"]);
   });
 
+  it("surfaces a managed handshake error without sending semantic search", async () => {
+    const recorded = mockDeploy({
+      catalog: V2_CATALOG_WITH_MODE,
+      toolErrorsOnce: { bkn_start_interaction: "invalid_params" },
+    });
+
+    await expect(semanticSearch(freshCtx(), "kn-managed", "物料")).rejects.toThrow(
+      /Context-loader error:.*invalid_params/,
+    );
+    expect(recorded.retrievalBodies).toHaveLength(0);
+  });
+
   it("v1: reuses one session across calls but never reuses an operation_key", async () => {
     const recorded = mockDeploy({ catalog: V1_CATALOG });
     const ctx = freshCtx();
@@ -475,7 +487,7 @@ describe("managed lifecycle on semantic search", () => {
   });
 
   it("opens an interaction inside a conversation the caller named on its own", async () => {
-    const recorded = mockDeploy();
+    const recorded = mockDeploy({ catalog: V2_CATALOG_WITH_MODE });
     const ctx = freshCtx({
       trace: {
         requestId: "req_1",
@@ -487,10 +499,12 @@ describe("managed lifecycle on semantic search", () => {
 
     // Opening a fresh conversation would file the evidence somewhere the caller
     // never asked for, silently.
-    // Exact match: the name is fixed at creation, so joining must not relabel
-    // someone else's conversation.
+    // Exact match: the current contract requires the stable Agent name on both
+    // new and continued interactions.
     expect(recorded.toolCalls[0]?.arguments).toEqual({
       question: "物料",
+      agent_name: "openbkn-sdk",
+      conversation_mode: "continue",
       conversation_id: "conv_caller_named",
     });
     const context = recorded.retrievalBodies[0]?.bkn_context as Record<string, string>;
