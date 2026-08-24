@@ -26,10 +26,6 @@ fi
 # shellcheck source=test/e2e/_env.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_env.sh"
 
-if ! command -v zip >/dev/null 2>&1; then
-  echo "Needs \`zip\` to build the skill package (macOS ships it; apt: zip)." >&2
-  exit 1
-fi
 
 # A name nobody else will pick, and one a human can trace back to a run.
 STAMP="$(date +%Y%m%d-%H%M%S)-$$"
@@ -54,8 +50,8 @@ trap cleanup EXIT INT TERM
 
 echo "### skill lifecycle ($SKILL_KEY)"
 
-# A minimal but real package: `register` takes a zip whose SKILL.md carries the
-# frontmatter the platform reads.
+# `register` takes the directory and zips it itself, so this only has to be a
+# real skill layout: a SKILL.md whose frontmatter the platform reads.
 mkdir -p "$WORK/skill"
 cat > "$WORK/skill/SKILL.md" <<SKILLMD
 ---
@@ -68,9 +64,8 @@ description: Temporary package created by live-write.sh; safe to delete.
 Created by the openbkn e2e write suite. If this is still here, a run was
 interrupted before its cleanup.
 SKILLMD
-(cd "$WORK/skill" && zip -qr "../$SKILL_KEY.zip" .)
 
-chk "skill register" skill register "$WORK/$SKILL_KEY.zip"
+chk "skill register" skill register "$WORK/skill"
 # Only mark it for cleanup once the platform has actually taken it: deleting a
 # name that was never created buries the real error under a second one.
 if run skill get "$SKILL_KEY" >/dev/null 2>&1; then
@@ -81,8 +76,12 @@ chk_has "skill get (after register)" "$SKILL_KEY" skill get "$SKILL_KEY"
 chk_has "skill list includes it" "$SKILL_KEY" skill list --limit 100
 chk "skill files" skill files "$SKILL_KEY"
 chk_has "skill read-file SKILL.md" "$SKILL_KEY" skill read-file "$SKILL_KEY" SKILL.md
-chk "skill set-status enabled" skill set-status "$SKILL_KEY" enabled
-chk "skill download" skill download "$SKILL_KEY" --output "$WORK/roundtrip.zip"
+# `set-status` accepts unpublish | published | offline — nothing else; the CLI
+# passes an unknown value straight through to the backend.
+chk "skill set-status published" skill set-status "$SKILL_KEY" published
+chk "skill set-status offline" skill set-status "$SKILL_KEY" offline
+# `download <skill-id> [out-path]` — the path is positional.
+chk "skill download" skill download "$SKILL_KEY" "$WORK/roundtrip.zip"
 chk "skill history" skill history "$SKILL_KEY"
 
 echo "### context managed lifecycle"
@@ -96,9 +95,14 @@ chk_has "context conversation is remembered" '"(conversationId|source)"' context
 
 # The remembered conversation has to survive a second command, which is the
 # whole point of remembering it.
-first="$(run context conversation | tr -d ' \n')"
-second="$(run context conversation | tr -d ' \n')"
-if [ "$first" = "$second" ]; then
+# Compare the id itself, not the whole payload: two empty outputs are equal,
+# and so are two identical error messages — both would have passed.
+first="$(run context conversation | grep -oE '"conversationId" *: *"[^"]+"' | head -1)"
+second="$(run context conversation | grep -oE '"conversationId" *: *"[^"]+"' | head -1)"
+if [ -z "$first" ]; then
+  echo "FAIL  no conversation was opened, so stability cannot be judged"
+  fail=$((fail + 1)); failed+=("conversation stability")
+elif [ "$first" = "$second" ]; then
   echo "PASS  conversation is stable across commands"; pass=$((pass + 1))
 else
   echo "FAIL  conversation changed between commands :: $first vs $second"

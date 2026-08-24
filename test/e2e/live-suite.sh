@@ -62,9 +62,10 @@ if [ -n "${BKN_SKILL_KEY:-}" ]; then
   chk "skill files" skill files "$BKN_SKILL_KEY"
   chk "skill content" skill content "$BKN_SKILL_KEY"
   chk "skill history" skill history "$BKN_SKILL_KEY"
-  chk "skill publish-history" skill publish-history "$BKN_SKILL_KEY"
+  # `publish-history` is not the history: it publishes a past version, and takes
+  # a required `--version`. A write has no place in this file.
 else
-  echo "SKIP  skill get/names/files/content/history/publish-history (set BKN_SKILL_KEY)"
+  echo "SKIP  skill get/names/files/content/history (set BKN_SKILL_KEY)"
 fi
 chk "toolbox list" toolbox list
 
@@ -75,15 +76,42 @@ chk_has "context info" '"(tools|name)"' context info
 chk_has "context tools" '"(tools|name)"' context tools "$BKN_KN_ID"
 chk "context kn-detail" context kn-detail "$BKN_KN_ID"
 chk "context search-schema" context search-schema "$BKN_KN_ID" "team"
-chk "context object-types" context object-types "$BKN_KN_ID" --limit 3
-chk "context relation-types" context relation-types "$BKN_KN_ID" --limit 3
 chk "context resources" context resources "$BKN_KN_ID"
 chk "context templates" context templates "$BKN_KN_ID"
 chk "context prompts" context prompts "$BKN_KN_ID"
-chk "context get-logic-properties" context get-logic-properties "$BKN_KN_ID"
-chk "context get-action-info" context get-action-info "$BKN_KN_ID"
-chk "context query-object-instance" context query-object-instance "$BKN_KN_ID" --limit 1
-chk "context query-instance-subgraph" context query-instance-subgraph "$BKN_KN_ID" --limit 1
+# `object-types` / `relation-types` take ids, not a page: `<kn-id> <ids...>`.
+# Read one id out of the KN rather than inventing one, and skip when the KN has
+# none — an empty knowledge network is a fact about the platform.
+OT_ID="$(run bkn object-type list "$BKN_KN_ID" --limit 1 | grep -oE '"id" *: *"[^"]+"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
+if [ -n "$OT_ID" ]; then
+  chk_has "context object-types" "$OT_ID" context object-types "$BKN_KN_ID" "$OT_ID"
+else
+  echo "SKIP  context object-types (no object type in $BKN_KN_ID)"
+fi
+RT_ID="$(run bkn relation-type list "$BKN_KN_ID" --limit 1 | grep -oE '"id" *: *"[^"]+"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
+if [ -n "$RT_ID" ]; then
+  chk_has "context relation-types" "$RT_ID" context relation-types "$BKN_KN_ID" "$RT_ID"
+else
+  echo "SKIP  context relation-types (no relation type in $BKN_KN_ID)"
+fi
+# These four declare `--args` as a required option; without it commander stops
+# the command before it reaches the platform.
+if [ -n "$OT_ID" ]; then
+  chk "context query-object-instance" context query-object-instance "$BKN_KN_ID" \
+    --args "{\"object_type_id\":\"$OT_ID\",\"limit\":1}"
+  chk "context query-instance-subgraph" context query-instance-subgraph "$BKN_KN_ID" \
+    --args "{\"object_type_id\":\"$OT_ID\",\"limit\":1}"
+  chk "context get-logic-properties" context get-logic-properties "$BKN_KN_ID" \
+    --args "{\"object_type_id\":\"$OT_ID\"}"
+else
+  echo "SKIP  context query-object-instance/query-instance-subgraph/get-logic-properties (no object type)"
+fi
+AT_ID="$(run bkn action-type list "$BKN_KN_ID" --limit 1 | grep -oE '"id" *: *"[^"]+"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
+if [ -n "$AT_ID" ]; then
+  chk "context get-action-info" context get-action-info "$BKN_KN_ID" --args "{\"action_type_id\":\"$AT_ID\"}"
+else
+  echo "SKIP  context get-action-info (no action type in $BKN_KN_ID)"
+fi
 # The generic entry points every business call goes through. `tools/list` over
 # `call-method` and a read-only tool over `tool-call` exercise the managed
 # lifecycle — a deploy from 0.1.3 on refuses both without a `bkn_context`, so a
@@ -93,9 +121,18 @@ chk "context tool-call search_schema" context tool-call "$BKN_KN_ID" search_sche
 chk "context conversation" context conversation
 
 echo "### conversation reuse"
-# `--new-conversation` must not disturb what is remembered; the id reported
-# after it has to be the one still in force.
-chk "context conversation --new-conversation" --new-conversation context conversation
+# `--new-conversation` reports `source: none` by design, so "it ran without
+# error" would prove nothing. What it must not do is disturb what is stored —
+# compare the stored id across it.
+BEFORE="$(run context conversation | grep -oE '"(storedConversationId|conversationId)" *: *"[^"]+"' | head -1)"
+run --new-conversation context conversation >/dev/null
+AFTER="$(run context conversation | grep -oE '"(storedConversationId|conversationId)" *: *"[^"]+"' | head -1)"
+if [ "$BEFORE" = "$AFTER" ]; then
+  echo "PASS  --new-conversation leaves the remembered one alone"; pass=$((pass + 1))
+else
+  echo "FAIL  --new-conversation changed the store :: '$BEFORE' -> '$AFTER'"
+  fail=$((fail + 1)); failed+=("--new-conversation side effect")
+fi
 
 echo "### trace"
 chk "trace validate-fixture" trace validate-fixture "$ROOT/fixtures/bkn-trace/positive.json"
