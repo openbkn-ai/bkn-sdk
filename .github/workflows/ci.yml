@@ -14,6 +14,10 @@ permissions:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    # A hung suite should turn red in minutes. Without this the job runs to
+    # GitHub's six-hour limit and reports `cancelled`, which reads as infra
+    # trouble rather than a test that never finished — that cost two days.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,6 +42,10 @@ jobs:
   # making. Kept separate so the required `ci` check keeps its name.
   engines-floor:
     runs-on: ubuntu-latest
+    # A hung suite should turn red in minutes. Without this the job runs to
+    # GitHub's six-hour limit and reports `cancelled`, which reads as infra
+    # trouble rather than a test that never finished — that cost two days.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

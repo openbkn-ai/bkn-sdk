@@ -1,24 +1,10 @@
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as auth from "../../src/resources/auth.js";
-
-const saved = { ...process.env };
 
 function jwt(claims: Record<string, unknown>): string {
   const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
   return `${b64({ alg: "RS256" })}.${b64(claims)}.sig`;
 }
-
-beforeEach(() => {
-  process.env.BKN_CONFIG_DIR = mkdtempSync(join(tmpdir(), "bkn-auth-"));
-  delete process.env.BKN_BASE_URL;
-  delete process.env.BKN_TOKEN;
-});
-afterEach(() => {
-  process.env = { ...saved };
-});
 
 describe("auth store round-trip", () => {
   it("attach → status → whoami → list → logout", () => {

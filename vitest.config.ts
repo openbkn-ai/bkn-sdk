@@ -8,6 +8,6 @@ export default defineConfig({
     environment: "node",
     // `tlsFetch` detours to undici's fetch whenever a request needs a
     // dispatcher; this keeps those requests observable through the global stub.
-    setupFiles: ["test/setup/undici-passthrough.ts"],
+    setupFiles: ["test/setup/undici-passthrough.ts", "test/setup/isolated-env.ts"],
   },
 });

@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Command } from "commander";
@@ -13,29 +13,24 @@ import {
   writeToken,
 } from "../../src/config/store.js";
 
-const saved = { ...process.env };
+/** Filled by the `printJson` mock below; one entry per print. */
+const printed: unknown[] = [];
+
+vi.mock("../../src/utils/output.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/utils/output.js")>()),
+  printJson: (value: unknown) => {
+    printed.push(value);
+  },
+}));
+
 const platform = "https://demo.example.com";
 
 beforeEach(() => {
-  process.env.BKN_CONFIG_DIR = mkdtempSync(join(tmpdir(), "bkn-conv-"));
-  // Every input the resolution reads, including `BKN_TOKEN`: `transientIdentity`
-  // treats an explicit token as another identity, so leaving one set turns off
-  // the whole feature and flips four of these assertions — green on a bare CI
-  // runner, red on a machine following the README.
-  for (const k of [
-    "BKN_BASE_URL",
-    "BKN_USER",
-    "BKN_TOKEN",
-    "BKN_CONVERSATION_ID",
-    "BKN_INTERACTION_ID",
-  ]) {
-    delete process.env[k];
-  }
+  // An empty store and no ambient `BKN_*` come from `test/setup/isolated-env.ts`
+  // — including `BKN_TOKEN`, which `transientIdentity` reads: left set, the
+  // feature switches itself off and four assertions here invert.
   writeToken(platform, { baseUrl: platform, accessToken: "t" });
   setActivePlatform(platform);
-});
-afterEach(() => {
-  process.env = { ...saved };
 });
 
 /** A stand-in for the commander object `clientFrom` reads its options from. */
@@ -159,31 +154,39 @@ describe("remembering a conversation the run opened", () => {
 
   it("survives a store it cannot write", () => {
     const client = clientFrom(fakeCmd({}));
-    process.env.BKN_CONFIG_DIR = "/proc/definitely-not-writable";
+    // A regular file where a directory has to go: `mkdir` fails with ENOTDIR on
+    // every platform, immediately. The earlier `/proc/...` path only failed
+    // that way on Linux, and left this test asserting a different thing
+    // depending on who ran it.
+    const blocked = join(mkdtempSync(join(tmpdir(), "bkn-blocked-")), "not-a-dir");
+    writeFileSync(blocked, "");
+    process.env.BKN_CONFIG_DIR = blocked;
     // Remembering is a convenience; losing it must not fail a command whose
     // real work already succeeded.
     expect(() => client.ctx.onConversationOpened?.("conv-x")).not.toThrow();
   });
 });
 
-/** The command itself, not the resolver underneath it. */
+/**
+ * The command itself, not the resolver underneath it.
+ *
+ * The payload is taken from `printJson`, never from `process.stdout`. Two
+ * earlier versions replaced `process.stdout.write` and this file then hung
+ * every CI run to the job's six-hour limit — 48 of 49 files reported, this one
+ * never did. A worker's stdout belongs to the runner as much as to the test,
+ * and neither swallowing chunks nor throwing on the ones that are not JSON
+ * showed up locally, where the reporter had nothing to say in that window.
+ * Mocking the module the command prints through leaves that plumbing alone.
+ */
 function run(...argv: string[]): unknown {
-  const out: unknown[] = [];
-  const spy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string) => {
-    out.push(JSON.parse(String(chunk)));
-    return true;
-  }) as typeof process.stdout.write);
-  try {
-    new Command("openbkn")
-      .exitOverride()
-      .option("--json")
-      .option("--conversation-id <id>")
-      .addCommand(contextCommand())
-      .parse(["node", "openbkn", "--json", ...argv]);
-  } finally {
-    spy.mockRestore();
-  }
-  return out[0];
+  printed.length = 0;
+  new Command("openbkn")
+    .exitOverride()
+    .option("--json")
+    .option("--conversation-id <id>")
+    .addCommand(contextCommand())
+    .parse(["node", "openbkn", "--json", ...argv]);
+  return printed[0];
 }
 
 describe("openbkn context conversation", () => {
