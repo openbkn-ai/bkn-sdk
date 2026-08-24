@@ -47,6 +47,26 @@ export interface BknContext {
 /** Which lifecycle contract a deploy speaks, decided from its tool catalog. */
 type Contract = "none" | "managed-v1" | "managed-v2";
 
+/**
+ * What the catalog says about opening an interaction, beyond which tools exist.
+ *
+ * `bkn_start_interaction` gained a required `conversation_mode` in a later
+ * platform build. A deploy that wants it refuses every handshake without it,
+ * and the refusal surfaces as the server's own `conversation_required` on the
+ * *business* call — so the whole `context` surface stops working with an error
+ * that names neither the field nor the handshake.
+ *
+ * Read from the tool's own `input_schema` rather than assumed from the contract
+ * name: both shapes advertise `managed-v2`, and only the schema separates them.
+ * Sending the field where it is not declared is not the safe default either —
+ * v2 validates `bkn_context` strictly, and a deploy is entitled to reject an
+ * argument it never published.
+ */
+interface Lifecycle {
+  contract: Contract;
+  startWantsConversationMode: boolean;
+}
+
 interface Session {
   contract: Exclude<Contract, "none">;
   conversationId: string;
@@ -93,7 +113,7 @@ const AGENT_NAME = "openbkn-sdk";
  */
 const RELEASE_TIMEOUT_MS = 3_000;
 
-const contracts = new Map<string, Promise<Contract>>();
+const contracts = new Map<string, Promise<Lifecycle>>();
 
 /**
  * How long a failed probe stays failed.
@@ -126,19 +146,26 @@ export function resetLifecycleCaches(): void {
  * that fails answers "none": an unreachable catalog must not turn into a hard
  * error on a request that might have succeeded without any context.
  */
-export function lifecycleContract(ctx: RequestContext): Promise<Contract> {
+const NO_LIFECYCLE: Lifecycle = { contract: "none", startWantsConversationMode: false };
+
+export function lifecycleFor(ctx: RequestContext): Promise<Lifecycle> {
   const failureKey = `${ctx.baseUrl}\0${identityOf(ctx)}`;
   const failedAt = probeFailures.get(failureKey);
   if (failedAt !== undefined) {
-    if (Date.now() - failedAt < PROBE_FAILURE_TTL_MS) return Promise.resolve("none");
+    if (Date.now() - failedAt < PROBE_FAILURE_TTL_MS) return Promise.resolve(NO_LIFECYCLE);
     probeFailures.delete(failureKey);
   }
   let pending = contracts.get(ctx.baseUrl);
   if (!pending) {
-    pending = mcpInfo(ctx).then((info): Contract => {
+    pending = mcpInfo(ctx).then((info): Lifecycle => {
       const names = toolNames(info);
-      if (names.includes(V1_MARKER)) return "managed-v1";
-      return names.includes(V2_MARKER) ? "managed-v2" : "none";
+      const startWantsConversationMode = requiresArgument(info, V2_MARKER, "conversation_mode");
+      if (names.includes(V1_MARKER)) {
+        return { contract: "managed-v1", startWantsConversationMode };
+      }
+      return names.includes(V2_MARKER)
+        ? { contract: "managed-v2", startWantsConversationMode }
+        : NO_LIFECYCLE;
     });
     contracts.set(ctx.baseUrl, pending);
     // Same rule the session cache follows: a probe that failed is not a lasting
@@ -156,7 +183,28 @@ export function lifecycleContract(ctx: RequestContext): Promise<Contract> {
   }
   // Degrade for this call regardless: an unreachable catalog must not turn into
   // a hard error on a request that might have succeeded without any context.
-  return pending.catch((): Contract => "none");
+  return pending.catch((): Lifecycle => NO_LIFECYCLE);
+}
+
+/** Kept for callers that only care which contract a deploy speaks. */
+export function lifecycleContract(ctx: RequestContext): Promise<Contract> {
+  return lifecycleFor(ctx).then((l) => l.contract);
+}
+
+/**
+ * Does a tool declare this argument as required?
+ *
+ * `false` when the catalog cannot be read that far — an unknown schema means
+ * "send what has always worked", not "guess a new field in".
+ */
+function requiresArgument(info: unknown, tool: string, argument: string): boolean {
+  const tools = (info as { tools?: Array<Record<string, unknown>> } | undefined)?.tools;
+  if (!Array.isArray(tools)) return false;
+  const found = tools.find((t) => t?.name === tool);
+  // The catalog spells it `input_schema`; MCP's own wire format uses
+  // `inputSchema`. Accept both rather than depend on which one answers.
+  const schema = (found?.input_schema ?? found?.inputSchema) as { required?: unknown } | undefined;
+  return Array.isArray(schema?.required) && schema.required.includes(argument);
 }
 
 function isAuthFailure(err: unknown): boolean {
@@ -252,10 +300,16 @@ function joinTarget(ctx: RequestContext, contract: Exclude<Contract, "none">): s
 async function openSession(
   ctx: RequestContext,
   knId: string,
-  contract: Exclude<Contract, "none">,
+  lifecycle: Lifecycle & { contract: Exclude<Contract, "none"> },
   question: string,
 ): Promise<Session> {
+  const { contract } = lifecycle;
   generation += 1;
+  // Declared required by later builds, absent from the schema of earlier ones.
+  // `continue` whenever a conversation is named — that is exactly what the
+  // enum means — and `new` when one is being minted.
+  const mode = (joining: boolean) =>
+    lifecycle.startWantsConversationMode ? { conversation_mode: joining ? "continue" : "new" } : {};
   const named = joinTarget(ctx, contract);
   if (contract === "managed-v2") {
     // Without a conversation_id the server mints a fresh conversation. Reusing
@@ -264,6 +318,7 @@ async function openSession(
     // a caller-named conversation is passed back in.
     const started = await callToolRaw(ctx, knId, V2_MARKER, {
       question,
+      ...mode(Boolean(named)),
       // The name is fixed when the conversation is created, so it belongs only
       // on the call that creates one. Joining a conversation the caller named
       // and relabelling it `openbkn-sdk` would rewrite their attribution — the
@@ -297,6 +352,7 @@ async function openSession(
       conversation_id: named,
       idempotency_key: `start:${PROCESS_ID}:${generation}`,
       question,
+      ...mode(true),
     });
     return {
       contract,
@@ -319,6 +375,7 @@ async function openSession(
     conversation_id: conversationId,
     idempotency_key: `start:${PROCESS_ID}:${generation}`,
     question,
+    ...mode(true),
   });
   return {
     contract,
@@ -372,9 +429,10 @@ function sessionKey(ctx: RequestContext, knId: string): string {
 function ensureSession(
   ctx: RequestContext,
   knId: string,
-  contract: Exclude<Contract, "none">,
+  lifecycle: Lifecycle & { contract: Exclude<Contract, "none"> },
   question: string,
 ): Promise<Session> {
+  const { contract } = lifecycle;
   const key = sessionKey(ctx, knId);
   const cached = sessions.get(key);
   if (cached) return cached;
@@ -391,12 +449,12 @@ function ensureSession(
   // under them.
   const remembered = callerNamedConversation(ctx) ? undefined : joinTarget(ctx, contract);
   const opening = remembered
-    ? openSession(ctx, knId, contract, question).catch((err: unknown) => {
+    ? openSession(ctx, knId, lifecycle, question).catch((err: unknown) => {
         if (!refusesThisConversation(err)) throw err;
         const { rememberedConversationId: _dropped, ...fresh } = ctx;
-        return openSession(fresh, knId, contract, question);
+        return openSession(fresh, knId, lifecycle, question);
       })
-    : openSession(ctx, knId, contract, question);
+    : openSession(ctx, knId, lifecycle, question);
   // Report only a conversation this call minted. One the caller named is
   // already theirs to keep, and echoing it back would let a `--conversation-id`
   // meant for a single command quietly become the stored default.
@@ -456,14 +514,16 @@ export async function bknContextFor(
   knId: string,
   question: string,
 ): Promise<BknContext | undefined> {
-  const contract = await lifecycleContract(ctx);
+  const lifecycle = await lifecycleFor(ctx);
+  const { contract } = lifecycle;
   if (contract === "none") return undefined;
 
   const owned = callerOwnedSession(ctx);
   if (owned) return contextFor(owned, contract);
 
   try {
-    return contextFor(await ensureSession(ctx, knId, contract, question), contract);
+    const session = await ensureSession(ctx, knId, { ...lifecycle, contract }, question);
+    return contextFor(session, contract);
   } catch {
     // Fall through with no context: the server's own error names the missing
     // piece far better than a handshake failure would.

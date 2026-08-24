@@ -15,6 +15,22 @@ const V2_CATALOG = {
   tools: [{ name: "bkn_start_interaction" }, { name: "bkn_finish_interaction" }],
 };
 const LEGACY_CATALOG = { tools: [{ name: "search_schema" }] };
+// A later platform build declares `conversation_mode` required on the start
+// tool. Both shapes advertise the same tool names, so only the schema tells
+// them apart — which is why the probe reads it.
+const V2_CATALOG_WITH_MODE = {
+  tools: [
+    {
+      name: "bkn_start_interaction",
+      input_schema: {
+        type: "object",
+        required: ["conversation_mode", "question", "agent_name"],
+        properties: { conversation_mode: { enum: ["continue", "new"] } },
+      },
+    },
+    { name: "bkn_finish_interaction" },
+  ],
+};
 
 /** A fresh host per test: both the lifecycle and MCP session caches key on it. */
 let hostSeq = 0;
@@ -320,6 +336,37 @@ describe("managed lifecycle on semantic search", () => {
       );
     },
   );
+
+  it("sends conversation_mode only where the catalog declares it required", async () => {
+    // Without it, a deploy that requires the field refuses every handshake, and
+    // the refusal surfaces as the server's `conversation_required` on the
+    // business call — naming neither the field nor the handshake.
+    const withMode = mockDeploy({ catalog: V2_CATALOG_WITH_MODE });
+    await semanticSearch(freshCtx(), "kn-managed", "物料");
+    expect(withMode.toolCalls[0]?.arguments.conversation_mode).toBe("new");
+
+    // And not where it is absent: v2 validates strictly, and a deploy may
+    // reject an argument it never published.
+    const without = mockDeploy({ catalog: V2_CATALOG });
+    await semanticSearch(freshCtx(), "kn-managed", "物料");
+    expect(without.toolCalls[0]?.arguments).not.toHaveProperty("conversation_mode");
+  });
+
+  it("joins with continue, not new", async () => {
+    const recorded = mockDeploy({ catalog: V2_CATALOG_WITH_MODE });
+    await semanticSearch(
+      freshCtx({
+        trace: { requestId: "req_x", traceparent: "00-x-y-01", conversationId: "conv_theirs" },
+      }),
+      "kn-managed",
+      "物料",
+    );
+    // The enum's own wording: `continue` with an id, `new` without one.
+    expect(recorded.toolCalls[0]?.arguments).toMatchObject({
+      conversation_id: "conv_theirs",
+      conversation_mode: "continue",
+    });
+  });
 
   it("does not report a conversation it only joined", async () => {
     const seen: string[] = [];
