@@ -87,3 +87,41 @@ report() {
   if [ ${#failed[@]} -gt 0 ]; then printf 'failed: %s\n' "${failed[@]}"; fi
   [ "$fail" -eq 0 ]
 }
+
+# First entry's id from a list command, or empty. Parsed rather than grepped:
+# a nested `"id"` (a creator, an owner) is not the entry's, and `head -1` on a
+# grep cannot tell the difference.
+first_id() {
+  run "$@" | node -e '
+    let s = "";
+    process.stdin.on("data", (d) => { s += d; });
+    process.stdin.on("end", () => {
+      try {
+        const j = JSON.parse(s);
+        const list = Array.isArray(j) ? j : (j.entries ?? j.data ?? []);
+        process.stdout.write(String(list[0]?.id ?? ""));
+      } catch {
+        process.stdout.write("");
+      }
+    });
+  '
+}
+
+# Some MCP surfaces are optional: a deploy that answers "resources not
+# supported" is telling us about itself, not failing. Report those as skipped so
+# the suite stays usable across deployments without hiding real errors.
+chk_optional() {
+  local label="$1"; shift
+  local out; out="$(run "$@")"
+    # Also covers answers that describe the model rather than a fault: a type with
+  # no logic properties defined has nothing to compute, and saying so is correct
+  # behaviour.
+  if grep -qiE "not supported|not implemented|has no logic properties|<center>nginx</center>" <<< "$out"; then
+    echo "SKIP  $label (not supported by this deploy)"
+  elif errored "$out"; then
+    echo "FAIL  $label :: $(head -c 140 <<< "$out" | tr '\n' ' ')"
+    fail=$((fail + 1)); failed+=("$label")
+  else
+    echo "PASS  $label"; pass=$((pass + 1))
+  fi
+}

@@ -20,6 +20,13 @@ chk "config show" config show
 chk "appkey list" appkey list
 
 echo "### knowledge networks"
+# Ids the checks below feed to commands that take one. Read from the platform
+# rather than invented, and empty when the network has none — which is a fact
+# about the network, not a failure.
+OT_ID="$(first_id bkn object-type list "$BKN_KN_ID")"
+RT_ID="$(first_id bkn relation-type list "$BKN_KN_ID")"
+AT_ID="$(first_id bkn action-type list "$BKN_KN_ID")"
+
 chk "bkn list" bkn list --limit 100
 chk "bkn get --stats" bkn get "$BKN_KN_ID" --stats
 chk "bkn search" bkn search "$BKN_KN_ID" "team"
@@ -32,10 +39,18 @@ chk "bkn action-schedule list" bkn action-schedule list "$BKN_KN_ID"
 chk "bkn action-log list" bkn action-log list "$BKN_KN_ID"
 chk "bkn resources" bkn resources
 # Reads tunnelled over POST — they need the X-HTTP-Method-Override header.
-chk "bkn relation-type-paths" bkn relation-type-paths "$BKN_KN_ID" \
-  --body '{"source_object_type_id":"'"${BKN_OT_ID:-}"'","direction":"forward","path_length":1}'
-chk "bkn subgraph" bkn subgraph "$BKN_KN_ID" \
-  --body '{"source_object_type_id":"'"${BKN_OT_ID:-}"'","direction":"forward","path_length":1,"limit":1}'
+#
+# Both need a body naming a source object type, a direction and a path length;
+# omit any and the backend answers 400. They had one, keyed off `BKN_OT_ID` —
+# a variable nothing sets, so every run sent an empty id and got
+# `NullParameter.SourceObjectTypeId`. The id comes from the network now.
+if [ -n "${OT_ID:-}" ]; then
+  PATH_BODY="{\"source_object_type_id\":\"$OT_ID\",\"direction\":\"bidirectional\",\"path_length\":1}"
+  chk "bkn relation-type-paths" bkn relation-type-paths "$BKN_KN_ID" --body "$PATH_BODY"
+  chk "bkn subgraph" bkn subgraph "$BKN_KN_ID" --body "$PATH_BODY"
+else
+  echo "SKIP  bkn relation-type-paths/subgraph (no object type in $BKN_KN_ID)"
+fi
 
 echo "### vega / resources"
 chk "vega catalog list" vega catalog list --limit 5
@@ -76,19 +91,19 @@ chk_has "context info" '"(tools|name)"' context info
 chk_has "context tools" '"(tools|name)"' context tools "$BKN_KN_ID"
 chk "context kn-detail" context kn-detail "$BKN_KN_ID"
 chk "context search-schema" context search-schema "$BKN_KN_ID" "team"
-chk "context resources" context resources "$BKN_KN_ID"
-chk "context templates" context templates "$BKN_KN_ID"
-chk "context prompts" context prompts "$BKN_KN_ID"
+# MCP resources/templates/prompts are optional surfaces; a deploy that says so
+# is reporting a capability, not an error.
+chk_optional "context resources" context resources "$BKN_KN_ID"
+chk_optional "context templates" context templates "$BKN_KN_ID"
+chk_optional "context prompts" context prompts "$BKN_KN_ID"
 # `object-types` / `relation-types` take ids, not a page: `<kn-id> <ids...>`.
 # Read one id out of the KN rather than inventing one, and skip when the KN has
 # none — an empty knowledge network is a fact about the platform.
-OT_ID="$(run bkn object-type list "$BKN_KN_ID" --limit 1 | grep -oE '"id" *: *"[^"]+"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
 if [ -n "$OT_ID" ]; then
   chk_has "context object-types" "$OT_ID" context object-types "$BKN_KN_ID" "$OT_ID"
 else
   echo "SKIP  context object-types (no object type in $BKN_KN_ID)"
 fi
-RT_ID="$(run bkn relation-type list "$BKN_KN_ID" --limit 1 | grep -oE '"id" *: *"[^"]+"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
 if [ -n "$RT_ID" ]; then
   chk_has "context relation-types" "$RT_ID" context relation-types "$BKN_KN_ID" "$RT_ID"
 else
@@ -97,16 +112,67 @@ fi
 # These four declare `--args` as a required option; without it commander stops
 # the command before it reaches the platform.
 if [ -n "$OT_ID" ]; then
+  # The MCP tools take `ot_id`, not `object_type_id` — see
+  # skills/openbkn/references/context.md. The backend names the field it wants
+  # when one is missing, which is how these three were corrected.
   chk "context query-object-instance" context query-object-instance "$BKN_KN_ID" \
-    --args "{\"object_type_id\":\"$OT_ID\",\"limit\":1}"
-  chk "context query-instance-subgraph" context query-instance-subgraph "$BKN_KN_ID" \
-    --args "{\"object_type_id\":\"$OT_ID\",\"limit\":1}"
-  chk "context get-logic-properties" context get-logic-properties "$BKN_KN_ID" \
-    --args "{\"object_type_id\":\"$OT_ID\"}"
+    --args "{\"ot_id\":\"$OT_ID\",\"limit\":1}"
+  # `_instance_identities` — the leading underscore is the tool's, and the
+  # schema says the values must come from a `_instance_identity` field rather
+  # than be constructed. Read one out of the network; skip when the type has no
+  # instances. `chk_optional` covers the other data-shaped answer: a type with
+  # no logic properties defined is a fact about the model, not a failure.
+  INST="$(run context query-object-instance "$BKN_KN_ID" --args "{\"ot_id\":\"$OT_ID\",\"limit\":1}" |
+    node -e '
+      let s = "";
+      process.stdin.on("data", (d) => { s += d; });
+      process.stdin.on("end", () => {
+        try {
+          const row = JSON.parse(s)?.result?.datas?.[0];
+          process.stdout.write(row?._instance_identity ? JSON.stringify(row._instance_identity) : "");
+        } catch {
+          process.stdout.write("");
+        }
+      });
+    ')"
+  if [ -n "$INST" ]; then
+    # `properties` names the logic properties to compute and cannot be empty, so
+    # this only runs when the type defines one. `fact` on the reference network
+    # defines none, which is what the tool says when asked — a fact about the
+    # model, not a defect.
+    LP="$(run bkn object-type get "$BKN_KN_ID" "$OT_ID" | node -e '
+      let s = "";
+      process.stdin.on("data", (d) => { s += d; });
+      process.stdin.on("end", () => {
+        try {
+          const e = JSON.parse(s).entries?.[0] ?? {};
+          const list = e.logic_properties ?? e.logicProperties ?? [];
+          process.stdout.write(String(list[0]?.name ?? list[0]?.id ?? ""));
+        } catch {
+          process.stdout.write("");
+        }
+      });
+    ')"
+    if [ -n "$LP" ]; then
+      chk_optional "context get-logic-properties" context get-logic-properties "$BKN_KN_ID" \
+        --args "{\"ot_id\":\"$OT_ID\",\"query\":\"status\",\"_instance_identities\":[$INST],\"properties\":[\"$LP\"]}"
+    else
+      echo "SKIP  context get-logic-properties (no logic property on $OT_ID)"
+    fi
+  else
+    echo "SKIP  context get-logic-properties (no instance of $OT_ID)"
+  fi
+  # `query-instance-subgraph` is left out on purpose. Its input is a path
+  # template — parallel `object_types` and `relation_types` arrays whose order
+  # must correspond, each node carrying a `condition` over a data property that
+  # exists on that type. Building one means knowing the model, and a check that
+  # hard-codes one network's properties tests that network rather than the CLI.
+  # Reach it through `context tool-call query_instance_subgraph` in a suite that
+  # owns its fixture.
+  echo "SKIP  context query-instance-subgraph (needs a model-specific path template)"
 else
   echo "SKIP  context query-object-instance/query-instance-subgraph/get-logic-properties (no object type)"
 fi
-AT_ID="$(run bkn action-type list "$BKN_KN_ID" --limit 1 | grep -oE '"id" *: *"[^"]+"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
 if [ -n "$AT_ID" ]; then
   chk "context get-action-info" context get-action-info "$BKN_KN_ID" --args "{\"action_type_id\":\"$AT_ID\"}"
 else
