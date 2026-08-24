@@ -4,7 +4,7 @@
 # one. `live-suite.sh` is the broad read-only pass; `live-write.sh` is the one
 # that creates things.
 #
-#   BKN_BASE_URL=https://host BKN_TOKEN=$(openbkn auth token) BKN_KN_ID=<kn> \
+#   BKN_BASE_URL=https://host [BKN_TOKEN=…] BKN_KN_ID=<kn> \
 #     [BKN_INSECURE=1] test/e2e/live-smoke.sh
 #
 # Not part of `npm test` (real backend).
@@ -60,7 +60,7 @@ fi
 # provided. License checks are reads (fingerprint works with no license
 # installed; show reports state=invalid then — both count as reachable).
 if [ -n "${BKN_ADMIN_TOKEN:-}" ]; then
-  a() { $CLI --base-url "$BKN_BASE_URL" --token "$BKN_ADMIN_TOKEN" "${TLS_FLAG[@]}" --json "$@" 2>&1 | grep -v -i warning; }
+  a() { $CLI --base-url "$BKN_BASE_URL" --token "$BKN_ADMIN_TOKEN" ${TLS_FLAG[@]+"${TLS_FLAG[@]}"} --json "$@" 2>&1 | grep -v -i warning; }
   acheck() {
     local label="$1"; shift
     local out; out="$(a "$@")"

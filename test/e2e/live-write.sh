@@ -7,7 +7,7 @@
 # Behind an explicit switch. Someone running the read-only suite against a
 # shared platform should not discover afterwards that it also wrote there.
 #
-#   BKN_E2E_WRITE=1 BKN_BASE_URL=https://host BKN_TOKEN=$(openbkn auth token) \
+#   BKN_E2E_WRITE=1 BKN_BASE_URL=https://host [BKN_TOKEN=…] \
 #     BKN_KN_ID=<kn> [BKN_INSECURE=1] test/e2e/live-write.sh
 #
 # Everything it creates is removed on the way out, including on failure and on

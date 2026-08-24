@@ -22,7 +22,11 @@ need() {
   fi
 }
 need BKN_BASE_URL "the platform to run against, e.g. https://bkn.example.com"
-need BKN_TOKEN "a token: BKN_TOKEN=\$(openbkn auth token)"
+# Deliberately not required. On a deploy whose `auth token` rotates on every
+# call, capturing one revokes it before the suite can use it — every request
+# then answers 401, which reads as a broken CLI rather than a captured token.
+# With no `BKN_TOKEN` the CLI uses the stored session and refreshes it itself.
+# Pass one only to run as an identity other than the logged-in one.
 need BKN_KN_ID "a knowledge network id on that platform"
 
 CLI="node $ROOT/dist/cli.js"
@@ -42,8 +46,17 @@ fi
 pass=0; fail=0; failed=()
 
 # `--json` is explicit: the human table is the default output.
+# `${arr[@]}` on an empty array is an unbound variable under `set -u` in bash
+# 3.2, which macOS still ships — the expansion aborts the command and the caller
+# sees empty output rather than an error. `${arr[@]+"${arr[@]}"}` expands to
+# nothing when the array is empty and to its elements otherwise, on every
+# version.
+TOKEN_FLAG=()
+[ -n "${BKN_TOKEN:-}" ] && TOKEN_FLAG=(--token "$BKN_TOKEN")
+
 run() {
-  $CLI --base-url "$BKN_BASE_URL" --token "$BKN_TOKEN" "${TLS_FLAG[@]}" --json "$@" 2>&1 |
+  $CLI --base-url "$BKN_BASE_URL" ${TOKEN_FLAG[@]+"${TOKEN_FLAG[@]}"} \
+    ${TLS_FLAG[@]+"${TLS_FLAG[@]}"} --json "$@" 2>&1 |
     grep -v -i -E 'NODE_TLS_REJECT_UNAUTHORIZED|trace-warnings'
 }
 

@@ -6,7 +6,7 @@
 #
 # Write paths live in `live-write.sh`, behind their own switch.
 #
-#   BKN_BASE_URL=https://host BKN_TOKEN=$(openbkn auth token) BKN_KN_ID=<kn> \
+#   BKN_BASE_URL=https://host [BKN_TOKEN=…] BKN_KN_ID=<kn> \
 #     [BKN_INSECURE=1] test/e2e/live-suite.sh
 #
 # Not part of `npm test` (real backend).
