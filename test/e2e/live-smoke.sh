@@ -1,39 +1,25 @@
 #!/usr/bin/env bash
 #
-# Live read-path smoke test for `openbkn` against a real platform.
-# Reuses an existing legacy CLI session for the token (refresh needs TLS bypass
-# on self-signed platforms, hence NODE_TLS_REJECT_UNAUTHORIZED=0).
+# Live read-path smoke test for `openbkn` against a real platform — the short
+# one. `live-suite.sh` is the broad read-only pass; `live-write.sh` is the one
+# that creates things.
 #
-#   BKN_BASE_URL=https://host  BKN_KN_ID=<kn>  test/e2e/live-smoke.sh
+#   BKN_BASE_URL=https://host [BKN_TOKEN=…] BKN_KN_ID=<kn> \
+#     [BKN_INSECURE=1] test/e2e/live-smoke.sh
 #
-# Defaults target the dev VM. Not part of `npm test` (real backend).
-set -uo pipefail
-export NODE_TLS_REJECT_UNAUTHORIZED=0
+# Not part of `npm test` (real backend).
+# shellcheck source=test/e2e/_env.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_env.sh"
 
-BASE="${BKN_BASE_URL:-https://10.211.55.4}"
-CLI="node $(cd "$(dirname "$0")/../.." && pwd)/dist/cli.js"
-TOKEN="${BKN_TOKEN:-$($CLI auth token 2>/dev/null)}"
-KN="${BKN_KN_ID:-}"
-
-if [ -z "$TOKEN" ]; then
-  echo "No token. Log in first (or set BKN_TOKEN)." >&2
-  exit 1
-fi
-
-# --json is explicit: the human table is the default output, so the JSON-shape
-# assertions below only hold when we ask for machine-readable output.
-o() { $CLI --base-url "$BASE" --token "$TOKEN" -k --json "$@" 2>&1 | grep -v -i warning; }
-pass=0; fail=0
+# This file's own pass/fail wording, kept as it was; `_env.sh` supplies `run`
+# and the counters.
 check() {
   local label="$1"; shift
-  # Buffer the output and match from a here-string: piping into `grep -q` lets
-  # grep exit on the first match, and the writer's SIGPIPE trips `pipefail` on
-  # large payloads.
-  local out; out="$(o "$@")"
-  if grep -qE '"(entries|data|count|id|name|total|tools|concepts|object_types)"|^\[|\[\]' <<< "$out"; then
-    echo "✅ $label"; pass=$((pass + 1))
+  local out; out="$(run "$@")"
+  if errored "$out"; then
+    echo "❌ $label"; fail=$((fail + 1)); failed+=("$label")
   else
-    echo "❌ $label"; fail=$((fail + 1))
+    echo "✅ $label"; pass=$((pass + 1))
   fi
 }
 
@@ -43,7 +29,7 @@ check() {
 skipped=0
 optional_check() {
   local label="$1"; shift
-  local out; out="$(o "$@")"
+  local out; out="$(run "$@")"
   if grep -q '<center>nginx</center>' <<< "$out"; then
     echo "⏭️  $label (service not deployed)"; skipped=$((skipped + 1)); return
   fi
@@ -64,17 +50,17 @@ check "model small list" model small list --limit 1
 check "skill list" skill list --limit 1
 check "toolbox list" toolbox list --limit 1
 optional_check "dataflow list" dataflow list
-if [ -n "$KN" ]; then
-  check "bkn object-type list" bkn object-type list "$KN"
-  check "bkn action-log list" bkn action-log list "$KN"
-  check "context tools" context tools "$KN"
+if [ -n "$BKN_KN_ID" ]; then
+  check "bkn object-type list" bkn object-type list "$BKN_KN_ID"
+  check "bkn action-log list" bkn action-log list "$BKN_KN_ID"
+  check "context tools" context tools "$BKN_KN_ID"
 fi
 
 # Operator (admin) endpoints need an operator token; run only when one is
 # provided. License checks are reads (fingerprint works with no license
 # installed; show reports state=invalid then — both count as reachable).
 if [ -n "${BKN_ADMIN_TOKEN:-}" ]; then
-  a() { $CLI --base-url "$BASE" --token "$BKN_ADMIN_TOKEN" -k --json "$@" 2>&1 | grep -v -i warning; }
+  a() { $CLI --base-url "$BKN_BASE_URL" --token "$BKN_ADMIN_TOKEN" ${TLS_FLAG[@]+"${TLS_FLAG[@]}"} --json "$@" 2>&1 | grep -v -i warning; }
   acheck() {
     local label="$1"; shift
     local out; out="$(a "$@")"
