@@ -16,6 +16,10 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
 - `openbkn bkn get <id>` — one network, summary + schema pointers.
 - `openbkn bkn query <id> ...` — query object types / instances (default limit 50).
 - `openbkn bkn push <dir>` / `openbkn bkn pull <id>` — upload/download a BKN package; optional encoding detection (`--no-detect-encoding`, `--source-encoding`).
+- When the lifecycle catalog requires `conversation_mode`, managed retrieval
+  sends `new` without a conversation ID or `continue` with one. If that
+  handshake fails, the SDK surfaces the lifecycle error and does not send an
+  uncontexted business request.
 
 ## Index building (via Catalog BuildTask — no KN-level build)
 
