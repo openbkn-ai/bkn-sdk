@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   configureResourceIndex,
   createResource,
@@ -15,6 +15,7 @@ import {
   upsertResourceDocument,
   upsertResourceDocuments,
 } from "../../src/api/resources.js";
+import type { ResourceLocalStatus } from "../../src/index.js";
 import type { RequestContext } from "../../src/types.js";
 import { HttpError, InputError } from "../../src/utils/errors.js";
 
@@ -55,6 +56,12 @@ function firstCall(fetchMock: typeof fetch): CallArgs {
 }
 
 afterEach(() => vi.unstubAllGlobals());
+
+describe("ResourceLocalStatus", () => {
+  it("is exported from the SDK entry point", () => {
+    expectTypeOf<ResourceLocalStatus>().toEqualTypeOf<"unavailable" | "available" | "stale">();
+  });
+});
 
 describe("listResources", () => {
   it("maps list filters to vega-backend query params", async () => {
