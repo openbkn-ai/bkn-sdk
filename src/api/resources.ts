@@ -83,7 +83,33 @@ const ResourceAccountInfo = z
   .object({ id: z.string(), type: z.string(), name: z.string().optional() })
   .passthrough();
 
-const ResourcePropertySchema: z.ZodType<ResourceProperty> = z
+/**
+ * Read JSON `null` as "the key is absent".
+ *
+ * A property with no features marshals as `features: null` rather than as a
+ * missing key or an empty array, and zod's `.optional()` accepts only
+ * `undefined` — so a plain optional rejects the response outright. That is why
+ * `resource get` failed on nearly every id on both reference deploys, and why
+ * `configureResourceIndex`, whose first act is that same read, could never run.
+ *
+ * Applied only where a null was actually observed, which is not everywhere it
+ * could be: scanning all 368 resources on one deploy found exactly three, all
+ * inside `schema_definition` — `attributes` 3578 times, `features` 4304, and a
+ * feature's `config` 501. Every other optional came back omitted the ordinary
+ * way, so the backend is selective rather than uniform about this, and a guard
+ * placed where no null has been seen is a guard no fixture can hold up. If one
+ * surfaces elsewhere, wrapping that field is the whole fix.
+ *
+ * Normalizing here rather than widening the types keeps "absent" a single shape
+ * for callers, so `?? []` and `?.` keep meaning what they already meant.
+ */
+const nullAsAbsent = <T extends z.ZodTypeAny>(schema: T) =>
+  schema.nullish().transform((v) => v ?? undefined);
+
+// The third parameter is the *input* type: what arrives on the wire, which is
+// not what parsing yields. Leaving it pinned to `ResourceProperty` asserts the
+// two are the same — the assumption this whole block exists to correct.
+const ResourcePropertySchema: z.ZodType<ResourceProperty, z.ZodTypeDef, unknown> = z
   .object({
     name: z.string(),
     display_name: z.string().optional(),
@@ -92,8 +118,8 @@ const ResourcePropertySchema: z.ZodType<ResourceProperty> = z
     original_name: z.string().optional(),
     original_type: z.string().optional(),
     original_description: z.string().optional(),
-    features: z
-      .array(
+    features: nullAsAbsent(
+      z.array(
         z
           .object({
             name: z.string().optional(),
@@ -103,12 +129,12 @@ const ResourcePropertySchema: z.ZodType<ResourceProperty> = z
             ref_property: z.string().optional(),
             is_default: z.boolean().optional(),
             is_native: z.boolean().optional(),
-            config: z.record(z.unknown()).optional(),
+            config: nullAsAbsent(z.record(z.unknown())),
           })
           .passthrough(),
-      )
-      .optional(),
-    attributes: z.record(z.unknown()).optional(),
+      ),
+    ),
+    attributes: nullAsAbsent(z.record(z.unknown())),
   })
   .passthrough();
 
