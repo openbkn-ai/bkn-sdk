@@ -381,7 +381,6 @@ describe("createBuildTask", () => {
     await stopBuildTask(ctx, "t-1");
     await deleteBuildTasks(ctx, ["t-1", "t-2"], {
       ignoreMissing: true,
-      deleteActiveIndex: true,
     });
     const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
     expect(new URL(calls[0]?.[0] ?? "").pathname).toBe(
@@ -392,7 +391,7 @@ describe("createBuildTask", () => {
     const deleteUrl = new URL(calls[2]?.[0] ?? "");
     expect(deleteUrl.pathname).toBe("/api/vega-backend/v1/build-tasks/t-1,t-2");
     expect(deleteUrl.searchParams.get("ignore_missing")).toBe("true");
-    expect(deleteUrl.searchParams.get("delete_active_index")).toBe("true");
+    expect(deleteUrl.searchParams.has("delete_active_index")).toBe(false);
   });
 });
 

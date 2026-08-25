@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   configureResourceIndex,
   createResource,
@@ -15,6 +15,7 @@ import {
   upsertResourceDocument,
   upsertResourceDocuments,
 } from "../../src/api/resources.js";
+import type { ResourceLocalStatus } from "../../src/index.js";
 import type { RequestContext } from "../../src/types.js";
 import { HttpError, InputError } from "../../src/utils/errors.js";
 
@@ -39,6 +40,7 @@ function resourceFixture(overrides: Record<string, unknown> = {}) {
     name: "orders",
     category: "table",
     status: "active",
+    local_status: "unavailable",
     source_identifier: "orders",
     creator: { id: "u-1", type: "user" },
     create_time: 1,
@@ -54,6 +56,12 @@ function firstCall(fetchMock: typeof fetch): CallArgs {
 }
 
 afterEach(() => vi.unstubAllGlobals());
+
+describe("ResourceLocalStatus", () => {
+  it("is exported from the SDK entry point", () => {
+    expectTypeOf<ResourceLocalStatus>().toEqualTypeOf<"unavailable" | "available" | "stale">();
+  });
+});
 
 describe("listResources", () => {
   it("maps list filters to vega-backend query params", async () => {
@@ -116,6 +124,9 @@ describe("listResources", () => {
     await expect(listResources(ctx)).resolves.toMatchObject({
       entries: [{ category: "warehouse", status: "archived", logic_type: "materialized" }],
     });
+
+    mockFetch({ entries: [resourceFixture({ local_status: "unknown" })], total_count: 1 });
+    await expect(listResources(ctx)).rejects.toThrow();
   });
 
   it("rejects an empty resource detail envelope", () => {

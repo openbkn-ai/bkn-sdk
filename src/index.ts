@@ -191,6 +191,7 @@ export type {
   ResourceCategory,
   ResourceDataPaging,
   ResourceDocument,
+  ResourceLocalStatus,
   ResourceStatus,
   UpdateResourceOptions,
 } from "./api/resources.js";

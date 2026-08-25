@@ -60,6 +60,9 @@ export type ResourceCategory = z.infer<typeof ResourceCategory>;
 export const ResourceStatus = z.enum(["active", "disabled", "deprecated", "stale"]);
 export type ResourceStatus = z.infer<typeof ResourceStatus>;
 
+export const ResourceLocalStatus = z.enum(["unavailable", "available", "stale"]);
+export type ResourceLocalStatus = z.infer<typeof ResourceLocalStatus>;
+
 export interface ResourceLike {
   id?: string;
   catalog_id?: string;
@@ -138,6 +141,7 @@ export const Resource = z
       })
       .passthrough()
       .optional(),
+    local_status: ResourceLocalStatus,
     index_name: z.string().optional(),
     column_count: z.number().optional(),
     row_count: z.number().optional(),

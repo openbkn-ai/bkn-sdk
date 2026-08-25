@@ -71,6 +71,7 @@ function normalizeVegaResponse(url: URL, body: unknown): unknown {
     catalog_id: "c-1",
     category: "table",
     status: "active",
+    local_status: "unavailable",
     source_identifier: "table",
     creator: { id: "u-1", type: "user" },
     create_time: 1,

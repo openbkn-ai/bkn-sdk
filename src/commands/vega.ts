@@ -1038,7 +1038,7 @@ export function vegaCommand(): Command {
   dataset
     .command("build-start <task-id>")
     .description("Start a BuildTask")
-    .option("--reset", "restart a full task from the beginning (ignored for incremental tasks)")
+    .option("--reset", "restart a full task from the beginning (rejected for incremental tasks)")
     .action(async (taskId: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).vega.startBuildTask(taskId, { reset: opts.reset }),
@@ -1057,12 +1057,10 @@ export function vegaCommand(): Command {
     .command("build-delete <ids...>")
     .description("Delete one or more BuildTasks")
     .option("--ignore-missing", "ignore missing task ids")
-    .option("--delete-active-index", "delete active indexes too")
     .action(async (ids: string[], opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).vega.deleteBuildTasks(ids, {
           ignoreMissing: opts.ignoreMissing,
-          deleteActiveIndex: opts.deleteActiveIndex,
         }),
         outputOptions(cmd),
       );
