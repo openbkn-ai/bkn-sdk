@@ -39,6 +39,7 @@ function resourceFixture(overrides: Record<string, unknown> = {}) {
     name: "orders",
     category: "table",
     status: "active",
+    local_status: "unavailable",
     source_identifier: "orders",
     creator: { id: "u-1", type: "user" },
     create_time: 1,
@@ -116,6 +117,9 @@ describe("listResources", () => {
     await expect(listResources(ctx)).resolves.toMatchObject({
       entries: [{ category: "warehouse", status: "archived", logic_type: "materialized" }],
     });
+
+    mockFetch({ entries: [resourceFixture({ local_status: "unknown" })], total_count: 1 });
+    await expect(listResources(ctx)).rejects.toThrow();
   });
 
   it("rejects an empty resource detail envelope", () => {

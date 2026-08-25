@@ -45,7 +45,7 @@ CLI:
   more statuses; the SDK sends repeated `status` query parameters. Use
   `--sort create_time|start_time|finish_time|last_progress_time` and
   `--direction asc|desc` for ordering.
-- `openbkn vega dataset build-start <task-id> [--reset]` — `--reset` restarts only a full task; it is ignored for incremental tasks.
+- `openbkn vega dataset build-start <task-id> [--reset]` — `--reset` restarts only a full task; incremental tasks reject it.
 
 **Field searchability is separate** — declared on the resource property schema via
 `feature_type` (`keyword` | `fulltext` | `vector`). The Resource configuration

@@ -355,7 +355,6 @@ export async function getBuildTask(ctx: RequestContext, taskId: string): Promise
 
 export interface DeleteBuildTasksOptions {
   ignoreMissing?: boolean;
-  deleteActiveIndex?: boolean;
 }
 
 export function deleteBuildTasks(
@@ -367,8 +366,6 @@ export function deleteBuildTasks(
     method: "DELETE",
     query: {
       ignore_missing: opts.ignoreMissing === undefined ? undefined : String(opts.ignoreMissing),
-      delete_active_index:
-        opts.deleteActiveIndex === undefined ? undefined : String(opts.deleteActiveIndex),
     },
   });
 }
