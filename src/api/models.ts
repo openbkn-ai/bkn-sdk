@@ -60,7 +60,41 @@ export function getSmallModel(ctx: RequestContext, modelId: string): Promise<unk
  * already a name.
  */
 export async function resolveSmallModelName(ctx: RequestContext, model: string): Promise<string> {
+  // Not routed through `resolveSmallModel`: that one needs the id too and pays
+  // a list read for it, and a caller who only wants the name and already has
+  // one must not pay for a round trip it does not need.
   if (!/^\d+$/.test(model)) return model;
+  return (await resolveSmallModel(ctx, model)).name;
+}
+
+/** A small model's id and name together, from either one. */
+export interface SmallModelRef {
+  id: string;
+  name: string;
+}
+
+/**
+ * Resolve a small-model reference to *both* forms.
+ *
+ * The platform does not agree with itself about which it wants: a resource's
+ * `index_config.default_embedding_model` takes the name, while a property
+ * feature's `config.embedding_model` takes the numeric id and answers a PUT
+ * carrying a name with
+ *
+ *     embedding model ID "text-embedding-v4" for field "name" not found
+ *
+ * Both were verified against a live deploy, one field at a time. So a caller
+ * that writes both needs both, and neither direction can be assumed from the
+ * other.
+ */
+export async function resolveSmallModel(
+  ctx: RequestContext,
+  model: string,
+): Promise<SmallModelRef> {
+  if (!/^\d+$/.test(model)) {
+    const id = await smallModelIdByName(ctx, model);
+    return { id, name: model };
+  }
   // Only a genuine "no such id" may fall through to the InputError below. An
   // expired token, a 5xx, or a deploy without model-factory must keep its own
   // cause — collapsing those into "you typed a bad id" is the exact failure
@@ -80,7 +114,36 @@ export async function resolveSmallModelName(ctx: RequestContext, model: string):
       ].join(" "),
     );
   }
-  return name;
+  return { id: model, name };
+}
+
+/**
+ * Find a small model's id from its name.
+ *
+ * There is no lookup-by-name endpoint, and the `name` query parameter is
+ * ignored — a deploy answering it returns every model whatever is asked for —
+ * so the match happens here. Paged rather than asked for in one go: `size` is
+ * the backend's own bound and `limit: -1` is not a value it takes, answering
+ * `ModelFactory.Router.ParamError.FormatError` instead. A name the platform
+ * does not have is the caller's own typo and says so; anything else (auth,
+ * 5xx, no model-factory) keeps its cause, for the same reason the id lookup
+ * above does.
+ */
+async function smallModelIdByName(ctx: RequestContext, name: string): Promise<string> {
+  const PAGE = 100;
+  for (let page = 1; page <= 50; page++) {
+    const listed = (await listSmallModels(ctx, { page, limit: PAGE })) as {
+      data?: Array<{ model_id?: string | number; model_name?: string }>;
+      entries?: Array<{ model_id?: string | number; model_name?: string }>;
+    };
+    const rows = listed?.data ?? listed?.entries ?? [];
+    const hit = rows.find((m) => m?.model_name === name);
+    if (hit?.model_id !== undefined) return String(hit.model_id);
+    if (rows.length < PAGE) break;
+  }
+  throw new InputError(
+    [`No small model named ${name}.`, "List them with `openbkn model small list`."].join(" "),
+  );
 }
 
 export interface ChatMessage {

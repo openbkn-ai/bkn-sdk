@@ -8,6 +8,7 @@ import {
   listLlmModels,
   listSmallModels,
   rerank,
+  resolveSmallModel,
   setDefaultLlm,
   setDefaultSmallModel,
 } from "../../src/api/models.js";
@@ -169,5 +170,44 @@ describe("small-model calls take a name or an id", () => {
     await embeddings(ctx, "text-embedding-v4", ["apple"]);
     expect(calls(f).some(([u]) => String(u).includes("/mf-model-manager"))).toBe(false);
     expect(JSON.parse(calls(f).at(-1)?.[1].body as string).model).toBe("text-embedding-v4");
+  });
+});
+
+describe("resolving a small-model name to its id", () => {
+  it("pages with page + size, never limit", async () => {
+    // `limit: -1` is not a value mf-model-manager takes: it answers
+    // `ModelFactory.Router.ParamError.FormatError`, and the whole index write
+    // fails on a model lookup rather than on anything about the resource.
+    const fn = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ count: 1, data: [{ model_id: "42", model_name: "emb" }] }), {
+          status: 200,
+        }),
+    );
+    vi.stubGlobal("fetch", fn);
+    await expect(resolveSmallModel(ctx, "emb")).resolves.toEqual({ id: "42", name: "emb" });
+    const url = new URL(
+      (fn as unknown as { mock: { calls: CallArgs[] } }).mock.calls[0]?.[0] ?? "",
+    );
+    expect(url.searchParams.get("size")).toBe("100");
+    expect(url.searchParams.get("page")).toBe("1");
+    expect(url.searchParams.get("limit")).toBeNull();
+  });
+
+  it("names a model the platform does not have", async () => {
+    // The `name` query parameter is ignored by the deploy — it answers with
+    // every model whatever is asked for — so a wrong name is only caught by
+    // matching here, never by an empty response.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ count: 1, data: [{ model_id: "42", model_name: "other" }] }),
+            { status: 200 },
+          ),
+      ),
+    );
+    await expect(resolveSmallModel(ctx, "emb")).rejects.toThrow(/No small model named emb/);
   });
 });

@@ -10,7 +10,7 @@ import { DEFAULT_LIST_LIMIT, type RequestContext } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { request } from "./http.js";
-import { resolveSmallModelName } from "./models.js";
+import { resolveSmallModel } from "./models.js";
 
 const BASE = "/api/vega-backend/v1/resources";
 
@@ -339,26 +339,23 @@ export async function configureResourceIndex(
   opts: ConfigureResourceIndexOptions,
 ): Promise<unknown> {
   const current = firstResource(await getResource(ctx, id));
-  // The index config stores a model NAME; an id gets rejected at build time with
-  // `embedding model "…" not found`, so resolve before it reaches the resource.
-  const embeddingModel = opts.embeddingModel
-    ? await resolveSmallModelName(ctx, opts.embeddingModel)
-    : undefined;
+  // The two places a model lands want it in different forms, and each rejects
+  // the other's: `index_config.default_embedding_model` takes the NAME (an id
+  // fails the build with `embedding model "…" not found`), while a feature's
+  // `config.embedding_model` takes the numeric ID (a name fails the PUT itself
+  // with `embedding model ID "…" for field "…" not found`). Resolve once, use
+  // each where it belongs.
+  const model = opts.embeddingModel ? await resolveSmallModel(ctx, opts.embeddingModel) : undefined;
   const schema = (current.schema_definition ?? []).map((prop) => ({ ...prop }));
   const indexConfig: ResourceIndexConfig = {
     ...(current.index_config ?? {}),
     ...(opts.buildKeyFields?.length ? { build_key_fields: opts.buildKeyFields } : {}),
-    ...(embeddingModel ? { default_embedding_model: embeddingModel } : {}),
+    ...(model ? { default_embedding_model: model.name } : {}),
     ...(opts.fulltextAnalyzer ? { default_fulltext_analyzer: opts.fulltextAnalyzer } : {}),
   };
 
   for (const field of opts.embeddingFields ?? []) {
-    ensureFeature(
-      schema,
-      field,
-      "vector",
-      embeddingModel ? { embedding_model: embeddingModel } : undefined,
-    );
+    ensureFeature(schema, field, "vector", model ? { embedding_model: model.id } : undefined);
   }
   for (const field of opts.fulltextFields ?? []) {
     ensureFeature(
@@ -399,6 +396,18 @@ function resourceUpdateBody(
   return body;
 }
 
+/**
+ * `ref_property` for a feature that indexes the column it hangs on.
+ *
+ * The field names where the indexed content comes from, and for in-place
+ * indexing there is no second column to name — so the platform leaves it empty,
+ * and its validator reads a feature whose `ref_property` equals its own
+ * column as an illegal self-reference. Writing the column name there is what
+ * made every index build fail: 90 features across both reference deploys carry
+ * `""` and not one carries a self-reference.
+ */
+const IN_PLACE = "";
+
 function ensureFeature(
   schema: ResourceProperty[],
   field: string,
@@ -412,13 +421,15 @@ function ensureFeature(
     (f) => f.feature_type === featureType && (f.ref_property || field) === field,
   );
   if (existing) {
-    existing.ref_property = existing.ref_property || field;
+    // Left alone on purpose. Setting it to `field` here rewrote a stored `""`
+    // into the shape the validator rejects, so a resource the platform had
+    // accepted became unwritable the next time anything touched its index.
     existing.config = { ...(existing.config ?? {}), ...(config ?? {}) };
   } else {
     features.push({
       name: `${field}_${featureType}`,
       feature_type: featureType,
-      ref_property: field,
+      ref_property: IN_PLACE,
       is_default: false,
       is_native: false,
       ...(config ? { config } : {}),
