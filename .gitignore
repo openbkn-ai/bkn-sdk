@@ -1,5 +1,8 @@
 # Dependencies
-node_modules/
+# No trailing slash: that form matches directories only, and a symlinked
+# node_modules — how a worktree usually borrows the parent's install — is not
+# a directory, so it slipped past and got committed.
+node_modules
 .pnp/
 .pnp.js
 

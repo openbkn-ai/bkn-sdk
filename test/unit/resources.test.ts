@@ -8,6 +8,7 @@ import {
   deleteResourceDocumentsByFilter,
   findResource,
   firstResource,
+  getResource,
   getResourceDocument,
   listResources,
   queryResource,
@@ -421,5 +422,64 @@ describe("findResource", () => {
     });
     const fuzzy = (await findResource(ctx, "orders")) as Array<{ name: string }>;
     expect(fuzzy).toHaveLength(2);
+  });
+});
+
+describe("absent collections arriving as null", () => {
+  // Captured from a live deploy: the backend omits nothing, so a property with
+  // no features, no attributes and a feature with no config sends each as
+  // `null`. Every one of the 368 resources there carries at least one.
+  const wireProperty = {
+    name: "slice_content",
+    type: "text",
+    attributes: null,
+    features: [{ name: "slice_content_fulltext", feature_type: "fulltext", config: null }],
+  };
+
+  it("reads a resource whose property collections are null", async () => {
+    mockFetch({
+      entries: [
+        resourceFixture({
+          schema_definition: [wireProperty, { ...wireProperty, name: "body", features: null }],
+        }),
+      ],
+    });
+    const parsed = firstResource(await getResource(ctx, "r-1"));
+    const [first, second] = parsed.schema_definition ?? [];
+    // `undefined`, not `null`: callers reach for these through `?? []` and `?.`,
+    // and null would survive both.
+    expect(second?.features).toBeUndefined();
+    expect(first?.attributes).toBeUndefined();
+    expect(first?.features?.[0]?.config).toBeUndefined();
+    expect(first?.features).toHaveLength(1);
+  });
+
+  it("indexes a resource whose properties carry no features yet", async () => {
+    // The read is `configureResourceIndex`'s first act, so a resource it cannot
+    // parse is a resource it can never index — which is every resource on both
+    // reference deploys until this parsed.
+    const f = mockFetch({
+      entries: [
+        resourceFixture({
+          update_time: 7,
+          schema_definition: [{ name: "title", type: "text", attributes: null, features: null }],
+        }),
+      ],
+    });
+    await configureResourceIndex(ctx, "r-1", { embeddingFields: ["title"] });
+    const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+    const body = JSON.parse(calls[1]?.[1].body as string);
+    expect(body.schema_definition[0].features[0]).toMatchObject({
+      feature_type: "vector",
+      ref_property: "title",
+    });
+  });
+
+  it("still rejects a property whose features are the wrong shape", async () => {
+    // Reading null as absent must not turn the schema into a rubber stamp.
+    mockFetch({
+      entries: [resourceFixture({ schema_definition: [{ name: "title", features: 42 }] })],
+    });
+    await expect(getResource(ctx, "r-1")).rejects.toThrow();
   });
 });
