@@ -123,6 +123,15 @@ describe("listResources", () => {
     await expect(listResources(ctx)).rejects.toThrow();
   });
 
+  it("reads a resource from a deploy that reports no local status", async () => {
+    // Neither reference deploy sends the key. Requiring it rejected every
+    // resource read against both, while the fixtures here carried it and so
+    // said nothing about that.
+    const { local_status: _omitted, ...withoutLocalStatus } = resourceFixture();
+    mockFetch({ entries: [withoutLocalStatus], total_count: 1 });
+    await expect(listResources(ctx)).resolves.toMatchObject({ entries: [{ id: "r-1" }] });
+  });
+
   it("rejects an empty resource detail envelope", () => {
     expect(() => firstResource({ entries: [] })).toThrow(
       "resource detail response contains no entries",
