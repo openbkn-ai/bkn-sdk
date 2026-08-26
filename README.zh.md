@@ -32,7 +32,6 @@ openbkn bkn object-type list <kn-id>
 # 数据平台
 openbkn resource list --type table
 openbkn vega catalog list
-openbkn dataflow list
 openbkn model llm list
 
 # 智能体

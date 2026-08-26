@@ -7,15 +7,15 @@ description: >-
   索引构建任务、Context Loader（MCP 检索）、Decision Agent（CRUD、流式对话、
   会话、挂载技能）、模型工厂（大模型/小模型 CRUD、OpenAI 兼容对话/embedding/
   rerank）、Skill 注册（zip 注册/下载/安装 + 生命周期）、Toolbox/Tool（上传、
-  导入导出、调用）、Dataflow 文档流程（+模板）、BKN Trace（第三方 Agent 受管
+  导入导出、调用）、BKN Trace（第三方 Agent 受管
   Conversation / Interaction / Operation、拉取 spans、用符号
   规则 + LLM rubric 判定诊断一条 trace、scan、eval-set 构建/测试、schema 校验）、
   以及运营面（`openbkn admin`：组织/用户/角色 CRUD、审计、模型管理）与认证
   （token + OAuth 密码/浏览器）。
   当用户提到：知识网络 / 知识图谱 / 对象类 / 关系 / 行动 / 指标 metric /
-  语义搜索 / 建索引 / create-from-catalog / create-from-csv / Agent / 智能体 /
+  语义搜索 / 建索引 / create-from-catalog / Agent / 智能体 /
   跟 Agent 对话 / 大模型 / 小模型 / embedding / rerank / Skill / 技能包 /
-  toolbox / 工具箱 / tool / dataflow / 数据流 / trace / 证据链 / diagnose /
+  toolbox / 工具箱 / tool / trace / 证据链 / diagnose /
   eval-set / Vega / Catalog / 数据源 / 组织 / 用户 / 角色 / 审计 audit /
   AppKey / api-key / bak_ 凭据 / 签发 key / 撤销 key 等意图时使用。
 allowed-tools: Bash(openbkn *), Bash(npx openbkn *)
@@ -80,7 +80,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 | `auth` | 认证 / 会话 / 多用户 | `login`（`--token` / `-u -p` / 浏览器 / `--device`，均走 device-code）、`status`/`whoami`/`token`/`list`/`use`/`switch`/`users`/`export`、`change-password` |
 | `config` | 平台 CLI 配置 | `config show` / `config set <key> <value>` |
 | `appkey` | 用户自助签发的 AppKey（`bak_` 长期凭据，仅 Context Loader 可用） | `list`、`create --name <s> [--expire-days <n> \| --expires-at <rfc3339> \| --never-expire]`（明文 `key` **只返回一次**）、`regenerate <id>`（轮换：同 id 出新 key，旧 key 立即失效）、`revoke <id>`、`admin list [--owner-id]`/`admin revoke <id>` |
-| `bkn` | 知识网络 + Schema + 查询 + 本地包 | `list`/`get`/`search`/`stats`/`export`、`object-type/relation-type/action-type list/get/create/update/delete`、`action-type query/execute/inputs`、`metric …`、`concept-group …`、`action-log/action-schedule …`、`subgraph`、`relation-type-paths`、`resources`、`push <dir>`/`pull <kn> [dir]`、`validate <dir>`、`create-from-catalog <catalog> --name …`、`create-from-csv <catalog> --files <glob> --name …`（`--build`、`--pk-map t:col`） |
+| `bkn` | 知识网络 + Schema + 查询 + 本地包 | `list`/`get`/`search`/`stats`/`export`、`object-type/relation-type/action-type list/get/create/update/delete`、`action-type query/execute/inputs`、`metric …`、`concept-group …`、`action-log/action-schedule …`、`subgraph`、`relation-type-paths`、`resources`、`push <dir>`/`pull <kn> [dir]`、`validate <dir>`、`create-from-catalog <catalog> --name …`（`--build`、`--pk-map t:col`） |
 | `resource` | Vega-backend 资源 | `list`/`get`/`find --name`/`query`/`delete` |
 | `vega` | Catalog + 索引构建 + SQL | `catalog list/get`、`catalog resources`、`connector-types`、`sql --resource-type <t> --query "<sql>"`（直连 MySQL/PG/OpenSearch，SQL 用 `{{resource-id}}` 占位）、`build`（索引 BuildTask）+ 状态 |
 | `context` | MCP 检索 | 业务对话通过 MCP 工具 `bkn_start_interaction` / `bkn_finish_interaction` 管理；CLI 沿用 `tool-call` 透传，不另设生命周期命令 |
@@ -88,7 +88,6 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 | `model` | 模型工厂 | `llm/small list/get/add/edit/delete/test`、`llm chat <name\|id> -m "…" [--stream]`（id 自动解析成 name）、`small embeddings/rerank <name>`（只收 name，填数字 id 会 400；与 chat 不同，暂不解析 id）、`llm set-default/unset-default <id>`、`small set-default/unset-default <id>`、`small get-default [--type embedding\|reranker]` |
 | `skill` | Skill 注册/市场/生命周期/沙箱执行 | `list`/`market`/`get`/`names <id...>`/`content`/`read-file`/`files [path] [--tree]`/`history`/`set-status`、`execute <id> --entry '<shell>'`、`register <dir>`/`download`/`install`、`update-metadata`/`update-package`、`republish`/`publish-history`；读类命令带 `--raw`（要正文而非对象存储 URL）与 `--draft`（读草稿版而非已发布版） |
 | `toolbox` / `tool` | 工具箱与工具 | toolbox `list/create/publish/delete/export/import`；tool `upload <file> --toolbox <id>`、`execute`/`debug` |
-| `dataflow` | 文档流程 | `list`/`runs`/`logs`/`run`、`create`（JSON 文档）、`templates`/`create-dataset`/`create-bkn`（`--template <name> --set k=v`） |
 | `trace` | BKN Trace | `get`、`search`、`diagnose <conv> [--llm]`（符号规则 + LLM rubric + synthesizer）、`scan <conv,…>`、`eval-set build <queries>`/`test <cases> --agent <id> [--llm]`、`schema validate <file>` |
 | `admin` | 运营 | `org/user/role …` CRUD + `reset-password`、`license show/import/receipt/activate/remove/fingerprint`（集群授权）、`audit list`、`llm/small-model …`、`auth …`、`config`、`call` |
 | `call`（别名 `curl`） | 通用 API 透传 | `call <url> [-X POST] [-d '<json>']` |
@@ -107,7 +106,6 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 | 模型工厂 | [model.md](references/model.md) |
 | Vega Catalog + 索引构建 | [vega.md](references/vega.md) |
 | vega-backend 资源 | [resource.md](references/resource.md) |
-| Dataflow + 模板 | [dataflow.md](references/dataflow.md) |
 | Context Loader（MCP） | [context.md](references/context.md) |
 | Skill 注册 / 生命周期 | [skill.md](references/skill.md) |
 | Toolbox / Tool | [toolbox.md](references/toolbox.md) |

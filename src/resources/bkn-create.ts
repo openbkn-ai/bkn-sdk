@@ -1,7 +1,6 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
-import { executeDataflow, pingDataflows } from "../api/dataflow.js";
 /**
  * `bkn create-from-catalog` orchestration. Build a knowledge network from a
  * Vega catalog's tables:
@@ -32,14 +31,6 @@ import {
 import { discoverCatalog, getDiscoverTask } from "../api/vega-discovery.js";
 import { createBuildTask, firstCatalog, getCatalog } from "../api/vega.js";
 import type { RequestContext } from "../types.js";
-import {
-  buildFieldMappings,
-  buildImportDag,
-  buildTableName,
-  parseCsvFile,
-  resolveFiles,
-  splitBatches,
-} from "../utils/csv-import.js";
 import { HttpError, InputError, NonJsonResponseError, formatError } from "../utils/errors.js";
 import {
   type TableColumn,
@@ -87,6 +78,13 @@ export interface CreateFromCatalogOptions {
 const DISCOVER_TASK_TIMEOUT_MS = 120_000;
 const DISCOVER_TASK_POLL_INTERVAL_MS = 2_000;
 
+/** Chunk a list so a fan-out reads a bounded number of resources at a time. */
+function splitBatches<T>(rows: T[], batchSize: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < rows.length; i += batchSize) out.push(rows.slice(i, i + batchSize));
+  return out;
+}
+
 async function discoverCatalogAndWait(ctx: RequestContext, catalogId: string): Promise<void> {
   const { id: taskId } = await discoverCatalog(ctx, catalogId);
   const deadline = Date.now() + DISCOVER_TASK_TIMEOUT_MS;
@@ -121,7 +119,7 @@ async function discoverCatalogAndWait(ctx: RequestContext, catalogId: string): P
  * tasks live on Vega resources outside the network and are never rolled back.
  *
  * Part of what this function throws, so callers may read it to tell the user
- * what to clean up (`createFromCsv` does). Deliberately a plain property rather
+ * what to clean up. Deliberately a plain property rather
  * than a new error class: it is one fact about one call, and wrapping the error
  * would cost its type — an `HttpError` here still has to arrive as one.
  */
@@ -315,10 +313,9 @@ export async function createFromCatalog(
   const log = opts.onProgress ?? (() => {});
   // Validate the embedding model before anything is written. Resolution lives
   // inside `configureResourceIndex`, i.e. step 5 — after the KN and its object
-  // types exist, and after `create-from-csv` has written every row — so a bad
-  // id used to cost a full import plus a rollback. Doing it here also means the
-  // build loop resolves once rather than once per table (a resolved name is not
-  // numeric, so the inner call short-circuits).
+  // types exist — so a bad id used to cost the whole run plus a rollback. Doing
+  // it here also means the build loop resolves once rather than once per table
+  // (a resolved name is not numeric, so the inner call short-circuits).
   const embeddingModel =
     opts.build && opts.embeddingModel
       ? await resolveSmallModelName(ctx, opts.embeddingModel)
@@ -616,234 +613,4 @@ export async function createFromCatalog(
     }
     throw e;
   }
-}
-
-export interface ImportCsvResult {
-  tables: string[];
-  failed: string[];
-  sampleRows: Record<string, Array<Record<string, string | null>>>;
-}
-
-/**
- * Fail before Phase 1 when the deploy has no dataflow backend.
- *
- * CSV import runs one dataflow DAG per batch, so a missing service turns into
- * one identical 404 per table, hundreds of rows in — long past the point where
- * the user can tell "this deploy can't do that" from "my data is wrong".
- *
- * What counts as "no service" is narrow: a gateway page, or a status the
- * gateway itself produces when nothing answers behind the route — 501, 502,
- * 503, 504. The probe reads `automation/v2` while the import runs on `v1`, so a
- * plain JSON 404 means the service answered and simply does not serve this
- * listing; blocking on that would ground an import whose own endpoints are
- * fine, so the probe steps aside and lets the real call speak (the same rule as
- * in `models.ts`). A 500 also steps aside: the service handled the request
- * badly, which is not the same as not being there.
- *
- * Reading 504 that way only holds because the probe asks for one row
- * (`pingDataflows`). Against the full listing a gateway timeout would as easily
- * mean "that query was slow", and the costs are not symmetric: this branch
- * aborts the command, while stepping aside costs one wasted attempt.
- */
-async function ensureDataflowAvailable(
-  ctx: RequestContext,
-  log: (m: string) => void,
-): Promise<void> {
-  try {
-    await pingDataflows(ctx);
-  } catch (e) {
-    // Both halves ask the same question — was it the service that answered?
-    // `request()` raises `NonJsonResponseError` only for a 2xx, so here it
-    // splits into a proxy page (nothing is deployed) and a service replying in
-    // something other than JSON (it is there; this listing just is not JSON).
-    // Treating the second as an absent service is the JSON-404 false positive
-    // again, wearing a different body.
-    // 504 belongs with 502/503, not with 500: the gateway routed the request
-    // and nothing answered. Every import batch would then wait out the full
-    // client timeout before failing, so twelve tables cost minutes of silence
-    // and twelve identical errors — the exact shape the preflight exists to
-    // prevent, one status code over.
-    const missing =
-      (e instanceof NonJsonResponseError && e.gateway) ||
-      (e instanceof HttpError && (e.gateway || [501, 502, 503, 504].includes(e.status)));
-    if (!missing) {
-      // An auth refusal is as conclusive as an absent service and just as
-      // wasteful to discover per batch — surface it now, with its own cause and
-      // exit code, rather than after reading every CSV. Name the refuser first:
-      // the error alone reads as a platform-wide auth problem, when the token
-      // may be fine everywhere except automation.
-      if (e instanceof HttpError && (e.status === 401 || e.status === 403)) {
-        log(`The dataflow service refused the preflight (HTTP ${e.status}); nothing was imported.`);
-        throw e;
-      }
-      log(`Dataflow preflight inconclusive (${formatError(e)}); continuing.`);
-      return;
-    }
-    throw new Error(
-      [
-        `The dataflow service is not available on this deploy (${formatError(e)}).`,
-        "`create-from-csv` imports through it, so it cannot run here.",
-        "Alternative: load the CSVs into the catalog's database directly, run",
-        "`openbkn vega catalog discover <catalog-id>`, then",
-        "`openbkn bkn create-from-catalog <catalog-id>`.",
-      ].join(" "),
-    );
-  }
-}
-
-/**
- * Import CSV files into a Vega catalog as tables. Each file becomes a table
- * (first batch creates it, later batches append) via a one-shot dataflow DAG.
- * Returns the imported table names and a per-table row sample (≤100 rows) for
- * downstream PK detection.
- */
-export async function importCsvToCatalog(
-  ctx: RequestContext,
-  opts: {
-    catalogId: string;
-    files: string;
-    tablePrefix?: string;
-    batchSize?: number;
-    onProgress?: (msg: string) => void;
-  },
-): Promise<ImportCsvResult> {
-  const log = opts.onProgress ?? (() => {});
-  const batchSize = opts.batchSize ?? 500;
-  await ensureDataflowAvailable(ctx, log);
-  const paths = await resolveFiles(opts.files);
-
-  // The database-write step needs the catalog's connector type.
-  const catalog = firstCatalog(await getCatalog(ctx, opts.catalogId)) as {
-    connector_type?: string;
-    type?: string;
-  };
-  const datasourceType = catalog.connector_type ?? catalog.type ?? "";
-
-  const tables: string[] = [];
-  const failed: string[] = [];
-  const sampleRows: Record<string, Array<Record<string, string | null>>> = {};
-
-  for (const path of paths) {
-    const tableName = buildTableName(path, opts.tablePrefix ?? "");
-    const { headers, rows } = await parseCsvFile(path);
-    if (headers.length === 0 || rows.length === 0) {
-      log(`Skipping ${tableName} (no headers/rows).`);
-      failed.push(tableName);
-      continue;
-    }
-    const fieldMappings = buildFieldMappings(headers);
-    const batches = splitBatches(rows, batchSize);
-    try {
-      for (let i = 0; i < batches.length; i += 1) {
-        log(`[${tableName}] batch ${i + 1}/${batches.length} (${batches[i]?.length} rows)...`);
-        await executeDataflow(
-          ctx,
-          buildImportDag({
-            catalogId: opts.catalogId,
-            datasourceType,
-            tableName,
-            tableExist: i > 0,
-            data: batches[i] as Array<Record<string, string | null>>,
-            fieldMappings,
-          }),
-        );
-      }
-      tables.push(tableName);
-      sampleRows[tableName] = rows.slice(0, 100);
-    } catch (e) {
-      // `formatError`, not `e.message`: the message alone is a bare `HTTP 404`,
-      // dropping both the server body and any next-step hint that came with it.
-      log(`[${tableName}] import failed: ${formatError(e)}`);
-      failed.push(tableName);
-    }
-  }
-  // Best-effort: refresh catalog metadata so the new tables are visible to the
-  // following create-from-catalog step.
-  await discoverCatalogAndWait(ctx, opts.catalogId).catch(() => {});
-  return { tables, failed, sampleRows };
-}
-
-export interface CreateFromCsvOptions {
-  catalogId: string;
-  name: string;
-  files: string;
-  tablePrefix?: string;
-  batchSize?: number;
-  tables?: string[];
-  pkMap?: Record<string, string>;
-  build?: boolean;
-  embeddingFields?: Record<string, string[]>;
-  embeddingModel?: string;
-  noRollback?: boolean;
-  onProgress?: (msg: string) => void;
-}
-
-/** Import CSVs into a catalog, then build a KN from the imported tables. */
-export async function createFromCsv(
-  ctx: RequestContext,
-  opts: CreateFromCsvOptions,
-): Promise<unknown> {
-  const log = opts.onProgress ?? (() => {});
-  // Before Phase 1, not inside Phase 2's build step: a bad model id must not
-  // cost a full CSV import whose rows then sit in the database with no KN.
-  const embeddingModel =
-    opts.build && opts.embeddingModel
-      ? await resolveSmallModelName(ctx, opts.embeddingModel)
-      : opts.embeddingModel;
-  log("Phase 1: importing CSVs...");
-  const imported = await importCsvToCatalog(ctx, {
-    catalogId: opts.catalogId,
-    files: opts.files,
-    tablePrefix: opts.tablePrefix,
-    batchSize: opts.batchSize,
-    onProgress: log,
-  });
-  if (imported.tables.length === 0) {
-    throw new Error(`No tables imported (failed: ${imported.failed.join(", ") || "none"}).`);
-  }
-  log(`Phase 2: building KN from ${imported.tables.length} table(s)...`);
-  const result = await createFromCatalog(ctx, {
-    catalogId: opts.catalogId,
-    name: opts.name,
-    tables: opts.tables && opts.tables.length > 0 ? opts.tables : imported.tables,
-    // The derived list comes from `importCsvToCatalog`, whose closing discover
-    // is best-effort — a table it has not registered yet must not sink a run
-    // whose rows are already in the database. A file whose import failed is
-    // already reported above, so an option keyed to it costs its own entry too.
-    absentTables: imported.failed,
-    ...(opts.tables && opts.tables.length > 0 ? {} : { missingTables: "skip" as const }),
-    pkMap: opts.pkMap,
-    build: opts.build,
-    embeddingFields: opts.embeddingFields,
-    embeddingModel,
-    noRollback: opts.noRollback,
-    sampleRows: imported.sampleRows,
-    onProgress: log,
-  }).catch((e: unknown) => {
-    // Past this line the rows are in the database, so no Phase 2 failure may
-    // read as "fix the flag and run this again" — that would import them a
-    // second time. Only this function knows that; `createFromCatalog` cannot
-    // tell a CSV import from any other caller, so the guidance is added here
-    // rather than guessed there, and every failure gets it, not a chosen few.
-    //
-    // Said as a log line, with the error rethrown untouched. Rewrapping cost an
-    // HttpError its status, hint and `gateway` flag, and turned exit code 3
-    // (auth) into 1 — the message would have been worth less than what it took.
-    const partialKn = (e as PartialKnMarked | null)?.partialKnId;
-    log(
-      [
-        "The CSV rows are already imported — re-running `create-from-csv` would duplicate them.",
-        partialKn
-          ? `Delete the partial knowledge network ${partialKn}, fix the problem, then continue with`
-          : "Fix the problem and continue with",
-        `\`openbkn bkn create-from-catalog ${opts.catalogId}\`.`,
-      ].join(" "),
-    );
-    throw e;
-  });
-  return {
-    imported_tables: imported.tables,
-    failed_imports: imported.failed,
-    ...(result as object),
-  };
 }

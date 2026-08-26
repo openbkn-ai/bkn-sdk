@@ -23,7 +23,7 @@ check() {
   fi
 }
 
-# Agent-factory and automation (dataflow) are optional deployments: the ingress
+# Agent-factory is an optional deployment: the ingress
 # answers with nginx's own 404 HTML when the service isn't installed, which is a
 # missing backend, not a broken command.
 skipped=0
@@ -49,7 +49,6 @@ check "model llm list" model llm list --limit 1
 check "model small list" model small list --limit 1
 check "skill list" skill list --limit 1
 check "toolbox list" toolbox list --limit 1
-optional_check "dataflow list" dataflow list
 if [ -n "$BKN_KN_ID" ]; then
   check "bkn object-type list" bkn object-type list "$BKN_KN_ID"
   check "bkn action-log list" bkn action-log list "$BKN_KN_ID"

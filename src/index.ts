@@ -14,7 +14,7 @@ export {
   DEFAULT_QUERY_LIMIT,
 } from "./types.js";
 export { HttpError, InputError, NonJsonResponseError, ToolError } from "./utils/errors.js";
-// The shape `kn.createFromCatalog` / `kn.createFromCsv` stamp onto a failure
+// The shape `kn.createFromCatalog` stamps onto a failure
 // that left a knowledge network behind. Documented as part of what they throw,
 // so it has to be nameable from the package, not just inside it.
 export type { PartialKnMarked } from "./resources/bkn-create.js";
@@ -77,7 +77,6 @@ export { admin } from "./resources/admin.js";
 export { agents } from "./resources/agents.js";
 export { context } from "./resources/context-loader.js";
 export type { ManagedToolResult, ToolCallOptions } from "./api/context-loader.js";
-export { dataflows } from "./resources/dataflows.js";
 export { kn } from "./resources/knowledge-networks.js";
 export { models } from "./resources/models.js";
 export { resources } from "./resources/resources.js";

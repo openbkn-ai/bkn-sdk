@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createFromCatalog, createFromCsv } from "../../src/resources/bkn-create.js";
+import { createFromCatalog } from "../../src/resources/bkn-create.js";
 import type { RequestContext } from "../../src/types.js";
 import { HttpError, InputError } from "../../src/utils/errors.js";
 
@@ -344,17 +344,7 @@ describe("createFromCatalog table identifiers", () => {
   });
 
   it("rejects an unknown --embedding-fields column before it can write anything", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "bkn-csv-"));
-    writeFileSync(join(dir, "document.csv"), "id,body\n1,alpha\n");
     const f = mockFetch([
-      [/^\/api\/automation\/v2\/dags$/, () => ({ entries: [] })],
-      [/^\/api\/automation\/v1\/data-flow\/flow$/, () => ({ id: "dag-1" })],
-      [/^\/api\/automation\/v1\/run-instance\/[^/]+$/, () => ({})],
-      [
-        /^\/api\/automation\/v1\/dag\/[^/]+\/results$/,
-        () => ({ results: [{ status: "success" }] }),
-      ],
-      [/^\/api\/automation\/v1\/data-flow\/flow\/[^/]+$/, () => ({})],
       [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({})],
       [
         /^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/,
@@ -372,155 +362,26 @@ describe("createFromCatalog table identifiers", () => {
       ],
       ...catalogRoutes([{ id: "r-1", name: "document", columns: ["id", "body"], pk: "id" }]),
     ]);
-    // The check runs in Phase 2, so the CSV rows are written by the time it
-    // fires — that is the bound. What it buys: left to `ensureFeature` this
-    // surfaces in step 5, after the KN and its object types exist and with
-    // earlier tables' PUTs and build tasks already landed and never rolled back.
+    // What this buys: left to `ensureFeature` the same typo surfaces in step 5,
+    // after the KN and its object types exist and with earlier tables' PUTs and
+    // build tasks already landed and never rolled back.
     await expect(
-      createFromCsv(ctx, {
+      createFromCatalog(ctx, {
         catalogId: "c-1",
         name: "kn",
-        files: `${dir}/*.csv`,
         build: true,
         embeddingFields: { document: ["bdy"] },
       }),
     ).rejects.toThrow(
       /--embedding-fields names bdy on table 'document'.*Indexable fields: id, body/,
     );
-    // Rows went in — that is why the check is reachable at all; nothing else did.
-    expect(paths(f)).toContain("/api/automation/v1/data-flow/flow");
     expect(paths(f)).not.toContain("/api/ontology-manager/v1/knowledge-networks");
     expect(paths(f)).not.toContain("/api/vega-backend/v1/build-tasks");
   });
 
-  it("tells a Phase 2 failure that the rows are already in the database", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "bkn-csv-"));
-    writeFileSync(join(dir, "document.csv"), "id,body\n1,alpha\n");
-    mockFetch([
-      [/^\/api\/automation\/v2\/dags$/, () => ({ entries: [] })],
-      [/^\/api\/automation\/v1\/data-flow\/flow$/, () => ({ id: "dag-1" })],
-      [/^\/api\/automation\/v1\/run-instance\/[^/]+$/, () => ({})],
-      [
-        /^\/api\/automation\/v1\/dag\/[^/]+\/results$/,
-        () => ({ results: [{ status: "success" }] }),
-      ],
-      [/^\/api\/automation\/v1\/data-flow\/flow\/[^/]+$/, () => ({})],
-      [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({})],
-      [
-        /^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/,
-        () => ({
-          entries: [
-            {
-              id: "c-1",
-              name: "catalog",
-              type: "physical",
-              enabled: true,
-              connector_type: "mysql",
-            },
-          ],
-        }),
-      ],
-      ...catalogRoutes([{ id: "r-1", name: "document", columns: ["id", "body"], pk: "id" }]),
-    ]);
-    // Every Phase 2 failure, not a chosen few: once the rows are in, "fix it
-    // and run this again" is the wrong next step.
-    const logs: string[] = [];
-    const err = await createFromCsv(ctx, {
-      catalogId: "c-1",
-      name: "kn",
-      files: `${dir}/*.csv`,
-      pkMap: { document: "nope" },
-      onProgress: (m) => logs.push(m),
-    }).catch((e) => e);
-    expect(String(err)).toMatch(/is not a column/);
-    expect(logs.join("\n")).toMatch(/already imported.*create-from-catalog c-1/s);
-    // Bad input stays bad input — the guidance must not cost the error's type.
-    expect(err).toBeInstanceOf(InputError);
-  });
-
-  it("names the partial network only when the run actually left one", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "bkn-csv-"));
-    writeFileSync(join(dir, "document.csv"), "id,body\n1,alpha\n");
-    const csvRoutes: Array<[RegExp, Route]> = [
-      [/^\/api\/automation\/v2\/dags$/, () => ({ entries: [] })],
-      [/^\/api\/automation\/v1\/data-flow\/flow$/, () => ({ id: "dag-1" })],
-      [/^\/api\/automation\/v1\/run-instance\/[^/]+$/, () => ({})],
-      [
-        /^\/api\/automation\/v1\/dag\/[^/]+\/results$/,
-        () => ({ results: [{ status: "success" }] }),
-      ],
-      [/^\/api\/automation\/v1\/data-flow\/flow\/[^/]+$/, () => ({})],
-      [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({})],
-      [
-        /^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/,
-        () => ({
-          entries: [
-            {
-              id: "c-1",
-              name: "catalog",
-              type: "physical",
-              enabled: true,
-              connector_type: "mysql",
-            },
-          ],
-        }),
-      ],
-    ];
-    const table = { id: "r-1", name: "document", columns: ["id", "body"], pk: "id" };
-
-    // Fails after the network exists: object-type creation is the first write
-    // past it, so `--no-rollback` really does leave one behind.
-    const late: string[] = [];
-    mockFetch([
-      ...csvRoutes,
-      ...catalogRoutes([table]).filter(
-        ([re]) => !re.test("/api/ontology-manager/v1/knowledge-networks/kn-1/object-types"),
-      ),
-      [
-        /^\/api\/ontology-manager\/v1\/knowledge-networks\/[^/]+\/object-types$/,
-        () => new Response(JSON.stringify({ error: "nope" }), { status: 500 }),
-      ],
-    ]);
-    await createFromCsv(ctx, {
-      catalogId: "c-1",
-      name: "kn",
-      files: `${dir}/*.csv`,
-      noRollback: true,
-      onProgress: (m) => late.push(m),
-    }).catch(() => {});
-    expect(late.join("\n")).toMatch(/Delete the partial knowledge network kn-1/);
-
-    // Fails before it exists — every input check now runs ahead of the KN, so
-    // there is nothing to delete and the guidance must not invent one.
-    const early: string[] = [];
-    mockFetch([...csvRoutes, ...catalogRoutes([table])]);
-    await createFromCsv(ctx, {
-      catalogId: "c-1",
-      name: "kn",
-      files: `${dir}/*.csv`,
-      noRollback: true,
-      pkMap: { document: "nope" },
-      onProgress: (m) => early.push(m),
-    }).catch(() => {});
-    expect(early.join("\n")).toMatch(/already imported/);
-    // Case-insensitive on purpose: the wording this replaced was lower-case,
-    // and a case-sensitive assertion would pass against it.
-    expect(early.join("\n")).not.toMatch(/partial knowledge network/i);
-  });
-
   it("names the network a failed rollback left behind", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "bkn-csv-"));
-    writeFileSync(join(dir, "document.csv"), "id,body\n1,alpha\n");
     const logs: string[] = [];
     mockFetch([
-      [/^\/api\/automation\/v2\/dags$/, () => ({ entries: [] })],
-      [/^\/api\/automation\/v1\/data-flow\/flow$/, () => ({ id: "dag-1" })],
-      [/^\/api\/automation\/v1\/run-instance\/[^/]+$/, () => ({})],
-      [
-        /^\/api\/automation\/v1\/dag\/[^/]+\/results$/,
-        () => ({ results: [{ status: "success" }] }),
-      ],
-      [/^\/api\/automation\/v1\/data-flow\/flow\/[^/]+$/, () => ({})],
       [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({})],
       [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/, () => ({ connector_type: "mysql" })],
       // Object-type creation fails, and the rollback DELETE is refused too, so
@@ -535,30 +396,18 @@ describe("createFromCatalog table identifiers", () => {
       ],
       ...catalogRoutes([{ id: "r-1", name: "document", columns: ["id", "body"], pk: "id" }]),
     ]);
-    await createFromCsv(ctx, {
+    await createFromCatalog(ctx, {
       catalogId: "c-1",
       name: "kn",
-      files: `${dir}/*.csv`,
       onProgress: (m) => logs.push(m),
     }).catch(() => {});
     // The reason decides what the user can do about it, so it must survive.
     expect(logs.join("\n")).toMatch(/Rollback of KN kn-1 failed \(.*nope.*\); it is still there/);
-    expect(logs.join("\n")).toMatch(/Delete the partial knowledge network kn-1/);
   });
 
   it("treats a 404 from the rollback as the network being gone", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "bkn-csv-"));
-    writeFileSync(join(dir, "document.csv"), "id,body\n1,alpha\n");
     const logs: string[] = [];
     const f = mockFetch([
-      [/^\/api\/automation\/v2\/dags$/, () => ({ entries: [] })],
-      [/^\/api\/automation\/v1\/data-flow\/flow$/, () => ({ id: "dag-1" })],
-      [/^\/api\/automation\/v1\/run-instance\/[^/]+$/, () => ({})],
-      [
-        /^\/api\/automation\/v1\/dag\/[^/]+\/results$/,
-        () => ({ results: [{ status: "success" }] }),
-      ],
-      [/^\/api\/automation\/v1\/data-flow\/flow\/[^/]+$/, () => ({})],
       [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({})],
       [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/, () => ({ connector_type: "mysql" })],
       [
@@ -573,10 +422,9 @@ describe("createFromCatalog table identifiers", () => {
       ],
       ...catalogRoutes([{ id: "r-1", name: "document", columns: ["id", "body"], pk: "id" }]),
     ]);
-    await createFromCsv(ctx, {
+    await createFromCatalog(ctx, {
       catalogId: "c-1",
       name: "kn",
-      files: `${dir}/*.csv`,
       onProgress: (m) => logs.push(m),
     }).catch(() => {});
     // Both assertions below are negative, so pin that the rollback really ran:
@@ -588,18 +436,8 @@ describe("createFromCatalog table identifiers", () => {
   });
 
   it("treats a non-JSON 2xx from the rollback as the delete having worked", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "bkn-csv-"));
-    writeFileSync(join(dir, "document.csv"), "id,body\n1,alpha\n");
     const logs: string[] = [];
     const f = mockFetch([
-      [/^\/api\/automation\/v2\/dags$/, () => ({ entries: [] })],
-      [/^\/api\/automation\/v1\/data-flow\/flow$/, () => ({ id: "dag-1" })],
-      [/^\/api\/automation\/v1\/run-instance\/[^/]+$/, () => ({})],
-      [
-        /^\/api\/automation\/v1\/dag\/[^/]+\/results$/,
-        () => ({ results: [{ status: "success" }] }),
-      ],
-      [/^\/api\/automation\/v1\/data-flow\/flow\/[^/]+$/, () => ({})],
       [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({})],
       [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/, () => ({ connector_type: "mysql" })],
       [
@@ -614,10 +452,9 @@ describe("createFromCatalog table identifiers", () => {
       ],
       ...catalogRoutes([{ id: "r-1", name: "document", columns: ["id", "body"], pk: "id" }]),
     ]);
-    await createFromCsv(ctx, {
+    await createFromCatalog(ctx, {
       catalogId: "c-1",
       name: "kn",
-      files: `${dir}/*.csv`,
       onProgress: (m) => logs.push(m),
     }).catch(() => {});
     expect(paths(f)).toContain("/api/ontology-manager/v1/knowledge-networks/kn-1");
@@ -626,18 +463,8 @@ describe("createFromCatalog table identifiers", () => {
   });
 
   it("keeps quiet only when the service itself answered the rollback", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "bkn-csv-"));
-    writeFileSync(join(dir, "document.csv"), "id,body\n1,alpha\n");
     const logs: string[] = [];
     mockFetch([
-      [/^\/api\/automation\/v2\/dags$/, () => ({ entries: [] })],
-      [/^\/api\/automation\/v1\/data-flow\/flow$/, () => ({ id: "dag-1" })],
-      [/^\/api\/automation\/v1\/run-instance\/[^/]+$/, () => ({})],
-      [
-        /^\/api\/automation\/v1\/dag\/[^/]+\/results$/,
-        () => ({ results: [{ status: "success" }] }),
-      ],
-      [/^\/api\/automation\/v1\/data-flow\/flow\/[^/]+$/, () => ({})],
       [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({})],
       [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/, () => ({ connector_type: "mysql" })],
       [
@@ -656,15 +483,13 @@ describe("createFromCatalog table identifiers", () => {
       ],
       ...catalogRoutes([{ id: "r-1", name: "document", columns: ["id", "body"], pk: "id" }]),
     ]);
-    await createFromCsv(ctx, {
+    await createFromCatalog(ctx, {
       catalogId: "c-1",
       name: "kn",
-      files: `${dir}/*.csv`,
       onProgress: (m) => logs.push(m),
     }).catch(() => {});
     // Saying nothing here would leave the network orphaned with no trace.
     expect(logs.join("\n")).toMatch(/Rollback of KN kn-1 failed.*it is still there/);
-    expect(logs.join("\n")).toMatch(/Delete the partial knowledge network kn-1/);
   });
 
   it("reads catalog details in batches rather than all at once", async () => {
@@ -704,39 +529,6 @@ describe("createFromCatalog table identifiers", () => {
     // One `Promise.all` over the catalog would peak at 25.
     expect(peak).toBeGreaterThan(1);
     expect(peak).toBeLessThanOrEqual(20);
-  });
-
-  it("keeps a Phase 2 HTTP failure typed, guidance or not", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "bkn-csv-"));
-    writeFileSync(join(dir, "document.csv"), "id,body\n1,alpha\n");
-    const logs: string[] = [];
-    mockFetch([
-      [/^\/api\/automation\/v2\/dags$/, () => ({ entries: [] })],
-      [/^\/api\/automation\/v1\/data-flow\/flow$/, () => ({ id: "dag-1" })],
-      [/^\/api\/automation\/v1\/run-instance\/[^/]+$/, () => ({})],
-      [
-        /^\/api\/automation\/v1\/dag\/[^/]+\/results$/,
-        () => ({ results: [{ status: "success" }] }),
-      ],
-      [/^\/api\/automation\/v1\/data-flow\/flow\/[^/]+$/, () => ({})],
-      [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({})],
-      [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/, () => ({ connector_type: "mysql" })],
-      // Phase 2 is HTTP end to end; this is the shape the guidance must not eat.
-      [
-        /^\/api\/vega-backend\/v1\/resources$/,
-        () => new Response(JSON.stringify({ error: "token expired" }), { status: 401 }),
-      ],
-    ]);
-    const err = await createFromCsv(ctx, {
-      catalogId: "c-1",
-      name: "kn",
-      files: `${dir}/*.csv`,
-      onProgress: (m) => logs.push(m),
-    }).catch((e) => e);
-    // Rewrapping would have cost status, hint and exit code 3.
-    expect(err).toBeInstanceOf(HttpError);
-    expect((err as HttpError).status).toBe(401);
-    expect(logs.join("\n")).toMatch(/already imported/);
   });
 
   it("never forgives an ambiguous table key, even under skip", async () => {
@@ -835,240 +627,5 @@ describe("createFromCatalog table identifiers", () => {
     await expect(
       createFromCatalog(ctx, { catalogId: "c-1", name: "kn", tables: ["document", "chunk"] }),
     ).rejects.toThrow(/--tables references unknown table 'chunk'/);
-  });
-});
-
-describe("createFromCsv table discovery lag", () => {
-  it("builds the KN from the tables the catalog did register", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "bkn-csv-"));
-    writeFileSync(join(dir, "document.csv"), "id,body\n1,alpha\n2,beta\n");
-    writeFileSync(join(dir, "chunk.csv"), "id,text\n1,x\n");
-    const logs: string[] = [];
-    // The catalog registered `document` but not `chunk` — the closing discover
-    // in importCsvToCatalog is best-effort and may lag or fail outright.
-    mockFetch([
-      [/^\/api\/automation\/v2\/dags$/, () => ({ entries: [] })],
-      [/^\/api\/automation\/v1\/data-flow\/flow$/, () => ({ id: "dag-1" })],
-      [/^\/api\/automation\/v1\/run-instance\/[^/]+$/, () => ({})],
-      [
-        /^\/api\/automation\/v1\/dag\/[^/]+\/results$/,
-        () => ({ results: [{ status: "success" }] }),
-      ],
-      [/^\/api\/automation\/v1\/data-flow\/flow\/[^/]+$/, () => ({})],
-      [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({})],
-      [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/, () => ({ connector_type: "mysql" })],
-      ...catalogRoutes([{ id: "r-1", name: "document", columns: ["id", "body"], pk: "id" }]),
-    ]);
-    const out = (await createFromCsv(ctx, {
-      catalogId: "c-1",
-      name: "kn",
-      files: `${dir}/*.csv`,
-      onProgress: (m) => logs.push(m),
-    })) as { imported_tables: string[]; object_types: Array<{ name: string }> };
-    expect(out.imported_tables.sort()).toEqual(["chunk", "document"]);
-    // Rows for both files are already in the database — the KN must still get built.
-    expect(out.object_types.map((o) => o.name)).toEqual(["document"]);
-    expect(logs.join("\n")).toMatch(/Skipping 1 table\(s\) not in the catalog.*chunk/);
-  });
-});
-
-describe("createFromCsv input validation order", () => {
-  it("rejects a bad embedding model before importing anything", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "bkn-csv-"));
-    writeFileSync(join(dir, "document.csv"), "id,body\n1,alpha\n");
-    const f = mockFetch([
-      [/^\/api\/automation\/v2\/dags$/, () => ({ entries: [] })],
-      [
-        /^\/api\/mf-model-manager\/v1\/small-model\/get$/,
-        () => new Response("{}", { status: 404 }),
-      ],
-    ]);
-    // Resolving inside the build step would mean a full import, a KN, its
-    // object types, and a rollback — with the rows left in the database.
-    await expect(
-      createFromCsv(ctx, {
-        catalogId: "c-1",
-        name: "kn",
-        files: `${dir}/*.csv`,
-        build: true,
-        embeddingModel: "2064382281006583808",
-      }),
-    ).rejects.toThrow(/No small model found with id 2064382281006583808/);
-    expect(paths(f)).not.toContain("/api/automation/v1/data-flow/flow");
-  });
-});
-
-describe("createFromCsv dependency preflight", () => {
-  it("stops before importing when the dataflow service is missing", async () => {
-    const f = mockFetch([
-      [
-        /^\/api\/automation\/v2\/dags$/,
-        () =>
-          new Response("<html><body><center>404 Not Found</center></body></html>", {
-            status: 404,
-            headers: { "content-type": "text/html" },
-          }),
-      ],
-    ]);
-    await expect(
-      createFromCsv(ctx, { catalogId: "c-1", name: "kn", files: "/tmp/none.csv" }),
-    ).rejects.toThrow(/dataflow service is not available.*create-from-catalog/s);
-    // Preflight only — no DAG was created, no CSV was read.
-    expect(paths(f)).toEqual(["/api/automation/v2/dags"]);
-  });
-
-  it("proceeds when the v2 listing 404s in JSON — the import runs on v1", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "bkn-csv-"));
-    writeFileSync(join(dir, "document.csv"), "id,body\n1,alpha\n");
-    const logs: string[] = [];
-    mockFetch([
-      // Service is up and routed; it just does not serve this v2 listing.
-      [
-        /^\/api\/automation\/v2\/dags$/,
-        () => new Response(JSON.stringify({ error: "not found" }), { status: 404 }),
-      ],
-      [/^\/api\/automation\/v1\/data-flow\/flow$/, () => ({ id: "dag-1" })],
-      [/^\/api\/automation\/v1\/run-instance\/[^/]+$/, () => ({})],
-      [
-        /^\/api\/automation\/v1\/dag\/[^/]+\/results$/,
-        () => ({ results: [{ status: "success" }] }),
-      ],
-      [/^\/api\/automation\/v1\/data-flow\/flow\/[^/]+$/, () => ({})],
-      [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({})],
-      [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/, () => ({ connector_type: "mysql" })],
-      ...catalogRoutes([{ id: "r-1", name: "document", columns: ["id", "body"], pk: "id" }]),
-    ]);
-    const out = (await createFromCsv(ctx, {
-      catalogId: "c-1",
-      name: "kn",
-      files: `${dir}/*.csv`,
-      onProgress: (m) => logs.push(m),
-    })) as { object_types: Array<{ name: string }> };
-    expect(out.object_types.map((o) => o.name)).toEqual(["document"]);
-    expect(logs.join("\n")).toMatch(/preflight inconclusive/);
-  });
-
-  it("stops on an auth refusal instead of reading every CSV first", async () => {
-    const f = mockFetch([
-      [
-        /^\/api\/automation\/v2\/dags$/,
-        () => new Response(JSON.stringify({ error: "token expired" }), { status: 401 }),
-      ],
-    ]);
-    const logs: string[] = [];
-    const err = await createFromCsv(ctx, {
-      catalogId: "c-1",
-      name: "kn",
-      files: "/tmp/none.csv",
-      onProgress: (m) => logs.push(m),
-    }).catch((e) => e);
-    // The auth cause survives — not reworded into "the service is unavailable".
-    expect(err).toBeInstanceOf(HttpError);
-    expect((err as HttpError).status).toBe(401);
-    expect(paths(f)).toEqual(["/api/automation/v2/dags"]);
-    // A bare 401 reads as a platform-wide auth problem; name who refused.
-    expect(logs.join("\n")).toMatch(/dataflow service refused the preflight \(HTTP 401\)/);
-  });
-
-  it("proceeds when the v2 listing answers 2xx in something other than JSON", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "bkn-csv-"));
-    writeFileSync(join(dir, "document.csv"), "id,body\n1,alpha\n");
-    const logs: string[] = [];
-    mockFetch([
-      // The service answered; this listing just is not JSON. It is there, so
-      // the import must not be grounded before it reads a single row.
-      [
-        /^\/api\/automation\/v2\/dags$/,
-        () => new Response("OK", { status: 200, headers: { "content-type": "text/plain" } }),
-      ],
-      [/^\/api\/automation\/v1\/data-flow\/flow$/, () => ({ id: "dag-1" })],
-      [/^\/api\/automation\/v1\/run-instance\/[^/]+$/, () => ({})],
-      [
-        /^\/api\/automation\/v1\/dag\/[^/]+\/results$/,
-        () => ({ results: [{ status: "success" }] }),
-      ],
-      [/^\/api\/automation\/v1\/data-flow\/flow\/[^/]+$/, () => ({})],
-      [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({})],
-      [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/, () => ({ connector_type: "mysql" })],
-      ...catalogRoutes([{ id: "r-1", name: "document", columns: ["id", "body"], pk: "id" }]),
-    ]);
-    const out = (await createFromCsv(ctx, {
-      catalogId: "c-1",
-      name: "kn",
-      files: `${dir}/*.csv`,
-      onProgress: (m) => logs.push(m),
-    })) as { object_types: Array<{ name: string }> };
-    expect(out.object_types.map((o) => o.name)).toEqual(["document"]);
-    expect(logs.join("\n")).toMatch(/preflight inconclusive/);
-  });
-
-  it("stops on a 504, but not on a 500", async () => {
-    // 504: the gateway routed the request and nothing answered. Left to the
-    // import, every batch waits out the full client timeout before failing.
-    const gone = mockFetch([
-      [
-        /^\/api\/automation\/v2\/dags$/,
-        () => new Response(JSON.stringify({ error: "upstream timeout" }), { status: 504 }),
-      ],
-    ]);
-    await expect(
-      createFromCsv(ctx, { catalogId: "c-1", name: "kn", files: "/tmp/none.csv" }),
-    ).rejects.toThrow(/dataflow service is not available.*create-from-catalog/s);
-    expect(paths(gone)).toEqual(["/api/automation/v2/dags"]);
-
-    // 500: the service handled the request badly, which is not the same as not
-    // being there — the probe must step aside and let the real call speak.
-    const logs: string[] = [];
-    mockFetch([
-      [
-        /^\/api\/automation\/v2\/dags$/,
-        () => new Response(JSON.stringify({ error: "boom" }), { status: 500 }),
-      ],
-    ]);
-    await expect(
-      createFromCsv(ctx, {
-        catalogId: "c-1",
-        name: "kn",
-        files: "/tmp/none.csv",
-        onProgress: (m) => logs.push(m),
-      }),
-    ).rejects.not.toThrow(/dataflow service is not available/);
-    expect(logs.join("\n")).toMatch(/preflight inconclusive/);
-  });
-
-  it("stops when a proxy answers the probe with a 200 login page", async () => {
-    const f = mockFetch([
-      // Session expired: an SSO proxy replies 200 with a sign-in page. The
-      // status describes the proxy, so nothing behind the route was reached —
-      // the same reading as its HTML 404 sibling, one status code apart.
-      [
-        /^\/api\/automation\/v2\/dags$/,
-        () =>
-          new Response("<html><body>Sign in</body></html>", {
-            status: 200,
-            headers: { "content-type": "text/html" },
-          }),
-      ],
-    ]);
-    await expect(
-      createFromCsv(ctx, { catalogId: "c-1", name: "kn", files: "/tmp/none.csv" }),
-    ).rejects.toThrow(/dataflow service is not available.*create-from-catalog/s);
-    expect(paths(f)).toEqual(["/api/automation/v2/dags"]);
-  });
-
-  it("reports an HTML gateway page as a routing failure, not a business error", async () => {
-    mockFetch([
-      [
-        /^\/api\/automation\/v2\/dags$/,
-        () =>
-          new Response("<html><body>404</body></html>", {
-            status: 404,
-            headers: { "content-type": "text/html" },
-          }),
-      ],
-    ]);
-    await expect(
-      createFromCsv(ctx, { catalogId: "c-1", name: "kn", files: "/tmp/none.csv" }),
-    ).rejects.toThrow(/did not reach the service behind \/api\/automation\/v2\/dags/);
   });
 });

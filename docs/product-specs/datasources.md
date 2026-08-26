@@ -2,7 +2,7 @@
 
 ## Goal
 
-Discover and inspect the data sources feeding knowledge networks and dataflows.
+Discover and inspect the data sources feeding knowledge networks.
 
 ## User-visible behavior
 
