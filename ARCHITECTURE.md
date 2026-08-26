@@ -14,7 +14,6 @@
   +--> BKN platform backend (REST over fetch)
        +-- knowledge-networks / BKN engine
        +-- decision-agents + chat / conversations
-       +-- dataflows
        +-- datasources
        +-- model-factory (llm + small-model + invocation)
        +-- skills + toolboxes (execution factory)

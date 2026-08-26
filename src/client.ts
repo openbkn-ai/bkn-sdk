@@ -7,7 +7,6 @@ import { admin } from "./resources/admin.js";
 import { agents } from "./resources/agents.js";
 import { appKeys } from "./resources/app-keys.js";
 import { context } from "./resources/context-loader.js";
-import { dataflows } from "./resources/dataflows.js";
 import { kn } from "./resources/knowledge-networks.js";
 import { models } from "./resources/models.js";
 import { resources } from "./resources/resources.js";
@@ -30,7 +29,6 @@ export interface BknClient {
   readonly ctx: RequestContext;
   readonly kn: ReturnType<typeof kn>;
   readonly resource: ReturnType<typeof resources>;
-  readonly dataflows: ReturnType<typeof dataflows>;
   /**
    * @deprecated Decision Agent (agent-factory) is being phased out and may be
    * removed in a future release. Avoid building new integrations on it.
@@ -54,7 +52,6 @@ export function createClient(opts: ClientOptions = {}): BknClient {
     ctx,
     kn: kn(ctx),
     resource: resources(ctx),
-    dataflows: dataflows(ctx),
     agents: agents(ctx),
     context: context(ctx),
     models: models(ctx),

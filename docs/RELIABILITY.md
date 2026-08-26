@@ -5,7 +5,7 @@ Runtime expectations for the SDK and CLI as a client of the BKN backend.
 ## Timeouts
 
 - Every `fetch` in `api/` sets an explicit timeout (via `AbortController`); no unbounded requests.
-- Long operations (uploads, dataflow runs) use a longer, named timeout — not the default.
+- Long operations (uploads) use a longer, named timeout — not the default.
 
 ## Retries
 

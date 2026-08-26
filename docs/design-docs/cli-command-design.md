@@ -15,7 +15,7 @@ openbkn
 
   # knowledge networks
   # NOTE: no `build` here — KN-level build removed; index build = `vega dataset build`
-  bkn       list | get | create | create-from-catalog | create-from-csv | update | delete
+  bkn       list | get | create | create-from-catalog | update | delete
             | stats | export | validate | push | pull | search | subgraph | resources
             object-type | relation-type | relation-type-paths | action-type | concept-group | metric
             action-execution | action-log | action-schedule | job
@@ -29,7 +29,6 @@ openbkn
 
   # data platform
   resource  (res)  list | find | get | query | delete
-  dataflow  list | run | runs | logs | templates | create-dataset | create-bkn | create
   vega      health | stats | inspect | catalog | resource | dataset | query | sql | connector-type
   context   (context-loader)  search-schema | query-object-instance | query-instance-subgraph
             | get-logic-properties | get-action-info | find-skills | tools | resources | resource
@@ -63,7 +62,7 @@ USAGE
 
 AUTHENTICATION & CONFIG   auth · token (→ auth token) · config · call
 DECISION AGENT            agent · toolbox · tool
-AI DATA PLATFORM          bkn · resource (res) · dataflow · vega · context (context-loader)
+AI DATA PLATFORM          bkn · resource (res) · vega · context (context-loader)
 TRACE AI                  trace
 MODELS & SKILLS           model · skill
 OPERATOR                  org · user · role · audit
