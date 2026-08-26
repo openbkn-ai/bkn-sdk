@@ -163,7 +163,10 @@ export const Resource = z
       })
       .passthrough()
       .optional(),
-    local_status: ResourceLocalStatus,
+    // Optional: neither reference deploy sends the key at all, so requiring it
+    // rejects every resource read against them. Still an enum when present —
+    // a deploy that reports the state must report one this SDK knows.
+    local_status: ResourceLocalStatus.optional(),
     index_name: z.string().optional(),
     column_count: z.number().optional(),
     row_count: z.number().optional(),
