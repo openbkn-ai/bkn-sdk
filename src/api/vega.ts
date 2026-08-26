@@ -71,7 +71,6 @@ export const Catalog = z
     connector_type: z.string(),
     connector_config: z.record(z.unknown()).optional(),
     metadata: z.record(z.unknown()).optional(),
-    extensions: z.record(z.string()).optional(),
     health_check_status: z.string().optional(),
     last_check_time: z.number().optional(),
     health_check_result: z.string().optional(),
@@ -106,9 +105,7 @@ export type ListCatalogsResponse = z.infer<typeof ListCatalogsResponse>;
 export const BatchCatalogsResponse = z.object({ entries: z.array(Catalog) }).passthrough();
 export type BatchCatalogsResponse = z.infer<typeof BatchCatalogsResponse>;
 
-export const CatalogRef = z
-  .object({ id: z.string(), extensions: z.record(z.string()).optional() })
-  .passthrough();
+export const CatalogRef = z.object({ id: z.string() }).passthrough();
 export type CatalogRef = z.infer<typeof CatalogRef>;
 
 export const CatalogHealthStatus = z
@@ -453,9 +450,6 @@ export interface ListCatalogsOptions {
   connectorType?: string;
   enabled?: boolean;
   healthCheckStatus?: CatalogHealthCheckStatus;
-  includeExtensions?: boolean;
-  includeExtensionKeys?: string;
-  extensionPairs?: Array<{ key: string; value: string }>;
   sort?: "name" | "create_time" | "update_time";
   direction?: "asc" | "desc";
 }
@@ -474,11 +468,6 @@ export async function listCatalogs(
       connector_type: opts.connectorType || undefined,
       enabled: opts.enabled === undefined ? undefined : String(opts.enabled),
       health_check_status: opts.healthCheckStatus || undefined,
-      include_extensions:
-        opts.includeExtensions === undefined ? undefined : String(opts.includeExtensions),
-      include_extension_keys: opts.includeExtensionKeys || undefined,
-      extension_key: opts.extensionPairs?.map((p) => p.key),
-      extension_value: opts.extensionPairs?.map((p) => p.value),
       sort: opts.sort,
       direction: opts.direction,
     },
@@ -515,7 +504,6 @@ export interface CreateCatalogRequest {
   enabled?: boolean;
   id?: string;
   internal?: boolean;
-  extensions?: Record<string, string>;
   healthCheckSchedule?: CatalogHealthCheckScheduleConfig | null;
 }
 
@@ -527,7 +515,6 @@ export interface UpdateCatalogRequest {
   connectorConfig?: Record<string, unknown>;
   tags?: string[];
   description?: string;
-  extensions?: Record<string, string>;
   /** Required optimistic-lock version from the latest Catalog `update_time`. */
   expectedUpdateTime: number;
 }
@@ -552,7 +539,6 @@ export function createCatalog(
       ...(req.description !== undefined ? { description: req.description } : {}),
       ...(req.enabled !== undefined ? { enabled: req.enabled } : {}),
       ...(req.internal !== undefined ? { internal: req.internal } : {}),
-      ...(req.extensions !== undefined ? { extensions: req.extensions } : {}),
       ...(req.healthCheckSchedule !== undefined
         ? {
             health_check_schedule:
@@ -585,7 +571,6 @@ export function updateCatalog(
       ...(req.connectorConfig !== undefined ? { connector_config: req.connectorConfig } : {}),
       ...(req.tags !== undefined ? { tags: req.tags } : {}),
       ...(req.description !== undefined ? { description: req.description } : {}),
-      ...(req.extensions !== undefined ? { extensions: req.extensions } : {}),
       expected_update_time: req.expectedUpdateTime,
     },
     timeoutMs: 60_000,

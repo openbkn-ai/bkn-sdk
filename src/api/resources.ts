@@ -35,7 +35,6 @@ export interface ResourceProperty {
   original_description?: string;
   features?: PropertyFeature[];
   attributes?: Record<string, unknown>;
-  extensions?: Record<string, string>;
 }
 
 export interface ResourceIndexConfig {
@@ -77,7 +76,6 @@ export interface ResourceLike {
   schema_definition?: ResourceProperty[];
   index_config?: ResourceIndexConfig;
   logic_definition?: unknown;
-  extensions?: Record<string, string>;
   update_time?: number;
 }
 
@@ -111,7 +109,6 @@ const ResourcePropertySchema: z.ZodType<ResourceProperty> = z
       )
       .optional(),
     attributes: z.record(z.unknown()).optional(),
-    extensions: z.record(z.string()).optional(),
   })
   .passthrough();
 
@@ -131,7 +128,6 @@ export const Resource = z
     schema: z.string().optional(),
     source_identifier: z.string(),
     source_metadata: z.record(z.unknown()).optional(),
-    extensions: z.record(z.string()).optional(),
     schema_definition: z.array(ResourcePropertySchema).optional(),
     index_config: z
       .object({
@@ -175,9 +171,6 @@ export interface ListResourcesOptions {
   offset?: number;
   sort?: "name" | "create_time" | "update_time";
   direction?: "asc" | "desc";
-  includeExtensions?: boolean;
-  includeExtensionKeys?: string;
-  extensionPairs?: Array<{ key: string; value: string }>;
 }
 
 export async function listResources(
@@ -203,11 +196,6 @@ export async function listResources(
       offset: opts.offset,
       sort: opts.sort,
       direction: opts.direction,
-      include_extensions:
-        opts.includeExtensions === undefined ? undefined : String(opts.includeExtensions),
-      include_extension_keys: opts.includeExtensionKeys || undefined,
-      extension_key: opts.extensionPairs?.map((p) => p.key),
-      extension_value: opts.extensionPairs?.map((p) => p.value),
     },
   });
   return ListResourcesResponse.parse(result);
@@ -243,7 +231,6 @@ export interface CreateResourceRequest {
   schema?: string;
   sourceIdentifier?: string;
   sourceMetadata?: Record<string, unknown>;
-  extensions?: Record<string, string>;
   schemaDefinition?: ResourceProperty[];
   indexConfig?: ResourceIndexConfig;
   logicDefinition?: unknown;
@@ -264,7 +251,6 @@ export async function createResource(
     ...(req.schema !== undefined ? { schema: req.schema } : {}),
     ...(req.sourceIdentifier !== undefined ? { source_identifier: req.sourceIdentifier } : {}),
     ...(req.sourceMetadata !== undefined ? { source_metadata: req.sourceMetadata } : {}),
-    ...(req.extensions !== undefined ? { extensions: req.extensions } : {}),
     ...(req.schemaDefinition !== undefined ? { schema_definition: req.schemaDefinition } : {}),
     ...(req.indexConfig !== undefined ? { index_config: req.indexConfig } : {}),
     ...(req.logicDefinition !== undefined ? { logic_definition: req.logicDefinition } : {}),
@@ -279,7 +265,6 @@ export interface UpdateResourceOptions {
   schemaDefinition?: ResourceProperty[];
   indexConfig?: ResourceIndexConfig;
   logicDefinition?: unknown;
-  extensions?: Record<string, string>;
   /** Optimistic-lock version from an earlier Resource `update_time`. */
   expectedUpdateTime?: number;
 }
@@ -378,9 +363,6 @@ function resourceUpdateBody(
     index_config: patch.indexConfig === undefined ? current.index_config : patch.indexConfig,
     logic_definition: patch.logicDefinition ?? current.logic_definition,
   };
-  if (patch.extensions !== undefined || current.extensions !== undefined) {
-    body.extensions = patch.extensions ?? current.extensions;
-  }
   const expectedUpdateTime = patch.expectedUpdateTime ?? current.update_time;
   if (expectedUpdateTime !== undefined) {
     body.expected_update_time = expectedUpdateTime;

@@ -73,9 +73,6 @@ describe("listResources", () => {
       schema: "app",
       limit: 10,
       offset: 20,
-      includeExtensions: true,
-      includeExtensionKeys: "owner",
-      extensionPairs: [{ key: "owner", value: "data" }],
       sort: "name",
       direction: "asc",
     });
@@ -88,10 +85,6 @@ describe("listResources", () => {
     expect(url.searchParams.has("database")).toBe(false);
     expect(url.searchParams.get("limit")).toBe("10");
     expect(url.searchParams.get("offset")).toBe("20");
-    expect(url.searchParams.get("include_extensions")).toBe("true");
-    expect(url.searchParams.get("include_extension_keys")).toBe("owner");
-    expect(url.searchParams.getAll("extension_key")).toEqual(["owner"]);
-    expect(url.searchParams.getAll("extension_value")).toEqual(["data"]);
     expect(url.searchParams.get("sort")).toBe("name");
     expect(url.searchParams.get("direction")).toBe("asc");
   });

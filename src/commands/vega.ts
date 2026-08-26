@@ -69,14 +69,6 @@ const parseJsonObject = (value: string, flag: string): Record<string, unknown> =
   return parsed as Record<string, unknown>;
 };
 
-const parseStringRecord = (value: string, flag: string): Record<string, string> => {
-  const parsed = parseJsonObject(value, flag);
-  if (Object.values(parsed).some((item) => typeof item !== "string")) {
-    throw new InputError(`${flag} values must be strings`);
-  }
-  return parsed as Record<string, string>;
-};
-
 const parseJsonArray = (value: string, flag: string): Record<string, unknown>[] => {
   let parsed: unknown;
   try {
@@ -114,18 +106,6 @@ const healthCheckSchedule = (
     return { mode };
   }
   throw new InputError("health-check mode must be inherit, enabled, or disabled");
-};
-
-const parsePairs = (raw?: string): Array<{ key: string; value: string }> | undefined => {
-  if (!raw) return undefined;
-  return raw
-    .split(",")
-    .map((part) => {
-      const idx = part.indexOf("=");
-      if (idx < 1) throw new InputError("--extension must be key=value[,key=value]");
-      return { key: part.slice(0, idx).trim(), value: part.slice(idx + 1).trim() };
-    })
-    .filter((p) => p.key.length > 0);
 };
 
 const buildTaskStatuses = (raw?: string): BuildTaskStatus[] | undefined => {
@@ -279,9 +259,6 @@ export function vegaCommand(): Command {
     .option("--connector-type <type>", "filter by connector type")
     .option("--enabled <bool>", "filter by enabled state")
     .option("--health-check-status <s>", "filter by health status")
-    .option("--include-extensions", "include all extension key/value pairs")
-    .option("--include-extension-keys <keys>", "include selected extension keys")
-    .option("--extension <k=v,...>", "filter by extension key/value pairs")
     .option("--sort <field>", "sort field: name | create_time | update_time")
     .option("--direction <dir>", "sort direction: asc | desc")
     .action(async (_opts, cmd: Command) => {
@@ -295,9 +272,6 @@ export function vegaCommand(): Command {
         connectorType: o.connectorType,
         enabled: o.enabled === undefined ? undefined : o.enabled === "true",
         healthCheckStatus: o.healthCheckStatus,
-        includeExtensions: o.includeExtensions,
-        includeExtensionKeys: o.includeExtensionKeys,
-        extensionPairs: parsePairs(o.extension),
         sort: o.sort,
         direction: o.direction,
       });
@@ -338,15 +312,11 @@ export function vegaCommand(): Command {
     .option("--description <s>", "description")
     .option("--enabled", "create enabled (default: disabled)")
     .option("--internal", "create an internal catalog")
-    .option("--extensions <json>", "extension key/value JSON object")
     .option("--allow-unhealthy", "save the catalog when its connection test fails")
     .option("--health-check-mode <mode>", "health schedule: inherit | enabled | disabled")
     .option("--health-check-cron <expr>", "cron expression for enabled health checks")
     .action(async (opts, cmd: Command) => {
       const connectorConfig = parseJsonObject(opts.connectorConfig, "--connector-config");
-      const extensions = opts.extensions
-        ? parseStringRecord(opts.extensions, "--extensions")
-        : undefined;
       printJson(
         await clientFrom(cmd).vega.createCatalog(
           {
@@ -363,7 +333,6 @@ export function vegaCommand(): Command {
             description: opts.description,
             enabled: opts.enabled ? true : undefined,
             internal: opts.internal ? true : undefined,
-            extensions,
             healthCheckSchedule: healthCheckSchedule(opts.healthCheckMode, opts.healthCheckCron),
           },
           { allowUnhealthy: opts.allowUnhealthy ? true : undefined },
@@ -380,7 +349,6 @@ export function vegaCommand(): Command {
     .option("--connector-config <json>", "connector config JSON")
     .option("--tags <t1,t2>", "comma-separated tags")
     .option("--description <s>", "description")
-    .option("--extensions <json>", "extension key/value JSON object")
     .requiredOption(
       "--expected-update-time <ms>",
       "optimistic-lock update time",
@@ -390,9 +358,6 @@ export function vegaCommand(): Command {
     .action(async (id: string, opts, cmd: Command) => {
       const connectorConfig = opts.connectorConfig
         ? parseJsonObject(opts.connectorConfig, "--connector-config")
-        : undefined;
-      const extensions = opts.extensions
-        ? parseStringRecord(opts.extensions, "--extensions")
         : undefined;
       printJson(
         await clientFrom(cmd).vega.updateCatalog(
@@ -409,7 +374,6 @@ export function vegaCommand(): Command {
               : undefined,
             description: opts.description,
             enabled: opts.enabled,
-            extensions,
             expectedUpdateTime: opts.expectedUpdateTime,
           },
           { allowUnhealthy: opts.allowUnhealthy ? true : undefined },
@@ -852,9 +816,6 @@ export function vegaCommand(): Command {
     .option("--schema <name>", "filter by source schema")
     .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
     .option("--offset <n>", "page offset", int, 0)
-    .option("--include-extensions", "include all extension key/value pairs")
-    .option("--include-extension-keys <keys>", "include selected extension keys")
-    .option("--extension <k=v,...>", "filter by extension key/value pairs")
     .option("--sort <field>", "sort field: name | create_time | update_time")
     .option("--direction <dir>", "sort direction: asc | desc")
     .action(async (opts, cmd: Command) => {
@@ -866,9 +827,6 @@ export function vegaCommand(): Command {
           schema: opts.schema,
           limit: opts.limit,
           offset: opts.offset,
-          includeExtensions: opts.includeExtensions,
-          includeExtensionKeys: opts.includeExtensionKeys,
-          extensionPairs: parsePairs(opts.extension),
           sort: opts.sort,
           direction: opts.direction,
         }),

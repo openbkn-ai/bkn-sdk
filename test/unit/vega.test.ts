@@ -103,7 +103,7 @@ describe("vega uses the vega-backend base path", () => {
     expect(u.searchParams.has("order")).toBe(false);
   });
 
-  it("listCatalogs sends new filters and repeated extension params", async () => {
+  it("listCatalogs sends filters and sort params", async () => {
     const f = mockFetch();
     await listCatalogs(ctx, {
       name: "prod",
@@ -112,12 +112,6 @@ describe("vega uses the vega-backend base path", () => {
       connectorType: "mysql",
       enabled: true,
       healthCheckStatus: "healthy",
-      includeExtensions: true,
-      includeExtensionKeys: "owner,env",
-      extensionPairs: [
-        { key: "owner", value: "data" },
-        { key: "env", value: "prod" },
-      ],
       sort: "name",
       direction: "asc",
     });
@@ -128,10 +122,6 @@ describe("vega uses the vega-backend base path", () => {
     expect(u.searchParams.get("connector_type")).toBe("mysql");
     expect(u.searchParams.get("enabled")).toBe("true");
     expect(u.searchParams.get("health_check_status")).toBe("healthy");
-    expect(u.searchParams.get("include_extensions")).toBe("true");
-    expect(u.searchParams.get("include_extension_keys")).toBe("owner,env");
-    expect(u.searchParams.getAll("extension_key")).toEqual(["owner", "env"]);
-    expect(u.searchParams.getAll("extension_value")).toEqual(["data", "prod"]);
     expect(u.searchParams.get("sort")).toBe("name");
     expect(u.searchParams.get("direction")).toBe("asc");
   });
@@ -588,7 +578,6 @@ describe("updateCatalog", () => {
         enabled: false,
         tags: [],
         description: "",
-        extensions: {},
         expectedUpdateTime: 1720000000123,
       },
       { allowUnhealthy: true },
@@ -606,7 +595,6 @@ describe("updateCatalog", () => {
       enabled: false,
       tags: [],
       description: "",
-      extensions: {},
       expected_update_time: 1720000000123,
     });
   });
