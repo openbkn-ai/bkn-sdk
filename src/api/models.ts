@@ -165,8 +165,15 @@ export async function chatCompletionsStream(
   return out;
 }
 
-export function embeddings(ctx: RequestContext, model: string, input: string[]): Promise<unknown> {
-  return request(ctx, `${API}/small-model/embeddings`, { method: "POST", body: { model, input } });
+export async function embeddings(
+  ctx: RequestContext,
+  model: string,
+  input: string[],
+): Promise<unknown> {
+  return request(ctx, `${API}/small-model/embeddings`, {
+    method: "POST",
+    body: { model: await resolveSmallModelName(ctx, model), input },
+  });
 }
 
 // ---- management writes (mf-model-manager) ---------------------------------
@@ -231,7 +238,7 @@ export function getDefaultSmallModel(
   });
 }
 
-export function rerank(
+export async function rerank(
   ctx: RequestContext,
   model: string,
   query: string,
@@ -239,6 +246,6 @@ export function rerank(
 ): Promise<unknown> {
   return request(ctx, `${API}/small-model/reranker`, {
     method: "POST",
-    body: { model, query, documents },
+    body: { model: await resolveSmallModelName(ctx, model), query, documents },
   });
 }
