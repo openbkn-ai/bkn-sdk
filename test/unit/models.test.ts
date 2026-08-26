@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   chatCompletions,
   chatCompletionsStream,
+  embeddings,
   getDefaultSmallModel,
   getLlmModel,
   listLlmModels,
   listSmallModels,
+  rerank,
   setDefaultLlm,
   setDefaultSmallModel,
 } from "../../src/api/models.js";
@@ -128,5 +130,44 @@ describe("model invocation (mf-model-api)", () => {
     if (!init) throw new Error("fetch not called");
     const body = JSON.parse(init.body as string);
     expect(body.stream).toBe(true);
+  });
+});
+
+describe("small-model calls take a name or an id", () => {
+  // `small list` and `small get-default` lead with the numeric `model_id`, so
+  // the first value a user copies is the one the backend rejects — with
+  // `ModelFactory.ExternalSmallModel.*` and an HTTP 400, which names neither
+  // the field nor the fact that a name was wanted. `llm chat` has resolved ids
+  // client-side since cffe7e3; these two never did.
+  function mockLookup(body: unknown = { model_name: "text-embedding-v4" }) {
+    const fn = vi.fn(async (input: string) =>
+      new URL(input).pathname.startsWith("/api/mf-model-manager")
+        ? new Response(JSON.stringify(body), { status: 200 })
+        : new Response("{}", { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fn);
+    return fn as unknown as typeof fetch;
+  }
+  const calls = (f: typeof fetch) => (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+
+  it("resolves a numeric id to the name embeddings must send", async () => {
+    const f = mockLookup();
+    await embeddings(ctx, "2064382281006583808", ["apple"]);
+    const lookup = calls(f).find(([u]) => String(u).includes("/mf-model-manager"));
+    expect(new URL(lookup?.[0] ?? "").searchParams.get("model_id")).toBe("2064382281006583808");
+    expect(JSON.parse(calls(f).at(-1)?.[1].body as string).model).toBe("text-embedding-v4");
+  });
+
+  it("resolves a numeric id to the name rerank must send", async () => {
+    const f = mockLookup({ model_name: "reranker" });
+    await rerank(ctx, "2071900034219999001", "apple", ["banana"]);
+    expect(JSON.parse(calls(f).at(-1)?.[1].body as string).model).toBe("reranker");
+  });
+
+  it("sends a name through untouched, without a lookup", async () => {
+    const f = mockLookup();
+    await embeddings(ctx, "text-embedding-v4", ["apple"]);
+    expect(calls(f).some(([u]) => String(u).includes("/mf-model-manager"))).toBe(false);
+    expect(JSON.parse(calls(f).at(-1)?.[1].body as string).model).toBe("text-embedding-v4");
   });
 });

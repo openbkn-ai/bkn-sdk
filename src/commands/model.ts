@@ -144,8 +144,8 @@ export function modelCommand(): Command {
       printJson(await clientFrom(cmd).models.small.get(id), outputOptions(cmd));
     });
   small
-    .command("embeddings <modelId>")
-    .description("Compute embeddings")
+    .command("embeddings <model>")
+    .description("Compute embeddings (<model> = model name or numeric id)")
     .requiredOption("-i, --input <text>", "comma-separated input texts")
     .action(async (id: string, opts, cmd: Command) => {
       printJson(
@@ -154,8 +154,8 @@ export function modelCommand(): Command {
       );
     });
   small
-    .command("rerank <modelId>")
-    .description("Rerank documents against a query")
+    .command("rerank <model>")
+    .description("Rerank documents against a query (<model> = model name or numeric id)")
     .requiredOption("-q, --query <text>", "query")
     .requiredOption("-d, --documents <list>", "comma-separated documents")
     .action(async (id: string, opts, cmd: Command) => {
