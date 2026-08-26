@@ -65,15 +65,32 @@ describe("ResourceLocalStatus", () => {
 });
 
 describe("listResources", () => {
-  it("uses the resource summary type for list responses", () => {
-    // @ts-expect-error Resource detail fields are not exposed by list entries.
-    type _SourceMetadata = ResourceSummary["source_metadata"];
-    // @ts-expect-error Resource detail fields are not exposed by list entries.
-    type _SchemaDefinition = ResourceSummary["schema_definition"];
-    // @ts-expect-error Resource detail fields are not exposed by list entries.
-    type _IndexConfig = ResourceSummary["index_config"];
-    // @ts-expect-error Resource detail fields are not exposed by list entries.
-    type _LogicDefinition = ResourceSummary["logic_definition"];
+  it("keeps summary responses forward-compatible without exposing detail-field types", async () => {
+    expectTypeOf<ResourceSummary["source_metadata"]>().toEqualTypeOf<unknown>();
+    expectTypeOf<ResourceSummary["schema_definition"]>().toEqualTypeOf<unknown>();
+    expectTypeOf<ResourceSummary["index_config"]>().toEqualTypeOf<unknown>();
+    expectTypeOf<ResourceSummary["logic_definition"]>().toEqualTypeOf<unknown>();
+
+    mockFetch({
+      entries: [
+        resourceFixture({
+          future_field: "preserved",
+          index_config: { build_key_fields: ["id"] },
+          source_metadata: { properties: { row_count: 1 } },
+        }),
+      ],
+      total_count: 1,
+    });
+
+    await expect(listResources(ctx)).resolves.toMatchObject({
+      entries: [
+        {
+          future_field: "preserved",
+          index_config: { build_key_fields: ["id"] },
+          source_metadata: { properties: { row_count: 1 } },
+        },
+      ],
+    });
   });
 
   it("maps list filters to vega-backend query params", async () => {
@@ -411,6 +428,10 @@ describe("deleteResource", () => {
 });
 
 describe("findResource", () => {
+  it("returns resource summaries", () => {
+    expectTypeOf<Awaited<ReturnType<typeof findResource>>>().toEqualTypeOf<ResourceSummary[]>();
+  });
+
   it("filters to exact name when --exact", async () => {
     mockFetch({
       entries: [

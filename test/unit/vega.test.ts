@@ -148,11 +148,36 @@ describe("vega uses the vega-backend base path", () => {
     });
   });
 
-  it("uses the catalog summary type for list responses", () => {
-    // @ts-expect-error Catalog detail fields are not exposed by list entries.
-    type _ConnectorConfig = CatalogSummary["connector_config"];
-    // @ts-expect-error Catalog detail fields are not exposed by list entries.
-    type _Metadata = CatalogSummary["metadata"];
+  it("keeps summary responses forward-compatible without exposing detail-field types", async () => {
+    expectTypeOf<CatalogSummary["connector_config"]>().toEqualTypeOf<unknown>();
+    expectTypeOf<CatalogSummary["metadata"]>().toEqualTypeOf<unknown>();
+
+    mockFetch({
+      entries: [
+        {
+          connector_config: { host: "db.example.com" },
+          connector_type: "mysql",
+          enabled: true,
+          future_field: "preserved",
+          id: "c-1",
+          metadata: { owner: "data" },
+          name: "orders",
+          type: "physical",
+          update_time: 1720000000123,
+        },
+      ],
+      total_count: 1,
+    });
+
+    await expect(listCatalogs(ctx)).resolves.toMatchObject({
+      entries: [
+        {
+          connector_config: { host: "db.example.com" },
+          future_field: "preserved",
+          metadata: { owner: "data" },
+        },
+      ],
+    });
   });
 
   it("rejects the obsolete unwrapped catalog detail shape", async () => {

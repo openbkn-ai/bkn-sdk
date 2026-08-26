@@ -98,7 +98,7 @@ export const Catalog = z
 export type Catalog = z.infer<typeof Catalog>;
 
 /** Catalog fields returned by list endpoints; connection configuration and metadata require a detail read. */
-export const CatalogSummary = Catalog.omit({ connector_config: true, metadata: true }).strip();
+export const CatalogSummary = Catalog.omit({ connector_config: true, metadata: true });
 export type CatalogSummary = z.infer<typeof CatalogSummary>;
 
 export const ListCatalogsResponse = z

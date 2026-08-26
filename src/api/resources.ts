@@ -158,7 +158,7 @@ export const ResourceSummary = Resource.omit({
   schema_definition: true,
   index_config: true,
   logic_definition: true,
-}).strip();
+});
 export type ResourceSummary = z.infer<typeof ResourceSummary>;
 
 export const ListResourcesResponse = z
@@ -450,7 +450,7 @@ export async function findResource(
   ctx: RequestContext,
   name: string,
   opts: FindResourceOptions = {},
-): Promise<Resource[]> {
+): Promise<ResourceSummary[]> {
   const result = await listResources(ctx, {
     name,
     catalogId: opts.catalogId,
