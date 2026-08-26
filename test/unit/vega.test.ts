@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   type CatalogDeletionImpact,
+  type CatalogSummary,
   CreateBuildTaskRequest,
   catalogHealthStatus,
   createBuildTask,
@@ -145,6 +146,13 @@ describe("vega uses the vega-backend base path", () => {
     await expect(getCatalog(ctx, "c-1")).resolves.toMatchObject({
       entries: [{ id: "c-1", update_time: 1720000000123 }],
     });
+  });
+
+  it("uses the catalog summary type for list responses", () => {
+    // @ts-expect-error Catalog detail fields are not exposed by list entries.
+    type _ConnectorConfig = CatalogSummary["connector_config"];
+    // @ts-expect-error Catalog detail fields are not exposed by list entries.
+    type _Metadata = CatalogSummary["metadata"];
   });
 
   it("rejects the obsolete unwrapped catalog detail shape", async () => {

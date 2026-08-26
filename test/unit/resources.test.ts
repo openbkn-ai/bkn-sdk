@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
+  type ResourceSummary,
   configureResourceIndex,
   createResource,
   createResourceDocuments,
@@ -64,6 +65,17 @@ describe("ResourceLocalStatus", () => {
 });
 
 describe("listResources", () => {
+  it("uses the resource summary type for list responses", () => {
+    // @ts-expect-error Resource detail fields are not exposed by list entries.
+    type _SourceMetadata = ResourceSummary["source_metadata"];
+    // @ts-expect-error Resource detail fields are not exposed by list entries.
+    type _SchemaDefinition = ResourceSummary["schema_definition"];
+    // @ts-expect-error Resource detail fields are not exposed by list entries.
+    type _IndexConfig = ResourceSummary["index_config"];
+    // @ts-expect-error Resource detail fields are not exposed by list entries.
+    type _LogicDefinition = ResourceSummary["logic_definition"];
+  });
+
   it("maps list filters to vega-backend query params", async () => {
     const f = mockFetch();
     await listResources(ctx, {
