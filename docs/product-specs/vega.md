@@ -14,9 +14,9 @@ Browse the Vega catalog — data sources, views, atomic views, connector types �
 - `openbkn vega catalog delete <id> --dry-run` — preview the resources, pending
   tasks, running blockers, and schedules affected by deletion. Omit `--dry-run`
   to perform the real deletion.
-- `openbkn vega resource list` — resources (limit 30); `openbkn vega resource preview <id>` — sample (limit 50).
+- `openbkn vega resource list` — resources (limit 30); `openbkn vega resource discover <id>` refreshes one resource's metadata, and `enable|disable <id>` changes only its enabled state.
 - `openbkn vega discover-schedule …` — create/list/get/update/delete discovery schedules and enable or disable them explicitly. Full updates require the current `catalog_id`, `enabled`, `strategy`, both time-window bounds, and `--expected-update-time` for optimistic locking.
-- `openbkn vega discover-task list|get|delete` — inspect and clean up discovery-task history.
+- `openbkn vega discover-task list|get|delete` — inspect and clean up discovery-task history; list accepts `--resource-id`. Tasks expose a read-only `queue_priority` and cannot be sorted by it.
 - `openbkn vega semantic-task create|list|get|delete` — manage semantic-understanding task lifecycles for a Catalog or Resource.
 - `openbkn vega resource document-*` — create, read, upsert, and delete dataset documents. Batch create/delete-by-filter use Vega's required method-override header internally.
 - Health / inspection: connector-type listing and health checks across catalog resources.
@@ -61,9 +61,9 @@ determines what is indexed; the BuildTask uses its snapshot.
 - `resource.update` and `resource.configureIndex` read the current Resource before issuing the backend's full PUT and automatically send its `update_time` as `expected_update_time`. An explicit `expectedUpdateTime` on `resource.update` overrides the freshly read value.
 - Catalog and Resource list/get/create responses are typed at the HTTP boundary. List responses use summary types and omit detail-only JSON fields; detail GETs preserve the backend batch envelope (`{ entries }`), and their `update_time` values can be passed directly to optimistic updates.
 - `vega.discoverSchedules`, `get/create/update/deleteDiscoverSchedule`, and the enable/disable actions cover the full DiscoverSchedule contract. Schedule updates require `catalogId`, `enabled`, `startTime`, `endTime`, `strategy`, and `expectedUpdateTime`, mapped to the backend's strict replacement fields.
-- `vega.discoverCatalog`, `discoverTasks`, `getDiscoverTask`, and `deleteDiscoverTasks` cover asynchronous manual triggering plus task history. `discoverCatalog` returns the new task ID and accepts an optional strategy. `vega.create/semanticUnderstandingTasks/get/deleteSemanticUnderstandingTask(s)` cover semantic task lifecycles.
+- `vega.discoverCatalog`, `discoverResource`, `discoverTasks`, `getDiscoverTask`, and `deleteDiscoverTasks` cover asynchronous manual triggering plus task history. Catalog discovery accepts an optional strategy; resource discovery has no request body. Resource-level tasks include `resource_id` and a read-only `queue_priority`; list filtering accepts `resourceId` but priority is not a sort input. `vega.create/semanticUnderstandingTasks/get/deleteSemanticUnderstandingTask(s)` cover semantic task lifecycles.
 - `resource.create` is the typed creation API for user-creatable `dataset` and `logicview` resources. `resource.query`, `createDocuments`, `upsertDocument(s)`, `getDocument`, `deleteDocuments`, and `deleteDocumentsByFilter` cover ResourceData. Dynamic document reads retain unsafe integers as native `bigint`; CLI document JSON and filter input preserve them on the request path too.
-- Resource list filtering uses the protocol field `schema` and `catalogId`, mapped to `catalog_id` on the wire. Resource updates expose only user-owned fields; catalog/category are read from the current Resource for the strict PUT precondition, while discovery-owned metadata is not sent as mutable input.
+- Resource list filtering uses the protocol field `schema` and `catalogId`, mapped to `catalog_id` on the wire. A Resource's `enabled` state is independent of its `active`, `deprecated`, or `stale` discovery status; use `resource.enable` or `resource.disable` to change it. Resource updates preserve the current `enabled` value while catalog/category are read for the strict PUT precondition, and discovery-owned metadata is not sent as mutable input.
 - `vega.deleteCatalog(id, { dryRun: true })` returns a typed
   `CatalogDeletionImpact`; `vega.deleteCatalog(id)` performs the real deletion
   and returns `undefined`.

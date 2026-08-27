@@ -56,7 +56,7 @@ export const ResourceCategory = z.enum([
 ]);
 export type ResourceCategory = z.infer<typeof ResourceCategory>;
 
-export const ResourceStatus = z.enum(["active", "disabled", "deprecated", "stale"]);
+export const ResourceStatus = z.enum(["active", "deprecated", "stale"]);
 export type ResourceStatus = z.infer<typeof ResourceStatus>;
 
 export const ResourceLocalStatus = z.enum(["unavailable", "available", "stale"]);
@@ -70,6 +70,7 @@ export interface ResourceLike {
   description?: string;
   category?: string;
   status?: string;
+  enabled?: boolean;
   schema?: string;
   source_identifier?: string;
   source_metadata?: Record<string, unknown>;
@@ -149,6 +150,8 @@ export const Resource = z
     // status; request options below remain constrained to known values.
     category: z.string(),
     status: z.string(),
+    // Older deployments omit this newly split field; the migration default is enabled.
+    enabled: z.boolean().default(true),
     status_message: z.string().optional(),
     last_discover_status: z.string().optional(),
     schema: z.string().optional(),
@@ -315,6 +318,16 @@ export function updateResourceRaw(
   return request(ctx, `${BASE}/${encodeURIComponent(id)}`, { method: "PUT", body });
 }
 
+/** Enable a Resource without changing its discovery status or metadata. */
+export function enableResource(ctx: RequestContext, id: string): Promise<unknown> {
+  return request(ctx, `${BASE}/${encodeURIComponent(id)}/enable`, { method: "POST" });
+}
+
+/** Disable a Resource without changing its discovery status or metadata. */
+export function disableResource(ctx: RequestContext, id: string): Promise<unknown> {
+  return request(ctx, `${BASE}/${encodeURIComponent(id)}/disable`, { method: "POST" });
+}
+
 export async function updateResource(
   ctx: RequestContext,
   id: string,
@@ -394,6 +407,7 @@ function resourceUpdateBody(
     tags: patch.tags ?? current.tags ?? [],
     description: patch.description ?? current.description ?? "",
     category: current.category,
+    enabled: current.enabled,
     schema_definition: patch.schemaDefinition ?? current.schema_definition,
     index_config: patch.indexConfig === undefined ? current.index_config : patch.indexConfig,
     logic_definition: patch.logicDefinition ?? current.logic_definition,

@@ -204,10 +204,13 @@ export const DiscoverTask = z
   .object({
     id: z.string(),
     catalog_id: z.string(),
+    resource_id: z.string().optional(),
     catalog_name: z.string().optional(),
     schedule_id: z.string(),
     strategy: z.string(),
     trigger_type: z.string(),
+    // Catalog tasks created before priority support have the manual default.
+    queue_priority: z.number().default(20),
     status: z.string(),
     progress: z.number(),
     message: z.string(),
@@ -239,6 +242,7 @@ export type ListDiscoverTasksResponse = z.infer<typeof ListDiscoverTasksResponse
 
 export interface ListDiscoverTasksOptions {
   catalogId?: string;
+  resourceId?: string;
   scheduleId?: string;
   status?: VegaTaskStatus | VegaTaskStatus[];
   strategy?: DiscoverStrategy;
@@ -256,6 +260,7 @@ export async function listDiscoverTasks(
   const result = await request<unknown>(ctx, `${VEGA_BASE}/discover-tasks`, {
     query: {
       catalog_id: opts.catalogId || undefined,
+      resource_id: opts.resourceId || undefined,
       schedule_id: opts.scheduleId || undefined,
       status: opts.status,
       strategy: opts.strategy,
@@ -304,6 +309,19 @@ export async function discoverCatalog(
     ctx,
     `${VEGA_BASE}/catalogs/${encodeURIComponent(catalogId)}/discover`,
     { method: "POST", body: req.strategy ? { strategy: req.strategy } : {} },
+  );
+  return IdResponse.parse(result);
+}
+
+/** Trigger metadata discovery for one Resource. */
+export async function discoverResource(
+  ctx: RequestContext,
+  resourceId: string,
+): Promise<{ id: string }> {
+  const result = await request<unknown>(
+    ctx,
+    `${VEGA_BASE}/resources/${encodeURIComponent(resourceId)}/discover`,
+    { method: "POST" },
   );
   return IdResponse.parse(result);
 }

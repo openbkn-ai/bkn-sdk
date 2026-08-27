@@ -12,6 +12,7 @@ import {
   deleteDiscoverTasks,
   disableDiscoverSchedule,
   discoverCatalog,
+  discoverResource,
   enableDiscoverSchedule,
   getDiscoverSchedule,
   getDiscoverTask,
@@ -99,6 +100,7 @@ export function vega(ctx: RequestContext) {
       updateCatalogHealthCheckSchedule(ctx, id, req),
     discoverCatalog: (catalogId: string, req?: Parameters<typeof discoverCatalog>[2]) =>
       discoverCatalog(ctx, catalogId, req),
+    discoverResource: (resourceId: string) => discoverResource(ctx, resourceId),
     catalogResources: (id: string, category?: string, limit?: number, offset?: number) =>
       listCatalogResources(ctx, id, category, limit, offset),
     catalogHealth: (id: string) => catalogHealthStatus(ctx, id),

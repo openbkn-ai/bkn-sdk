@@ -3,6 +3,7 @@ import {
   createDiscoverSchedule,
   deleteDiscoverTasks,
   discoverCatalog,
+  discoverResource,
   getDiscoverSchedule,
   listDiscoverSchedules,
   listDiscoverTasks,
@@ -104,12 +105,36 @@ describe("DiscoverSchedule APIs", () => {
 });
 
 describe("DiscoverTask APIs", () => {
-  it("lists tasks with repeated statuses", async () => {
-    const f = mockFetch({ entries: [], total_count: 0 });
-    await listDiscoverTasks(ctx, { status: ["pending", "running"], scheduleId: "s-1" });
+  it("lists tasks with repeated statuses and a resource filter", async () => {
+    const f = mockFetch({
+      entries: [
+        {
+          id: "t-1",
+          catalog_id: "c-1",
+          resource_id: "r-1",
+          schedule_id: "",
+          strategy: "full_sync",
+          trigger_type: "manual",
+          queue_priority: 30,
+          status: "pending",
+          progress: 0,
+          creator: account,
+          create_time: 10,
+        },
+      ],
+      total_count: 1,
+    });
+    await expect(
+      listDiscoverTasks(ctx, {
+        status: ["pending", "running"],
+        scheduleId: "s-1",
+        resourceId: "r-1",
+      }),
+    ).resolves.toMatchObject({ entries: [{ resource_id: "r-1", queue_priority: 30 }] });
     const url = new URL(calls(f)[0]?.[0] ?? "");
     expect(url.searchParams.getAll("status")).toEqual(["pending", "running"]);
     expect(url.searchParams.get("schedule_id")).toBe("s-1");
+    expect(url.searchParams.get("resource_id")).toBe("r-1");
   });
 
   it("triggers a task and encodes batch deletion ids separately", async () => {
@@ -123,6 +148,13 @@ describe("DiscoverTask APIs", () => {
     expect(JSON.parse(calls(triggerFetch)[0]?.[1].body as string)).toEqual({
       strategy: "cleanup_only",
     });
+
+    const resourceTriggerFetch = mockFetch({ id: "t-2" });
+    await expect(discoverResource(ctx, "r/1")).resolves.toEqual({ id: "t-2" });
+    expect(new URL(calls(resourceTriggerFetch)[0]?.[0] ?? "").pathname).toContain(
+      "/resources/r%2F1/discover",
+    );
+    expect(calls(resourceTriggerFetch)[0]?.[1].body).toBeUndefined();
 
     const deleteFetch = mockFetch();
     await deleteDiscoverTasks(ctx, ["t/1", "t 2"], { ignoreMissing: true });

@@ -7,8 +7,9 @@
 | `catalog delete <id> [--dry-run]` | Preview deletion impact with `--dry-run`; omit it to delete. Running tasks and protected resources block deletion. |
 | `catalog health <ids...>` | Health-status for one or more catalogs. |
 | `catalog discover <id> [--strategy full_sync\|create_only\|cleanup_only]` | Start asynchronous resource discovery; returns a discovery-task id. |
+| `resource discover <id>` / `resource enable\|disable <id>` | Refresh one Resource's metadata, or change its enabled state without changing discovery status. |
 | `discover-schedule create\|list\|get\|update\|delete\|enable\|disable` | Manage catalog discovery schedules. Update is a full replacement and requires the current state plus `--expected-update-time`. |
-| `discover-task list\|get\|delete` | Inspect or clean up discovery-task history. |
+| `discover-task list [--resource-id <id>]\|get\|delete` | Inspect or clean up discovery-task history. Task `queue_priority` is output-only; it cannot be used to sort or reprioritize tasks. |
 | `semantic-task create\|list\|get\|delete` | Manage semantic-understanding tasks. |
 | `connector-type list` / `connector-type get <type>` | Available connector types. |
 | `sql --query "<sql>"` / `sql -d <json>` | Run SQL or OpenSearch DSL directly against a data source. SQL uses a `{{<resource-id>}}` table placeholder; DSL identifies its resource with top-level `resource_id`. See [§ vega sql](#vega-sql--run-sql--dsl-against-a-data-source). |

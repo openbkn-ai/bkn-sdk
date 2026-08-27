@@ -571,6 +571,7 @@ export function vegaCommand(): Command {
     .command("list")
     .description("List discovery tasks")
     .option("--catalog-id <id>", "filter by catalog id")
+    .option("--resource-id <id>", "filter by resource id")
     .option("--schedule-id <id>", "filter by schedule id")
     .option("--status <status>", `comma-separated: ${VegaTaskStatus.options.join(" | ")}`)
     .option("--strategy <strategy>", `strategy: ${DiscoverStrategy.options.join(" | ")}`)
@@ -583,6 +584,7 @@ export function vegaCommand(): Command {
       printJson(
         await clientFrom(cmd).vega.discoverTasks({
           catalogId: opts.catalogId,
+          resourceId: opts.resourceId,
           scheduleId: opts.scheduleId,
           status: taskStatuses(opts.status),
           strategy: discoverStrategy(opts.strategy),
@@ -839,6 +841,22 @@ export function vegaCommand(): Command {
     .action(async (id: string, _opts, cmd: Command) => {
       printJson(await clientFrom(cmd).resource.get(id), outputOptions(cmd));
     });
+  resource
+    .command("discover <id>")
+    .description("Trigger metadata discovery for a resource")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.discoverResource(id), outputOptions(cmd));
+    });
+  for (const action of ["enable", "disable"] as const) {
+    resource
+      .command(`${action} <id>`)
+      .description(`${action[0]?.toUpperCase()}${action.slice(1)} a resource`)
+      .action(async (id: string, _opts, cmd: Command) => {
+        const api = clientFrom(cmd).resource;
+        const result = action === "enable" ? await api.enable(id) : await api.disable(id);
+        printJson(result, outputOptions(cmd));
+      });
+  }
   resource
     .command("query <id>")
     .description("Fetch data rows from a resource")
