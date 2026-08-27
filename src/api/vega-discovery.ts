@@ -205,6 +205,7 @@ export const DiscoverTask = z
     id: z.string(),
     catalog_id: z.string(),
     resource_id: z.string().optional(),
+    resource_name: z.string().optional(),
     catalog_name: z.string().optional(),
     schedule_id: z.string(),
     strategy: z.string(),
