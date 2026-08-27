@@ -44,3 +44,9 @@ remain unchanged.
   required native JSON APIs, but it has entered maintenance. The SDK support
   baseline is Node 24.19.0 for its active security lifecycle, so maintaining a
   separate Node 22 path adds complexity without serving a supported runtime.
+
+  Superseded: no separate path was ever needed, since Node 22.19.0 has the
+  native APIs and runs the suite unchanged. The 24.19.0 floor shipped in 0.1.4
+  and made that release uninstallable for everyone below it — npm resolves past
+  a version whose `engines` the caller cannot meet and hands back the previous
+  one without an error. The floor is 22.19.0 again as of 0.1.5.
