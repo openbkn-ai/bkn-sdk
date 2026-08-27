@@ -16,7 +16,7 @@ const rawJSON = (JSON as JSONWithRawJSON).rawJSON;
 function assertNativeJSONSupport(): void {
   if (typeof rawJSON !== "function") {
     throw new Error(
-      "Lossless BIGINT JSON support requires Node.js >=24.19.0 (missing JSON.rawJSON).",
+      "Lossless BIGINT JSON support requires Node.js >=22.19.0 (missing JSON.rawJSON).",
     );
   }
 
@@ -27,7 +27,7 @@ function assertNativeJSONSupport(): void {
   });
   if (source !== "1") {
     throw new Error(
-      "Lossless BIGINT JSON support requires Node.js >=24.19.0 (missing JSON.parse source text access).",
+      "Lossless BIGINT JSON support requires Node.js >=22.19.0 (missing JSON.parse source text access).",
     );
   }
 }
