@@ -181,8 +181,17 @@ export const Resource = z
   .passthrough();
 export type Resource = z.infer<typeof Resource>;
 
+/** Resource fields returned by list endpoints; extended JSON fields require a detail read. */
+export const ResourceSummary = Resource.omit({
+  source_metadata: true,
+  schema_definition: true,
+  index_config: true,
+  logic_definition: true,
+});
+export type ResourceSummary = z.infer<typeof ResourceSummary>;
+
 export const ListResourcesResponse = z
-  .object({ entries: z.array(Resource), total_count: z.number() })
+  .object({ entries: z.array(ResourceSummary), total_count: z.number() })
   .passthrough();
 export type ListResourcesResponse = z.infer<typeof ListResourcesResponse>;
 
@@ -481,7 +490,7 @@ export async function findResource(
   ctx: RequestContext,
   name: string,
   opts: FindResourceOptions = {},
-): Promise<Resource[]> {
+): Promise<ResourceSummary[]> {
   const result = await listResources(ctx, {
     name,
     catalogId: opts.catalogId,

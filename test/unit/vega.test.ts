@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   type CatalogDeletionImpact,
+  type CatalogSummary,
   CreateBuildTaskRequest,
   catalogHealthStatus,
   createBuildTask,
@@ -144,6 +145,38 @@ describe("vega uses the vega-backend base path", () => {
     mockFetch({ entries: [catalog] });
     await expect(getCatalog(ctx, "c-1")).resolves.toMatchObject({
       entries: [{ id: "c-1", update_time: 1720000000123 }],
+    });
+  });
+
+  it("keeps summary responses forward-compatible without exposing detail-field types", async () => {
+    expectTypeOf<CatalogSummary["connector_config"]>().toEqualTypeOf<unknown>();
+    expectTypeOf<CatalogSummary["metadata"]>().toEqualTypeOf<unknown>();
+
+    mockFetch({
+      entries: [
+        {
+          connector_config: { host: "db.example.com" },
+          connector_type: "mysql",
+          enabled: true,
+          future_field: "preserved",
+          id: "c-1",
+          metadata: { owner: "data" },
+          name: "orders",
+          type: "physical",
+          update_time: 1720000000123,
+        },
+      ],
+      total_count: 1,
+    });
+
+    await expect(listCatalogs(ctx)).resolves.toMatchObject({
+      entries: [
+        {
+          connector_config: { host: "db.example.com" },
+          future_field: "preserved",
+          metadata: { owner: "data" },
+        },
+      ],
     });
   });
 

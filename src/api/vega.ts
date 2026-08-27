@@ -97,8 +97,12 @@ export const Catalog = z
   .passthrough();
 export type Catalog = z.infer<typeof Catalog>;
 
+/** Catalog fields returned by list endpoints; connection configuration and metadata require a detail read. */
+export const CatalogSummary = Catalog.omit({ connector_config: true, metadata: true });
+export type CatalogSummary = z.infer<typeof CatalogSummary>;
+
 export const ListCatalogsResponse = z
-  .object({ entries: z.array(Catalog), total_count: z.number() })
+  .object({ entries: z.array(CatalogSummary), total_count: z.number() })
   .passthrough();
 export type ListCatalogsResponse = z.infer<typeof ListCatalogsResponse>;
 
