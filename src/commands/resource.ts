@@ -13,7 +13,7 @@ const int = (v: string) => Number.parseInt(v, 10);
 export function resourceCommand(): Command {
   const cmd = new Command("resource")
     .alias("res")
-    .description("Resources — list, find, get, query, delete");
+    .description("Resources — list, find, get, enable, disable, query, delete");
 
   cmd
     .command("list")
