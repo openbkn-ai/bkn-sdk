@@ -250,6 +250,7 @@ describe("createBuildTask", () => {
       catalogId: "c-1",
       status: ["pending", "running"],
       mode: "batch",
+      executeType: "incremental",
       sort: "last_progress_time",
       direction: "asc",
       limit: 5,
@@ -262,6 +263,7 @@ describe("createBuildTask", () => {
     expect(u.searchParams.getAll("status")).toEqual(["pending", "running"]);
     expect(u.searchParams.has("active")).toBe(false);
     expect(u.searchParams.get("mode")).toBe("batch");
+    expect(u.searchParams.get("execute_type")).toBe("incremental");
     expect(u.searchParams.get("sort")).toBe("last_progress_time");
     expect(u.searchParams.get("direction")).toBe("asc");
     expect(u.searchParams.get("limit")).toBe("5");

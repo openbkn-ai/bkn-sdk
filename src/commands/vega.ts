@@ -16,6 +16,7 @@ import {
   SemanticUnderstandingTaskSort,
 } from "../api/vega-semantic.js";
 import {
+  BuildTaskExecuteType,
   BuildTaskSort,
   BuildTaskStatus,
   type CatalogHealthCheckScheduleConfig,
@@ -131,6 +132,17 @@ const buildTaskSort = (raw?: string): BuildTaskSort | undefined => {
   if (!parsed.success) {
     throw new InputError(
       `invalid build task sort "${raw}"; expected one of ${BuildTaskSort.options.join(", ")}`,
+    );
+  }
+  return parsed.data;
+};
+
+const buildTaskExecuteType = (raw?: string): BuildTaskExecuteType | undefined => {
+  if (raw === undefined) return undefined;
+  const parsed = BuildTaskExecuteType.safeParse(raw);
+  if (!parsed.success) {
+    throw new InputError(
+      `invalid build task execute type "${raw}"; expected one of ${BuildTaskExecuteType.options.join(", ")}`,
     );
   }
   return parsed.data;
@@ -571,6 +583,7 @@ export function vegaCommand(): Command {
     .command("list")
     .description("List discovery tasks")
     .option("--catalog-id <id>", "filter by catalog id")
+    .option("--resource-id <id>", "filter by resource id")
     .option("--schedule-id <id>", "filter by schedule id")
     .option("--status <status>", `comma-separated: ${VegaTaskStatus.options.join(" | ")}`)
     .option("--strategy <strategy>", `strategy: ${DiscoverStrategy.options.join(" | ")}`)
@@ -583,6 +596,7 @@ export function vegaCommand(): Command {
       printJson(
         await clientFrom(cmd).vega.discoverTasks({
           catalogId: opts.catalogId,
+          resourceId: opts.resourceId,
           scheduleId: opts.scheduleId,
           status: taskStatuses(opts.status),
           strategy: discoverStrategy(opts.strategy),
@@ -840,6 +854,22 @@ export function vegaCommand(): Command {
       printJson(await clientFrom(cmd).resource.get(id), outputOptions(cmd));
     });
   resource
+    .command("discover <id>")
+    .description("Trigger metadata discovery for a resource")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.discoverResource(id), outputOptions(cmd));
+    });
+  for (const action of ["enable", "disable"] as const) {
+    resource
+      .command(`${action} <id>`)
+      .description(`${action[0]?.toUpperCase()}${action.slice(1)} a resource`)
+      .action(async (id: string, _opts, cmd: Command) => {
+        const api = clientFrom(cmd).resource;
+        const result = action === "enable" ? await api.enable(id) : await api.disable(id);
+        printJson(result, outputOptions(cmd));
+      });
+  }
+  resource
     .command("query <id>")
     .description("Fetch data rows from a resource")
     .option("--limit <n>", "row limit", int, 50)
@@ -975,6 +1005,10 @@ export function vegaCommand(): Command {
     .option("--catalog-id <id>", "filter by catalog id")
     .option("--status <status>", `comma-separated statuses: ${BuildTaskStatus.options.join(" | ")}`)
     .option("--mode <mode>", "filter by mode: batch | streaming")
+    .option(
+      "--execute-type <type>",
+      `filter by execution type: ${BuildTaskExecuteType.options.join(" | ")}`,
+    )
     .option("--sort <field>", `sort field: ${BuildTaskSort.options.join(" | ")}`)
     .option("--direction <dir>", `sort direction: ${SortDirection.options.join(" | ")}`)
     .action(async (opts, cmd: Command) => {
@@ -986,6 +1020,7 @@ export function vegaCommand(): Command {
           catalogId: opts.catalogId,
           status: buildTaskStatuses(opts.status),
           mode: opts.mode,
+          executeType: buildTaskExecuteType(opts.executeType),
           sort: buildTaskSort(opts.sort),
           direction: sortDirection(opts.direction),
         }),

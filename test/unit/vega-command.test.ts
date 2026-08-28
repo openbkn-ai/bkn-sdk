@@ -89,6 +89,54 @@ describe("vega resource document input", () => {
   });
 });
 
+describe("vega resource discovery commands", () => {
+  it("triggers a resource discovery task without a strategy body", async () => {
+    const fetchMock = mockFetch({ id: "t-1" });
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "resource",
+        "discover",
+        "r/1",
+      ],
+      { from: "user" },
+    );
+
+    expect(new URL(fetchMock.mock.calls[0]?.[0] as string).pathname).toBe(
+      "/api/vega-backend/v1/resources/r%2F1/discover",
+    );
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toBeUndefined();
+  });
+
+  it("forwards resource enabled-state actions and task resource filters", async () => {
+    const fetchMock = mockFetch({ entries: [], total_count: 0 });
+    suppressOutput();
+    const base = ["--base-url", "https://demo.example.com", "--token", "t", "vega"];
+
+    await cli().parseAsync([...base, "resource", "enable", "r-1"], { from: "user" });
+    await cli().parseAsync([...base, "resource", "disable", "r-1"], { from: "user" });
+    await cli().parseAsync([...base, "discover-task", "list", "--resource-id", "r-1"], {
+      from: "user",
+    });
+
+    expect(new URL(fetchMock.mock.calls[0]?.[0] as string).pathname).toBe(
+      "/api/vega-backend/v1/resources/r-1/enable",
+    );
+    expect(new URL(fetchMock.mock.calls[1]?.[0] as string).pathname).toBe(
+      "/api/vega-backend/v1/resources/r-1/disable",
+    );
+    expect(new URL(fetchMock.mock.calls[2]?.[0] as string).searchParams.get("resource_id")).toBe(
+      "r-1",
+    );
+  });
+});
+
 describe("vega optimistic updates", () => {
   it("requires an optimistic-lock version for every Vega PUT command", async () => {
     suppressOutput();
@@ -529,6 +577,52 @@ describe("vega dataset build-list", () => {
 
     const url = new URL(fetchMock.mock.calls[0]?.[0] as string);
     expect(url.searchParams.getAll("status")).toEqual(["pending", "running"]);
+  });
+
+  it("forwards a validated execute type", async () => {
+    const fetchMock = mockFetch({ entries: [], total_count: 0 });
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "dataset",
+        "build-list",
+        "--execute-type",
+        "incremental",
+      ],
+      { from: "user" },
+    );
+
+    const url = new URL(fetchMock.mock.calls[0]?.[0] as string);
+    expect(url.searchParams.get("execute_type")).toBe("incremental");
+  });
+
+  it("rejects an invalid execute type before issuing a request", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      cli().parseAsync(
+        [
+          "--base-url",
+          "https://demo.example.com",
+          "--token",
+          "t",
+          "vega",
+          "dataset",
+          "build-list",
+          "--execute-type",
+          "unknown",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow(/invalid build task execute type/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("rejects an empty status list before issuing a request", async () => {

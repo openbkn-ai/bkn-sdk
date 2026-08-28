@@ -7,6 +7,8 @@ import {
   deleteResource,
   deleteResourceDocuments,
   deleteResourceDocumentsByFilter,
+  disableResource,
+  enableResource,
   findResource,
   firstResource,
   getResource,
@@ -42,6 +44,7 @@ function resourceFixture(overrides: Record<string, unknown> = {}) {
     name: "orders",
     category: "table",
     status: "active",
+    enabled: true,
     local_status: "unavailable",
     source_identifier: "orders",
     creator: { id: "u-1", type: "user" },
@@ -204,11 +207,25 @@ describe("updateResource/configureResourceIndex", () => {
     const body = JSON.parse(calls[1]?.[1].body as string);
     expect(body.name).toBe("orders");
     expect(body.catalog_id).toBe("c-1");
+    expect(body.enabled).toBe(true);
     expect(body).not.toHaveProperty("schema");
     expect(body).not.toHaveProperty("source_identifier");
     expect(body).not.toHaveProperty("source_metadata");
     expect(body.index_config).toEqual({ build_key_fields: ["id"] });
     expect(body.expected_update_time).toBe(1720000000123);
+  });
+
+  it("uses action endpoints for independent enabled state", async () => {
+    const f = mockFetch();
+    await enableResource(ctx, "r/1");
+    await disableResource(ctx, "r 2");
+    const requestCalls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+    expect(new URL(requestCalls[0]?.[0] ?? "").pathname).toBe(
+      "/api/vega-backend/v1/resources/r%2F1/enable",
+    );
+    expect(new URL(requestCalls[1]?.[0] ?? "").pathname).toBe(
+      "/api/vega-backend/v1/resources/r%202/disable",
+    );
   });
 
   it("writes resource index_config and schema features for build intent", async () => {

@@ -13,7 +13,7 @@ const int = (v: string) => Number.parseInt(v, 10);
 export function resourceCommand(): Command {
   const cmd = new Command("resource")
     .alias("res")
-    .description("Resources — list, find, get, query, delete");
+    .description("Resources — list, find, get, enable, disable, query, delete");
 
   cmd
     .command("list")
@@ -63,6 +63,17 @@ export function resourceCommand(): Command {
     .action(async (id: string, _opts, cmd: Command) => {
       printJson(await clientFrom(cmd).resource.get(id), outputOptions(cmd));
     });
+
+  for (const action of ["enable", "disable"] as const) {
+    cmd
+      .command(`${action} <id>`)
+      .description(`${action[0]?.toUpperCase()}${action.slice(1)} a resource`)
+      .action(async (id: string, _opts, cmd: Command) => {
+        const api = clientFrom(cmd).resource;
+        const result = action === "enable" ? await api.enable(id) : await api.disable(id);
+        printJson(result, outputOptions(cmd));
+      });
+  }
 
   cmd
     .command("query <id>")

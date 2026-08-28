@@ -15,6 +15,8 @@ import {
   deleteResource,
   deleteResourceDocuments,
   deleteResourceDocumentsByFilter,
+  disableResource,
+  enableResource,
   findResource,
   getResource,
   getResourceDocument,
@@ -34,6 +36,8 @@ export function resources(ctx: RequestContext) {
     delete: (id: string | string[], opts?: Parameters<typeof deleteResource>[2]) =>
       deleteResource(ctx, id, opts),
     update: (id: string, patch: UpdateResourceOptions) => updateResource(ctx, id, patch),
+    enable: (id: string) => enableResource(ctx, id),
+    disable: (id: string) => disableResource(ctx, id),
     configureIndex: (id: string, opts: Parameters<typeof configureResourceIndex>[2]) =>
       configureResourceIndex(ctx, id, opts),
     find: (name: string, opts?: FindResourceOptions) => findResource(ctx, name, opts),

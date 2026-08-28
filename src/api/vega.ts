@@ -314,6 +314,7 @@ export interface ListBuildTasksOptions {
   catalogId?: string;
   status?: BuildTaskStatus | BuildTaskStatus[];
   mode?: BuildMode;
+  executeType?: BuildTaskExecuteType;
   sort?: BuildTaskSort;
   direction?: SortDirection;
 }
@@ -341,6 +342,7 @@ export async function listBuildTasks(
       catalog_id: opts.catalogId || undefined,
       status: opts.status || undefined,
       mode: opts.mode,
+      execute_type: opts.executeType,
       sort: opts.sort,
       direction: opts.direction,
     },
