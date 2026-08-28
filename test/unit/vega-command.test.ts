@@ -579,6 +579,52 @@ describe("vega dataset build-list", () => {
     expect(url.searchParams.getAll("status")).toEqual(["pending", "running"]);
   });
 
+  it("forwards a validated execute type", async () => {
+    const fetchMock = mockFetch({ entries: [], total_count: 0 });
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "dataset",
+        "build-list",
+        "--execute-type",
+        "incremental",
+      ],
+      { from: "user" },
+    );
+
+    const url = new URL(fetchMock.mock.calls[0]?.[0] as string);
+    expect(url.searchParams.get("execute_type")).toBe("incremental");
+  });
+
+  it("rejects an invalid execute type before issuing a request", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      cli().parseAsync(
+        [
+          "--base-url",
+          "https://demo.example.com",
+          "--token",
+          "t",
+          "vega",
+          "dataset",
+          "build-list",
+          "--execute-type",
+          "unknown",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow(/invalid build task execute type/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("rejects an empty status list before issuing a request", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

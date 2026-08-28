@@ -16,6 +16,7 @@ import {
   SemanticUnderstandingTaskSort,
 } from "../api/vega-semantic.js";
 import {
+  BuildTaskExecuteType,
   BuildTaskSort,
   BuildTaskStatus,
   type CatalogHealthCheckScheduleConfig,
@@ -131,6 +132,17 @@ const buildTaskSort = (raw?: string): BuildTaskSort | undefined => {
   if (!parsed.success) {
     throw new InputError(
       `invalid build task sort "${raw}"; expected one of ${BuildTaskSort.options.join(", ")}`,
+    );
+  }
+  return parsed.data;
+};
+
+const buildTaskExecuteType = (raw?: string): BuildTaskExecuteType | undefined => {
+  if (raw === undefined) return undefined;
+  const parsed = BuildTaskExecuteType.safeParse(raw);
+  if (!parsed.success) {
+    throw new InputError(
+      `invalid build task execute type "${raw}"; expected one of ${BuildTaskExecuteType.options.join(", ")}`,
     );
   }
   return parsed.data;
@@ -993,6 +1005,10 @@ export function vegaCommand(): Command {
     .option("--catalog-id <id>", "filter by catalog id")
     .option("--status <status>", `comma-separated statuses: ${BuildTaskStatus.options.join(" | ")}`)
     .option("--mode <mode>", "filter by mode: batch | streaming")
+    .option(
+      "--execute-type <type>",
+      `filter by execution type: ${BuildTaskExecuteType.options.join(" | ")}`,
+    )
     .option("--sort <field>", `sort field: ${BuildTaskSort.options.join(" | ")}`)
     .option("--direction <dir>", `sort direction: ${SortDirection.options.join(" | ")}`)
     .action(async (opts, cmd: Command) => {
@@ -1004,6 +1020,7 @@ export function vegaCommand(): Command {
           catalogId: opts.catalogId,
           status: buildTaskStatuses(opts.status),
           mode: opts.mode,
+          executeType: buildTaskExecuteType(opts.executeType),
           sort: buildTaskSort(opts.sort),
           direction: sortDirection(opts.direction),
         }),
