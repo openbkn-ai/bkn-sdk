@@ -5,7 +5,6 @@ Behavior per product domain. Each file: goals, user-visible behavior, CLI/SDK to
 | Domain | Description |
 | ------ | ----------- |
 | [knowledge-networks.md](knowledge-networks.md) | BKN format, knowledge-network CRUD, schema/query, push/pull, context loading |
-| [decision-agents.md](decision-agents.md) | Agent CRUD, chat, sessions/history, members, conversations |
 | [datasources.md](datasources.md) | Datasource listing, inspection, preview |
 | [model-factory.md](model-factory.md) | LLM + small-model management, invocation, OpenAI-compatible chat |
 | [skills-toolboxes.md](skills-toolboxes.md) | Skill registry/install, toolbox + tool execution |

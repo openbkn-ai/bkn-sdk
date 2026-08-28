@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 /** Trace resource surface (data fetch + symbolic/rubric diagnose + eval-set). */
-import { fetchAgentInfo, sendChat } from "../api/agent-chat.js";
 import { traceLifecycleApi } from "../api/trace-lifecycle.js";
 import {
   type TechnicalTraceQuery,
@@ -22,36 +21,10 @@ import {
   runRules,
   synthesizeFindings,
 } from "../bkn-trace/diagnose.js";
-import {
-  type EvalCase,
-  type EvalSetResult,
-  buildCasesFromQueries,
-  runEvalSet,
-} from "../bkn-trace/eval-set.js";
+import { type EvalCase, buildCasesFromQueries } from "../bkn-trace/eval-set.js";
 import { validateFixturePath } from "../bkn-trace/fixture-validate.js";
 import { ManagedTrace } from "../managed-trace.js";
 import type { RequestContext } from "../types.js";
-
-async function semanticJudge(
-  question: string,
-  answer: string,
-  reference: string,
-): Promise<{ verdict: "pass" | "fail"; reasoning: string }> {
-  const prompt = [
-    "You judge whether an agent ANSWER semantically matches a REFERENCE answer.",
-    question ? `QUESTION/CRITERION: ${question}` : "",
-    `ANSWER: ${answer}`,
-    `REFERENCE: ${reference}`,
-    'Respond with ONLY JSON: {"verdict":"pass|fail","reasoning":"<one sentence>"}',
-  ]
-    .filter(Boolean)
-    .join("\n");
-  const out = await judgeJson(prompt, { timeoutMs: 120_000 });
-  return {
-    verdict: out.verdict === "pass" ? "pass" : "fail",
-    reasoning: typeof out.reasoning === "string" ? out.reasoning : "",
-  };
-}
 
 export function trace(ctx: RequestContext) {
   const lifecycle = traceLifecycleApi(ctx);
@@ -162,33 +135,6 @@ export function trace(ctx: RequestContext) {
     evalSetBuild: (raw: unknown): EvalCase[] => buildCasesFromQueries(raw),
     /** Validate BKN Trace phase-one fixture files or directories. */
     validateFixture: (path: string) => validateFixturePath(path),
-    /**
-     * Run an eval set against an agent: each case's query is sent to the agent,
-     * the resulting trace is fetched, and assertions are checked. `llm` enables
-     * `semantic_match` assertions via the local claude judge.
-     */
-    evalSetTest: async (
-      agentId: string,
-      cases: EvalCase[],
-      opts: { version?: string; llm?: boolean } = {},
-    ): Promise<EvalSetResult> => {
-      const info = await fetchAgentInfo(ctx, agentId, opts.version ?? "v0");
-      return runEvalSet(agentId, cases, {
-        runQuery: async (query) => {
-          const res = await sendChat(ctx, info, query, {});
-          return { answer: res.text, conversationId: res.conversationId ?? null };
-        },
-        fetchSpans: async (conversationId) => {
-          const { spans, traceIds } = await getRawSpansByConversation(ctx, conversationId);
-          const primary = traceIds[0] ?? conversationId;
-          return assembleTraceTree(
-            primary,
-            traceIds.length > 0 ? spans.filter((s) => !s.traceId || s.traceId === primary) : spans,
-          ).spans;
-        },
-        judgeSemanticMatch: opts.llm && claudeAvailable() ? semanticJudge : undefined,
-      });
-    },
   };
 }
 

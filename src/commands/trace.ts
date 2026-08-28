@@ -332,7 +332,7 @@ export function traceCommand(): Command {
       );
     });
 
-  const evalSet = cmd.command("eval-set").description("Build + run trace eval sets");
+  const evalSet = cmd.command("eval-set").description("Build trace eval sets");
   evalSet
     .command("build <queries-file>")
     .description("Build eval cases from a queries JSON file")
@@ -347,23 +347,6 @@ export function traceCommand(): Command {
         printJson({ cases }, outputOptions(cmd));
       }
     });
-  evalSet
-    .command("test <cases-file>")
-    .description("Run an eval set against an agent (--llm enables semantic_match)")
-    .requiredOption("--agent <id>", "agent id to run the queries against")
-    .option("--version <v>", "agent version", "v0")
-    .option("--llm", "enable semantic_match assertions via the local `claude` CLI")
-    .action(async (casesFile: string, opts, cmd: Command) => {
-      const raw = parseBigIntJSON(readFileSync(casesFile, "utf8"));
-      const cases = clientFrom(cmd).trace.evalSetBuild(raw);
-      const result = await clientFrom(cmd).trace.evalSetTest(opts.agent, cases, {
-        version: opts.version,
-        llm: Boolean(opts.llm),
-      });
-      printJson(result, outputOptions(cmd));
-      if (result.failed > 0) process.exitCode = 1;
-    });
-
   const schema = cmd.command("schema").description("Validate eval-set / diagnosis-rule files");
   schema
     .command("validate <file>")
@@ -384,5 +367,5 @@ export function traceCommand(): Command {
       if (!result.ok) process.exitCode = 1;
     });
 
-  return group(cmd, "TRACE AI");
+  return group(cmd, "BKN TRACE");
 }

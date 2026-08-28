@@ -211,6 +211,6 @@ chk "admin llm list" admin llm list
 chk "admin license fingerprint" admin license fingerprint
 
 echo "### passthrough"
-chk "call ontology KN list" call "/api/ontology-manager/v1/knowledge-networks?page=1&size=1"
+chk "call ontology KN list" call "/api/bkn-backend/v1/knowledge-networks?page=1&size=1"
 
 report

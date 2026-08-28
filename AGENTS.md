@@ -105,7 +105,7 @@ Dependency direction is one-way: `commands → resources → api → auth/config
 
 ## Domains
 
-Behavior per product area lives in [docs/product-specs/](docs/product-specs/index.md): knowledge-networks · decision-agents · datasources · model-factory · skills-toolboxes · vega · bkn-trace · identity-access.
+Behavior per product area lives in [docs/product-specs/](docs/product-specs/index.md): knowledge-networks · datasources · model-factory · skills-toolboxes · vega · bkn-trace · identity-access.
 
 ## How to use this harness
 

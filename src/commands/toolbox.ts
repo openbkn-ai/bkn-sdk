@@ -90,7 +90,7 @@ export function toolboxCommand(): Command {
       printJson(await clientFrom(cmd).toolboxes.import(file, opts.type), outputOptions(cmd));
     });
 
-  return group(cmd, "DECISION AGENT");
+  return group(cmd, "MODELS & SKILLS");
 }
 
 export function toolCommand(): Command {
@@ -191,5 +191,5 @@ export function toolCommand(): Command {
       );
     });
 
-  return group(cmd, "DECISION AGENT");
+  return group(cmd, "MODELS & SKILLS");
 }

@@ -119,9 +119,9 @@ function catalogRoutes(
         };
       },
     ],
-    [/^\/api\/ontology-manager\/v1\/knowledge-networks$/, () => ({ id: "kn-1" })],
-    [/^\/api\/ontology-manager\/v1\/knowledge-networks\/[^/]+\/object-types$/, () => ({})],
-    [/^\/api\/ontology-manager\/v1\/knowledge-networks\/[^/]+$/, () => ({})],
+    [/^\/api\/bkn-backend\/v1\/knowledge-networks$/, () => ({ id: "kn-1" })],
+    [/^\/api\/bkn-backend\/v1\/knowledge-networks\/[^/]+\/object-types$/, () => ({})],
+    [/^\/api\/bkn-backend\/v1\/knowledge-networks\/[^/]+$/, () => ({})],
   ];
 }
 
@@ -137,7 +137,7 @@ describe("createFromCatalog table identifiers", () => {
     })) as { object_types: Array<{ name: string; pk: string }> };
     expect(out.object_types).toEqual([{ name: "document", pk: "id" }]);
     // No rollback DELETE — the run succeeded.
-    expect(paths(f)).not.toContain("/api/ontology-manager/v1/knowledge-networks/kn-1");
+    expect(paths(f)).not.toContain("/api/bkn-backend/v1/knowledge-networks/kn-1");
   });
 
   it("waits for asynchronous discovery before listing an empty catalog again", async () => {
@@ -375,7 +375,7 @@ describe("createFromCatalog table identifiers", () => {
     ).rejects.toThrow(
       /--embedding-fields names bdy on table 'document'.*Indexable fields: id, body/,
     );
-    expect(paths(f)).not.toContain("/api/ontology-manager/v1/knowledge-networks");
+    expect(paths(f)).not.toContain("/api/bkn-backend/v1/knowledge-networks");
     expect(paths(f)).not.toContain("/api/vega-backend/v1/build-tasks");
   });
 
@@ -387,11 +387,11 @@ describe("createFromCatalog table identifiers", () => {
       // Object-type creation fails, and the rollback DELETE is refused too, so
       // the network survives even though --no-rollback was never passed.
       [
-        /^\/api\/ontology-manager\/v1\/knowledge-networks\/[^/]+\/object-types$/,
+        /^\/api\/bkn-backend\/v1\/knowledge-networks\/[^/]+\/object-types$/,
         () => new Response(JSON.stringify({ error: "nope" }), { status: 500 }),
       ],
       [
-        /^\/api\/ontology-manager\/v1\/knowledge-networks\/[^/]+$/,
+        /^\/api\/bkn-backend\/v1\/knowledge-networks\/[^/]+$/,
         () => new Response(JSON.stringify({ error: "nope" }), { status: 500 }),
       ],
       ...catalogRoutes([{ id: "r-1", name: "document", columns: ["id", "body"], pk: "id" }]),
@@ -411,13 +411,13 @@ describe("createFromCatalog table identifiers", () => {
       [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({})],
       [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/, () => ({ connector_type: "mysql" })],
       [
-        /^\/api\/ontology-manager\/v1\/knowledge-networks\/[^/]+\/object-types$/,
+        /^\/api\/bkn-backend\/v1\/knowledge-networks\/[^/]+\/object-types$/,
         () => new Response(JSON.stringify({ error: "nope" }), { status: 500 }),
       ],
       // The rollback DELETE says the network is not there. It is gone, so the
       // user must not be sent to delete it.
       [
-        /^\/api\/ontology-manager\/v1\/knowledge-networks\/[^/]+$/,
+        /^\/api\/bkn-backend\/v1\/knowledge-networks\/[^/]+$/,
         () => new Response(JSON.stringify({ error: "not found" }), { status: 404 }),
       ],
       ...catalogRoutes([{ id: "r-1", name: "document", columns: ["id", "body"], pk: "id" }]),
@@ -430,7 +430,7 @@ describe("createFromCatalog table identifiers", () => {
     // Both assertions below are negative, so pin that the rollback really ran:
     // otherwise a change that never reaches it would keep this test green.
     expect(logs.join("\n")).toMatch(/Rolling back KN kn-1/);
-    expect(paths(f)).toContain("/api/ontology-manager/v1/knowledge-networks/kn-1");
+    expect(paths(f)).toContain("/api/bkn-backend/v1/knowledge-networks/kn-1");
     expect(logs.join("\n")).not.toMatch(/still there/);
     expect(logs.join("\n")).not.toMatch(/partial knowledge network/i);
   });
@@ -441,13 +441,13 @@ describe("createFromCatalog table identifiers", () => {
       [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({})],
       [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/, () => ({ connector_type: "mysql" })],
       [
-        /^\/api\/ontology-manager\/v1\/knowledge-networks\/[^/]+\/object-types$/,
+        /^\/api\/bkn-backend\/v1\/knowledge-networks\/[^/]+\/object-types$/,
         () => new Response(JSON.stringify({ error: "nope" }), { status: 500 }),
       ],
       // `200 text/plain "OK"` is a common way to answer a DELETE. It raises
       // NonJsonResponseError here, but the network is gone all the same.
       [
-        /^\/api\/ontology-manager\/v1\/knowledge-networks\/[^/]+$/,
+        /^\/api\/bkn-backend\/v1\/knowledge-networks\/[^/]+$/,
         () => new Response("OK", { status: 200, headers: { "content-type": "text/plain" } }),
       ],
       ...catalogRoutes([{ id: "r-1", name: "document", columns: ["id", "body"], pk: "id" }]),
@@ -457,7 +457,7 @@ describe("createFromCatalog table identifiers", () => {
       name: "kn",
       onProgress: (m) => logs.push(m),
     }).catch(() => {});
-    expect(paths(f)).toContain("/api/ontology-manager/v1/knowledge-networks/kn-1");
+    expect(paths(f)).toContain("/api/bkn-backend/v1/knowledge-networks/kn-1");
     expect(logs.join("\n")).not.toMatch(/still there/);
     expect(logs.join("\n")).not.toMatch(/partial knowledge network/i);
   });
@@ -468,13 +468,13 @@ describe("createFromCatalog table identifiers", () => {
       [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({})],
       [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/, () => ({ connector_type: "mysql" })],
       [
-        /^\/api\/ontology-manager\/v1\/knowledge-networks\/[^/]+\/object-types$/,
+        /^\/api\/bkn-backend\/v1\/knowledge-networks\/[^/]+\/object-types$/,
         () => new Response(JSON.stringify({ error: "nope" }), { status: 500 }),
       ],
       // An SSO proxy answers a dead session with a 200 login page. The delete
       // never reached the service, so the network is still standing.
       [
-        /^\/api\/ontology-manager\/v1\/knowledge-networks\/[^/]+$/,
+        /^\/api\/bkn-backend\/v1\/knowledge-networks\/[^/]+$/,
         () =>
           new Response("<html><body>Sign in</body></html>", {
             status: 200,

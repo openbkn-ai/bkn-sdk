@@ -23,7 +23,7 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
 
 ## Index building (via Catalog BuildTask — no KN-level build)
 
-There is **no KN-level build**. The legacy `bkn build` (a `job_type:"full"` job under `ontology-manager/.../jobs`) is removed and not reimplemented. Index / instance data is produced by **Catalog BuildTasks** at resource granularity — `POST /build-tasks` with config on the task. See [vega.md](vega.md) → *Index build (BuildTask)*.
+There is **no KN-level build**. The legacy `bkn build` (a `job_type:"full"` job under `bkn-backend/.../jobs`) is removed and not reimplemented. Index / instance data is produced by **Catalog BuildTasks** at resource granularity — `POST /build-tasks` with config on the task. See [vega.md](vega.md) → *Index build (BuildTask)*.
 
 A KN is the schema/ontology layer; it **references** already-built Catalog resources and does not own a build lifecycle. Rationale: KN→Catalog is one-to-many and the data layer must build independently of the schema layer — driving builds from a KN verb would invert the layering and be ambiguous.
 
