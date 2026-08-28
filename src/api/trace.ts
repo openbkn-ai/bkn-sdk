@@ -13,6 +13,9 @@ import type { OperationCallFact, OperationReceipt } from "./trace-lifecycle.js";
 
 const EVIDENCE_EVENTS = "/api/agent-observability/v1/evidence/events";
 const EVIDENCE_ARTIFACTS = "/api/agent-observability/v1/evidence/artifacts";
+// EE-only since foundry 0.1.4: the OSS agent-observability build dropped the
+// public registration for these business-provenance summaries (the handlers
+// survive as EE overlay building blocks). Calls 404 on an OSS-only deploy.
 const BUSINESS_PROVENANCE = "/api/agent-observability/v1/business-provenance";
 const BUSINESS_PROVENANCE_TRACES = `${BUSINESS_PROVENANCE}/traces`;
 const REQUESTS = `${BUSINESS_PROVENANCE}/requests`;

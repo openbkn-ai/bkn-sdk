@@ -142,12 +142,6 @@ export function bknCommand(): Command {
       );
     });
   actionType
-    ?.command("inputs <kn-id> <at-id>")
-    .description("Get an action type's input schema")
-    .action(async (knId: string, atId: string, _o, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.actionTypeInputs(knId, atId), outputOptions(cmd));
-    });
-  actionType
     ?.command("get <kn-id> <at-id>")
     .description("Get an action type")
     .action(async (knId: string, atId: string, _o, cmd: Command) => {
@@ -312,14 +306,6 @@ export function bknCommand(): Command {
     .description("Delete a metric")
     .action(async (knId: string, id: string, _o, cmd: Command) => {
       printJson(await clientFrom(cmd).kn.metricDelete(knId, id), outputOptions(cmd));
-    });
-  metric
-    .command("search <kn-id>")
-    .description("Search metrics (--body / --body-file)")
-    .option("--body <json>", "body JSON")
-    .option("--body-file <path>", "read body JSON from a file")
-    .action(async (knId: string, opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.metricSearch(knId, readBody(opts)), outputOptions(cmd));
     });
   metric
     .command("validate <kn-id>")

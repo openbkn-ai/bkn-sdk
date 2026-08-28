@@ -23,28 +23,10 @@ check() {
   fi
 }
 
-# Agent-factory is an optional deployment: the ingress
-# answers with nginx's own 404 HTML when the service isn't installed, which is a
-# missing backend, not a broken command.
-skipped=0
-optional_check() {
-  local label="$1"; shift
-  local out; out="$(run "$@")"
-  if grep -q '<center>nginx</center>' <<< "$out"; then
-    echo "⏭️  $label (service not deployed)"; skipped=$((skipped + 1)); return
-  fi
-  if grep -qE '"(entries|data|count|id|name|total)"|^\[|\[\]' <<< "$out"; then
-    echo "✅ $label"; pass=$((pass + 1))
-  else
-    echo "❌ $label"; fail=$((fail + 1))
-  fi
-}
-
 check "bkn list" bkn list
 check "resource list" resource list --limit 1
 check "vega catalog list" vega catalog list --limit 1
 check "vega resource list" vega resource list --limit 1
-optional_check "agent list" agent list --limit 1
 check "model llm list" model llm list --limit 1
 check "model small list" model small list --limit 1
 check "skill list" skill list --limit 1
@@ -74,6 +56,6 @@ if [ -n "${BKN_ADMIN_TOKEN:-}" ]; then
 fi
 
 echo "---"
-echo "passed=$pass failed=$fail skipped=$skipped"
+echo "passed=$pass failed=$fail"
 # Remaining operator (admin) endpoints need dedicated fixtures; skipped by design.
 [ "$fail" -eq 0 ]

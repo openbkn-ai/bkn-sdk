@@ -2,7 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 /**
- * Knowledge-network backend client (ontology-manager + agent-retrieval).
+ * Knowledge-network backend client (bkn-backend + ontology-query + agent-retrieval).
+ * `/api/ontology-manager/v1` is a compat alias of `/api/bkn-backend/v1`; the
+ * canonical prefix is the latter.
  * Responses are passed through as parsed JSON
  * (shapes vary by backend version — validate at higher layers as needed).
  */
@@ -11,7 +13,7 @@ import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { request } from "./http.js";
 import { type BknContext, withManagedLifecycle } from "./lifecycle.js";
 
-const ONTOLOGY_BASE = "/api/ontology-manager/v1/knowledge-networks";
+const ONTOLOGY_BASE = "/api/bkn-backend/v1/knowledge-networks";
 const ONTOLOGY_QUERY_BASE = "/api/ontology-query/v1/knowledge-networks";
 const RETRIEVAL_BASE = "/api/agent-retrieval/v1/kn";
 
@@ -197,18 +199,6 @@ export function executeActionType(
   );
 }
 
-/** Get an action type's input schema (ontology-query). */
-export function getActionTypeInputs(
-  ctx: RequestContext,
-  knId: string,
-  atId: string,
-): Promise<unknown> {
-  return request(
-    ctx,
-    `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-types/${encodeURIComponent(atId)}/inputs`,
-  );
-}
-
 export function getActionExecution(
   ctx: RequestContext,
   knId: string,
@@ -298,7 +288,7 @@ export function listActionTypes(
   });
 }
 
-/** Schema item kind in the ontology-manager path. */
+/** Schema item kind in the bkn-backend schema path. */
 export type SchemaKind = "object-types" | "relation-types" | "action-types";
 
 export function getSchemaItem(
@@ -354,7 +344,7 @@ export function deleteSchemaItem(
   );
 }
 
-// Metric definitions live under ontology-manager (data/dry-run are query-side).
+// Metric definitions live under bkn-backend (data/dry-run are query-side).
 export function listMetrics(
   ctx: RequestContext,
   knId: string,
@@ -403,12 +393,6 @@ export function deleteMetric(
       method: "DELETE",
     },
   );
-}
-export function searchMetrics(ctx: RequestContext, knId: string, body: unknown): Promise<unknown> {
-  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/search`, {
-    method: "POST",
-    body,
-  });
 }
 export function validateMetric(ctx: RequestContext, knId: string, body: unknown): Promise<unknown> {
   return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/validation`, {

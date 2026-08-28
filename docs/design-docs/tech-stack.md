@@ -22,21 +22,21 @@ tools; this records what the rewrite picks and why. Update here if a choice chan
 ## Grouped help renderer
 
 The legacy help is **not** commander's default flat list — it groups
-commands under section headers (`AUTHENTICATION & CONFIG`, `DECISION AGENT`,
-`AI DATA PLATFORM`, `TRACE AI`, `FOUNDATION`) and adds `USAGE` / `FLAGS` /
+commands under section headers (`AUTHENTICATION & CONFIG`,
+`AI DATA PLATFORM`, `MODELS & SKILLS`, `BKN TRACE`, `OPERATOR`, `FOUNDATION`) and adds `USAGE` / `FLAGS` /
 `ENVIRONMENT` / `EXAMPLES` / `LEARN MORE` blocks. To keep `openbkn --help` equivalent,
 override commander's help via `Command.configureHelp()` / a custom `formatHelp`:
 
 - Tag each command with a group (e.g. `cmd.addHelpText` or a `group` attribute read by the formatter).
 - Render section headers in the legacy order, plus a new `OPERATOR` group for the merged operator commands (org/user/role/audit).
-- **Applies at every level**: the same formatter groups a command's own subcommands too (e.g. `openbkn agent --help` → DISCOVERY / CRUD / RUNTIME; `openbkn bkn --help` → LIFECYCLE / SCHEMA / …), matching legacy depth-1 group help.
+- **Applies at every level**: the same formatter groups a command's own subcommands too (e.g. `openbkn bkn --help` → LIFECYCLE / SCHEMA / …), matching legacy depth-1 group help.
 - Keep `openbkn help all` = full per-action signature dump (migration fallback).
 
 This is one small shared formatter module, not per-command help strings. It applies at every depth of the command tree.
 
 ## Rejected / out of scope
 
-- **ink / react** — dropped. No complex chat TUI is needed; `agent chat` streams plain text. Cuts a heavy dep tree and keeps the SDK light to import.
+- **ink / react** — dropped. No complex chat TUI is needed; `model llm chat` streams plain text. Cuts a heavy dep tree and keeps the SDK light to import.
 - **inquirer** — `@clack/prompts` is lighter and prettier for the few interactive flows.
 - **yargs** — would minimize user-side migration but forces rewriting the admin tree; commander chosen instead.
 - **citty / cac** — leaner/more-modern CLI parsers, but smaller ecosystems and more migration risk; commander's maturity wins here.

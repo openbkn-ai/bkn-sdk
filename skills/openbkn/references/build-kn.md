@@ -11,4 +11,4 @@ From local CSVs: load them into the catalog's own database, then
 `openbkn vega catalog discover <catalog-id>` and build from the catalog as
 above. There is no CSV import command — the service it ran on is gone.
 
-Then verify + bind: `bkn get <kn> --stats`, `bkn search <kn> "<q>"`, attach to an agent (`agent skill add`). Needs a physical catalog (logical catalogs can't be discovered/written).
+Then verify: `bkn get <kn> --stats`, `bkn search <kn> "<q>"`. Needs a physical catalog (logical catalogs can't be discovered/written).

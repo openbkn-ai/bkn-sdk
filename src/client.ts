@@ -4,7 +4,6 @@
 import { type RawCallOptions, type RawCallResult, rawCall } from "./api/call.js";
 import { resolveContext } from "./config/resolve.js";
 import { admin } from "./resources/admin.js";
-import { agents } from "./resources/agents.js";
 import { appKeys } from "./resources/app-keys.js";
 import { context } from "./resources/context-loader.js";
 import { kn } from "./resources/knowledge-networks.js";
@@ -29,11 +28,6 @@ export interface BknClient {
   readonly ctx: RequestContext;
   readonly kn: ReturnType<typeof kn>;
   readonly resource: ReturnType<typeof resources>;
-  /**
-   * @deprecated Decision Agent (agent-factory) is being phased out and may be
-   * removed in a future release. Avoid building new integrations on it.
-   */
-  readonly agents: ReturnType<typeof agents>;
   readonly context: ReturnType<typeof context>;
   readonly models: ReturnType<typeof models>;
   readonly skills: ReturnType<typeof skills>;
@@ -52,7 +46,6 @@ export function createClient(opts: ClientOptions = {}): BknClient {
     ctx,
     kn: kn(ctx),
     resource: resources(ctx),
-    agents: agents(ctx),
     context: context(ctx),
     models: models(ctx),
     skills: skills(ctx),

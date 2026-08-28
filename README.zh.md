@@ -34,16 +34,12 @@ openbkn resource list --type table
 openbkn vega catalog list
 openbkn model llm list
 
-# 智能体
-openbkn agent list
-openbkn agent sessions <agent-key>
-
 # 运维（嵌套）
 openbkn admin org list
 openbkn admin role list
 
 # 任意端点的原始透传
-openbkn call /api/ontology-manager/v1/knowledge-networks
+openbkn call /api/bkn-backend/v1/knowledge-networks
 
 # 全局参数：--base-url --token --user --json/--compact -bd/--biz-domain -k/--insecure
 #           --conversation-id/--interaction-id（BKN Trace 关联，等价 env：BKN_CONVERSATION_ID/BKN_INTERACTION_ID）

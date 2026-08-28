@@ -3,8 +3,8 @@
 
 /**
  * `trace schema validate` — validate a local eval-set or diagnosis-rule file
- * (JSON or YAML) against a zod schema. Catches malformed cases/rules before
- * `eval-set test` runs them or before a custom rule is shipped.
+ * (JSON or YAML) against a zod schema. Catches malformed cases/rules before a
+ * runner consumes them or before a custom rule is shipped.
  */
 import { readFileSync } from "node:fs";
 import { extname } from "node:path";

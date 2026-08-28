@@ -41,7 +41,6 @@ import {
   executeActionType,
   getActionExecution,
   getActionLog,
-  getActionTypeInputs,
   getKnowledgeNetwork,
   getMetric,
   getSchemaItem,
@@ -55,7 +54,6 @@ import {
   queryMetricData,
   queryObjectTypeInstances,
   querySubgraph,
-  searchMetrics,
   semanticSearch,
   updateKnowledgeNetwork,
   updateMetric,
@@ -93,7 +91,6 @@ export function kn(ctx: RequestContext) {
     metricUpdate: (knId: string, metricId: string, body: unknown) =>
       updateMetric(ctx, knId, metricId, body),
     metricDelete: (knId: string, metricId: string) => deleteMetric(ctx, knId, metricId),
-    metricSearch: (knId: string, body: unknown) => searchMetrics(ctx, knId, body),
     metricValidate: (knId: string, body: unknown) => validateMetric(ctx, knId, body),
     objectTypes: (knId: string, opts?: ListSchemaOptions) => listObjectTypes(ctx, knId, opts),
     objectTypeQuery: (knId: string, otId: string, body: unknown) =>
@@ -117,7 +114,6 @@ export function kn(ctx: RequestContext) {
       queryActionType(ctx, knId, atId, body),
     actionTypeExecute: (knId: string, atId: string, body: unknown) =>
       executeActionType(ctx, knId, atId, body),
-    actionTypeInputs: (knId: string, atId: string) => getActionTypeInputs(ctx, knId, atId),
     actionTypeGet: (knId: string, id: string) => getSchemaItem(ctx, knId, "action-types", id),
     conceptGroups: (knId: string) => listConceptGroups(ctx, knId),
     conceptGroup: (knId: string, cgId: string) => getConceptGroup(ctx, knId, cgId),

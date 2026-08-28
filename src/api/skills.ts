@@ -169,7 +169,10 @@ export function updateSkillMetadata(
   skillId: string,
   body: unknown,
 ): Promise<unknown> {
-  return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}`, { method: "PUT", body });
+  return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}/metadata`, {
+    method: "PUT",
+    body,
+  });
 }
 
 /** Republish a previous skill version (`POST /skills/:id/history/republish`). */

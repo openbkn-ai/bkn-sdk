@@ -40,16 +40,12 @@ openbkn resource list --type table
 openbkn vega catalog list
 openbkn model llm list
 
-# Agents
-openbkn agent list
-openbkn agent sessions <agent-key>
-
 # Operator (nested)
 openbkn admin org list
 openbkn admin role list
 
 # Raw passthrough to any endpoint
-openbkn call /api/ontology-manager/v1/knowledge-networks
+openbkn call /api/bkn-backend/v1/knowledge-networks
 
 # Global flags: --base-url, --token, --user, --json/--compact, -bd/--biz-domain, -k/--insecure,
 #               --conversation-id/--interaction-id (BKN Trace correlation; also BKN_CONVERSATION_ID/BKN_INTERACTION_ID)
@@ -104,7 +100,7 @@ lists its flags and arguments, so the tree is discoverable end to end.
 ecosystem) that lets an AI drive the `openbkn` CLI from natural language. It
 ships a `SKILL.md` (trigger intents, `allowed-tools: Bash(openbkn *)`, a
 command-group map, examples, and cautions) plus per-domain cheat sheets under
-`references/` (auth, bkn, agent, model, vega, resource, context,
+`references/` (auth, bkn, model, vega, resource, context,
 skill, toolbox, trace, admin, call) and two how-tos (build-a-KN, troubleshooting).
 
 A second skill, `skills/create-bkn/`, guides an AI through **authoring** a BKN

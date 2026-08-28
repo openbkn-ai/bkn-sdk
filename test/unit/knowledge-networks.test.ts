@@ -56,11 +56,11 @@ function callTo(fetchMock: typeof fetch, pathname: string): CallArgs {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("listKnowledgeNetworks", () => {
-  it("hits ontology-manager with default paging + sort", async () => {
+  it("hits bkn-backend with default paging + sort", async () => {
     const fetchMock = mockFetch();
     await listKnowledgeNetworks(ctx);
     const url = new URL(firstCall(fetchMock)[0]);
-    expect(url.pathname).toBe("/api/ontology-manager/v1/knowledge-networks");
+    expect(url.pathname).toBe("/api/bkn-backend/v1/knowledge-networks");
     expect(url.searchParams.get("limit")).toBe("30");
     expect(url.searchParams.get("sort")).toBe("update_time");
     expect(url.searchParams.get("direction")).toBe("desc");
@@ -80,7 +80,7 @@ describe("getKnowledgeNetwork", () => {
     const fetchMock = mockFetch();
     await getKnowledgeNetwork(ctx, "kn 1", { exportMode: true, stats: true });
     const url = new URL(firstCall(fetchMock)[0]);
-    expect(url.pathname).toBe("/api/ontology-manager/v1/knowledge-networks/kn%201");
+    expect(url.pathname).toBe("/api/bkn-backend/v1/knowledge-networks/kn%201");
     expect(url.searchParams.get("mode")).toBe("export");
     expect(url.searchParams.get("include_statistics")).toBe("true");
   });
@@ -107,12 +107,12 @@ describe("create + delete", () => {
   });
 });
 
-describe("schema lists (ontology-manager)", () => {
+describe("schema lists (bkn-backend)", () => {
   it("object-types: branch + limit defaults", async () => {
     const f = mockFetch();
     await listObjectTypes(ctx, "kn-1");
     const u = new URL(firstCall(f)[0]);
-    expect(u.pathname).toBe("/api/ontology-manager/v1/knowledge-networks/kn-1/object-types");
+    expect(u.pathname).toBe("/api/bkn-backend/v1/knowledge-networks/kn-1/object-types");
     expect(u.searchParams.get("branch")).toBe("main");
     expect(u.searchParams.get("limit")).toBe("-1");
   });
@@ -120,7 +120,7 @@ describe("schema lists (ontology-manager)", () => {
     const f = mockFetch();
     await listRelationTypes(ctx, "kn-1");
     expect(new URL(firstCall(f)[0]).pathname).toBe(
-      "/api/ontology-manager/v1/knowledge-networks/kn-1/relation-types",
+      "/api/bkn-backend/v1/knowledge-networks/kn-1/relation-types",
     );
   });
 });
@@ -258,7 +258,7 @@ describe("validateMetric", () => {
     await validateMetric(ctx, "kn-1", { entries: [] });
     const call = firstCall(fetchMock);
     expect(new URL(call[0]).pathname).toBe(
-      "/api/ontology-manager/v1/knowledge-networks/kn-1/metrics/validation",
+      "/api/bkn-backend/v1/knowledge-networks/kn-1/metrics/validation",
     );
     expect(call[1].method).toBe("POST");
   });
