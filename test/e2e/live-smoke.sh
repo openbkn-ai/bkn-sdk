@@ -23,6 +23,10 @@ check() {
   fi
 }
 
+check "bkn list" bkn list
+check "resource list" resource list --limit 1
+check "vega catalog list" vega catalog list --limit 1
+check "vega resource list" vega resource list --limit 1
 check "model llm list" model llm list --limit 1
 check "model small list" model small list --limit 1
 check "skill list" skill list --limit 1
