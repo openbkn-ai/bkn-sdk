@@ -21,7 +21,7 @@ function requireActive(): string {
 }
 
 export function configCommand(): Command {
-  const config = new Command("config").description("Per-platform CLI configuration");
+  const config = new Command("config").description("Remember a platform URL / business domain");
 
   config
     .command("show")
@@ -67,5 +67,5 @@ export function configCommand(): Command {
       throw new InputError("Not yet implemented — requires backend business-domains API.");
     });
 
-  return group(config, "AUTHENTICATION & CONFIG");
+  return group(config, "SIGN IN & SETTINGS");
 }

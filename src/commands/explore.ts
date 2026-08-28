@@ -74,9 +74,7 @@ const INDEX = `<!doctype html><meta charset="utf-8"><title>openbkn explore</titl
   .join("")}</ul>`;
 
 export function exploreCommand(): Command {
-  const cmd = new Command("explore").description(
-    "Start a local web server with read-only bkn + vega JSON endpoints",
-  );
+  const cmd = new Command("explore").description("Serve bkn + vega as read-only JSON on localhost");
   cmd
     .option("--port <n>", "port to listen on", int, 7777)
     .option("--host <h>", "host to bind", "127.0.0.1")
@@ -90,7 +88,7 @@ export function exploreCommand(): Command {
         console.error("bkn + vega read endpoints only. Press Ctrl+C to stop.");
       });
     });
-  return group(cmd, "FOUNDATION");
+  return group(cmd, "ADMINISTRATION");
 }
 
 async function handle(

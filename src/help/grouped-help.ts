@@ -9,12 +9,28 @@
 import type { Command, Help } from "commander";
 
 const GROUP = Symbol("openbkn.group");
+const GUIDE = Symbol("openbkn.guide");
 const DEFAULT_GROUP = "COMMANDS";
 
 /** Tag a command with the help section it belongs to. Returns the command. */
 export function group(cmd: Command, name: string): Command {
   (cmd as unknown as Record<symbol, string>)[GROUP] = name;
   return cmd;
+}
+
+/**
+ * Attach prose sections (first steps, task recipes, conventions) rendered
+ * between the command list and FLAGS — where a reader looks after seeing what
+ * exists but before hunting through flags. Commander's own `addHelpText`
+ * can only append after everything, which buries it.
+ */
+export function guide(cmd: Command, text: string): Command {
+  (cmd as unknown as Record<symbol, string>)[GUIDE] = text;
+  return cmd;
+}
+
+function guideOf(cmd: Command): string | undefined {
+  return (cmd as unknown as Record<symbol, string | undefined>)[GUIDE];
 }
 
 function groupOf(cmd: Command): string {
@@ -46,6 +62,9 @@ function formatHelp(cmd: Command, helper: Help): string {
       out.push("");
     }
   }
+
+  const extra = guideOf(cmd);
+  if (extra) out.push(extra.trim(), "");
 
   const opts = helper.visibleOptions(cmd);
   if (opts.length > 0) {

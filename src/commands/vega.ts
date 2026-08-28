@@ -256,7 +256,7 @@ const sortDirection = (raw?: string): SortDirection | undefined => {
 
 export function vegaCommand(): Command {
   const vega = new Command("vega").description(
-    "Vega observability — catalog, resources, index build tasks",
+    "Data sources: catalogs, connectors, SQL, index builds",
   );
 
   const catalog = vega.command("catalog").description("Catalog entries");
@@ -1059,5 +1059,5 @@ export function vegaCommand(): Command {
       );
     });
 
-  return group(vega, "AI DATA PLATFORM");
+  return group(vega, "DATA & KNOWLEDGE");
 }

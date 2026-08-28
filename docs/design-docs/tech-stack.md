@@ -22,13 +22,14 @@ tools; this records what the rewrite picks and why. Update here if a choice chan
 ## Grouped help renderer
 
 The legacy help is **not** commander's default flat list — it groups
-commands under section headers (`AUTHENTICATION & CONFIG`,
-`AI DATA PLATFORM`, `MODELS & SKILLS`, `BKN TRACE`, `OPERATOR`, `FOUNDATION`) and adds `USAGE` / `FLAGS` /
+commands under task-shaped section headers (`SIGN IN & SETTINGS`,
+`DATA & KNOWLEDGE`, `MODELS`, `TOOLS & SKILLS`, `TRACING`,
+`ADMINISTRATION`) and adds `USAGE` / `FLAGS` /
 `ENVIRONMENT` / `EXAMPLES` / `LEARN MORE` blocks. To keep `openbkn --help` equivalent,
 override commander's help via `Command.configureHelp()` / a custom `formatHelp`:
 
 - Tag each command with a group (e.g. `cmd.addHelpText` or a `group` attribute read by the formatter).
-- Render section headers in the legacy order, plus a new `OPERATOR` group for the merged operator commands (org/user/role/audit).
+- Render section headers in registration order; the root also carries a `guide()` block (FIRST STEPS / COMMON TASKS / GOOD TO KNOW / NOT HERE YET) rendered between the command list and FLAGS.
 - **Applies at every level**: the same formatter groups a command's own subcommands too (e.g. `openbkn bkn --help` → LIFECYCLE / SCHEMA / …), matching legacy depth-1 group help.
 - Keep `openbkn help all` = full per-action signature dump (migration fallback).
 

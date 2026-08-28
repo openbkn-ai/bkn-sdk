@@ -64,7 +64,9 @@ const draftOption = (c: Command) =>
   c.option("--draft", "read the draft (management) version instead of the published one");
 
 export function skillCommand(): Command {
-  const cmd = new Command("skill").description("Skill registry and market");
+  const cmd = new Command("skill").description(
+    "Skill packages (SKILL.md + files) agents load on demand",
+  );
 
   const listOpts = (c: Command) =>
     c
@@ -332,5 +334,5 @@ export function skillCommand(): Command {
       );
     });
 
-  return group(cmd, "MODELS & SKILLS");
+  return group(cmd, "TOOLS & SKILLS");
 }

@@ -57,7 +57,7 @@ export function renderTechnicalTraceDetail(detail: TechnicalTraceDetail): string
 
 export function traceCommand(): Command {
   const cmd = new Command("trace").description(
-    "BKN Trace — fetch spans, diagnose (symbolic + LLM rubric), scan, eval-set, schema validate",
+    "Inspect what an agent actually did, and diagnose bad answers",
   );
 
   cmd
@@ -367,5 +367,5 @@ export function traceCommand(): Command {
       if (!result.ok) process.exitCode = 1;
     });
 
-  return group(cmd, "BKN TRACE");
+  return group(cmd, "TRACING");
 }

@@ -60,7 +60,7 @@ function addManagementCommands(parent: Command, kind: "llm" | "small"): void {
 
 export function modelCommand(): Command {
   const model = new Command("model").description(
-    "Model factory — LLM / small-model CRUD, chat / embeddings / rerank, default selection",
+    "Large and small models: chat, embeddings, rerank, defaults",
   );
 
   const llm = model.command("llm").description("Large language models");
@@ -201,5 +201,5 @@ Examples:
   $ openbkn model small set-default <id>                        # default embedding/reranker`,
   );
 
-  return group(model, "MODELS & SKILLS");
+  return group(model, "MODELS");
 }

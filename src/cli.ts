@@ -23,14 +23,17 @@ import { skillCommand } from "./commands/skill.js";
 import { toolCommand, toolboxCommand } from "./commands/toolbox.js";
 import { traceCommand } from "./commands/trace.js";
 import { vegaCommand } from "./commands/vega.js";
-import { installGroupedHelp } from "./help/grouped-help.js";
+import { guide, installGroupedHelp } from "./help/grouped-help.js";
 import { formatError, toExitCode } from "./utils/errors.js";
 
 const program = new Command();
 
 program
   .name("openbkn")
-  .description("Operate the BKN platform from the CLI")
+  .description(
+    "openbkn — one CLI for the BKN platform: knowledge networks, the data behind them,\n" +
+      "the tools and skills agents run on them, and the traces they leave.",
+  )
   .version(pkg.version, "-V, --version", "output the version number")
   .option("--base-url <url>", "platform base URL (env: BKN_BASE_URL)")
   .option("--token <value>", "access token (env: BKN_TOKEN)")
@@ -48,13 +51,13 @@ program
   .option("-k, --insecure", "skip TLS verification (dev / self-signed only)")
   .showHelpAfterError();
 
-// Real commands.
+// Real commands. Registration order sets the order of help sections.
 program.addCommand(authCommand());
-program.addCommand(callCommand());
 program.addCommand(configCommand());
 program.addCommand(appkeyCommand());
-program.addCommand(vegaCommand());
+program.addCommand(callCommand());
 program.addCommand(bknCommand());
+program.addCommand(vegaCommand());
 program.addCommand(resourceCommand());
 program.addCommand(contextCommand());
 program.addCommand(modelCommand());
@@ -64,6 +67,45 @@ program.addCommand(toolCommand());
 program.addCommand(traceCommand());
 program.addCommand(adminCommand());
 program.addCommand(exploreCommand());
+
+// Read after the command list, before FLAGS: how to start, what a typical job
+// looks like end to end, and which platform capabilities have no command yet.
+guide(
+  program,
+  `FIRST STEPS
+  openbkn auth login https://your-platform -u <user> -p <pass>
+  openbkn bkn list                       # knowledge networks you can see
+  openbkn bkn --help                     # every group has its own help
+
+COMMON TASKS
+  Answer a question about the business
+      openbkn bkn search <kn-id> "customer churn"
+      openbkn context search-schema <kn-id> "orders last quarter"
+      openbkn context query-object-instance <kn-id> --args '<json>'
+  Look at the underlying data
+      openbkn vega catalog list
+      openbkn resource find --name orders
+      openbkn resource query <resource-id>
+  Build a network from a data catalog
+      openbkn bkn create-from-catalog <catalog-id> --name "Supply chain"
+      openbkn vega dataset build <resource-id>          # index it
+  Edit a network as files
+      openbkn bkn pull <kn-id> ./kn && openbkn bkn validate ./kn && openbkn bkn push ./kn
+  Give an agent a new capability
+      openbkn skill register ./my-skill
+      openbkn toolbox create --name "Billing" && openbkn tool upload ./api.yaml --toolbox <id>
+  Work out why an answer was wrong
+      openbkn trace conversations list
+      openbkn trace diagnose <conversation-id> --llm
+
+GOOD TO KNOW
+  Add --json to any command for machine-readable output (the default view trims columns,
+  --full widens it). Ids come from list/search output — they are opaque, never guess one.
+  list/get/search only read; create, delete, publish and execute change the platform.
+  Multi-tenant deploys: --biz-domain picks the domain, --user switches saved logins.
+  \`openbkn call\` reaches any endpoint a command does not cover, auth injected. Look the
+  path up at https://openbkn-ai.github.io/bkn-foundry/ first — do not guess one.`,
+);
 
 // Apply grouped help to the whole tree (after all commands are registered).
 installGroupedHelp(program);

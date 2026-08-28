@@ -13,7 +13,7 @@ const int = (v: string) => Number.parseInt(v, 10);
 export function resourceCommand(): Command {
   const cmd = new Command("resource")
     .alias("res")
-    .description("Resources — list, find, get, enable, disable, query, delete");
+    .description("Tables and views behind a network: find, inspect, sample, enable, disable");
 
   cmd
     .command("list")
@@ -104,5 +104,5 @@ export function resourceCommand(): Command {
       printJson(await clientFrom(cmd).resource.delete(id), outputOptions(cmd));
     });
 
-  return group(cmd, "AI DATA PLATFORM");
+  return group(cmd, "DATA & KNOWLEDGE");
 }

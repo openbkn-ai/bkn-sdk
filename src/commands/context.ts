@@ -74,7 +74,7 @@ function printToolList(res: unknown, out: { json?: boolean; compact?: boolean })
 
 export function contextCommand(): Command {
   const cmd = new Command("context").description(
-    "Context loader (MCP) — schema discovery, instance query, skill recall",
+    "Ask a network questions (the MCP interface agents use)",
   );
 
   cmd
@@ -315,5 +315,5 @@ export function contextCommand(): Command {
       );
     });
 
-  return group(cmd, "AI DATA PLATFORM");
+  return group(cmd, "DATA & KNOWLEDGE");
 }

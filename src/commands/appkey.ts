@@ -44,7 +44,7 @@ function printNewKey(created: CreatedApiKey, out: OutputOptions): void {
 
 export function appkeyCommand(): Command {
   const appkey = new Command("appkey").description(
-    "AppKeys — user-issued long-lived credentials (bak_) for the Context Loader",
+    "Issue long-lived `bak_` keys for scripts and services",
   );
 
   appkey
@@ -118,5 +118,5 @@ export function appkeyCommand(): Command {
       printJson({ revoked: id }, outputOptions(cmd));
     });
 
-  return group(appkey, "AUTHENTICATION & CONFIG");
+  return group(appkey, "SIGN IN & SETTINGS");
 }

@@ -38,7 +38,7 @@ async function importLicenseFile(cmd: Command, file: string, receipt: boolean): 
 }
 
 export function adminCommand(): Command {
-  const admin = new Command("admin").description("Operator CLI: org, user, role, models, audit");
+  const admin = new Command("admin").description("Orgs, users, roles, license, audit log");
 
   // Operator auth = the same leaves as top-level `openbkn auth` (1:1 nest).
   registerAuthLeaves(admin.command("auth").description("Operator authentication"));
@@ -644,5 +644,5 @@ export function adminCommand(): Command {
       if (res.status >= 400) process.exitCode = 1;
     });
 
-  return group(admin, "OPERATOR");
+  return group(admin, "ADMINISTRATION");
 }

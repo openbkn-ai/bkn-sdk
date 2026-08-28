@@ -13,7 +13,9 @@ import { clientFrom, csv, outputOptions, readBody } from "./_shared.js";
 const int = (v: string) => Number.parseInt(v, 10);
 
 export function bknCommand(): Command {
-  const bkn = new Command("bkn").description("Knowledge networks — list, query, schema, instances");
+  const bkn = new Command("bkn").description(
+    "Knowledge networks: schema, metrics, search, import/export",
+  );
 
   bkn
     .command("list")
@@ -520,5 +522,5 @@ export function bknCommand(): Command {
       if (!result.valid) process.exitCode = 1;
     });
 
-  return group(bkn, "AI DATA PLATFORM");
+  return group(bkn, "DATA & KNOWLEDGE");
 }

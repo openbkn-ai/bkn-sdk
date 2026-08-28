@@ -332,7 +332,7 @@ export function registerAuthLeaves(cmd: Command): void {
 }
 
 export function authCommand(): Command {
-  const cmd = new Command("auth").description("Login, session, and token management");
+  const cmd = new Command("auth").description("Log in; the token is saved and reused. Start here.");
   registerAuthLeaves(cmd);
-  return group(cmd, "AUTHENTICATION & CONFIG");
+  return group(cmd, "SIGN IN & SETTINGS");
 }

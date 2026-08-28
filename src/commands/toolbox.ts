@@ -13,7 +13,7 @@ import { clientFrom, outputOptions } from "./_shared.js";
 const int = (v: string) => Number.parseInt(v, 10);
 
 export function toolboxCommand(): Command {
-  const cmd = new Command("toolbox").description("Agent toolbox lifecycle");
+  const cmd = new Command("toolbox").description("Toolboxes: group tools into one publishable box");
 
   cmd
     .command("list")
@@ -90,11 +90,13 @@ export function toolboxCommand(): Command {
       printJson(await clientFrom(cmd).toolboxes.import(file, opts.type), outputOptions(cmd));
     });
 
-  return group(cmd, "MODELS & SKILLS");
+  return group(cmd, "TOOLS & SKILLS");
 }
 
 export function toolCommand(): Command {
-  const cmd = new Command("tool").description("Tools inside a toolbox");
+  const cmd = new Command("tool").description(
+    "Tools in a box: upload an OpenAPI spec, enable, call",
+  );
 
   cmd
     .command("list")
@@ -191,5 +193,5 @@ export function toolCommand(): Command {
       );
     });
 
-  return group(cmd, "MODELS & SKILLS");
+  return group(cmd, "TOOLS & SKILLS");
 }

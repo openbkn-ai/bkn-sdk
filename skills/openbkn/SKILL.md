@@ -93,6 +93,21 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 
 **按需深入**：需要某命令的完整参数时运行 `openbkn <group> <sub> --help`，或读对应的速查参考。
 
+**本 CLI 暂未覆盖的平台能力**（别猜命令，直接用 `openbkn call` 打原始接口）：
+
+- Agent 运行时 `bkn-agent`（`/api/bkn-agent/v1/agents`、`/chat`、`/run`、`/tasks`、`/prompts`）
+- 执行工厂的算子、沙箱函数、MCP 注册面（`/api/agent-operator-integration/v1/operator|function|mcp`）
+- Skill 索引构建任务（`/api/agent-operator-integration/v1/skills/index/build`）
+- `openbkn call /api/<service>/v1/... [-X POST] [-d '<json>']` 会自动注入认证头
+- **接口文档在 https://openbkn-ai.github.io/bkn-foundry/** —— 按模块分组的交互式
+  OpenAPI（bkn-backend / context-loader / ontology-query / vega-backend /
+  execution-factory / agent-observability / bkn-agent）。先在那里查准路径和
+  请求体，再 `call`，不要猜路径
+
+另注：知识网络没有"整网构建"这回事，索引数据由 `openbkn vega dataset build <resource-id>` 的
+BuildTask 产出；`trace` 的 business-provenance 摘要（requests/interactions）自 foundry 0.1.4 起
+只在企业版注册，社区版部署上会 404。
+
 ## 详细参考（references/）
 
 | 主题 | 文件 |

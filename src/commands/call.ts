@@ -19,7 +19,7 @@ function collect(value: string, prev: string[]): string[] {
 export function callCommand(): Command {
   const cmd = new Command("call")
     .alias("curl")
-    .description("Call an API with curl-style flags and auto-injected auth headers")
+    .description("Call any platform API endpoint directly (auth added)")
     .argument("<url>", "API path (e.g. /api/...) or absolute URL")
     .option("-X, --request <method>", "HTTP method")
     .option("-H, --header <header>", 'extra header "Name: value" (repeatable)', collect, [])
@@ -69,5 +69,5 @@ export function callCommand(): Command {
       }
     });
 
-  return group(cmd, "AUTHENTICATION & CONFIG");
+  return group(cmd, "SIGN IN & SETTINGS");
 }
