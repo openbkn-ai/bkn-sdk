@@ -135,5 +135,5 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 - **不要预检**：直接执行目标命令，认证由 CLI 处理(token 模式不自动续期；`~/.bkn/` 凭据可用 refresh)。
 - **不要猜 business domain / 参数**：用 `--help`；列表为空时确认 `-bd`。
 - **破坏性操作**（`bkn`/`admin` 的 delete、`admin user reset-password`、Action 执行）作用于线上，执行前向用户确认。
-- `trace diagnose --llm`、`eval-set test --llm`、rubric/synthesizer 用**本地 `claude` CLI** 做判定；`claude` 不在 PATH 时自动降级为纯符号 / 跳过 `semantic_match`。
+- `trace diagnose --llm`、rubric/synthesizer 用**本地 `claude` CLI** 做判定；`claude` 不在 PATH 时自动降级为纯符号。
 - 宽表查询(`object-type query` / `context query-object-instance`)务必限制 `limit`、用分页与 `condition` 过滤，避免 JSON 截断。

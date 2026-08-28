@@ -20,10 +20,7 @@ openbkn
             object-type | relation-type | relation-type-paths | action-type | concept-group | metric
             action-execution | action-log | action-schedule | job
 
-  # decision agents
-  agent     list | personal-list | category-list | template-list | template-get
-            | get | get-by-key | create | update | delete | publish | unpublish
-            | chat | sessions | history | trace | skill
+  # tools an agent calls
   toolbox   create | list | publish | unpublish | delete | export | import
   tool      upload | list | enable | disable | execute | debug
 
@@ -60,11 +57,10 @@ openbkn — operate the BKN platform from the CLI
 USAGE
   openbkn [global flags] <command> <subcommand> [flags]
 
-AUTHENTICATION & CONFIG   auth · token (→ auth token) · config · call
-DECISION AGENT            agent · toolbox · tool
+AUTHENTICATION & CONFIG   auth · token (→ auth token) · config · call · appkey
 AI DATA PLATFORM          bkn · resource (res) · vega · context (context-loader)
-TRACE AI                  trace
-MODELS & SKILLS           model · skill
+BKN TRACE                 trace
+MODELS & SKILLS           model · skill · toolbox · tool
 OPERATOR                  org · user · role · audit
 FOUNDATION                explore · help
 
@@ -83,12 +79,12 @@ Grouped help is **recursive** — not just the top level. Every command,
 subcommand, and sub-subcommand carries its own:
 
 - top: `openbkn --help`
-- group: `openbkn agent --help`, `openbkn bkn --help` …
-- leaf: `openbkn agent chat --help`, `openbkn bkn object-type --help`
+- group: `openbkn bkn --help`, `openbkn vega --help` …
+- leaf: `openbkn bkn object-type --help`, `openbkn trace diagnose --help`
 - deep leaf: `openbkn bkn object-type query --help`, `openbkn bkn metric dry-run --help`
 
 The same grouped formatter applies at every level: a command's own help groups
-its subcommands by role (e.g. `agent` → DISCOVERY / CRUD / RUNTIME;
+its subcommands by role (e.g.
 `bkn` → LIFECYCLE / LOCAL DIRECTORY / SCHEMA / INSTANCES / EXECUTION). One
 formatter reads a `group` tag off each command — no per-command help strings.
 
