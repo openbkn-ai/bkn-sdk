@@ -30,7 +30,6 @@ import type { RequestContext } from "../../src/types.js";
 const ctx: RequestContext = {
   baseUrl: "https://demo.example.com",
   token: "t",
-  businessDomain: "bd_public",
   insecure: false,
 };
 

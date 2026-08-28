@@ -16,7 +16,6 @@ import type { RequestContext } from "../../src/types.js";
 const ctx: RequestContext = {
   baseUrl: "https://demo.example.com",
   token: "t",
-  businessDomain: "bd_public",
   insecure: false,
   trace: {
     requestId: "req_context_loader_001",
@@ -362,7 +361,6 @@ describe("managed MCP tool calls", () => {
       issued_at: "2026-08-02T06:00:00Z",
       owner: {
         tenant_id: "tenant-1",
-        business_domain_id: "bd_public",
         application_principal_id: "openbkn-sdk",
         effective_subject_type: "user",
         effective_subject_id: "user-1",

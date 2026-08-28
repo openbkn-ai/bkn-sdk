@@ -25,7 +25,6 @@
     "bkn list": ["entries", "total_count"],
     "bkn get": [
       "branch",
-      "business_domain",
       "color",
       "comment",
       "create_time",
@@ -47,7 +46,6 @@
     "bkn action-type get": ["entries"],
     "bkn stats": [
       "branch",
-      "business_domain",
       "color",
       "comment",
       "create_time",
@@ -208,7 +206,6 @@
     ],
     "skill list": ["data", "has_next", "has_prev", "page", "page_size", "total", "total_pages"],
     "skill get": [
-      "business_domain_id",
       "category",
       "category_name",
       "create_time",
@@ -224,7 +221,6 @@
     ],
     "skill market": ["data", "has_next", "has_prev", "page", "page_size", "total", "total_pages"],
     "skill market-get": [
-      "business_domain_id",
       "category",
       "category_name",
       "create_time",

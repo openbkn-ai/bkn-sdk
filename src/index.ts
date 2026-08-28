@@ -8,11 +8,7 @@
  */
 export { createClient, type BknClient } from "./client.js";
 export type { ClientOptions, RequestContext } from "./types.js";
-export {
-  DEFAULT_BUSINESS_DOMAIN,
-  DEFAULT_LIST_LIMIT,
-  DEFAULT_QUERY_LIMIT,
-} from "./types.js";
+export { DEFAULT_LIST_LIMIT, DEFAULT_QUERY_LIMIT } from "./types.js";
 export { HttpError, InputError, NonJsonResponseError, ToolError } from "./utils/errors.js";
 // The shape `kn.createFromCatalog` stamps onto a failure
 // that left a knowledge network behind. Documented as part of what they throw,

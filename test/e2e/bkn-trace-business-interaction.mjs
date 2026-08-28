@@ -6,7 +6,7 @@ import { createClient } from "../../dist/index.js";
 const question = "6月份有哪些需求预测单，列出来，需求总量是多少？";
 const baseUrl = process.env.BKN_BASE_URL ?? "http://localhost";
 const token = process.env.BKN_TOKEN;
-const businessDomain = requiredEnv("BKN_BUSINESS_DOMAIN");
+const tenantId = requiredEnv("BKN_TENANT_ID");
 const accountId = requiredEnv("BKN_ACCOUNT_ID");
 const accountType = process.env.BKN_ACCOUNT_TYPE ?? "user";
 const knId = process.env.BKN_KN_ID ?? "supplychain_hd0202";
@@ -89,7 +89,7 @@ const session = evidenceClient.trace.createSession({
     traceparent: evidenceIdentity.traceparent,
     "bkn.request.id": evidenceIdentity.requestId,
     "bkn.conversation.id": conversationId,
-    business_domain: businessDomain,
+    "bkn.tenant.id": tenantId,
     "bkn.account.id": accountId,
     "bkn.account.type": accountType,
   },
@@ -188,7 +188,6 @@ await session.flush();
 const queryClient = createClient({
   baseUrl,
   ...(token ? { token } : {}),
-  businessDomain,
   insecure: envFlag("BKN_INSECURE"),
 });
 const expectedRequestIds = [
@@ -249,7 +248,6 @@ function operationClient(name) {
   return createClient({
     baseUrl,
     ...(token ? { token } : {}),
-    businessDomain,
     insecure: envFlag("BKN_INSECURE"),
     trace: {
       requestId: `req_e2e_${runId}_${name}`,
@@ -282,7 +280,7 @@ function artifact(type, content, businessRefs) {
     observed_at: new Date().toISOString(),
     content_hash: hash(content),
     content,
-    business_domain: businessDomain,
+    "bkn.tenant.id": tenantId,
     "bkn.account.id": accountId,
     "bkn.account.type": accountType,
     initiator: `account:${accountId}`,

@@ -17,10 +17,9 @@ describe("--dry-run preview", () => {
     const req = preview({
       method: "GET",
       url: "https://x/api/y",
-      headers: { authorization: "Bearer ory_at_secret", "x-business-domain": "bd_public" },
+      headers: { authorization: "Bearer ory_at_secret" },
     });
     expect(req.headers.authorization).toBe("<redacted>");
-    expect(req.headers["x-business-domain"]).toBe("bd_public");
   });
 
   it("redacts a credential carried as a body field, not only as a header", () => {

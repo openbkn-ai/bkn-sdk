@@ -69,7 +69,7 @@ const VERB_SECTIONS: Array<[RegExp, string]> = [
     "RUN",
   ],
   [
-    /^(create|update|delete|add|edit|remove|set|register|upload|publish|unpublish|republish|import|activate|login|logout|use|switch|change-password|enable|disable|push|assign-role|revoke-role|add-member|remove-member|reset-password|grant-perm|revoke-perm|add-members|remove-members|set-status|regenerate|revoke|set-bd|list-bd|build-start|build-stop|build-delete|publish-history|update-metadata|update-package|create-from-catalog|export-config)$/,
+    /^(create|update|delete|add|edit|remove|set|register|upload|publish|unpublish|republish|import|activate|login|logout|use|switch|change-password|enable|disable|push|assign-role|revoke-role|add-member|remove-member|reset-password|grant-perm|revoke-perm|add-members|remove-members|set-status|regenerate|revoke|build-start|build-stop|build-delete|publish-history|update-metadata|update-package|create-from-catalog|export-config)$/,
     "WRITE",
   ],
 ];

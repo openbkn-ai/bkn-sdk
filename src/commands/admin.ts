@@ -641,11 +641,10 @@ export function adminCommand(): Command {
           baseUrl: g.baseUrl,
           token: g.token,
           user: g.user,
-          businessDomain: g.bizDomain,
           insecure: g.insecure,
         }),
         url,
-        { method: opts.request, header: opts.header, data: opts.data, businessDomain: g.bizDomain },
+        { method: opts.request, header: opts.header, data: opts.data },
       );
       const out = outputOptions(cmd);
       try {

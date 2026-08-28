@@ -401,10 +401,7 @@ async function openSession(
  * request joins.
  */
 function identityOf(ctx: RequestContext): string {
-  return createHash("sha256")
-    .update(`${ctx.token}\0${ctx.businessDomain}`)
-    .digest("hex")
-    .slice(0, 16);
+  return createHash("sha256").update(ctx.token).digest("hex").slice(0, 16);
 }
 
 function sessionKey(ctx: RequestContext, knId: string): string {

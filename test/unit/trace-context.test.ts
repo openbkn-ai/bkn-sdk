@@ -8,7 +8,6 @@ import type { RequestContext } from "../../src/types.js";
 const ctx: RequestContext = {
   baseUrl: "https://demo.example.com",
   token: "SECRET",
-  businessDomain: "bd_public",
   insecure: false,
   trace: {
     requestId: "req_test_001",

@@ -50,7 +50,6 @@ export interface TokenConfig {
 
 /** Per-platform, per-user non-auth settings. */
 export interface PlatformConfig {
-  businessDomain?: string;
   /**
    * The last conversation the managed lifecycle opened for this identity, so
    * consecutive commands file their evidence under one thread instead of a new
@@ -202,7 +201,14 @@ export function readPlatformConfig(
   userId = activeUserId(baseUrl),
 ): PlatformConfig {
   if (!userId) return {};
-  return readJson<PlatformConfig>(join(userDir(baseUrl, userId), "config.json")) ?? {};
+  const stored = readJson<Record<string, unknown>>(join(userDir(baseUrl, userId), "config.json"));
+  if (!stored) return {};
+  return {
+    ...(typeof stored.conversationId === "string" ? { conversationId: stored.conversationId } : {}),
+    ...(typeof stored.conversationOpenedAt === "string"
+      ? { conversationOpenedAt: stored.conversationOpenedAt }
+      : {}),
+  };
 }
 
 export function writePlatformConfig(baseUrl: string, config: PlatformConfig): void {

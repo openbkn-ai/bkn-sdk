@@ -54,7 +54,6 @@ type: knowledge_network
 id: {network_id}
 name: {显示名称}
 tags: [tag1, tag2]               # 可选
-business_domain: {domain}        # 可选
 ---
 ```
 

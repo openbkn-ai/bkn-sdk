@@ -26,7 +26,6 @@ import { HttpError, InputError } from "../../src/utils/errors.js";
 const ctx: RequestContext = {
   baseUrl: "https://demo.example.com",
   token: "t",
-  businessDomain: "bd_public",
   insecure: false,
 };
 

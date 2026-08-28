@@ -41,7 +41,6 @@ export interface EvidenceTraceContext {
   "bkn.request.id": string;
   "bkn.conversation.id"?: string;
   "bkn.tenant.id"?: string;
-  business_domain?: string;
   "bkn.account.id": string;
   "bkn.account.type": string;
 }
@@ -118,7 +117,6 @@ export interface EvidenceArtifact {
   content?: unknown;
   snapshot_ref?: string;
   "bkn.tenant.id"?: string;
-  business_domain?: string;
   "bkn.account.id": string;
   "bkn.account.type": string;
   initiator?: string;
@@ -150,7 +148,6 @@ export interface RequestSummary {
   completed_at?: string;
   initiator?: string;
   agent_or_app?: string;
-  business_domain?: string;
   knowledge_networks?: string[];
   question_preview?: string;
   result_preview?: string;
@@ -175,7 +172,6 @@ export interface TraceExecutionSummary {
   agent_name?: string;
   application_principal_id?: string;
   effective_subject_id?: string;
-  business_domain?: string;
   question_preview?: string;
   result_preview?: string;
   root_service?: string;
@@ -234,7 +230,6 @@ export interface RequestSummaryQuery {
   to?: string;
   status?: string;
   agentOrApp?: string;
-  businessDomain?: string;
   conversationId?: string;
   interactionId?: string;
   knowledgeNetwork?: string;
@@ -700,7 +695,6 @@ function summaryQuery(query: RequestSummaryQuery): Record<string, string | numbe
   if (query.to) result.to = query.to;
   if (query.status) result.status = query.status;
   if (query.agentOrApp) result.agent_or_app = query.agentOrApp;
-  if (query.businessDomain) result.business_domain = query.businessDomain;
   if (query.conversationId) result.conversation_id = query.conversationId;
   if (query.interactionId) result.interaction_id = query.interactionId;
   if (query.knowledgeNetwork) result.knowledge_network = query.knowledgeNetwork;

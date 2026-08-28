@@ -15,7 +15,6 @@ import { HttpError } from "../../src/utils/errors.js";
 const ctx: RequestContext = {
   baseUrl: "https://demo.example.com",
   token: "token",
-  businessDomain: "bd_supply_chain",
   insecure: false,
 };
 
@@ -119,7 +118,6 @@ describe("traceLifecycleApi conversations", () => {
 
     const headers = new Headers(ensure[1].headers);
     expect(headers.get("authorization")).toBe("Bearer token");
-    expect(headers.get("x-business-domain")).toBe("bd_supply_chain");
     expect(headers.get("content-type")).toBe("application/json");
   });
 });

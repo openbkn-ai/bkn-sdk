@@ -58,10 +58,8 @@ Requires the `openbkn` CLI from `@openbkn/bkn-sdk` (`npm install -g @openbkn/bkn
 - **BKN validation** — If workflow step 12 (`openbkn bkn validate <dir>`) **already succeeded** for this directory, **do not** repeat validate before `push` unless you changed `.bkn` files. If you have **not** validated yet, run `validate` before `push`.
 
 ```bash
-openbkn bkn push <dir> [--branch main] [-bd <business-domain>]
+openbkn bkn push <dir> [--branch main]
 ```
-
-`-bd` / `--biz-domain` is optional. If you omit it, the CLI resolves the business domain automatically (saved platform config in `~/.bkn`, otherwise `bd_public`).
 
 Export: `openbkn bkn pull <kn-id> [<dir>]`. More subcommands: `openbkn bkn --help` (see the openbkn skill if loaded).
 

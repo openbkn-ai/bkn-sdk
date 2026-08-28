@@ -39,7 +39,6 @@ function freshCtx(extra: Partial<RequestContext> = {}): RequestContext {
   return {
     baseUrl: `https://deploy-${hostSeq}.example.com`,
     token: "t",
-    businessDomain: "bd_public",
     insecure: false,
     ...extra,
   };

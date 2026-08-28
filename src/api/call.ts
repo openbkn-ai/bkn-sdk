@@ -20,8 +20,6 @@ export interface RawCallOptions {
   data?: string;
   /** Multipart fields: "key=value" or "key=@/path/to/file". */
   form?: string[];
-  /** Override business domain for this call. */
-  businessDomain?: string;
   verbose?: boolean;
   timeoutMs?: number;
 }
@@ -81,8 +79,7 @@ export async function rawCall(
 
   const method = opts.method ?? (body !== undefined ? "POST" : "GET");
   // Headers carry the bearer token, so rebuild them after a refresh swaps it.
-  const headersFor = () =>
-    buildHeaders({ ...ctx, businessDomain: opts.businessDomain ?? ctx.businessDomain }, extra);
+  const headersFor = () => buildHeaders(ctx, extra);
 
   if (opts.verbose) process.stderr.write(`> ${method} ${url}\n`);
 
