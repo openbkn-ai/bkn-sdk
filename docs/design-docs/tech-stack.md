@@ -36,7 +36,7 @@ This is one small shared formatter module, not per-command help strings. It appl
 
 ## Rejected / out of scope
 
-- **ink / react** — dropped. No complex chat TUI is needed; `agent chat` streams plain text. Cuts a heavy dep tree and keeps the SDK light to import.
+- **ink / react** — dropped. No complex chat TUI is needed; `model llm chat` streams plain text. Cuts a heavy dep tree and keeps the SDK light to import.
 - **inquirer** — `@clack/prompts` is lighter and prettier for the few interactive flows.
 - **yargs** — would minimize user-side migration but forces rewriting the admin tree; commander chosen instead.
 - **citty / cac** — leaner/more-modern CLI parsers, but smaller ecosystems and more migration risk; commander's maturity wins here.

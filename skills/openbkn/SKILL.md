@@ -8,7 +8,7 @@ description: >-
   rerank）、Skill 注册（zip 注册/下载/安装 + 生命周期）、Toolbox/Tool（上传、
   导入导出、调用）、BKN Trace（第三方 Agent 受管
   Conversation / Interaction / Operation、拉取 spans、用符号
-  规则 + LLM rubric 判定诊断一条 trace、scan、eval-set 构建/测试、schema 校验）、
+  规则 + LLM rubric 判定诊断一条 trace、scan、eval-set 构建、schema 校验）、
   以及运营面（`openbkn admin`：组织/用户/角色 CRUD、审计、模型管理）与认证
   （token + OAuth 密码/浏览器）。
   当用户提到：知识网络 / 知识图谱 / 对象类 / 关系 / 行动 / 指标 metric /

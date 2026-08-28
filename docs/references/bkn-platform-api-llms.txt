@@ -7,7 +7,6 @@ auth flows, and response examples here. Append-only; link from product-specs.
 Backend services (from the legacy SDK / operator CLI — verify against live API)
 -------------------------------------------------------------------------------
 - knowledge networks / BKN engine
-- decision agents + chat / conversations
 - datasources
 - model-factory: mf-model-manager (CRUD), mf-model-api (chat / small-model)
 - skills, toolboxes (execution factory)
