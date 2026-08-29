@@ -15,7 +15,9 @@ import { callCommand } from "./commands/call.js";
 import { configCommand } from "./commands/config.js";
 import { contextCommand } from "./commands/context.js";
 import { describeCommand } from "./commands/describe.js";
+import { functionCommand } from "./commands/function.js";
 import { modelCommand } from "./commands/model.js";
+import { operatorCommand } from "./commands/operator.js";
 import { resourceCommand } from "./commands/resource.js";
 import { skillCommand } from "./commands/skill.js";
 import { toolCommand, toolboxCommand } from "./commands/toolbox.js";
@@ -64,6 +66,8 @@ export function buildProgram(): Command {
   program.addCommand(skillCommand());
   program.addCommand(toolboxCommand());
   program.addCommand(toolCommand());
+  program.addCommand(functionCommand());
+  program.addCommand(operatorCommand());
   program.addCommand(traceCommand());
   program.addCommand(adminCommand());
   program.addCommand(callCommand());
@@ -89,6 +93,8 @@ export function buildProgram(): Command {
     Edit as files        bkn pull <kn-id> ./kn  ->  bkn validate ./kn  ->  bkn push ./kn
     Ship a capability    skill register ./my-skill; toolbox create --name "<n>"  ->
                          tool upload ./api.yaml --toolbox <id>  ->  toolbox publish <id>
+    Ship some code       function run ./add.py  ->  operator register ./add.py --name add
+                         --publish  ->  operator convert-to-tool <id> --toolbox <box-id>
     Debug an answer      trace conversations list  ->  trace diagnose <conversation-id> --llm
 
   GOOD TO KNOW
