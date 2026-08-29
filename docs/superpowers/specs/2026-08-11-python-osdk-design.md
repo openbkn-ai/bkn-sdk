@@ -71,7 +71,9 @@ dict-iteration-order dependence.
 Schema comes from **ontology-manager REST** — the authoritative schema layer, which needs
 no managed lifecycle session:
 
-- `GET /api/ontology-manager/v1/knowledge-networks/{id}` — network metadata.
+- `GET /api/bkn-backend/v1/knowledge-networks/{id}` — network metadata. The
+  `/api/ontology-manager/v1` prefix still answers but is a monorepo-refactor
+  alias, kept only until external callers move off it.
 - `GET …/{id}/object-types?branch=main&limit=-1` — [`api/knowledge-networks.ts:251`](../../../src/api/knowledge-networks.ts#L251).
 - `GET …/{id}/relation-types?branch=main&limit=-1` — same file, `listRelationTypes`.
 
@@ -677,9 +679,11 @@ Two details decide whether it is pleasant to use:
 Palantir's OSDK does support writes, and its model is instructive: **no direct property
 assignment**. Every mutation goes through a typed Action, generated from the ontology's action
 definitions. BKN has the same shape — `action_type` is a first-class schema entity with a
-declared input schema, retrievable via
-[`getActionTypeInputs`](../../../src/api/knowledge-networks.ts#L197) and executed through
-`POST …/action-types/{id}/execute`.
+declared input schema, carried by `bkn action-type get` and executed through
+`POST …/action-types/{id}/execute`. (An earlier draft named
+`getActionTypeInputs` / `/action-types/{id}/inputs`; that route exists in no
+foundry service and was removed from the TypeScript client — the input schema
+comes back from the action type itself.)
 
 Deferred here only because the first release is scoped to reads. Nothing in the design has to
 change to admit it — it is a fourth generated module:

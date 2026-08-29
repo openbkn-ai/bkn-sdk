@@ -8,10 +8,14 @@ core takes a `KnSchema` and nothing else — no client, no credentials — which
 what lets the same emitter run from the CLI, from a test fixture, and one day
 from the backend.
 
-Schema comes from **ontology-manager REST**, the authoritative schema layer,
-rather than from the MCP `get_kn_detail` tool: that one is the agent-facing
+Schema comes from **bkn-backend REST**, the authoritative schema layer, rather
+than from the MCP `get_kn_detail` tool: that one is the agent-facing
 progressive-disclosure surface, subject to dedup and the lifecycle contract, and
 is the wrong source of truth for codegen.
+
+The canonical prefix is `/api/bkn-backend/v1`. `/api/ontology-manager/v1` still
+answers on the deploys reachable so far, but foundry's API README documents it
+as a monorepo-refactor alias kept only until external callers move off it.
 """
 
 from __future__ import annotations
@@ -152,11 +156,11 @@ def fingerprint(schema: KnSchema) -> str:
 
 # ---- fetching and parsing ---------------------------------------------------
 
-ONTOLOGY_BASE = "/api/ontology-manager/v1/knowledge-networks"
+ONTOLOGY_BASE = "/api/bkn-backend/v1/knowledge-networks"
 
 
 def fetch_schema(ctx: Context, kn_id: str, branch: str = "main") -> KnSchema:
-    """Read a network's schema from ontology-manager REST.
+    """Read a network's schema from bkn-backend REST.
 
     Two list calls plus the network itself, all with `limit=-1` (the backend's
     "everything"). Everything is fetched before anything is parsed, so a failure

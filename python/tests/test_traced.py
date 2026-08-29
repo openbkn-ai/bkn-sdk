@@ -50,8 +50,15 @@ class Tournaments(ObjectType):
 class Deploy:
     """A stub speaking the MCP transport, recording every call it serves."""
 
-    def __init__(self, *, sse: bool = False, tools: tuple[str, ...] = ()) -> None:
+    def __init__(
+        self,
+        *,
+        sse: bool = False,
+        tools: tuple[str, ...] = (),
+        declares_conversation_mode: bool = False,
+    ) -> None:
         self.sse = sse
+        self.declares_conversation_mode = declares_conversation_mode
         self.tools = tools or ("bkn_start_interaction", "bkn_finish_interaction")
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.rpc_methods: list[str] = []
@@ -60,7 +67,7 @@ class Deploy:
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/mcp/info"):
-            return httpx.Response(200, json={"tools": [{"name": n} for n in self.tools]})
+            return httpx.Response(200, json={"tools": [self._tool(n) for n in self.tools]})
         if not request.url.path.endswith("/mcp"):
             return httpx.Response(200, json={"datas": []})  # the REST read path
 
@@ -76,6 +83,22 @@ class Deploy:
         arguments = body["params"]["arguments"]
         self.calls.append((name, arguments))
         return self._respond(name)
+
+    def _tool(self, name: str) -> dict[str, Any]:
+        """A catalog entry, with the start tool's schema where it declares one."""
+        if name != "bkn_start_interaction" or not self.declares_conversation_mode:
+            return {"name": name}
+        return {
+            "name": name,
+            "input_schema": {
+                "properties": {
+                    "question": {"type": "string"},
+                    "agent_name": {"type": "string"},
+                    "conversation_mode": {"enum": ["new", "continue"]},
+                },
+                "required": ["conversation_mode", "question", "agent_name"],
+            },
+        }
 
     def _respond(self, name: str) -> httpx.Response:
         if name == "bkn_start_interaction":
@@ -376,6 +399,45 @@ def test_a_caller_owned_turn_is_joined_rather_than_replaced(
     }
 
 
+def test_conversation_mode_is_sent_only_where_the_tool_declares_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two builds advertise the same tool names and disagree on the arguments —
+    one declares the field required, the other never published it, and this
+    contract rejects an argument it does not know."""
+    declaring = Deploy(declares_conversation_mode=True)
+    _serve(monkeypatch, declaring)
+    monkeypatch.setenv("BKN_BASE_URL", PLATFORM)
+    monkeypatch.setenv("BKN_TOKEN", "t-1")
+
+    with session(traced=True):
+        Tournaments.objects().page(limit=1)
+
+    assert tool_calls(declaring, "bkn_start_interaction")[0]["conversation_mode"] == "new"
+
+
+def test_joining_a_conversation_continues_it_rather_than_starting_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    declaring = Deploy(declares_conversation_mode=True)
+    _serve(monkeypatch, declaring)
+    monkeypatch.setenv("BKN_BASE_URL", PLATFORM)
+    monkeypatch.setenv("BKN_TOKEN", "t-1")
+    monkeypatch.setenv("BKN_CONVERSATION_ID", "host-conv")
+
+    with session(traced=True):
+        Tournaments.objects().page(limit=1)
+
+    assert tool_calls(declaring, "bkn_start_interaction")[0]["conversation_mode"] == "continue"
+
+
+def test_a_deploy_that_never_published_the_field_is_not_sent_it(deploy: Deploy) -> None:
+    with session(traced=True):
+        Tournaments.objects().page(limit=1)
+
+    assert "conversation_mode" not in tool_calls(deploy, "bkn_start_interaction")[0]
+
+
 def test_a_caller_owned_turn_is_never_finished(
     deploy: Deploy, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -401,9 +463,6 @@ def test_a_caller_named_conversation_is_joined_not_replaced(
 
     started = tool_calls(deploy, "bkn_start_interaction")[0]
     assert started["conversation_id"] == "host-conv"
-    # The display name is fixed at creation; relabelling their conversation would
-    # rewrite the caller's attribution.
-    assert "agent_name" not in started
 
 
 def test_our_own_turn_is_still_finished(deploy: Deploy) -> None:

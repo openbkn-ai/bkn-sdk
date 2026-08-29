@@ -24,7 +24,7 @@ from pathlib import Path
 from bkn_osdk import http, resolve_context
 
 FIXTURE_DIR = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "schema"
-ONTOLOGY_BASE = "/api/ontology-manager/v1/knowledge-networks"
+ONTOLOGY_BASE = "/api/bkn-backend/v1/knowledge-networks"
 
 
 def main(argv: list[str] | None = None) -> int:

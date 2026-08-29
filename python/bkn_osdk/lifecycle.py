@@ -48,6 +48,23 @@ FINISH_TOOL = "bkn_finish_interaction"
 CREATE_TOOL = "bkn_create_conversation"
 
 DEFAULT_QUESTION = "bkn-osdk read"
+#: Display-only attribution, so an SDK-opened turn is identifiable in Trace.
+AGENT_NAME = "bkn-osdk"
+
+
+@dataclass(frozen=True)
+class Catalog:
+    """What a deploy's tool catalog says about opening a turn.
+
+    Two builds advertise the same tool names and still disagree on the
+    arguments: one declares `conversation_mode` required on the start tool, the
+    other never published it. Only the tool's own schema separates them, so the
+    probe keeps it rather than throwing it away with the names.
+    """
+
+    tools: frozenset[str]
+    #: True when the start tool declares `conversation_mode`.
+    declares_conversation_mode: bool = False
 
 
 @dataclass
@@ -75,7 +92,7 @@ _current: ContextVar[dict[str, Interaction] | None] = ContextVar(
     "bkn_osdk_interactions", default=None
 )
 _lock = threading.Lock()
-_catalogs: dict[str, frozenset[str]] = {}
+_catalogs: dict[str, Catalog] = {}
 
 
 def current_interaction(ctx: Context, kn_id: str) -> Interaction:
@@ -116,7 +133,8 @@ def _start(ctx: Context, kn_id: str, question: str = DEFAULT_QUESTION) -> Intera
     if ctx.conversation_id and ctx.interaction_id:
         return Interaction(kn_id, ctx.conversation_id, ctx.interaction_id, caller_owned=True)
 
-    tools = _tools(ctx)
+    catalog = _catalog(ctx)
+    tools = catalog.tools
     if START_TOOL not in tools:
         raise BknError(
             f"This deploy's tool catalog has no {START_TOOL}, so no managed interaction can "
@@ -136,13 +154,18 @@ def _start(ctx: Context, kn_id: str, question: str = DEFAULT_QUESTION) -> Intera
         START_TOOL,
         {
             "question": question,
-            # The display name is fixed when a conversation is created, so it
-            # belongs only on the call that creates one — relabelling a caller's
-            # conversation would rewrite their attribution.
+            #: Display-only, but the only thing separating a turn this SDK
+            #: opened from a real agent's in a Trace listing.
+            "agent_name": AGENT_NAME,
+            **({"conversation_id": ctx.conversation_id} if ctx.conversation_id else {}),
+            # Sent only where the tool declares it: this contract validates
+            # strictly, and a deploy may reject an argument it never published.
+            # An unreadable catalog answers "no" — send what has always worked
+            # rather than guess a new field in.
             **(
-                {"conversation_id": ctx.conversation_id}
-                if ctx.conversation_id
-                else {"agent_name": "bkn-osdk"}
+                {"conversation_mode": "continue" if ctx.conversation_id else "new"}
+                if catalog.declares_conversation_mode
+                else {}
             ),
         },
     )
@@ -241,23 +264,43 @@ def finish(ctx: Context, interaction: Interaction, outcome: str, answer: str | N
         return
 
 
-def _tools(ctx: Context) -> frozenset[str]:
-    """The deploy's tool names, fetched once per process per deploy."""
+def _catalog(ctx: Context) -> Catalog:
+    """The deploy's tool catalog, read once per process per deploy."""
     with _lock:
         cached = _catalogs.get(ctx.base_url)
     if cached is not None:
         return cached
 
-    catalog = tool_catalog(ctx)
-    tools = catalog.get("tools") if isinstance(catalog, dict) else None
-    names = frozenset(
-        tool["name"]
-        for tool in (tools or [])
-        if isinstance(tool, dict) and isinstance(tool.get("name"), str)
+    payload = tool_catalog(ctx)
+    entries = payload.get("tools") if isinstance(payload, dict) else None
+    tools = [entry for entry in (entries or []) if isinstance(entry, dict)]
+    names = frozenset(entry["name"] for entry in tools if isinstance(entry.get("name"), str))
+    catalog = Catalog(
+        tools=names,
+        declares_conversation_mode=any(
+            entry.get("name") == START_TOOL and _declares(entry, "conversation_mode")
+            for entry in tools
+        ),
     )
     with _lock:
-        _catalogs[ctx.base_url] = names
-    return names
+        _catalogs[ctx.base_url] = catalog
+    return catalog
+
+
+def _declares(tool: dict[str, Any], field: str) -> bool:
+    """Whether a tool's published input schema names this argument.
+
+    Keyed on `properties` rather than `required`: a field the deploy published
+    is one it knows, and sending a published-but-optional argument is safe where
+    sending an unpublished one is not. The platform is moving the other way
+    anyway — a build that listed `conversation_mode` as optional now lists it as
+    required.
+    """
+    schema = tool.get("input_schema") or tool.get("inputSchema")
+    if not isinstance(schema, dict):
+        return False
+    properties = schema.get("properties")
+    return isinstance(properties, dict) and field in properties
 
 
 def _reset_for_tests() -> None:
