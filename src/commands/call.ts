@@ -6,7 +6,7 @@ import { Command } from "commander";
 import { rawCall } from "../api/call.js";
 import { lifecycleHint } from "../api/http.js";
 import { resolveContext } from "../config/resolve.js";
-import { group } from "../help/grouped-help.js";
+import { group, guide } from "../help/grouped-help.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
 import { outputOptions, traceOptionsFrom } from "./_shared.js";
@@ -19,9 +19,7 @@ function collect(value: string, prev: string[]): string[] {
 export function callCommand(): Command {
   const cmd = new Command("call")
     .alias("curl")
-    .description(
-      "Call any platform API endpoint directly (auth added) — paths and request bodies are documented at https://openbkn-ai.github.io/bkn-foundry/",
-    )
+    .description("Call any platform API endpoint directly (auth added)")
     .argument("<url>", "API path (e.g. /api/...) or absolute URL")
     .option("-X, --request <method>", "HTTP method")
     .option("-H, --header <header>", 'extra header "Name: value" (repeatable)', collect, [])
@@ -71,5 +69,17 @@ export function callCommand(): Command {
       }
     });
 
-  return group(cmd, "SIGN IN & SETTINGS");
+  guide(
+    cmd,
+    `WHEN TO USE THIS
+  Anything the named commands do not cover: services with no command group yet
+  (bkn-agent, execution-factory operators and sandbox functions, MCP registration,
+  skill index builds), and endpoints newer than this CLI.
+
+FINDING THE PATH
+  Every service's API is documented at https://openbkn-ai.github.io/bkn-foundry/ —
+  read the path and request body there rather than guessing. Auth, business domain
+  and TLS flags are injected the same way as for any other command.`,
+  );
+  return group(cmd, "RAW API");
 }

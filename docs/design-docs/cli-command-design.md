@@ -57,12 +57,13 @@ openbkn — operate the BKN platform from the CLI
 USAGE
   openbkn [global flags] <command> <subcommand> [flags]
 
-SIGN IN & SETTINGS   auth · config · appkey · call
+SIGN IN & SETTINGS   auth · config · appkey
 DATA & KNOWLEDGE     bkn · vega · resource (res) · context (context-loader)
 MODELS               model
 TOOLS & SKILLS       skill · toolbox · tool
 TRACING              trace
 ADMINISTRATION       admin · explore
+RAW API              call (curl)
 
 Then, before FLAGS: FIRST STEPS · COMMON TASKS · GOOD TO KNOW · NOT HERE YET
 

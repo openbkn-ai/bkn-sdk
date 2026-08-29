@@ -24,7 +24,7 @@ tools; this records what the rewrite picks and why. Update here if a choice chan
 The legacy help is **not** commander's default flat list — it groups
 commands under task-shaped section headers (`SIGN IN & SETTINGS`,
 `DATA & KNOWLEDGE`, `MODELS`, `TOOLS & SKILLS`, `TRACING`,
-`ADMINISTRATION`) and adds `USAGE` / `FLAGS` /
+`ADMINISTRATION`, `RAW API`) and adds `USAGE` / `FLAGS` /
 `ENVIRONMENT` / `EXAMPLES` / `LEARN MORE` blocks. To keep `openbkn --help` equivalent,
 override commander's help via `Command.configureHelp()` / a custom `formatHelp`:
 

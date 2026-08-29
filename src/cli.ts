@@ -55,7 +55,6 @@ program
 program.addCommand(authCommand());
 program.addCommand(configCommand());
 program.addCommand(appkeyCommand());
-program.addCommand(callCommand());
 program.addCommand(bknCommand());
 program.addCommand(vegaCommand());
 program.addCommand(resourceCommand());
@@ -67,6 +66,7 @@ program.addCommand(toolCommand());
 program.addCommand(traceCommand());
 program.addCommand(adminCommand());
 program.addCommand(exploreCommand());
+program.addCommand(callCommand());
 
 // Read after the command list, before FLAGS: how to start, what a typical job
 // looks like end to end, and which platform capabilities have no command yet.
