@@ -588,6 +588,11 @@ EDITING SCHEMA AS FILES
   pull <kn-id> ./dir  ->  edit  ->  validate ./dir  ->  push ./dir
   \`validate\` is offline and catches structure errors before the upload.
 
+REQUEST BODIES
+  create/update take a definition; query/execute/dry-run take a query. Both are documented
+  at https://openbkn-ai.github.io/bkn-foundry/ — definitions under bkn-backend, reads and
+  executions under ontology-query. Each command's --body flag names its own module.
+
 CREATING FROM DATA
   create-from-catalog <catalog-id> --name "<n>" builds a network from a Vega catalog,
   then \`openbkn vega dataset build <resource-id>\` produces the index. There is no

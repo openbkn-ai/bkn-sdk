@@ -386,7 +386,8 @@ DIAGNOSING
 
 MANAGED LIFECYCLE
   conversations / interactions / operations / receipts are the write side: an agent opens an
-  interaction, reports operations, then completes it. Those bodies are 3.0 manifests.`,
+  interaction, reports operations, then completes it. Those bodies are 3.0 manifests,
+  documented at https://openbkn-ai.github.io/bkn-foundry/ (agent-observability).`,
   );
   return group(cmd, "TRACING");
 }
