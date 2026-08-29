@@ -401,10 +401,21 @@ export function validateMetric(ctx: RequestContext, knId: string, body: unknown)
   });
 }
 
-export interface SemanticSearchOptions {
-  mode?: string;
-  maxConcepts?: number;
-  returnQueryUnderstanding?: boolean;
+export interface SearchInstanceOptions {
+  /** Restrict recall to these concept groups. */
+  conceptGroups?: string[];
+  /** Pin recall to these object-type ids (ids, not names). */
+  objectTypes?: string[];
+  /** Drop these object-type ids from recall; wins over `objectTypes` on overlap. */
+  excludeObjectTypes?: string[];
+  /** How many object types may take part. Each one costs a downstream query. */
+  maxObjectTypes?: number;
+  /** How many instances to return per object type. */
+  maxInstancesPerType?: number;
+  /** Re-rank hits with a cross-encoder; silently skipped if no rerank model is deployed. */
+  rerank?: boolean;
+  /** Ship the trimmed definitions of the object types that produced hits (default true). */
+  includeObjectTypes?: boolean;
   /**
    * A `bkn_context` the caller built itself, sent as-is.
    *
@@ -416,39 +427,52 @@ export interface SemanticSearchOptions {
   bknContext?: BknContext;
 }
 
-function searchBody(knId: string, query: string, opts: SemanticSearchOptions) {
+function searchBody(knId: string, query: string, opts: SearchInstanceOptions) {
   return {
     kn_id: knId,
     query,
-    mode: opts.mode ?? "keyword_vector_retrieval",
-    max_concepts: opts.maxConcepts ?? 10,
-    return_query_understanding: opts.returnQueryUnderstanding ?? false,
+    ...(opts.conceptGroups?.length ? { concept_groups: opts.conceptGroups } : {}),
+    ...(opts.objectTypes?.length ? { object_types: opts.objectTypes } : {}),
+    ...(opts.excludeObjectTypes?.length ? { exclude_object_types: opts.excludeObjectTypes } : {}),
+    ...(opts.maxObjectTypes === undefined ? {} : { max_object_types: opts.maxObjectTypes }),
+    ...(opts.maxInstancesPerType === undefined
+      ? {}
+      : { max_instances_per_type: opts.maxInstancesPerType }),
+    ...(opts.rerank === undefined ? {} : { rerank: opts.rerank }),
+    ...(opts.includeObjectTypes === undefined
+      ? {}
+      : { include_object_types: opts.includeObjectTypes }),
   };
 }
 
 /**
- * Semantic search over a KN.
+ * Recall instances from one natural-language sentence: concept recall picks the
+ * object types, then each one is searched semantically (vector + full text,
+ * fused by rank). Hits carry the trimmed object-type definitions needed to read
+ * them, so a caller does not have to fetch schema separately.
  *
- * This is the one `/kn/*` tool with no MCP equivalent, so it cannot fall back
- * to the transport that merges a conversation per connection — deploys that
- * enforce the lifecycle contract need a `bkn_context` in the body, and
- * {@link withManagedLifecycle} opens the session that supplies one. Deploys
+ * Only properties whose `condition_operations` include `match` or `knn` take
+ * part, so an object type with no index produces no instances. No hits is not
+ * an error: `nodes` comes back empty with a `message`.
+ *
+ * Deploys that enforce the lifecycle contract need a `bkn_context` in the body;
+ * {@link withManagedLifecycle} opens the session that supplies one, and deploys
  * without the contract get the request unchanged.
  */
-export function semanticSearch(
+export function searchInstance(
   ctx: RequestContext,
   knId: string,
   query: string,
-  opts: SemanticSearchOptions = {},
+  opts: SearchInstanceOptions = {},
 ): Promise<unknown> {
   if (opts.bknContext) {
-    return request(ctx, `${RETRIEVAL_BASE}/semantic-search`, {
+    return request(ctx, `${RETRIEVAL_BASE}/search_instance`, {
       method: "POST",
       body: { ...searchBody(knId, query, opts), bkn_context: opts.bknContext },
     });
   }
   return withManagedLifecycle(ctx, knId, query, (bknContext) =>
-    request(ctx, `${RETRIEVAL_BASE}/semantic-search`, {
+    request(ctx, `${RETRIEVAL_BASE}/search_instance`, {
       method: "POST",
       body: {
         ...searchBody(knId, query, opts),
