@@ -12,6 +12,7 @@
  */
 import { Command, type Option } from "commander";
 import { SECTION_MEANINGS, group, guideOf, sectionOf } from "../help/grouped-help.js";
+import returnShapes from "../help/returns.json" with { type: "json" };
 import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { outputOptions } from "./_shared.js";
@@ -121,6 +122,8 @@ interface DescribedCommand {
   summary: string;
   /** Only on a node the walk stopped at, so a reader knows to ask for more. */
   hasCommands?: boolean;
+  /** Top-level keys a live deploy answered with, or "array" for a bare list. */
+  returns?: string[] | string;
   /** Present once a deploy has been probed: true, false, or "unknown". */
   available?: boolean | "unknown";
   /** Why this deploy cannot answer the command. */
@@ -142,6 +145,13 @@ function describeOption(opt: Option): DescribedOption {
   };
 }
 
+/** What a live deploy answered with, captured by `scripts/capture-returns.mjs`. */
+const RETURN_SHAPES = (returnShapes as { commands: Record<string, string[] | string> }).commands;
+
+function shapeOf(path: string): string[] | string | undefined {
+  return RETURN_SHAPES[path];
+}
+
 let activeProbe: ProbeResult | undefined;
 
 function describeNode(cmd: Command, parentPath: string[], depth: number): DescribedCommand {
@@ -154,6 +164,7 @@ function describeNode(cmd: Command, parentPath: string[], depth: number): Descri
     name: cmd.name(),
     section: sectionOf(cmd),
     summary: cmd.description(),
+    ...(shapeOf(path.join(" ")) ? { returns: shapeOf(path.join(" ")) } : {}),
     ...(state ? { available: state.available } : {}),
     ...(state?.reason ? { unavailable: state.reason } : {}),
   };
@@ -189,6 +200,9 @@ function describeNode(cmd: Command, parentPath: string[], depth: number): Descri
  * subtree, so a reader never has to infer what `from` or `hasCommands` are for.
  */
 const FIELD_MEANINGS: Record<string, string> = {
+  returns:
+    "top-level keys observed on a live deploy — evidence for parsing, not a contract; " +
+    "absent where nothing was recorded",
   available:
     "whether this deploy can answer the command (only after --probe). Checked per service " +
     "and per MCP tool, so a command can still be refused for a capability the probe cannot see",

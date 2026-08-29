@@ -32,6 +32,7 @@
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "check:deps": "node scripts/check-no-self-dep.mjs",
+    "capture:returns": "node scripts/capture-returns.mjs",
     "lint": "npm run check:deps && biome check . && tsc --noEmit",
     "format": "biome format --write .",
     "test": "vitest run",
