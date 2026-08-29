@@ -77,6 +77,17 @@ export interface ExecuteFunctionOptions {
   /** Tracing marks written into the sandbox environment, not arguments. */
   source?: string;
   taskId?: string;
+  /**
+   * The caller's credential, placed in the sandbox's `BKN_TOKEN` so code using
+   * `sandbox_sdk.bkn` reaches BKN as the caller. Nothing else fills it — the
+   * request's own `authorization` header does not reach the sandbox, verified
+   * on a live deploy — and nothing needs it unless the code calls back into
+   * BKN, so a caller opts in rather than handing a bearer to every run.
+   */
+  bknToken?: string;
+  /** Hangs the sandbox's own BKN calls under this conversation / interaction. */
+  conversationId?: string;
+  interactionId?: string;
 }
 
 export interface FunctionExecuteResult {
@@ -110,6 +121,9 @@ export function executeFunction(
       ...(opts.dependenciesUrl ? { dependencies_url: opts.dependenciesUrl } : {}),
       ...(opts.source ? { source: opts.source } : {}),
       ...(opts.taskId ? { task_id: opts.taskId } : {}),
+      ...(opts.bknToken ? { bkn_token: opts.bknToken } : {}),
+      ...(opts.conversationId ? { bkn_conversation_id: opts.conversationId } : {}),
+      ...(opts.interactionId ? { bkn_interaction_id: opts.interactionId } : {}),
     },
   });
 }

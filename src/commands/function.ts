@@ -102,14 +102,24 @@ export function functionCommand(): Command {
     .option("--timeout <s>", "sandbox timeout in seconds", int)
     .option("--dep <name@version>", "install a package first (repeatable)", collectDep)
     .option("--index-url <url>", "package index to install from (default PyPI)")
+    .option(
+      "--pass-token",
+      "put your credential in the sandbox's BKN_TOKEN so `sandbox_sdk.bkn` calls BKN as you",
+    )
     .action(async (file: string, opts, cmd: Command) => {
-      const result = await clientFrom(cmd).functions.run({
+      const client = clientFrom(cmd);
+      const result = await client.functions.run({
         code: readCode(file),
         event: (parseJsonOption(opts.event, "event") ?? {}) as Record<string, unknown>,
         timeout: opts.timeout,
         dependencies: opts.dep,
         dependenciesUrl: opts.indexUrl,
         source: "openbkn_cli",
+        // The request headers carry these too, but they stop at the service:
+        // the sandbox reads its own environment, which only these fields fill.
+        conversationId: client.ctx.trace?.conversationId,
+        interactionId: client.ctx.trace?.interactionId,
+        ...(opts.passToken ? { bknToken: client.ctx.token } : {}),
       });
       printJson(result, outputOptions(cmd));
       // The service answers 200 for code that raised; `exit_code` is the verdict.
@@ -175,6 +185,12 @@ export function functionCommand(): Command {
   READING THE ANSWER
   Code that raises still answers HTTP 200 — \`exit_code\` is the verdict and the
   traceback is in \`stderr\`. This command exits non-zero to match, so \`&&\` works.
+
+  CONTEXT INSIDE THE SANDBOX
+  --conversation-id / --interaction-id reach the sandbox as BKN_CONVERSATION_ID
+  and BKN_INTERACTION_ID, which is how \`sandbox_sdk.bkn\` hangs its own BKN calls
+  under your interaction. The credential does not travel unless you say so:
+  --pass-token puts it in BKN_TOKEN so that code runs as you.
 
   ORDER OF WORK
   function deps                      what is already importable

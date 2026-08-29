@@ -66,6 +66,30 @@ describe("function endpoints", () => {
     expect(res.exit_code).toBe(1);
   });
 
+  it("carries the conversation and interaction into the sandbox body", async () => {
+    const f = mockFetch();
+    await executeFunction(ctx, {
+      code: "x",
+      conversationId: "conv-1",
+      interactionId: "inter-1",
+      bknToken: "ory_at_secret",
+    });
+    const body = JSON.parse(String(call(f)[1].body));
+    // The request headers carry these too, but they stop at the service: the
+    // sandbox reads its own environment, which only these fields fill.
+    expect(body.bkn_conversation_id).toBe("conv-1");
+    expect(body.bkn_interaction_id).toBe("inter-1");
+    expect(body.bkn_token).toBe("ory_at_secret");
+  });
+
+  it("sends no credential when none was offered", async () => {
+    const f = mockFetch();
+    await executeFunction(ctx, { code: "x", conversationId: "conv-1" });
+    const body = JSON.parse(String(call(f)[1].body));
+    expect(body).not.toHaveProperty("bkn_token");
+    expect(body).not.toHaveProperty("bkn_interaction_id");
+  });
+
   it("infer-schema posts only the code", async () => {
     const f = mockFetch();
     await inferFunctionSchema(ctx, "@tool\ndef add(a: int) -> int: ...");

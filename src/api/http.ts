@@ -84,7 +84,7 @@ export async function request<T = unknown>(
     if (!res.ok) {
       // Both hints can apply at once — an auth proxy answers a revoked AppKey
       // with an HTML 401 — so join them rather than letting either win.
-      const gateway = gatewayHint(url, contentType, text);
+      const gateway = gatewayHint(url, res.status, contentType, text);
       const hints = [gateway, hintFor(ctx, res.status, text)].filter(Boolean);
       throw new HttpError(
         res.status,
@@ -102,7 +102,7 @@ export async function request<T = unknown>(
       // JSON" or "a proxy answered instead of the service" — an SSO gateway
       // serves a 200 login page for a dead session. Carry which one it was
       // rather than flattening it into the message: callers act on it.
-      const gateway = gatewayHint(url, contentType, text);
+      const gateway = gatewayHint(url, res.status, contentType, text);
       throw new NonJsonResponseError(
         res.status,
         contentType,
@@ -119,14 +119,30 @@ export async function request<T = unknown>(
 
 /**
  * Recognise a reverse-proxy error page. Every backend here speaks JSON, so an
- * HTML body means the request died at the gateway — usually the service is not
- * deployed or not routed on this cluster. Without this the caller sees a bare
- * `HTTP 404` and reads it as "this record does not exist".
+ * HTML body means the gateway answered instead of the service. Without this the
+ * caller sees a bare `HTTP 404` and reads it as "this record does not exist".
+ *
+ * Which gateway failure it was matters: a 504 comes from a service that is
+ * routed and simply took too long — a sandbox function that blocks on an
+ * unreachable address produces one — and telling that caller their backend is
+ * missing sends them to debug the wrong thing.
  */
-function gatewayHint(url: URL, contentType: string, body: string): string | undefined {
+function gatewayHint(
+  url: URL,
+  status: number,
+  contentType: string,
+  body: string,
+): string | undefined {
   const looksHtml =
     contentType.includes("html") || /^\s*(<!doctype html|<html)/i.test(body.slice(0, 200));
   if (!looksHtml) return undefined;
+  if (status === 504 || status === 408) {
+    return [
+      "The gateway timed out waiting for the service behind",
+      `${url.pathname} — it is routed, it did not answer in time. Long-running work`,
+      "(a sandbox run, a build) may still be going; retry the read rather than the write.",
+    ].join(" ");
+  }
   return [
     "The response is an HTML error page, not JSON — the request did not reach the service",
     `behind ${url.pathname}. That backend is likely not deployed or not routed on this`,

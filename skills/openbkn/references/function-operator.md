@@ -22,6 +22,13 @@
 `stderr`。`function run` 会把非零 `exit_code` 映射成进程退出码，所以 shell 里
 `&&` 串起来是对的。
 
+**沙箱里的上下文**：`--conversation-id` / `--interaction-id` 会同时写进请求头
+**和**沙箱环境变量 `BKN_CONVERSATION_ID` / `BKN_INTERACTION_ID` —— 后者是
+`sandbox_sdk.bkn` 回调 BKN 时挂到哪次交互的依据，只有请求体里的
+`bkn_conversation_id` 等字段能填，请求头到服务就停了（实测头单独发时三个变量都是空）。
+凭据不自动发：要让沙箱里的代码以你的身份调 BKN，显式加 `--pass-token`，它才把
+令牌放进 `BKN_TOKEN`（`--dry-run` 预览会把这个字段打码）。
+
 `--dep` 会在执行前装包，首次调用明显变慢；已预装的库别声明。
 
 ## operator
