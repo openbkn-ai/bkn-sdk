@@ -134,7 +134,10 @@ valid identifiers as-is, they are unique within a platform, and they do not move
 renames the network. Display names are none of those things — the live platform's are Chinese
 (`电商经营决策知识网络`) and two networks may share one.
 
-`--package` overrides it, and **non-ASCII package names are supported**: PEP 3131 permits them
+In practice the import name *is* the `--out` directory's name, since that is what Python imports;
+`--package` therefore **asserts** that name rather than setting it, and a mismatch fails before
+anything is written. The recommended invocation is `--out ./<kn-id>`, which gives the default this
+section argues for. **Non-ASCII package names are supported**: PEP 3131 permits them
 and `from 报名.object_types import People` was verified to import. One caveat, and it only bites
 in delivery modes B and C: a *distribution* name (what `pip install` takes) must be ASCII, so a
 Chinese package would need an ASCII distribution name wrapping it. Import name and distribution
@@ -278,12 +281,18 @@ PascalCase class names: `people → People`, `monitoring_task → MonitoringTask
 id is preserved as `__bkn_id__` and is what the runtime transmits — nothing ever reverses a
 class name back into an id.
 
-Two edge cases:
+Three edge cases:
 
-- **Name collision** (`po` and `p_o` both yielding `Po`) — the generator fails with both
+- **Name collision** (`a_b` and `a__b` both yielding `AB`) — the generator fails with both
   offending ids and requires the KN to be fixed. It does not silently disambiguate.
-- **Python keyword** (`class`, `import`, `from`) — suffixed with an underscore (`Class_`),
-  `__bkn_id__` unchanged.
+- **Python keyword.** Capitalisation already escapes almost all of them — a `class` object
+  type becomes the perfectly legal `Class`. Only `none`, `true`, and `false` survive it, and
+  those get the underscore suffix (`None_`). Property names keep the id verbatim, so there the
+  suffix is the common case: `class` → `class_`, `__bkn_id__` unchanged.
+- **Collision with an inherited query method.** `where`, `order_by`, `take`, `iterate`,
+  `count`, `get`, `raw`, and `with_context` come from `ObjectType`; a property named `count`
+  would shadow `Order.count()` and break every caller. It is suffixed like a keyword
+  (`count_`) and keeps its real id in the descriptor.
 
 Primary keys come from the specification's `### Keys` → `Primary Keys` and determine the
 `get()` signature: a single key gives `get(value)`, a composite key gives

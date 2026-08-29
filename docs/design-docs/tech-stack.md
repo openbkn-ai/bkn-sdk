@@ -44,7 +44,7 @@ This is one small shared formatter module, not per-command help strings. It appl
 - **oclif** — plugin framework built for large multi-CLI suites; overkill for one lean single-package SDK.
 - **pnpm / workspace monorepo** — single package is enough; no multi-package split.
 - **ESLint + Prettier** — heavier config than Biome with no existing setup to preserve.
-- **Python SDK** — dropped entirely in this rewrite.
+- **Python SDK (hand-written port)** — dropped entirely in this rewrite. What `python/` ships instead is the OSDK: a generator plus a runtime, where the value is typed classes over an ontology rather than a second implementation of this HTTP surface. See `docs/superpowers/specs/2026-08-11-python-osdk-design.md`.
 - **axios / node-fetch** — native `fetch` covers it.
 
 ## Divergence reference (legacy)

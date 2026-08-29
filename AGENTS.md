@@ -137,7 +137,7 @@ of all of it. Check your work by reading it, not by reading the source.
 
 - Default list `limit` = **30**; query/preview `limit` = **50**; `--limit` always overrides.
 - Global `--json` for machine-readable output where supported.
-- This is a **rewrite**, not a port: reference the legacy user/agent-SDK and operator-CLI predecessors, but slim and unify — do not copy verbatim. Python SDK is dropped.
+- This is a **rewrite**, not a port: reference the legacy user/agent-SDK and operator-CLI predecessors, but slim and unify — do not copy verbatim. The legacy Python SDK stays dropped; `python/` is a different thing — a generated, read-only OSDK, not a hand-written port of this surface.
 
 ## Domains
 
