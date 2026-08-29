@@ -3,7 +3,7 @@
 
 /** `openbkn resource` (alias `res`) — vega-backend resources. */
 import { Command } from "commander";
-import { group } from "../help/grouped-help.js";
+import { group, groupChildren } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT, DEFAULT_QUERY_LIMIT } from "../types.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, outputOptions } from "./_shared.js";
@@ -13,7 +13,7 @@ const int = (v: string) => Number.parseInt(v, 10);
 export function resourceCommand(): Command {
   const cmd = new Command("resource")
     .alias("res")
-    .description("Resources — list, find, get, enable, disable, query, delete");
+    .description("Tables and views behind a network: find, inspect, sample, enable, disable");
 
   cmd
     .command("list")
@@ -43,7 +43,7 @@ export function resourceCommand(): Command {
 
   cmd
     .command("find")
-    .description("Search resources by name (fuzzy; --exact for strict)")
+    .description("Search resources by name, fuzzy unless --exact → a bare array, not an envelope")
     .requiredOption("--name <name>", "resource name to search")
     .option("--exact", "exact name match")
     .option("--catalog-id <id>", "limit to a catalog")
@@ -104,5 +104,11 @@ export function resourceCommand(): Command {
       printJson(await clientFrom(cmd).resource.delete(id), outputOptions(cmd));
     });
 
-  return group(cmd, "AI DATA PLATFORM");
+  groupChildren(cmd, {
+    READ: ["list", "find", "get"],
+    RUN: ["query"],
+    WRITE: ["enable", "disable", "delete"],
+  });
+
+  return group(cmd, "DATA & KNOWLEDGE");
 }

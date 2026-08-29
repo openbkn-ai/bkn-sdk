@@ -54,16 +54,18 @@ export async function request<T = unknown>(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), init.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
+  const method = init.method ?? (hasBody ? "POST" : "GET");
+  const headers = buildHeaders(ctx, {
+    ...(hasBody ? { "content-type": "application/json" } : {}),
+    ...init.headers,
+  });
   const send = () =>
     tlsFetch(
       ctx.insecure,
       url,
       {
-        method: init.method ?? (hasBody ? "POST" : "GET"),
-        headers: buildHeaders(ctx, {
-          ...(hasBody ? { "content-type": "application/json" } : {}),
-          ...init.headers,
-        }),
+        method,
+        headers,
         body: hasBody ? stringifyBigIntJSON(init.body) : undefined,
         redirect: init.redirect,
         signal: controller.signal,

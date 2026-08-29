@@ -8,5 +8,5 @@
 | `toolbox export <id> -o box.adp [--type toolbox|mcp|operator]` | Export config (impex, raw bytes). |
 | `toolbox import <file> [--type …]` | Import an exported `.adp` (multipart). |
 | `tool upload <openapi-file> --toolbox <id> [--metadata-type openapi]` | Upload a tool spec. |
-| `tool list --toolbox <id> [--limit n] [--page n] [--all]` / `tool set-status …` | List / enable-disable. `tool list` backend defaults to 10; `--all` returns every tool. |
+| `tool list --toolbox <id> [--limit n] [--page n] [--all]` / `tool enable\|disable <tool-ids...> --toolbox <id>` | List / enable-disable. `tool list` backend defaults to 10; `--all` returns every tool. |
 | `tool execute|debug <tool-id> --toolbox <id> [--header/--query/--path/--body JSON]` | Invoke (debug bypasses the enabled gate). |

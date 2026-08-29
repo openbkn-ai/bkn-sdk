@@ -23,6 +23,7 @@ import {
   usersOfPlatform,
   writeToken,
 } from "../config/store.js";
+import { isDryRun } from "../utils/dry-run.js";
 import { InputError } from "../utils/errors.js";
 
 export function hostOf(baseUrl: string): string {
@@ -138,7 +139,9 @@ export async function currentTokenFresh(
   const claims = decodeJwt(token.accessToken);
   const decodable = claims?.exp !== undefined;
   const needsRefresh = decodable ? isExpired(claims) : true;
-  if (token.refreshToken && needsRefresh) {
+  // Refreshing rotates the stored credential, which `--dry-run` promises not to
+  // do. Hand back what is stored, exactly as `--no-refresh` would.
+  if (token.refreshToken && needsRefresh && !isDryRun()) {
     try {
       const t = await refreshAccessToken(baseUrl, token.refreshToken, undefined, opts.insecure);
       writeToken(

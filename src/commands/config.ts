@@ -9,7 +9,7 @@ import {
   setActivePlatform,
   updatePlatformConfig,
 } from "../config/store.js";
-import { group } from "../help/grouped-help.js";
+import { group, groupChildren } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { outputOptions } from "./_shared.js";
@@ -21,7 +21,7 @@ function requireActive(): string {
 }
 
 export function configCommand(): Command {
-  const config = new Command("config").description("Per-platform CLI configuration");
+  const config = new Command("config").description("Remember a platform URL / business domain");
 
   config
     .command("show")
@@ -67,5 +67,7 @@ export function configCommand(): Command {
       throw new InputError("Not yet implemented — requires backend business-domains API.");
     });
 
-  return group(config, "AUTHENTICATION & CONFIG");
+  groupChildren(config, { READ: ["show", "list-bd"], WRITE: ["set", "set-bd"] });
+
+  return group(config, "SIGN IN & SETTINGS");
 }

@@ -9,7 +9,8 @@
  */
 import { createOperationTraceContext } from "../trace-context.js";
 import type { RequestContext } from "../types.js";
-import { HttpError, ToolError } from "../utils/errors.js";
+import { withoutPreview } from "../utils/dry-run.js";
+import { HttpError, ToolError, readableServerError } from "../utils/errors.js";
 import { parseBigIntJSON, stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
@@ -85,8 +86,13 @@ async function post(
   const controller = timeoutMs === undefined ? undefined : new AbortController();
   const timer =
     controller === undefined ? undefined : setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await authFetch(ctx, () =>
+  // `tlsFetch` previews every outbound request, which would stop on the
+  // handshake — the frames a caller checking their arguments did not ask about.
+  const rpcMethod = (body as { method?: string } | undefined)?.method;
+  const isHandshake =
+    rpcMethod === "initialize" || Boolean(rpcMethod?.startsWith("notifications/"));
+  const send = () =>
+    authFetch(ctx, () =>
       tlsFetch(ctx.insecure, mcpUrl(ctx), {
         method: "POST",
         headers: headers(ctx, knId, sessionId),
@@ -94,6 +100,8 @@ async function post(
         ...(controller ? { signal: controller.signal } : {}),
       }),
     );
+  try {
+    const res = await (isHandshake ? withoutPreview(send) : send());
     const text = await res.text();
     if (!res.ok) throw new HttpError(res.status, res.statusText, text);
     return { res, text };
@@ -168,10 +176,13 @@ function unwrapToolResult(parsed: unknown): UnwrappedToolResult {
     ?.bkn_receipt;
   const content = result.content;
   if (result.isError === true) {
-    const message =
+    const raw =
       Array.isArray(content) && content[0] && typeof content[0].text === "string"
         ? content[0].text
         : "tool call failed";
+    // The tool hands back the platform envelope as a JSON string; a caller wants
+    // the sentence inside it, not the envelope.
+    const message = readableServerError(raw) || raw;
     // The structured error code, not the prose, is what tells a caller whether
     // the failure is retryable — a dead lifecycle session is reopenable, a bad
     // argument is not.

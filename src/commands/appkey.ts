@@ -9,7 +9,7 @@
  */
 import { Command } from "commander";
 import type { CreatedApiKey } from "../api/app-keys.js";
-import { group } from "../help/grouped-help.js";
+import { group, groupChildren } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
 import { type OutputOptions, printJson } from "../utils/output.js";
 import { clientFrom, outputOptions } from "./_shared.js";
@@ -44,12 +44,12 @@ function printNewKey(created: CreatedApiKey, out: OutputOptions): void {
 
 export function appkeyCommand(): Command {
   const appkey = new Command("appkey").description(
-    "AppKeys — user-issued long-lived credentials (bak_) for the Context Loader",
+    "Issue long-lived `bak_` keys for scripts and services",
   );
 
   appkey
     .command("list")
-    .description("List your own AppKeys (no secrets)")
+    .description("List your own AppKeys, no secrets → {keys}")
     .action(async (_opts, cmd: Command) => {
       printJson(await clientFrom(cmd).appKeys.list(), outputOptions(cmd));
     });
@@ -118,5 +118,13 @@ export function appkeyCommand(): Command {
       printJson({ revoked: id }, outputOptions(cmd));
     });
 
-  return group(appkey, "AUTHENTICATION & CONFIG");
+  groupChildren(appkey, {
+    GROUPS: ["admin"],
+    READ: ["list"],
+    WRITE: ["create", "regenerate", "revoke"],
+  });
+  const appkeyAdmin = appkey.commands.find((c) => c.name() === "admin");
+  if (appkeyAdmin) groupChildren(appkeyAdmin, { READ: ["list"], WRITE: ["revoke"] });
+
+  return group(appkey, "SIGN IN & SETTINGS");
 }

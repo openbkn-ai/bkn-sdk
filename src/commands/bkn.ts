@@ -3,7 +3,7 @@
 
 /** `openbkn bkn …` — knowledge networks. */
 import { Command } from "commander";
-import { group } from "../help/grouped-help.js";
+import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { validateBknDirectory } from "../utils/bkn-validate.js";
 import { printJson } from "../utils/output.js";
@@ -13,7 +13,9 @@ import { clientFrom, csv, outputOptions, readBody } from "./_shared.js";
 const int = (v: string) => Number.parseInt(v, 10);
 
 export function bknCommand(): Command {
-  const bkn = new Command("bkn").description("Knowledge networks — list, query, schema, instances");
+  const bkn = new Command("bkn").description(
+    "Knowledge networks: schema, metrics, search, import/export",
+  );
 
   bkn
     .command("list")
@@ -52,13 +54,25 @@ export function bknCommand(): Command {
 
   bkn
     .command("search <kn-id> <query>")
-    .description("Semantic search within a knowledge network")
-    .option("--max-concepts <n>", "max concepts to return", int, 10)
-    .option("--mode <mode>", "retrieval mode", "keyword_vector_retrieval")
+    .description(
+      "Recall instances from a plain sentence — no object type or field names needed → {nodes, object_types}",
+    )
+    .option("--object-types <ids>", "pin recall to these object-type ids (comma-separated)")
+    .option("--exclude-object-types <ids>", "drop these object-type ids (comma-separated)")
+    .option("--concept-groups <names>", "limit recall to these concept groups (comma-separated)")
+    .option("--max-object-types <n>", "how many object types may take part", int)
+    .option("--max-instances <n>", "instances per object type", int)
+    .option("--rerank", "re-rank hits with a cross-encoder (needs a rerank model deployed)")
+    .option("--no-object-types-detail", "omit the object-type definitions that come with hits")
     .action(async (knId: string, query: string, opts, cmd: Command) => {
       const data = await clientFrom(cmd).kn.search(knId, query, {
-        maxConcepts: opts.maxConcepts,
-        mode: opts.mode,
+        objectTypes: csv(opts.objectTypes),
+        excludeObjectTypes: csv(opts.excludeObjectTypes),
+        conceptGroups: csv(opts.conceptGroups),
+        maxObjectTypes: opts.maxObjectTypes,
+        maxInstancesPerType: opts.maxInstances,
+        rerank: opts.rerank,
+        includeObjectTypes: opts.objectTypesDetail === false ? false : undefined,
       });
       printJson(data, outputOptions(cmd));
     });
@@ -84,13 +98,17 @@ export function bknCommand(): Command {
       });
     if (crud) {
       g.command("get <kn-id> <id>")
-        .description(`Get ${name}`)
+        // The backend route takes a list of ids, so a single get answers an envelope.
+        .description(`Get ${name} → {entries}`)
         .action(async (knId: string, id: string, _o, cmd: Command) => {
           printJson(await clientFrom(cmd).kn[`${crud}Get`](knId, id), outputOptions(cmd));
         });
       g.command("create <kn-id>")
         .description(`Create ${name} (--body / --body-file)`)
-        .option("--body <json>", "body JSON")
+        .option(
+          "--body <json>",
+          "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+        )
         .option("--body-file <path>", "read body JSON from a file")
         .action(async (knId: string, opts, cmd: Command) => {
           printJson(
@@ -100,7 +118,10 @@ export function bknCommand(): Command {
         });
       g.command("update <kn-id> <id>")
         .description(`Update ${name} (--body / --body-file)`)
-        .option("--body <json>", "body JSON")
+        .option(
+          "--body <json>",
+          "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+        )
         .option("--body-file <path>", "read body JSON from a file")
         .action(async (knId: string, id: string, opts, cmd: Command) => {
           printJson(
@@ -122,7 +143,10 @@ export function bknCommand(): Command {
   actionType
     ?.command("query <kn-id> <at-id>")
     .description("Query an action type (--body / --body-file JSON)")
-    .option("--body <json>", "query JSON")
+    .option(
+      "--body <json>",
+      "query JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (ontology-query)",
+    )
     .option("--body-file <path>", "read query JSON from a file")
     .action(async (knId: string, atId: string, opts, cmd: Command) => {
       printJson(
@@ -133,7 +157,10 @@ export function bknCommand(): Command {
   actionType
     ?.command("execute <kn-id> <at-id>")
     .description("Execute an action type (--body / --body-file envelope JSON)")
-    .option("--body <json>", "execution envelope JSON")
+    .option(
+      "--body <json>",
+      "execution envelope JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (ontology-query)",
+    )
     .option("--body-file <path>", "read envelope JSON from a file")
     .action(async (knId: string, atId: string, opts, cmd: Command) => {
       printJson(
@@ -167,7 +194,10 @@ export function bknCommand(): Command {
   objectType
     ?.command("query <kn-id> <ot-id>")
     .description("Query instances of an object type (--body / --body-file JSON)")
-    .option("--body <json>", "query JSON")
+    .option(
+      "--body <json>",
+      "query JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (ontology-query)",
+    )
     .option("--body-file <path>", "read query JSON from a file")
     .action(async (knId: string, otId: string, opts, cmd: Command) => {
       printJson(
@@ -190,7 +220,10 @@ export function bknCommand(): Command {
   bkn
     .command("update <kn-id>")
     .description("Update a knowledge network (--body / --body-file)")
-    .option("--body <json>", "update body JSON")
+    .option(
+      "--body <json>",
+      "update body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+    )
     .option("--body-file <path>", "read update body JSON from a file")
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(await clientFrom(cmd).kn.update(knId, readBody(opts)), outputOptions(cmd));
@@ -207,13 +240,18 @@ export function bknCommand(): Command {
   bkn
     .command("subgraph <kn-id>")
     .description("Query a subgraph (--body / --body-file JSON)")
-    .option("--body <json>", "subgraph query JSON")
+    .option(
+      "--body <json>",
+      "subgraph query JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (ontology-query)",
+    )
     .option("--body-file <path>", "read subgraph query JSON from a file")
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(await clientFrom(cmd).kn.subgraph(knId, readBody(opts)), outputOptions(cmd));
     });
 
-  const actionLog = bkn.command("action-log").description("Action logs — list/get/cancel");
+  const actionLog = bkn
+    .command("action-log")
+    .description("Action logs — list/get/cancel; list pages with search_after");
   actionLog
     .command("list <kn-id>")
     .description("List action logs")
@@ -254,7 +292,10 @@ export function bknCommand(): Command {
   metric
     .command("query <kn-id> <metric-id>")
     .description("Query a metric's data (--body / --body-file JSON)")
-    .option("--body <json>", "query JSON")
+    .option(
+      "--body <json>",
+      "query JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (ontology-query)",
+    )
     .option("--body-file <path>", "read query JSON from a file")
     .action(async (knId: string, metricId: string, opts, cmd: Command) => {
       printJson(
@@ -265,7 +306,10 @@ export function bknCommand(): Command {
   metric
     .command("dry-run <kn-id>")
     .description("Dry-run a metric definition (--body / --body-file JSON)")
-    .option("--body <json>", "metric definition JSON")
+    .option(
+      "--body <json>",
+      "metric definition JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (ontology-query)",
+    )
     .option("--body-file <path>", "read metric definition JSON from a file")
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(await clientFrom(cmd).kn.metricDryRun(knId, readBody(opts)), outputOptions(cmd));
@@ -278,14 +322,17 @@ export function bknCommand(): Command {
     });
   metric
     .command("get <kn-id> <metric-id>")
-    .description("Get a metric")
+    .description("Get a metric → {entries}, since the route takes a list of ids")
     .action(async (knId: string, id: string, _o, cmd: Command) => {
       printJson(await clientFrom(cmd).kn.metricGet(knId, id), outputOptions(cmd));
     });
   metric
     .command("create <kn-id>")
     .description("Create a metric (--body / --body-file)")
-    .option("--body <json>", "body JSON")
+    .option(
+      "--body <json>",
+      "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+    )
     .option("--body-file <path>", "read body JSON from a file")
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(await clientFrom(cmd).kn.metricCreate(knId, readBody(opts)), outputOptions(cmd));
@@ -293,7 +340,10 @@ export function bknCommand(): Command {
   metric
     .command("update <kn-id> <metric-id>")
     .description("Update a metric (--body / --body-file)")
-    .option("--body <json>", "body JSON")
+    .option(
+      "--body <json>",
+      "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+    )
     .option("--body-file <path>", "read body JSON from a file")
     .action(async (knId: string, id: string, opts, cmd: Command) => {
       printJson(
@@ -310,7 +360,10 @@ export function bknCommand(): Command {
   metric
     .command("validate <kn-id>")
     .description("Validate a metric definition (--body / --body-file)")
-    .option("--body <json>", "body JSON")
+    .option(
+      "--body <json>",
+      "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+    )
     .option("--body-file <path>", "read body JSON from a file")
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(await clientFrom(cmd).kn.metricValidate(knId, readBody(opts)), outputOptions(cmd));
@@ -329,7 +382,10 @@ export function bknCommand(): Command {
     });
   cg.command("create <kn-id>")
     .description("Create a concept group (--body / --body-file)")
-    .option("--body <json>", "body JSON")
+    .option(
+      "--body <json>",
+      "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+    )
     .option("--body-file <path>", "read body JSON from a file")
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(
@@ -339,7 +395,10 @@ export function bknCommand(): Command {
     });
   cg.command("update <kn-id> <cg-id>")
     .description("Update a concept group (--body / --body-file)")
-    .option("--body <json>", "body JSON")
+    .option(
+      "--body <json>",
+      "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+    )
     .option("--body-file <path>", "read body JSON from a file")
     .action(async (knId: string, cgId: string, opts, cmd: Command) => {
       printJson(
@@ -354,7 +413,10 @@ export function bknCommand(): Command {
     });
   cg.command("add-members <kn-id> <cg-id>")
     .description("Add object types to a concept group (--body / --body-file)")
-    .option("--body <json>", "body JSON")
+    .option(
+      "--body <json>",
+      "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+    )
     .option("--body-file <path>", "read body JSON from a file")
     .action(async (knId: string, cgId: string, opts, cmd: Command) => {
       printJson(
@@ -387,7 +449,10 @@ export function bknCommand(): Command {
   sched
     .command("create <kn-id>")
     .description("Create an action schedule (--body / --body-file)")
-    .option("--body <json>", "body JSON")
+    .option(
+      "--body <json>",
+      "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+    )
     .option("--body-file <path>", "read body JSON from a file")
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(
@@ -398,7 +463,10 @@ export function bknCommand(): Command {
   sched
     .command("update <kn-id> <schedule-id>")
     .description("Update an action schedule (--body / --body-file)")
-    .option("--body <json>", "body JSON")
+    .option(
+      "--body <json>",
+      "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+    )
     .option("--body-file <path>", "read body JSON from a file")
     .action(async (knId: string, sId: string, opts, cmd: Command) => {
       printJson(
@@ -409,7 +477,10 @@ export function bknCommand(): Command {
   sched
     .command("set-status <kn-id> <schedule-id>")
     .description("Set an action schedule's status (--body / --body-file)")
-    .option("--body <json>", "body JSON")
+    .option(
+      "--body <json>",
+      "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+    )
     .option("--body-file <path>", "read body JSON from a file")
     .action(async (knId: string, sId: string, opts, cmd: Command) => {
       printJson(
@@ -460,7 +531,10 @@ export function bknCommand(): Command {
   bkn
     .command("relation-type-paths <kn-id>")
     .description("Query relation-type paths between object types (--body / --body-file JSON)")
-    .option("--body <json>", "request JSON")
+    .option(
+      "--body <json>",
+      "request JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+    )
     .option("--body-file <path>", "read request JSON from a file")
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(
@@ -520,5 +594,63 @@ export function bknCommand(): Command {
       if (!result.valid) process.exitCode = 1;
     });
 
-  return group(bkn, "AI DATA PLATFORM");
+  groupChildren(bkn, {
+    GROUPS: [
+      "object-type",
+      "relation-type",
+      "action-type",
+      "metric",
+      "concept-group",
+      "action-log",
+      "action-schedule",
+    ],
+    READ: [
+      "pull",
+      "list",
+      "get",
+      "stats",
+      "export",
+      "search",
+      "subgraph",
+      "relation-type-paths",
+      "resources",
+      "action-execution",
+      "validate",
+    ],
+    WRITE: ["create", "update", "delete", "push", "create-from-catalog"],
+  });
+
+  groupChildren(metric, {
+    READ: ["list", "get"],
+    RUN: ["query", "dry-run", "validate"],
+    WRITE: ["create", "update", "delete"],
+  });
+
+  guide(
+    bkn,
+    `WHERE IDS COME FROM
+  \`list\` gives kn ids; \`object-type list <kn-id>\` and \`search <kn-id> "<q>"\` give the rest.
+
+SEARCH VS THE MCP SIDE
+  \`search\` recalls instance rows from one sentence and ships the object-type definitions
+  needed to read them — start here when you do not know the schema yet. It only reaches
+  properties indexed for match/knn, so an unindexed object type yields nothing, and no hits
+  comes back as empty nodes with a message rather than an error. For schema alone use
+  \`openbkn context search-schema\`; for a structured filter use \`object-type query\`.
+
+EDITING SCHEMA AS FILES
+  pull <kn-id> ./dir  ->  edit  ->  validate ./dir  ->  push ./dir
+  \`validate\` is offline and catches structure errors before the upload.
+
+REQUEST BODIES
+  create/update take a definition; query/execute/dry-run take a query. Both are documented
+  at https://openbkn-ai.github.io/bkn-foundry/ — definitions under bkn-backend, reads and
+  executions under ontology-query. Each command's --body flag names its own module.
+
+CREATING FROM DATA
+  create-from-catalog <catalog-id> --name "<n>" builds a network from a Vega catalog,
+  then \`openbkn vega dataset build <resource-id>\` produces the index. There is no
+  whole-network build.`,
+  );
+  return group(bkn, "DATA & KNOWLEDGE");
 }

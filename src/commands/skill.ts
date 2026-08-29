@@ -3,7 +3,7 @@
 
 /** `openbkn skill …` — skill registry and market. */
 import { Command } from "commander";
-import { group } from "../help/grouped-help.js";
+import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
@@ -64,7 +64,9 @@ const draftOption = (c: Command) =>
   c.option("--draft", "read the draft (management) version instead of the published one");
 
 export function skillCommand(): Command {
-  const cmd = new Command("skill").description("Skill registry and market");
+  const cmd = new Command("skill").description(
+    "Skill packages (SKILL.md + files) agents load on demand",
+  );
 
   const listOpts = (c: Command) =>
     c
@@ -74,7 +76,13 @@ export function skillCommand(): Command {
       .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
       .option("--page <n>", "page", int, 1);
 
-  listOpts(cmd.command("list").description("List skills"))
+  listOpts(
+    cmd
+      .command("list")
+      .description(
+        "List skills → {data, total, page, page_size, has_next}; the id to reuse is `skill_id`",
+      ),
+  )
     .option("--create-user <s>", "filter by creator")
     .action(async (opts, cmd: Command) => {
       printJson(
@@ -97,19 +105,19 @@ export function skillCommand(): Command {
       printJson(await clientFrom(cmd).skills.get(id), outputOptions(cmd));
     });
 
-  listOpts(cmd.command("market").description("Browse the skill market")).action(
-    async (opts, cmd: Command) => {
-      printJson(
-        await clientFrom(cmd).skills.market({
-          name: opts.name,
-          source: opts.source,
-          pageSize: opts.limit,
-          page: opts.page,
-        }),
-        outputOptions(cmd),
-      );
-    },
-  );
+  listOpts(
+    cmd.command("market").description("Browse the skill market → {data, total, page, has_next}"),
+  ).action(async (opts, cmd: Command) => {
+    printJson(
+      await clientFrom(cmd).skills.market({
+        name: opts.name,
+        source: opts.source,
+        pageSize: opts.limit,
+        page: opts.page,
+      }),
+      outputOptions(cmd),
+    );
+  });
 
   cmd
     .command("market-get <skill-id>")
@@ -299,7 +307,10 @@ export function skillCommand(): Command {
   cmd
     .command("update-metadata <skill-id>")
     .description("Update a skill's metadata (--body / --body-file JSON)")
-    .option("--body <json>", "metadata JSON")
+    .option(
+      "--body <json>",
+      "metadata JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (execution-factory)",
+    )
     .option("--body-file <path>", "read metadata JSON from a file")
     .action(async (skillId: string, opts, cmd: Command) => {
       printJson(
@@ -332,5 +343,43 @@ export function skillCommand(): Command {
       );
     });
 
-  return group(cmd, "MODELS & SKILLS");
+  groupChildren(cmd, {
+    READ: [
+      "list",
+      "market",
+      "get",
+      "market-get",
+      "names",
+      "content",
+      "read-file",
+      "files",
+      "history",
+    ],
+    RUN: ["execute", "download", "install"],
+    WRITE: [
+      "register",
+      "update-metadata",
+      "update-package",
+      "set-status",
+      "republish",
+      "publish-history",
+      "delete",
+    ],
+  });
+
+  guide(
+    cmd,
+    `READING A SKILL
+  content <id> gives the SKILL.md index; files <id> [path] walks the package; read-file
+  pulls one file. Read progressively — do not download the whole archive to answer a question.
+
+PUBLISHED VS DRAFT
+  Read commands return the published version. --draft reads the editing copy instead, which
+  is what a Studio user sees. The two differ whenever changes are unpublished.
+
+AUTHORING
+  register <dir> zips and registers; update-package replaces the files; update-metadata
+  changes only the metadata. set-status and republish move versions around.`,
+  );
+  return group(cmd, "TOOLS & SKILLS");
 }

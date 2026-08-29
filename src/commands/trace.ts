@@ -13,7 +13,7 @@ import type { TechnicalTraceDetail } from "../api/trace.js";
 import { renderReportMarkdown } from "../bkn-trace/diagnose.js";
 import { validateFixturePath } from "../bkn-trace/fixture-validate.js";
 import { validateSchemaFile } from "../bkn-trace/schema-validate.js";
-import { group } from "../help/grouped-help.js";
+import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON, stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
@@ -57,7 +57,7 @@ export function renderTechnicalTraceDetail(detail: TechnicalTraceDetail): string
 
 export function traceCommand(): Command {
   const cmd = new Command("trace").description(
-    "BKN Trace — fetch spans, diagnose (symbolic + LLM rubric), scan, eval-set, schema validate",
+    "Inspect what an agent actually did, and diagnose bad answers",
   );
 
   cmd
@@ -180,7 +180,10 @@ export function traceCommand(): Command {
     interactions
       .command(`${action} <interaction-id>`)
       .description(`${action} a managed interaction using a 3.0 completion manifest`)
-      .requiredOption("--body-file <path>", "read completion manifest JSON from a protected file")
+      .requiredOption(
+        "--body-file <path>",
+        "read completion manifest JSON from a protected file — docs: https://openbkn-ai.github.io/bkn-foundry/ (agent-observability)",
+      )
       .action(async (interactionId: string, opts, cmd: Command) => {
         const input = readBody(opts) as InteractionCompletionInput;
         const lifecycle = clientFrom(cmd).trace.lifecycle;
@@ -220,7 +223,10 @@ export function traceCommand(): Command {
   operations
     .command("retry <operation-id>")
     .description("Create the next retry attempt for an eligible failed operation")
-    .requiredOption("--body-file <path>", "read retry request JSON from a protected file")
+    .requiredOption(
+      "--body-file <path>",
+      "read retry request JSON from a protected file — docs: https://openbkn-ai.github.io/bkn-foundry/ (agent-observability)",
+    )
     .action(async (operationId: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).trace.lifecycle.retryOperationAttempt(
@@ -273,7 +279,7 @@ export function traceCommand(): Command {
 
   cmd
     .command("search")
-    .description("List authorized technical traces")
+    .description("List authorized technical traces → {entries, total, next_cursor, partial}")
     .option("--limit <n>", "page size, 1..200", (value) => Number.parseInt(value, 10))
     .option("--cursor <cursor>", "opaque pagination cursor")
     .option("--from <time>", "started at or after this RFC3339 timestamp")
@@ -367,5 +373,27 @@ export function traceCommand(): Command {
       if (!result.ok) process.exitCode = 1;
     });
 
-  return group(cmd, "BKN TRACE");
+  groupChildren(cmd, {
+    GROUPS: ["conversations", "interactions", "operations", "receipts", "eval-set", "schema"],
+    READ: ["graph", "get", "search", "detail", "spans"],
+    RUN: ["diagnose", "scan", "validate-fixture"],
+  });
+
+  guide(
+    cmd,
+    `FINDING A CONVERSATION
+  conversations list gives conversation ids; get <conversation-id> pulls its spans.
+
+DIAGNOSING
+  diagnose <conversation-id>          symbolic rules only, no model needed
+  diagnose <conversation-id> --llm    adds rubric judging + a synthesized summary; needs a
+                                      local \`claude\` CLI on PATH, silently degrades without it
+  scan <id,id,...>                    the same over several conversations, aggregated
+
+MANAGED LIFECYCLE
+  conversations / interactions / operations / receipts are the write side: an agent opens an
+  interaction, reports operations, then completes it. Those bodies are 3.0 manifests,
+  documented at https://openbkn-ai.github.io/bkn-foundry/ (agent-observability).`,
+  );
+  return group(cmd, "TRACING");
 }

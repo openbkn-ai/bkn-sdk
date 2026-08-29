@@ -122,7 +122,10 @@ export function formatError(err: unknown): string {
       const next = err.hint ? ` ${err.hint}` : "";
       return `Forbidden (HTTP 403)${serverMsg ? `: ${serverMsg}` : " — admin privileges required"}.${next}`;
     }
-    const detail = err.body ? `: ${truncate(err.body, 500)}` : "";
+    // A platform error body is an envelope, sometimes wrapping another one in a
+    // string. Read it down to the sentence a caller can act on rather than
+    // making every reader — human or agent — parse nested JSON.
+    const detail = serverMsg ? `: ${serverMsg}` : err.body ? `: ${truncate(err.body, 500)}` : "";
     // A hint on any other status is the actionable half of the message — a bare
     // server error body tells the user what failed but never what to do next.
     const next = err.hint ? ` ${err.hint}` : "";
@@ -145,12 +148,52 @@ export function formatError(err: unknown): string {
 }
 
 /** Pull a human message out of a server JSON error body, if any. */
+/** The sentence inside a platform error envelope, or "" if this is not one. */
+export function readableServerError(body: string): string {
+  return serverError(body);
+}
+
 function serverError(body: string): string {
   if (!body) return "";
   try {
-    const j = JSON.parse(body) as Record<string, unknown>;
-    const m = j.error ?? j.detail ?? j.description ?? j.message;
-    return typeof m === "string" ? m : "";
+    return describeEnvelope(JSON.parse(body) as Record<string, unknown>);
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Render one platform error envelope as a sentence: the human description, the
+ * stable code that identifies it, and the suggested fix when the server offers
+ * one. Services nest an inner envelope inside `details` as a string, so follow
+ * that one level down to the error that actually happened.
+ */
+function describeEnvelope(j: Record<string, unknown>, depth = 0): string {
+  const text = (v: unknown): string => (typeof v === "string" && v.trim() ? v.trim() : "");
+  const description = text(j.description) || text(j.error) || text(j.detail) || text(j.message);
+  const code = text(j.error_code) || text(j.code);
+  const solution = text(j.solution);
+  const details = text(j.error_details) || text(j.details);
+
+  const inner = depth < 2 ? innerEnvelope(details) : "";
+  const parts = [
+    description || code,
+    description && code ? `[${code}]` : "",
+    inner || (details && details !== description ? truncate(details, 200) : ""),
+    solution && solution !== description ? `— ${solution}` : "",
+  ].filter(Boolean);
+  return parts.join(" ");
+}
+
+/** Some services embed the upstream envelope as JSON inside a prose `details`. */
+function innerEnvelope(details: string, depth = 0): string {
+  const start = details.indexOf("{");
+  const end = details.lastIndexOf("}");
+  if (start === -1 || end <= start) return "";
+  try {
+    const nested = JSON.parse(details.slice(start, end + 1)) as Record<string, unknown>;
+    const rendered = describeEnvelope(nested, depth + 1);
+    return rendered ? `(${rendered})` : "";
   } catch {
     return "";
   }

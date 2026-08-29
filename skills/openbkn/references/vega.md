@@ -7,14 +7,14 @@
 | `catalog delete <id> [--dry-run]` | Preview deletion impact with `--dry-run`; omit it to delete. Running tasks and protected resources block deletion. |
 | `catalog health <ids...>` | Health-status for one or more catalogs. |
 | `catalog discover <id> [--strategy full_sync\|create_only\|cleanup_only]` | Start asynchronous resource discovery; returns a discovery-task id. |
-| `resource discover <id>` / `resource enable\|disable <id>` | Refresh one Resource's metadata, or change its enabled state without changing discovery status. |
+| `vega resource discover <id>` / `vega resource enable\|disable <id>` | Refresh one Resource's metadata, or change its enabled state without changing discovery status. |
 | `discover-schedule create\|list\|get\|update\|delete\|enable\|disable` | Manage catalog discovery schedules. Update is a full replacement and requires the current state plus `--expected-update-time`. |
 | `discover-task list [--resource-id <id>]\|get\|delete` | Inspect or clean up discovery-task history. Task `queue_priority` is output-only; it cannot be used to sort or reprioritize tasks. |
 | `semantic-task create\|list\|get\|delete` | Manage semantic-understanding tasks. |
 | `connector-type list` / `connector-type get <type>` | Available connector types. |
 | `sql --query "<sql>"` / `sql -d <json>` | Run SQL or OpenSearch DSL directly against a data source. SQL uses a `{{<resource-id>}}` table placeholder; DSL identifies its resource with top-level `resource_id`. See [§ vega sql](#vega-sql--run-sql--dsl-against-a-data-source). |
 | `resource …` | Vega-backend resources (mirror of top-level `resource`). |
-| `resource document-create\|document-get\|document-upsert\|document-delete\|document-delete-filter` | Manage documents for a dataset resource. Delete-by-filter requires a non-empty filter. |
+| `vega resource document-create\|document-get\|document-upsert\|document-delete\|document-delete-filter` | Manage documents for a dataset resource. Delete-by-filter requires a non-empty filter. |
 | `dataset build <resource-id> --mode batch\|streaming [--embedding-fields a,b] [--build-key-fields k] [--embedding-model <name-or-id>] [--fulltext-fields a,b] [--fulltext-analyzer <n>] [--execute-type incremental\|full] [--wait] [--timeout <s>]` | Create an index BuildTask. **Index build lives on the resource (one resource = one table); there is no KN-level build.** `batch` requires `--build-key-fields` (else `400 build_key_fields is required for batch mode`). `--embedding-model` takes the model name or a numeric id. Both are resolved: the index config stores the **name** (an id there fails the build), while each vector feature's `config.embedding_model` stores the **id** (a name there is refused by the PUT with `embedding model ID "…" for field "…" not found`). |
 | `dataset build-status <task-id>` | BuildTask status + progress. |
 | `dataset build-list [--status pending,running]` | List BuildTasks. Multiple statuses are OR filters; valid states include `cancelled`. |

@@ -3,7 +3,7 @@
 
 /** `openbkn toolbox …` and `openbkn tool …` — agent toolboxes + tools. */
 import { Command } from "commander";
-import { group } from "../help/grouped-help.js";
+import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
@@ -13,7 +13,7 @@ import { clientFrom, outputOptions } from "./_shared.js";
 const int = (v: string) => Number.parseInt(v, 10);
 
 export function toolboxCommand(): Command {
-  const cmd = new Command("toolbox").description("Agent toolbox lifecycle");
+  const cmd = new Command("toolbox").description("Toolboxes: group tools into one publishable box");
 
   cmd
     .command("list")
@@ -34,16 +34,26 @@ export function toolboxCommand(): Command {
 
   cmd
     .command("create")
-    .description("Create a toolbox")
+    .description(
+      "Create a toolbox — openapi proxies to a service, function holds platform functions",
+    )
     .requiredOption("--name <name>", "toolbox name")
-    .requiredOption("--service-url <url>", "tool service URL")
+    .option("--service-url <url>", "where an openapi box proxies its tools; required for that type")
+    .option("--type <t>", "openapi | function", "openapi")
     .option("--description <d>", "description")
     .action(async (opts, cmd: Command) => {
+      if (opts.type !== "openapi" && opts.type !== "function") {
+        throw new InputError("--type must be openapi or function");
+      }
+      if (opts.type === "openapi" && !opts.serviceUrl) {
+        throw new InputError("--service-url is required for an openapi toolbox");
+      }
       printJson(
         await clientFrom(cmd).toolboxes.create({
           name: opts.name,
           serviceUrl: opts.serviceUrl,
           description: opts.description,
+          metadataType: opts.type,
         }),
         outputOptions(cmd),
       );
@@ -90,11 +100,31 @@ export function toolboxCommand(): Command {
       printJson(await clientFrom(cmd).toolboxes.import(file, opts.type), outputOptions(cmd));
     });
 
-  return group(cmd, "MODELS & SKILLS");
+  groupChildren(cmd, {
+    READ: ["list", "export"],
+    WRITE: ["create", "publish", "unpublish", "delete", "import"],
+  });
+
+  guide(
+    cmd,
+    `ORDER OF WORK
+  toolbox create --name "<n>"        an empty box, in draft
+  tool upload <openapi> --toolbox    each tool comes from an OpenAPI definition
+  tool enable <tool-ids...>          a tool is off until enabled
+  toolbox publish <box-id>           the box becomes callable by agents
+  tool execute <tool-id>             call a published, enabled tool
+  tool debug <tool-id>               call one that is neither, while building it
+
+  export / import move a whole box between deploys as an .adp file.`,
+  );
+
+  return group(cmd, "TOOLS & SKILLS");
 }
 
 export function toolCommand(): Command {
-  const cmd = new Command("tool").description("Tools inside a toolbox");
+  const cmd = new Command("tool").description(
+    "Tools in a box: upload an OpenAPI spec, enable, call",
+  );
 
   cmd
     .command("list")
@@ -139,7 +169,10 @@ export function toolCommand(): Command {
   const invokeOpts = (c: Command) =>
     c
       .requiredOption("--toolbox <box-id>", "toolbox id")
-      .option("--body <json>", "request body JSON")
+      .option(
+        "--body <json>",
+        "request body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (execution-factory)",
+      )
       .option("--header <json>", "headers map JSON")
       .option("--query <json>", "query params JSON")
       .option("--path <json>", "path params JSON")
@@ -191,5 +224,11 @@ export function toolCommand(): Command {
       );
     });
 
-  return group(cmd, "MODELS & SKILLS");
+  groupChildren(cmd, {
+    READ: ["list"],
+    RUN: ["execute", "debug"],
+    WRITE: ["enable", "disable", "upload"],
+  });
+
+  return group(cmd, "TOOLS & SKILLS");
 }

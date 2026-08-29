@@ -14,7 +14,7 @@ import {
   queryMetricData,
   queryObjectTypeInstances,
   querySubgraph,
-  semanticSearch,
+  searchInstance,
 } from "../../src/api/knowledge-networks.js";
 import { resetLifecycleCaches } from "../../src/api/lifecycle.js";
 import { readBody } from "../../src/commands/_shared.js";
@@ -225,28 +225,52 @@ describe("reads tunnelled over POST", () => {
   });
 });
 
-describe("semanticSearch", () => {
+describe("searchInstance", () => {
   // Search probes the MCP tool catalog first to decide whether this deploy
   // needs a `bkn_context`, so the retrieval POST is no longer the first call.
   beforeEach(() => resetLifecycleCaches());
 
-  it("POSTs the retrieval body with defaults", async () => {
+  it("POSTs only the sentence when nothing is narrowed", async () => {
     const fetchMock = mockFetch();
-    await semanticSearch(ctx, "kn-1", "churn");
-    const call = callTo(fetchMock, "/api/agent-retrieval/v1/kn/semantic-search");
+    await searchInstance(ctx, "kn-1", "churn");
+    const call = callTo(fetchMock, "/api/agent-retrieval/v1/kn/search_instance");
     expect(call[1].method).toBe("POST");
+    const body = JSON.parse(call[1].body as string);
+    expect(body).toMatchObject({ kn_id: "kn-1", query: "churn" });
+    // The server owns the defaults for everything else, so an untouched flag
+    // must not travel as an explicit value.
+    expect(body).not.toHaveProperty("max_object_types");
+    expect(body).not.toHaveProperty("rerank");
+    expect(body).not.toHaveProperty("include_object_types");
+  });
+
+  it("passes the narrowing options through under their wire names", async () => {
+    const fetchMock = mockFetch();
+    await searchInstance(ctx, "kn-1", "churn", {
+      objectTypes: ["customer"],
+      excludeObjectTypes: ["log"],
+      conceptGroups: ["sales"],
+      maxObjectTypes: 3,
+      maxInstancesPerType: 2,
+      rerank: true,
+      includeObjectTypes: false,
+    });
+    const call = callTo(fetchMock, "/api/agent-retrieval/v1/kn/search_instance");
     expect(JSON.parse(call[1].body as string)).toMatchObject({
-      kn_id: "kn-1",
-      query: "churn",
-      mode: "keyword_vector_retrieval",
-      max_concepts: 10,
+      object_types: ["customer"],
+      exclude_object_types: ["log"],
+      concept_groups: ["sales"],
+      max_object_types: 3,
+      max_instances_per_type: 2,
+      rerank: true,
+      include_object_types: false,
     });
   });
 
   it("leaves the body untouched when the deploy has no lifecycle tools", async () => {
     const fetchMock = mockFetch();
-    await semanticSearch(ctx, "kn-1", "churn");
-    const call = callTo(fetchMock, "/api/agent-retrieval/v1/kn/semantic-search");
+    await searchInstance(ctx, "kn-1", "churn");
+    const call = callTo(fetchMock, "/api/agent-retrieval/v1/kn/search_instance");
     expect(JSON.parse(call[1].body as string)).not.toHaveProperty("bkn_context");
   });
 });

@@ -89,9 +89,23 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 | `trace` | BKN Trace | `get`、`search`、`diagnose <conv> [--llm]`（符号规则 + LLM rubric + synthesizer）、`scan <conv,…>`、`eval-set build <queries>`、`schema validate <file>` |
 | `admin` | 运营 | `org/user/role …` CRUD + `reset-password`、`license show/import/receipt/activate/remove/fingerprint`（集群授权）、`audit list`、`llm/small-model …`、`auth …`、`config`、`call` |
 | `call`（别名 `curl`） | 通用 API 透传 | `call <url> [-X POST] [-d '<json>']` |
-| `explore` | 本地只读服务（bkn + vega JSON） | `explore [--port <n>]` |
 
 **按需深入**：需要某命令的完整参数时运行 `openbkn <group> <sub> --help`，或读对应的速查参考。
+
+**本 CLI 暂未覆盖的平台能力**（别猜命令，直接用 `openbkn call` 打原始接口）：
+
+- Agent 运行时 `bkn-agent`（`/api/bkn-agent/v1/agents`、`/chat`、`/run`、`/tasks`、`/prompts`）
+- 执行工厂的算子、沙箱函数、MCP 注册面（`/api/agent-operator-integration/v1/operator|function|mcp`）
+- Skill 索引构建任务（`/api/agent-operator-integration/v1/skills/index/build`）
+- `openbkn call /api/<service>/v1/... [-X POST] [-d '<json>']` 会自动注入认证头
+- **接口文档在 https://openbkn-ai.github.io/bkn-foundry/** —— 按模块分组的交互式
+  OpenAPI（bkn-backend / context-loader / ontology-query / vega-backend /
+  execution-factory / agent-observability / bkn-agent）。先在那里查准路径和
+  请求体，再 `call`，不要猜路径
+
+另注：知识网络没有"整网构建"这回事，索引数据由 `openbkn vega dataset build <resource-id>` 的
+BuildTask 产出；`trace` 的 business-provenance 摘要（requests/interactions）自 foundry 0.1.4 起
+只在企业版注册，社区版部署上会 404。
 
 ## 详细参考（references/）
 
@@ -134,6 +148,11 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 
 - **不要预检**：直接执行目标命令，认证由 CLI 处理(token 模式不自动续期；`~/.bkn/` 凭据可用 refresh)。
 - **不要猜 business domain / 参数**：用 `--help`；列表为空时确认 `-bd`。
+- **不要猜请求体字段**：带 `--body` / `--body-file` 的命令，其 `--body` 说明里写着该去
+  https://openbkn-ai.github.io/bkn-foundry/ 的哪个模块查形状（改定义看 bkn-backend，
+  取数/执行看 ontology-query，skill/tool 看 execution-factory，受管交互看
+  agent-observability）。`context` 的 `--args` 例外：形状是 MCP 工具自己的 input schema，
+  用 `context tools <kn-id>` 取。
 - **破坏性操作**（`bkn`/`admin` 的 delete、`admin user reset-password`、Action 执行）作用于线上，执行前向用户确认。
 - `trace diagnose --llm`、rubric/synthesizer 用**本地 `claude` CLI** 做判定；`claude` 不在 PATH 时自动降级为纯符号。
 - 宽表查询(`object-type query` / `context query-object-instance`)务必限制 `limit`、用分页与 `condition` 过滤，避免 JSON 截断。

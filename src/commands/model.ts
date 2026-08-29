@@ -4,7 +4,7 @@
 /** `openbkn model …` — model factory (llm / small-model). */
 import { Command } from "commander";
 import type { BknClient } from "../client.js";
-import { group } from "../help/grouped-help.js";
+import { group, groupChildren } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
@@ -29,7 +29,10 @@ function addManagementCommands(parent: Command, kind: "llm" | "small"): void {
   parent
     .command("add")
     .description("Register a model (definition JSON via --body / --body-file)")
-    .option("--body <json>", "model definition JSON")
+    .option(
+      "--body <json>",
+      "model definition JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (mf-model-manager)",
+    )
     .option("--body-file <path>", "read model definition JSON from a file")
     .action(async (opts, cmd: Command) => {
       printJson(await clientFrom(cmd).models[kind].add(readBody(opts)), outputOptions(cmd));
@@ -37,7 +40,10 @@ function addManagementCommands(parent: Command, kind: "llm" | "small"): void {
   parent
     .command("edit")
     .description("Update a model definition (JSON via --body / --body-file)")
-    .option("--body <json>", "model definition JSON")
+    .option(
+      "--body <json>",
+      "model definition JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (mf-model-manager)",
+    )
     .option("--body-file <path>", "read model definition JSON from a file")
     .action(async (opts, cmd: Command) => {
       printJson(await clientFrom(cmd).models[kind].edit(readBody(opts)), outputOptions(cmd));
@@ -51,7 +57,10 @@ function addManagementCommands(parent: Command, kind: "llm" | "small"): void {
   parent
     .command("test")
     .description("Test a model's connectivity / inference (JSON via --body / --body-file)")
-    .option("--body <json>", "test request JSON")
+    .option(
+      "--body <json>",
+      "test request JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (mf-model-manager)",
+    )
     .option("--body-file <path>", "read test request JSON from a file")
     .action(async (opts, cmd: Command) => {
       printJson(await clientFrom(cmd).models[kind].test(readBody(opts)), outputOptions(cmd));
@@ -60,13 +69,13 @@ function addManagementCommands(parent: Command, kind: "llm" | "small"): void {
 
 export function modelCommand(): Command {
   const model = new Command("model").description(
-    "Model factory — LLM / small-model CRUD, chat / embeddings / rerank, default selection",
+    "Large and small models: chat, embeddings, rerank, defaults",
   );
 
   const llm = model.command("llm").description("Large language models");
   llm
     .command("list")
-    .description("List LLM models")
+    .description("List LLM models → {data, count}")
     .option("--name <s>", "filter by name")
     .option("--type <t>", "model type filter")
     .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
@@ -121,7 +130,7 @@ export function modelCommand(): Command {
   const small = model.command("small").description("Small models (embedding / reranker)");
   small
     .command("list")
-    .description("List small models")
+    .description("List small models → {data, count}")
     .option("--name <s>", "filter by name")
     .option("--type <t>", "model type filter")
     .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
@@ -201,5 +210,13 @@ Examples:
   $ openbkn model small set-default <id>                        # default embedding/reranker`,
   );
 
-  return group(model, "MODELS & SKILLS");
+  for (const kind of [llm, small]) {
+    groupChildren(kind, {
+      READ: ["list", "get", "get-default"],
+      RUN: ["chat", "embeddings", "rerank", "test"],
+      WRITE: ["add", "edit", "delete", "set-default", "unset-default"],
+    });
+  }
+
+  return group(model, "MODELS");
 }

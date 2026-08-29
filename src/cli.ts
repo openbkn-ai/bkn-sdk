@@ -6,75 +6,37 @@
  * `openbkn` — unified CLI for the BKN platform.
  * Thin shell: parse argv → call a resource → print. No business logic here.
  */
-import { Command } from "commander";
-import pkg from "../package.json" with { type: "json" };
 import { releaseLifecycleSessions } from "./api/lifecycle.js";
-import { adminCommand } from "./commands/admin.js";
-import { appkeyCommand } from "./commands/appkey.js";
-import { authCommand } from "./commands/auth.js";
-import { bknCommand } from "./commands/bkn.js";
-import { callCommand } from "./commands/call.js";
-import { configCommand } from "./commands/config.js";
-import { contextCommand } from "./commands/context.js";
-import { exploreCommand } from "./commands/explore.js";
-import { modelCommand } from "./commands/model.js";
-import { resourceCommand } from "./commands/resource.js";
-import { skillCommand } from "./commands/skill.js";
-import { toolCommand, toolboxCommand } from "./commands/toolbox.js";
-import { traceCommand } from "./commands/trace.js";
-import { vegaCommand } from "./commands/vega.js";
-import { installGroupedHelp } from "./help/grouped-help.js";
+import { buildProgram } from "./cli-program.js";
+import { DryRunSignal, enableDryRun } from "./utils/dry-run.js";
 import { formatError, toExitCode } from "./utils/errors.js";
 
-const program = new Command();
+// `openbkn describe | head` closes the pipe while we are still writing. Node
+// turns that into an unhandled EPIPE and a stack trace; for a CLI it just means
+// the reader had enough.
+process.stdout.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EPIPE") process.exit(0);
+  throw err;
+});
 
-program
-  .name("openbkn")
-  .description("Operate the BKN platform from the CLI")
-  .version(pkg.version, "-V, --version", "output the version number")
-  .option("--base-url <url>", "platform base URL (env: BKN_BASE_URL)")
-  .option("--token <value>", "access token (env: BKN_TOKEN)")
-  .option("--user <id|name>", "use specific user credentials (env: BKN_USER)")
-  .option("--json", "machine-readable JSON output")
-  .option("--compact", "single-line JSON output")
-  .option("--full", "human view: show all columns (default trims to the key ones)")
-  .option("--biz-domain <s>", "business domain (alias: -bd)")
-  .option("--conversation-id <id>", "BKN Trace conversation id (env: BKN_CONVERSATION_ID)")
-  .option("--interaction-id <id>", "BKN Trace interaction id (env: BKN_INTERACTION_ID)")
-  .option(
-    "--new-conversation",
-    "ignore the remembered conversation for this command (see `openbkn context conversation`)",
-  )
-  .option("-k, --insecure", "skip TLS verification (dev / self-signed only)")
-  .showHelpAfterError();
-
-// Real commands.
-program.addCommand(authCommand());
-program.addCommand(callCommand());
-program.addCommand(configCommand());
-program.addCommand(appkeyCommand());
-program.addCommand(vegaCommand());
-program.addCommand(bknCommand());
-program.addCommand(resourceCommand());
-program.addCommand(contextCommand());
-program.addCommand(modelCommand());
-program.addCommand(skillCommand());
-program.addCommand(toolboxCommand());
-program.addCommand(toolCommand());
-program.addCommand(traceCommand());
-program.addCommand(adminCommand());
-program.addCommand(exploreCommand());
-
-// Apply grouped help to the whole tree (after all commands are registered).
-installGroupedHelp(program);
+const program = buildProgram();
 
 // Legacy `-bd` is a 2-char short flag commander can't declare; rewrite it to
 // the canonical `--biz-domain` before parsing (legacy compatibility).
 const argv = process.argv.map((a) => (a === "-bd" ? "--biz-domain" : a));
 
+// The flag has to be read before commander parses, because the switch must be
+// on by the time a resource builds its first request.
+if (argv.includes("--dry-run")) enableDryRun();
+
 try {
   await program.parseAsync(argv);
 } catch (err) {
+  if (err instanceof DryRunSignal) {
+    process.stdout.write(`${JSON.stringify(err.request, null, 2)}\n`);
+    await releaseLifecycleSessions();
+    process.exit(0);
+  }
   console.error(formatError(err));
   await releaseLifecycleSessions();
   process.exit(toExitCode(err));

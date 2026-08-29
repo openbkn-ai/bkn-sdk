@@ -11,7 +11,7 @@ import { Command } from "commander";
 import { rawCall } from "../api/call.js";
 import { resolveContext } from "../config/resolve.js";
 import { activePlatform, setActivePlatform } from "../config/store.js";
-import { group } from "../help/grouped-help.js";
+import { group, groupChildren } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
@@ -38,7 +38,7 @@ async function importLicenseFile(cmd: Command, file: string, receipt: boolean): 
 }
 
 export function adminCommand(): Command {
-  const admin = new Command("admin").description("Operator CLI: org, user, role, models, audit");
+  const admin = new Command("admin").description("Orgs, users, roles, license, audit log");
 
   // Operator auth = the same leaves as top-level `openbkn auth` (1:1 nest).
   registerAuthLeaves(admin.command("auth").description("Operator authentication"));
@@ -46,7 +46,7 @@ export function adminCommand(): Command {
   const org = admin.command("org").description("Departments and org structure");
   org
     .command("list")
-    .description("List departments")
+    .description("List departments → {departments, total}")
     .option("--role <r>", "role qualifier", "super_admin")
     .option("--name <s>", "filter by name")
     .option("--limit <n>", "page size", int, 100)
@@ -153,7 +153,7 @@ export function adminCommand(): Command {
   const user = admin.command("user").description("User management");
   user
     .command("list")
-    .description("List users")
+    .description("List users → {users, total}")
     .option("--org <id>", "filter by department id")
     .option("--keyword <s>", "filter by name")
     .option("--limit <n>", "page size", int, 100)
@@ -299,7 +299,7 @@ export function adminCommand(): Command {
   const role = admin.command("role").description("Role management");
   role
     .command("list")
-    .description("List roles")
+    .description("List roles → {roles}")
     .option("--keyword <s>", "filter by keyword")
     .option("--limit <n>", "page size", int, 100)
     .option("--offset <n>", "page offset", int, 0)
@@ -470,7 +470,10 @@ export function adminCommand(): Command {
       .option("--name <s>", "model name")
       .option("--api-model <s>", "upstream API model id")
       .option("--api-key <s>", "upstream API key")
-      .option("--body <json>", "model config JSON (overrides flags)")
+      .option(
+        "--body <json>",
+        "model config JSON (overrides flags) — docs: https://openbkn-ai.github.io/bkn-foundry/ (mf-model-manager)",
+      )
       .option("--body-file <path>", "read config JSON from a file");
     if (isLlm) {
       add
@@ -493,7 +496,10 @@ export function adminCommand(): Command {
       .command("edit <modelid>")
       .description(`Edit a ${kind} model (granular flags or --body/--body-file)`)
       .option("--name <s>", "model name")
-      .option("--body <json>", "model config JSON (overrides flags)")
+      .option(
+        "--body <json>",
+        "model config JSON (overrides flags) — docs: https://openbkn-ai.github.io/bkn-foundry/ (mf-model-manager)",
+      )
       .option("--body-file <path>", "read config JSON from a file");
     if (isLlm) {
       edit.option("--icon <url>", "icon URL");
@@ -517,7 +523,10 @@ export function adminCommand(): Command {
 
     m.command("test <modelid>")
       .description(`Test a ${kind} model`)
-      .option("--body <json>", "test request JSON")
+      .option(
+        "--body <json>",
+        "test request JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (mf-model-manager)",
+      )
       .option("--body-file <path>", "read test request JSON from a file")
       .action(async (id: string, opts, cmd: Command) => {
         const body = opts.body || opts.bodyFile ? (readBody(opts) as object) : {};
@@ -610,7 +619,9 @@ export function adminCommand(): Command {
     });
   admin
     .command("call <url>")
-    .description("Operator API passthrough (curl-style; auto-injected auth)")
+    .description(
+      "Operator API passthrough (curl-style; auto-injected auth) — paths at https://openbkn-ai.github.io/bkn-foundry/",
+    )
     .option("-X, --request <method>", "HTTP method")
     .option(
       "-H, --header <header>",
@@ -644,5 +655,10 @@ export function adminCommand(): Command {
       if (res.status >= 400) process.exitCode = 1;
     });
 
-  return group(admin, "OPERATOR");
+  groupChildren(admin, {
+    GROUPS: ["org", "user", "role", "llm", "small-model", "license", "audit", "auth", "config"],
+    RUN: ["call"],
+  });
+
+  return group(admin, "ADMINISTRATION");
 }
