@@ -7,7 +7,7 @@ import { changePasswordSafe, getUserSafe } from "../api/safe.js";
 import { decodeJwt } from "../auth/jwt.js";
 import { credentialDeviceLogin, deviceLogin, isHeadless, openBrowser } from "../auth/oauth.js";
 import { resolveContext } from "../config/resolve.js";
-import { group, groupChildren } from "../help/grouped-help.js";
+import { group, groupChildren, guide } from "../help/grouped-help.js";
 import * as auth from "../resources/auth.js";
 import { DEFAULT_BUSINESS_DOMAIN } from "../types.js";
 import { HttpError, InputError } from "../utils/errors.js";
@@ -339,6 +339,26 @@ export function authCommand(): Command {
     RUN: ["token", "export"],
     WRITE: ["login", "logout", "use", "switch", "delete", "change-password"],
   });
+
+  guide(
+    cmd,
+    `WAYS IN
+  login <url> -u <user> -p <pass>   password, no browser
+  login <url> --token <token>       a token you already hold (CI)
+  login <url> --device              device code, for a host with no browser
+  login <url>                       opens a browser; --no-browser prints the URL instead
+
+MANY PLATFORMS, MANY USERS
+  A session is a platform plus a user. \`use <url>\` changes which platform is
+  active; \`switch <url> <user>\` changes which saved user is active on one.
+  \`list\` shows both, marking the active pair. \`--user\` on any command borrows a
+  saved user for that call alone.
+
+TOKENS
+  \`token\` prints the access token, refreshing it first if it has expired;
+  \`--no-refresh\` prints what is stored. \`export\` hands the whole session to a
+  headless host. Both write a secret to stdout.`,
+  );
 
   return group(cmd, "SIGN IN & SETTINGS");
 }

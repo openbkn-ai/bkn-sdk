@@ -3,7 +3,7 @@
 
 /** `openbkn toolbox …` and `openbkn tool …` — agent toolboxes + tools. */
 import { Command } from "commander";
-import { group, groupChildren } from "../help/grouped-help.js";
+import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
@@ -94,6 +94,19 @@ export function toolboxCommand(): Command {
     READ: ["list", "export"],
     WRITE: ["create", "publish", "unpublish", "delete", "import"],
   });
+
+  guide(
+    cmd,
+    `ORDER OF WORK
+  toolbox create --name "<n>"        an empty box, in draft
+  tool upload <openapi> --toolbox    each tool comes from an OpenAPI definition
+  tool enable <tool-ids...>          a tool is off until enabled
+  toolbox publish <box-id>           the box becomes callable by agents
+  tool execute <tool-id>             call a published, enabled tool
+  tool debug <tool-id>               call one that is neither, while building it
+
+  export / import move a whole box between deploys as an .adp file.`,
+  );
 
   return group(cmd, "TOOLS & SKILLS");
 }
