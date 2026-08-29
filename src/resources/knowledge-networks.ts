@@ -29,7 +29,7 @@ import {
   type GetKnOptions,
   type ListKnOptions,
   type ListSchemaOptions,
-  type SemanticSearchOptions,
+  type SearchInstanceOptions,
   cancelActionLog,
   createKnowledgeNetwork,
   createMetric,
@@ -54,7 +54,7 @@ import {
   queryMetricData,
   queryObjectTypeInstances,
   querySubgraph,
-  semanticSearch,
+  searchInstance,
   updateKnowledgeNetwork,
   updateMetric,
   updateSchemaItem,
@@ -71,8 +71,8 @@ export function kn(ctx: RequestContext) {
   return {
     list: (opts?: ListKnOptions) => listKnowledgeNetworks(ctx, opts),
     get: (knId: string, opts?: GetKnOptions) => getKnowledgeNetwork(ctx, knId, opts),
-    search: (knId: string, query: string, opts?: SemanticSearchOptions) =>
-      semanticSearch(ctx, knId, query, opts),
+    search: (knId: string, query: string, opts?: SearchInstanceOptions) =>
+      searchInstance(ctx, knId, query, opts),
     create: (opts: CreateKnOptions) => createKnowledgeNetwork(ctx, opts),
     update: (knId: string, body: unknown) => updateKnowledgeNetwork(ctx, knId, body),
     delete: (knId: string) => deleteKnowledgeNetwork(ctx, knId),
