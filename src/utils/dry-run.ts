@@ -26,9 +26,10 @@ export function isDryRun(): boolean {
 }
 
 /**
- * Run something without previewing it. Used for the exchanges a caller is not
- * asking about — an MCP handshake, a token refresh — so the preview lands on
- * the request they actually typed.
+ * Run something without previewing it: the exchanges a caller is not asking
+ * about, such as an MCP handshake, so the preview lands on the request they
+ * typed. Token refresh takes the other road — it rotates a stored credential,
+ * so under a dry run it does not happen at all.
  */
 export async function withoutPreview<T>(fn: () => Promise<T>): Promise<T> {
   suppressed += 1;
