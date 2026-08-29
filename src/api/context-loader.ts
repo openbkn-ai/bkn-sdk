@@ -9,7 +9,7 @@
  */
 import { createOperationTraceContext } from "../trace-context.js";
 import type { RequestContext } from "../types.js";
-import { previewRequest } from "../utils/dry-run.js";
+import { withoutPreview } from "../utils/dry-run.js";
 import { HttpError, ToolError, readableServerError } from "../utils/errors.js";
 import { parseBigIntJSON, stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { authFetch } from "./auth-fetch.js";
@@ -86,20 +86,13 @@ async function post(
   const controller = timeoutMs === undefined ? undefined : new AbortController();
   const timer =
     controller === undefined ? undefined : setTimeout(() => controller.abort(), timeoutMs);
-  // MCP goes out on its own fetch, so it needs the same last stop as `request`.
-  // The handshake frames are noise to someone checking their arguments, so a
-  // preview waits for the frame that carries them.
+  // `tlsFetch` previews every outbound request, which would stop on the
+  // handshake — the frames a caller checking their arguments did not ask about.
   const rpcMethod = (body as { method?: string } | undefined)?.method;
-  if (rpcMethod !== "initialize" && !rpcMethod?.startsWith("notifications/")) {
-    previewRequest({
-      method: "POST",
-      url: mcpUrl(ctx),
-      headers: headers(ctx, knId, sessionId),
-      body,
-    });
-  }
-  try {
-    const res = await authFetch(ctx, () =>
+  const isHandshake =
+    rpcMethod === "initialize" || Boolean(rpcMethod?.startsWith("notifications/"));
+  const send = () =>
+    authFetch(ctx, () =>
       tlsFetch(ctx.insecure, mcpUrl(ctx), {
         method: "POST",
         headers: headers(ctx, knId, sessionId),
@@ -107,6 +100,8 @@ async function post(
         ...(controller ? { signal: controller.signal } : {}),
       }),
     );
+  try {
+    const res = await (isHandshake ? withoutPreview(send) : send());
     const text = await res.text();
     if (!res.ok) throw new HttpError(res.status, res.statusText, text);
     return { res, text };

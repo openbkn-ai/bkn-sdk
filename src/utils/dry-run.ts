@@ -14,6 +14,7 @@
  */
 
 let enabled = false;
+let suppressed = 0;
 
 /** Turn on request preview for this process. */
 export function enableDryRun(): void {
@@ -22,6 +23,20 @@ export function enableDryRun(): void {
 
 export function isDryRun(): boolean {
   return enabled;
+}
+
+/**
+ * Run something without previewing it. Used for the exchanges a caller is not
+ * asking about — an MCP handshake, a token refresh — so the preview lands on
+ * the request they actually typed.
+ */
+export async function withoutPreview<T>(fn: () => Promise<T>): Promise<T> {
+  suppressed += 1;
+  try {
+    return await fn();
+  } finally {
+    suppressed -= 1;
+  }
 }
 
 export interface PreviewedRequest {
@@ -72,7 +87,7 @@ export function previewRequest(input: {
   headers?: HeaderInput;
   body?: unknown;
 }): void {
-  if (!enabled) return;
+  if (!enabled || suppressed > 0) return;
   let body = input.body;
   if (typeof body === "string") {
     try {

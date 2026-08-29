@@ -15,6 +15,7 @@
  * `fetch`, which does.
  */
 import { Agent, FormData as UndiciFormData, fetch as undiciFetch } from "undici";
+import { previewRequest } from "../utils/dry-run.js";
 
 type UndiciInit = NonNullable<Parameters<typeof undiciFetch>[1]>;
 
@@ -99,6 +100,16 @@ export function tlsFetch(
   init?: RequestInit,
   headersTimeoutMs?: number,
 ): Promise<Response> {
+  // Every outbound request funnels through here — `request()`, the MCP fetch,
+  // `call`, and the multipart uploads that build their own — so this is the one
+  // place where `--dry-run` can promise it sent nothing.
+  previewRequest({
+    method: String(init?.method ?? "GET"),
+    url,
+    headers: init?.headers as Record<string, string> | undefined,
+    body:
+      typeof init?.body === "string" ? init.body : init?.body ? "<binary or multipart>" : undefined,
+  });
   // Only detour for a header deadline that the platform's own `fetch` cannot
   // already honour. Below the threshold the two behave identically, and staying
   // on the global keeps it interceptable — a consumer who stubs `fetch` should
