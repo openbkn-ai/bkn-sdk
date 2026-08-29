@@ -79,7 +79,9 @@ export function contextCommand(): Command {
 
   cmd
     .command("search-schema <kn-id> <query>")
-    .description("Search object/relation/action/metric schemas")
+    .description(
+      "Search object/relation/action/metric schemas → {object_types, relation_types, action_types, metric_types}",
+    )
     .option("--scope <list>", "comma-separated scopes (object,relation,action,metric)")
     .option("--max <n>", "max concepts", int)
     .action(async (knId: string, query: string, opts, cmd: Command) => {
@@ -92,10 +94,12 @@ export function contextCommand(): Command {
 
   cmd
     .command("query-object-instance <kn-id>")
-    .description("Query object instances (provide --args as JSON)")
+    .description(
+      'Query one object type\'s instances — `--args \'{"ot_id":"<id>","limit":10}\'` → {datas, total_count}',
+    )
     .requiredOption(
       "--args <json>",
-      "tool arguments as JSON — input schema comes from `context tools <kn-id>`",
+      "tool arguments as JSON; kn_id is filled from <kn-id> — input schema comes from `context tools <kn-id>`",
     )
     .action(async (knId: string, opts, cmd: Command) => {
       let args: Record<string, unknown>;
@@ -209,7 +213,7 @@ export function contextCommand(): Command {
     .description("Call any MCP tool by name — current or future (use `tools` to discover)")
     .option(
       "--args <json>",
-      "tool arguments as JSON — input schema comes from `context tools <kn-id>`",
+      "tool arguments as JSON; kn_id is filled from <kn-id> — input schema comes from `context tools <kn-id>`",
     )
     .option(
       "--arg <key=value>",
@@ -298,7 +302,7 @@ export function contextCommand(): Command {
     .description("Query an instance subgraph across relation-type paths")
     .requiredOption(
       "--args <json>",
-      "tool arguments as JSON — input schema comes from `context tools <kn-id>`",
+      "tool arguments as JSON; kn_id is filled from <kn-id> — input schema comes from `context tools <kn-id>`",
     )
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(
@@ -311,7 +315,7 @@ export function contextCommand(): Command {
     .description("Compute logic-property values for instances")
     .requiredOption(
       "--args <json>",
-      "tool arguments as JSON — input schema comes from `context tools <kn-id>`",
+      "tool arguments as JSON; kn_id is filled from <kn-id> — input schema comes from `context tools <kn-id>`",
     )
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(
@@ -324,7 +328,7 @@ export function contextCommand(): Command {
     .description("Fetch action info / dynamic tools for an instance")
     .requiredOption(
       "--args <json>",
-      "tool arguments as JSON — input schema comes from `context tools <kn-id>`",
+      "tool arguments as JSON; kn_id is filled from <kn-id> — input schema comes from `context tools <kn-id>`",
     )
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(
@@ -345,6 +349,11 @@ export function contextCommand(): Command {
 PICKING THE RIGHT QUERY
   Aggregation, ranking, GROUP BY or joins are not query-object-instance — send SQL through
   \`tool-call <kn-id> run_sql\`. Unknown topology is explore, not a hand-built path.
+
+THE SAME ID, FOUR NAMES
+  An object type's id is \`concept_id\` in search-schema output, \`id\` in kn-detail and
+  get_object_types, \`ot_id\` in query-object-instance arguments, and \`object_type_id\` on
+  an instance row. Same value throughout — carry it across, do not look it up again.
 
 RAW MCP
   tools <kn-id> lists what this deploy advertises, with each tool's input schema.

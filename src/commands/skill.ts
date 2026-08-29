@@ -76,7 +76,9 @@ export function skillCommand(): Command {
       .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
       .option("--page <n>", "page", int, 1);
 
-  listOpts(cmd.command("list").description("List skills"))
+  listOpts(
+    cmd.command("list").description("List skills → {data, total, page, page_size, has_next}"),
+  )
     .option("--create-user <s>", "filter by creator")
     .action(async (opts, cmd: Command) => {
       printJson(

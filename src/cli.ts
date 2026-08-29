@@ -93,6 +93,8 @@ GOOD TO KNOW
   --full widens it). Ids come from list/search output — they are opaque, never guess one.
   list/get/search only read; create, delete, publish and execute change the platform.
   Multi-tenant deploys: --biz-domain picks the domain, --user switches saved logins.
+  Most list commands answer {entries, total_count}; commands that answer something else
+  say so in their own description.
   \`openbkn call\` reaches any endpoint a command does not cover, auth injected. Look the
   path up at https://openbkn-ai.github.io/bkn-foundry/ first — do not guess one.`,
 );

@@ -54,7 +54,7 @@ export function bknCommand(): Command {
 
   bkn
     .command("search <kn-id> <query>")
-    .description("Semantic search within a knowledge network")
+    .description("Semantic search within a knowledge network → {concepts} (schema, not instances)")
     .option("--max-concepts <n>", "max concepts to return", int, 10)
     .option("--mode <mode>", "retrieval mode", "keyword_vector_retrieval")
     .action(async (knId: string, query: string, opts, cmd: Command) => {
