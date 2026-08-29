@@ -75,7 +75,7 @@ export function modelCommand(): Command {
   const llm = model.command("llm").description("Large language models");
   llm
     .command("list")
-    .description("List LLM models")
+    .description("List LLM models → {data, count}")
     .option("--name <s>", "filter by name")
     .option("--type <t>", "model type filter")
     .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
@@ -130,7 +130,7 @@ export function modelCommand(): Command {
   const small = model.command("small").description("Small models (embedding / reranker)");
   small
     .command("list")
-    .description("List small models")
+    .description("List small models → {data, count}")
     .option("--name <s>", "filter by name")
     .option("--type <t>", "model type filter")
     .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)

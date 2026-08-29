@@ -43,7 +43,7 @@ export function resourceCommand(): Command {
 
   cmd
     .command("find")
-    .description("Search resources by name (fuzzy; --exact for strict)")
+    .description("Search resources by name, fuzzy unless --exact → a bare array, not an envelope")
     .requiredOption("--name <name>", "resource name to search")
     .option("--exact", "exact name match")
     .option("--catalog-id <id>", "limit to a catalog")

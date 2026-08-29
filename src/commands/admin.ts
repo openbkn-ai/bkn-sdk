@@ -46,7 +46,7 @@ export function adminCommand(): Command {
   const org = admin.command("org").description("Departments and org structure");
   org
     .command("list")
-    .description("List departments")
+    .description("List departments → {departments, total}")
     .option("--role <r>", "role qualifier", "super_admin")
     .option("--name <s>", "filter by name")
     .option("--limit <n>", "page size", int, 100)
@@ -153,7 +153,7 @@ export function adminCommand(): Command {
   const user = admin.command("user").description("User management");
   user
     .command("list")
-    .description("List users")
+    .description("List users → {users, total}")
     .option("--org <id>", "filter by department id")
     .option("--keyword <s>", "filter by name")
     .option("--limit <n>", "page size", int, 100)
@@ -299,7 +299,7 @@ export function adminCommand(): Command {
   const role = admin.command("role").description("Role management");
   role
     .command("list")
-    .description("List roles")
+    .description("List roles → {roles}")
     .option("--keyword <s>", "filter by keyword")
     .option("--limit <n>", "page size", int, 100)
     .option("--offset <n>", "page offset", int, 0)

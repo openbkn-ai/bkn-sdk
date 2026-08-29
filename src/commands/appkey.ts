@@ -49,7 +49,7 @@ export function appkeyCommand(): Command {
 
   appkey
     .command("list")
-    .description("List your own AppKeys (no secrets)")
+    .description("List your own AppKeys, no secrets → {keys}")
     .action(async (_opts, cmd: Command) => {
       printJson(await clientFrom(cmd).appKeys.list(), outputOptions(cmd));
     });

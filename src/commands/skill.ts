@@ -105,19 +105,19 @@ export function skillCommand(): Command {
       printJson(await clientFrom(cmd).skills.get(id), outputOptions(cmd));
     });
 
-  listOpts(cmd.command("market").description("Browse the skill market")).action(
-    async (opts, cmd: Command) => {
-      printJson(
-        await clientFrom(cmd).skills.market({
-          name: opts.name,
-          source: opts.source,
-          pageSize: opts.limit,
-          page: opts.page,
-        }),
-        outputOptions(cmd),
-      );
-    },
-  );
+  listOpts(
+    cmd.command("market").description("Browse the skill market → {data, total, page, has_next}"),
+  ).action(async (opts, cmd: Command) => {
+    printJson(
+      await clientFrom(cmd).skills.market({
+        name: opts.name,
+        source: opts.source,
+        pageSize: opts.limit,
+        page: opts.page,
+      }),
+      outputOptions(cmd),
+    );
+  });
 
   cmd
     .command("market-get <skill-id>")

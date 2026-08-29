@@ -248,7 +248,9 @@ export function bknCommand(): Command {
       printJson(await clientFrom(cmd).kn.subgraph(knId, readBody(opts)), outputOptions(cmd));
     });
 
-  const actionLog = bkn.command("action-log").description("Action logs — list/get/cancel");
+  const actionLog = bkn
+    .command("action-log")
+    .description("Action logs — list/get/cancel; list pages with search_after");
   actionLog
     .command("list <kn-id>")
     .description("List action logs")

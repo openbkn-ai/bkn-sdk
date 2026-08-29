@@ -279,7 +279,7 @@ export function traceCommand(): Command {
 
   cmd
     .command("search")
-    .description("List authorized technical traces")
+    .description("List authorized technical traces → {entries, total, next_cursor, partial}")
     .option("--limit <n>", "page size, 1..200", (value) => Number.parseInt(value, 10))
     .option("--cursor <cursor>", "opaque pagination cursor")
     .option("--from <time>", "started at or after this RFC3339 timestamp")

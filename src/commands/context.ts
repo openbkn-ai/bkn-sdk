@@ -321,7 +321,7 @@ rewriting it with \`run-sql\` produces a number the platform will not agree with
 
   cmd
     .command("tools <kn-id>")
-    .description("List MCP tools advertised for a KN session")
+    .description("List MCP tools advertised for a KN session → {tools} with each inputSchema")
     .action(async (knId: string, _opts, cmd: Command) => {
       printToolList(await clientFrom(cmd).context.tools(knId), outputOptions(cmd));
     });

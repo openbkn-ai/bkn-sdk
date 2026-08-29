@@ -172,10 +172,18 @@ function formatHelp(cmd: Command, helper: Help): string {
  * inherited through `addCommand`, so we set it on each node explicitly.
  */
 export function installGroupedHelp(root: Command): void {
-  const apply = (cmd: Command): void => {
+  const apply = (cmd: Command, path: string[]): void => {
     cmd.configureHelp({ formatHelp });
     if (cmd !== root) autoGroup(cmd);
-    for (const child of cmd.commands) apply(child);
+    // Commander prints the whole help after a usage error, which buries the one
+    // sentence that fixes it. Point at the description of what went wrong
+    // instead — for a subcommand that is its own entry, ids and all.
+    cmd.showHelpAfterError(
+      path.length
+        ? `Run \`openbkn describe ${path.join(" ")}\` to see its arguments and where their ids come from.`
+        : "Run `openbkn describe --depth 1` for every command, or `openbkn --help` for the guide.",
+    );
+    for (const child of cmd.commands) apply(child, [...path, child.name()]);
   };
-  apply(root);
+  apply(root, []);
 }

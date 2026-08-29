@@ -47,6 +47,8 @@ export function buildProgram(): Command {
       "ignore the remembered conversation for this command (see `openbkn context conversation`)",
     )
     .option("-k, --insecure", "skip TLS verification (dev / self-signed only)")
+    // The pointer that replaces the full-help dump is installed for every
+    // command by `installGroupedHelp`, which knows each one's path.
     .showHelpAfterError();
 
   // Real commands. Registration order sets the order of help sections.

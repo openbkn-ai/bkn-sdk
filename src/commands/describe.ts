@@ -24,6 +24,79 @@ interface DescribedArgument {
   required: boolean;
   variadic: boolean;
   description?: string;
+  /** The command that hands out this id, for the ids that travel between commands. */
+  from?: string;
+}
+
+/**
+ * Where the ids that cross command boundaries come from. A caller holding none
+ * of them otherwise has to guess which list command mints which, and the names
+ * are consistent enough across 294 commands to answer it here rather than in
+ * 223 argument descriptions.
+ */
+const ID_SOURCES: Record<string, string> = {
+  "kn-id": "openbkn bkn list",
+  "catalog-id": "openbkn vega catalog list",
+  "resource-id": "openbkn vega catalog resources <catalog-id>",
+  "ot-id": 'openbkn context search-schema <kn-id> "<q>"',
+  "at-id": "openbkn bkn action-type list <kn-id>",
+  "metric-id": "openbkn bkn metric list <kn-id>",
+  "skill-id": "openbkn skill list",
+  "box-id": "openbkn toolbox list",
+  "tool-id": "openbkn tool list --toolbox <box-id>",
+  "conversation-id": "openbkn trace conversations list",
+  "trace-id": "openbkn trace search",
+  "interaction-id": "openbkn trace interactions",
+  "operation-id": "openbkn trace operations",
+  "ot-ids": 'openbkn context search-schema <kn-id> "<q>"',
+  "object-type-id": 'openbkn context search-schema <kn-id> "<q>"',
+  "execution-id": "openbkn bkn action-log list <kn-id>",
+  "receipt-id": "openbkn trace interactions operations <interaction-id>",
+  "conversation-ids": "openbkn trace conversations list",
+  "model-ids": "openbkn model llm list",
+  "tool-ids": "openbkn tool list --toolbox <box-id>",
+  "document-id": "openbkn vega resource document-get <resource-id> <document-id>",
+  "document-ids": "openbkn context run-sql, or the ids you wrote",
+};
+
+/**
+ * A bare `<id>` means whatever its group manages, so resolve it from the path
+ * the command sits on rather than leaving the commonest argument name unsourced.
+ */
+const GROUP_ID_SOURCES: Array<[RegExp, string]> = [
+  [/^vega catalog\b/, "openbkn vega catalog list"],
+  [/^vega resource\b/, "openbkn vega catalog resources <catalog-id>"],
+  [/^vega (discover-schedule|discover-task|semantic-task)\b/, "the sibling `list` command"],
+  [/^vega dataset\b/, "openbkn vega dataset build-list"],
+  [/^bkn action-schedule\b/, "openbkn bkn action-schedule list <kn-id>"],
+  [/^vega connector-type\b/, "openbkn vega connector-type list"],
+  [/^resource\b/, "openbkn resource list"],
+  [/^skill\b/, "openbkn skill list (the `skill_id` field)"],
+  [/^toolbox\b/, "openbkn toolbox list"],
+  [/^tool\b/, "openbkn tool list --toolbox <box-id>"],
+  [/^appkey\b/, "openbkn appkey list"],
+  [/^admin org\b/, "openbkn admin org list"],
+  [/^admin user\b/, "openbkn admin user list"],
+  [/^admin role\b/, "openbkn admin role list"],
+  [/^admin (llm|small-model)\b/, "the sibling `list` command"],
+  [/^model (llm|small)\b/, "the sibling `list` command"],
+  [/^bkn object-type\b/, "openbkn bkn object-type list <kn-id>"],
+  [/^bkn relation-type\b/, "openbkn bkn relation-type list <kn-id>"],
+  [/^bkn action-type\b/, "openbkn bkn action-type list <kn-id>"],
+  [/^bkn concept-group\b/, "openbkn bkn concept-group list <kn-id>"],
+  [/^bkn action-schedule\b/, "openbkn bkn action-schedule list <kn-id>"],
+  [/^bkn action-log\b/, "openbkn bkn action-log list <kn-id>"],
+];
+
+/** Where an argument's value comes from: by name first, then by the group it sits in. */
+function sourceOf(argName: string, path: string[]): string | undefined {
+  const byName = ID_SOURCES[argName];
+  if (byName) return byName;
+  const generic =
+    /^(id|ids|cg-id|modelid|role|user|schedule-id|schedule-ids|task-id|log-id)$/i.test(argName);
+  if (!generic) return undefined;
+  const parent = path.slice(0, -1).join(" ");
+  return GROUP_ID_SOURCES.find(([re]) => re.test(parent))?.[1];
 }
 
 interface DescribedOption {
@@ -84,6 +157,7 @@ function describeNode(cmd: Command, parentPath: string[], depth: number): Descri
             required: arg.required,
             variadic: arg.variadic,
             ...(arg.description ? { description: arg.description } : {}),
+            ...(sourceOf(arg.name(), path) ? { from: sourceOf(arg.name(), path) } : {}),
           })),
         }
       : {}),
@@ -94,6 +168,22 @@ function describeNode(cmd: Command, parentPath: string[], depth: number): Descri
       : {}),
   };
 }
+
+/**
+ * What each field in this document means. Shipped with every view, including a
+ * subtree, so a reader never has to infer what `from` or `hasCommands` are for.
+ */
+const FIELD_MEANINGS: Record<string, string> = {
+  path: "full command path — run it as `openbkn <path>`",
+  section: "which section the command sits in; see `sections`",
+  summary: "what the command does; often names the shape it answers with",
+  hasCommands: "this walk stopped here — ask for this path to see deeper",
+  arguments: "positional arguments, in order",
+  "arguments[].from": "the command that hands out this argument's value",
+  options: "flags; `mandatory` means the flag itself is required",
+  guide: "prose the command's own --help prints under its command list",
+  commands: "nested commands",
+};
 
 export interface DescribeOptions {
   /** Only this subtree, given as a command path (`bkn metric`). */
@@ -117,7 +207,12 @@ export function describeCommandTree(program: Command, opts: DescribeOptions = {}
   // `--depth 1` means "this level only", so the count is spent on the node itself.
   const depth = opts.depth === undefined ? Number.MAX_SAFE_INTEGER : opts.depth - 1;
   if (opts.path?.length) {
-    return describeNode(resolve(program, opts.path), opts.path.slice(0, -1), depth + 1);
+    // A subtree carries the legends too — it is often the only view a caller reads.
+    return {
+      sections: SECTION_MEANINGS,
+      fields: FIELD_MEANINGS,
+      ...describeNode(resolve(program, opts.path), opts.path.slice(0, -1), depth + 1),
+    };
   }
   const top = program.commands.filter(
     (c) => !c.name().startsWith("help") && c.name() !== "describe",
@@ -127,6 +222,7 @@ export function describeCommandTree(program: Command, opts: DescribeOptions = {}
     version: program.version(),
     summary: program.description(),
     sections: SECTION_MEANINGS,
+    fields: FIELD_MEANINGS,
     commands: top.map((cmd) => describeNode(cmd, [], depth)),
     globalOptions: program.options.filter((o) => o.long !== "--help").map(describeOption),
     guide: guideOf(program),
@@ -156,6 +252,7 @@ function rows(node: DescribedCommand, indent = ""): Column[] {
 
 function renderText(tree: unknown): string {
   const root = tree as {
+    path?: string;
     sections?: Record<string, string>;
     commands?: DescribedCommand[];
   };
@@ -168,8 +265,9 @@ function renderText(tree: unknown): string {
     }
     out.push("");
   }
-  // The whole-tree view starts at the roots; a subtree view keeps its own header.
-  const nodes = root.sections ? (root.commands ?? []) : [tree as DescribedCommand];
+  // A subtree names itself with `path`, and keeps that header row; the
+  // whole-tree view has no path of its own and starts at the roots.
+  const nodes = root.path ? [tree as DescribedCommand] : (root.commands ?? []);
   const truncated = nodes.some(function deeper(n: DescribedCommand): boolean {
     return Boolean(n.hasCommands) || (n.commands ?? []).some(deeper);
   });
