@@ -62,7 +62,7 @@ DATA & KNOWLEDGE     bkn · vega · resource (res) · context (context-loader)
 MODELS               model
 TOOLS & SKILLS       skill · toolbox · tool
 TRACING              trace
-ADMINISTRATION       admin · explore
+ADMINISTRATION       admin
 RAW API              call (curl)
 
 Then, before FLAGS: FIRST STEPS · COMMON TASKS · GOOD TO KNOW · NOT HERE YET
@@ -119,4 +119,3 @@ naming the binary `openbkn` — distinct from its `bkn` subcommand — avoids an
 ## Open questions
 
 - Canonical JSON flag spelling (`--json` vs `--pretty`/`--compact`) — pick one, alias the rest.
-- Whether `explore` (local web UI) fits the backend-only product scope or should be dropped.

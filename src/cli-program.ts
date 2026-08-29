@@ -15,7 +15,6 @@ import { callCommand } from "./commands/call.js";
 import { configCommand } from "./commands/config.js";
 import { contextCommand } from "./commands/context.js";
 import { describeCommand } from "./commands/describe.js";
-import { exploreCommand } from "./commands/explore.js";
 import { modelCommand } from "./commands/model.js";
 import { resourceCommand } from "./commands/resource.js";
 import { skillCommand } from "./commands/skill.js";
@@ -64,7 +63,6 @@ export function buildProgram(): Command {
   program.addCommand(toolCommand());
   program.addCommand(traceCommand());
   program.addCommand(adminCommand());
-  program.addCommand(exploreCommand());
   program.addCommand(callCommand());
   program.addCommand(describeCommand(program));
 

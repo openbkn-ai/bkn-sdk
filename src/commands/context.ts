@@ -437,7 +437,8 @@ adds paging and --need-total but records nothing in Trace.`,
 
 PICKING THE RIGHT QUERY
   Aggregation, ranking, GROUP BY or joins are not query-object-instance — send SQL through
-  \`tool-call <kn-id> run_sql\`. Unknown topology is explore, not a hand-built path.
+  \`tool-call <kn-id> run_sql\`. Unknown topology is \`tool-call <kn-id> explore_subgraph\`,
+  not a hand-built path.
 
 THE SAME ID, FOUR NAMES
   An object type's id is \`concept_id\` in search-schema output, \`id\` in kn-detail and
