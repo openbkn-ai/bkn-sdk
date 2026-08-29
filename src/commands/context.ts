@@ -4,7 +4,7 @@
 /** `openbkn context …` (alias of legacy context-loader) — MCP retrieval. */
 import { Command } from "commander";
 import { readPlatformConfig, updatePlatformConfig } from "../config/store.js";
-import { group } from "../help/grouped-help.js";
+import { group, guide } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
@@ -93,7 +93,10 @@ export function contextCommand(): Command {
   cmd
     .command("query-object-instance <kn-id>")
     .description("Query object instances (provide --args as JSON)")
-    .requiredOption("--args <json>", "tool arguments as JSON")
+    .requiredOption(
+      "--args <json>",
+      "tool arguments as JSON — input schema comes from `context tools <kn-id>`",
+    )
     .action(async (knId: string, opts, cmd: Command) => {
       let args: Record<string, unknown>;
       try {
@@ -204,7 +207,10 @@ export function contextCommand(): Command {
   cmd
     .command("tool-call <kn-id> <name>")
     .description("Call any MCP tool by name — current or future (use `tools` to discover)")
-    .option("--args <json>", "tool arguments as JSON")
+    .option(
+      "--args <json>",
+      "tool arguments as JSON — input schema comes from `context tools <kn-id>`",
+    )
     .option(
       "--arg <key=value>",
       "one argument (repeatable; value parsed as JSON, else string)",
@@ -223,7 +229,7 @@ export function contextCommand(): Command {
     .description(
       "Call any MCP method by name (e.g. tools/list, resources/read) — current or future",
     )
-    .option("--args <json>", "method params as JSON")
+    .option("--args <json>", "method params as JSON — see `context call-method <kn-id> tools/list`")
     .option(
       "--arg <key=value>",
       "one param (repeatable; value parsed as JSON, else string)",
@@ -264,7 +270,10 @@ export function contextCommand(): Command {
   cmd
     .command("prompt <kn-id> <name>")
     .description("Get one MCP prompt (--args JSON for prompt arguments)")
-    .option("--args <json>", "prompt arguments as JSON")
+    .option(
+      "--args <json>",
+      "prompt arguments as JSON — argument names come from `context prompts <kn-id>`",
+    )
     .action(async (knId: string, name: string, opts, cmd: Command) => {
       let args: Record<string, unknown> | undefined;
       if (opts.args) {
@@ -287,7 +296,10 @@ export function contextCommand(): Command {
   cmd
     .command("query-instance-subgraph <kn-id>")
     .description("Query an instance subgraph across relation-type paths")
-    .requiredOption("--args <json>", "tool arguments as JSON")
+    .requiredOption(
+      "--args <json>",
+      "tool arguments as JSON — input schema comes from `context tools <kn-id>`",
+    )
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).context.queryInstanceSubgraph(knId, jsonArgs(opts.args)),
@@ -297,7 +309,10 @@ export function contextCommand(): Command {
   cmd
     .command("get-logic-properties <kn-id>")
     .description("Compute logic-property values for instances")
-    .requiredOption("--args <json>", "tool arguments as JSON")
+    .requiredOption(
+      "--args <json>",
+      "tool arguments as JSON — input schema comes from `context tools <kn-id>`",
+    )
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).context.logicProperties(knId, jsonArgs(opts.args)),
@@ -307,7 +322,10 @@ export function contextCommand(): Command {
   cmd
     .command("get-action-info <kn-id>")
     .description("Fetch action info / dynamic tools for an instance")
-    .requiredOption("--args <json>", "tool arguments as JSON")
+    .requiredOption(
+      "--args <json>",
+      "tool arguments as JSON — input schema comes from `context tools <kn-id>`",
+    )
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).context.actionInfo(knId, jsonArgs(opts.args)),
@@ -315,5 +333,22 @@ export function contextCommand(): Command {
       );
     });
 
+  guide(
+    cmd,
+    `ORDER OF WORK
+  1. search-schema <kn-id> "<question>"     find the object/relation/action ids that matter
+  2. kn-detail / object-types               drill into the ones you picked
+  3. query-object-instance                  filter + sort + page one object type
+     query-instance-subgraph                follow a known relation path
+     get-logic-properties / get-action-info  computed values, runnable actions
+
+PICKING THE RIGHT QUERY
+  Aggregation, ranking, GROUP BY or joins are not query-object-instance — send SQL through
+  \`tool-call <kn-id> run_sql\`. Unknown topology is explore, not a hand-built path.
+
+RAW MCP
+  tools <kn-id> lists what this deploy advertises, with each tool's input schema.
+  tool-call / call-method reach anything the named commands above do not cover.`,
+  );
   return group(cmd, "DATA & KNOWLEDGE");
 }

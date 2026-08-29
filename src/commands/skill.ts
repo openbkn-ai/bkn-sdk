@@ -3,7 +3,7 @@
 
 /** `openbkn skill …` — skill registry and market. */
 import { Command } from "commander";
-import { group } from "../help/grouped-help.js";
+import { group, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
@@ -301,7 +301,10 @@ export function skillCommand(): Command {
   cmd
     .command("update-metadata <skill-id>")
     .description("Update a skill's metadata (--body / --body-file JSON)")
-    .option("--body <json>", "metadata JSON")
+    .option(
+      "--body <json>",
+      "metadata JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (execution-factory)",
+    )
     .option("--body-file <path>", "read metadata JSON from a file")
     .action(async (skillId: string, opts, cmd: Command) => {
       printJson(
@@ -334,5 +337,19 @@ export function skillCommand(): Command {
       );
     });
 
+  guide(
+    cmd,
+    `READING A SKILL
+  content <id> gives the SKILL.md index; files <id> [path] walks the package; read-file
+  pulls one file. Read progressively — do not download the whole archive to answer a question.
+
+PUBLISHED VS DRAFT
+  Read commands return the published version. --draft reads the editing copy instead, which
+  is what a Studio user sees. The two differ whenever changes are unpublished.
+
+AUTHORING
+  register <dir> zips and registers; update-package replaces the files; update-metadata
+  changes only the metadata. set-status and republish move versions around.`,
+  );
   return group(cmd, "TOOLS & SKILLS");
 }

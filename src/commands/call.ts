@@ -19,7 +19,9 @@ function collect(value: string, prev: string[]): string[] {
 export function callCommand(): Command {
   const cmd = new Command("call")
     .alias("curl")
-    .description("Call any platform API endpoint directly (auth added)")
+    .description(
+      "Call any platform API endpoint directly (auth added) — paths and request bodies are documented at https://openbkn-ai.github.io/bkn-foundry/",
+    )
     .argument("<url>", "API path (e.g. /api/...) or absolute URL")
     .option("-X, --request <method>", "HTTP method")
     .option("-H, --header <header>", 'extra header "Name: value" (repeatable)', collect, [])

@@ -29,7 +29,10 @@ function addManagementCommands(parent: Command, kind: "llm" | "small"): void {
   parent
     .command("add")
     .description("Register a model (definition JSON via --body / --body-file)")
-    .option("--body <json>", "model definition JSON")
+    .option(
+      "--body <json>",
+      "model definition JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (mf-model-manager)",
+    )
     .option("--body-file <path>", "read model definition JSON from a file")
     .action(async (opts, cmd: Command) => {
       printJson(await clientFrom(cmd).models[kind].add(readBody(opts)), outputOptions(cmd));
@@ -37,7 +40,10 @@ function addManagementCommands(parent: Command, kind: "llm" | "small"): void {
   parent
     .command("edit")
     .description("Update a model definition (JSON via --body / --body-file)")
-    .option("--body <json>", "model definition JSON")
+    .option(
+      "--body <json>",
+      "model definition JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (mf-model-manager)",
+    )
     .option("--body-file <path>", "read model definition JSON from a file")
     .action(async (opts, cmd: Command) => {
       printJson(await clientFrom(cmd).models[kind].edit(readBody(opts)), outputOptions(cmd));
@@ -51,7 +57,10 @@ function addManagementCommands(parent: Command, kind: "llm" | "small"): void {
   parent
     .command("test")
     .description("Test a model's connectivity / inference (JSON via --body / --body-file)")
-    .option("--body <json>", "test request JSON")
+    .option(
+      "--body <json>",
+      "test request JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (mf-model-manager)",
+    )
     .option("--body-file <path>", "read test request JSON from a file")
     .action(async (opts, cmd: Command) => {
       printJson(await clientFrom(cmd).models[kind].test(readBody(opts)), outputOptions(cmd));

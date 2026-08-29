@@ -23,7 +23,7 @@ import {
   type RawQueryRequest,
   SortDirection,
 } from "../api/vega.js";
-import { group } from "../help/grouped-help.js";
+import { group, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
@@ -751,7 +751,9 @@ export function vegaCommand(): Command {
 
   vega
     .command("sql")
-    .description("Run SQL / OpenSearch DSL directly against a vega-backend data source")
+    .description(
+      "Run SQL / OpenSearch DSL directly against a vega-backend data source — dialects and\nplaceholder rules: https://openbkn-ai.github.io/bkn-foundry/ (vega-backend)",
+    )
     .option(
       "--query <sql>",
       "SQL string; reference a resource with a {{<resource-id>}} placeholder",
@@ -892,7 +894,10 @@ export function vegaCommand(): Command {
   resource
     .command("document-create <resource-id>")
     .description("Create dataset documents")
-    .requiredOption("--data <json>", "JSON array of documents")
+    .requiredOption(
+      "--data <json>",
+      "JSON array of documents — docs: https://openbkn-ai.github.io/bkn-foundry/ (vega-backend)",
+    )
     .action(async (resourceId: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).resource.createDocuments(
@@ -905,7 +910,10 @@ export function vegaCommand(): Command {
   resource
     .command("document-upsert <resource-id>")
     .description("Upsert dataset documents; every document must have an id")
-    .requiredOption("--data <json>", "JSON array of documents")
+    .requiredOption(
+      "--data <json>",
+      "JSON array of documents — docs: https://openbkn-ai.github.io/bkn-foundry/ (vega-backend)",
+    )
     .action(async (resourceId: string, opts, cmd: Command) => {
       const documents = parseJsonArray(opts.data, "--data");
       if (documents.some((document) => typeof document.id !== "string")) {
@@ -1059,5 +1067,19 @@ export function vegaCommand(): Command {
       );
     });
 
+  guide(
+    vega,
+    `FINDING DATA
+  catalog list -> catalog resources <catalog-id> -> resource get <id>. A physical catalog
+  can be discovered and written; a logical one cannot.
+
+QUERYING DIRECTLY
+  sql --resource-type <t> --query "<sql>" runs against the source itself. Reference a
+  resource with a {{<resource-id>}} placeholder rather than a physical table name.
+
+BUILDING AN INDEX
+  dataset build <resource-id> creates a BuildTask; build-status / build-list follow it.
+  Indexes are per resource — a knowledge network has no build of its own.`,
+  );
   return group(vega, "DATA & KNOWLEDGE");
 }

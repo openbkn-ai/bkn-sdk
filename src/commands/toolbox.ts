@@ -141,7 +141,10 @@ export function toolCommand(): Command {
   const invokeOpts = (c: Command) =>
     c
       .requiredOption("--toolbox <box-id>", "toolbox id")
-      .option("--body <json>", "request body JSON")
+      .option(
+        "--body <json>",
+        "request body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (execution-factory)",
+      )
       .option("--header <json>", "headers map JSON")
       .option("--query <json>", "query params JSON")
       .option("--path <json>", "path params JSON")

@@ -470,7 +470,10 @@ export function adminCommand(): Command {
       .option("--name <s>", "model name")
       .option("--api-model <s>", "upstream API model id")
       .option("--api-key <s>", "upstream API key")
-      .option("--body <json>", "model config JSON (overrides flags)")
+      .option(
+        "--body <json>",
+        "model config JSON (overrides flags) — docs: https://openbkn-ai.github.io/bkn-foundry/ (mf-model-manager)",
+      )
       .option("--body-file <path>", "read config JSON from a file");
     if (isLlm) {
       add
@@ -493,7 +496,10 @@ export function adminCommand(): Command {
       .command("edit <modelid>")
       .description(`Edit a ${kind} model (granular flags or --body/--body-file)`)
       .option("--name <s>", "model name")
-      .option("--body <json>", "model config JSON (overrides flags)")
+      .option(
+        "--body <json>",
+        "model config JSON (overrides flags) — docs: https://openbkn-ai.github.io/bkn-foundry/ (mf-model-manager)",
+      )
       .option("--body-file <path>", "read config JSON from a file");
     if (isLlm) {
       edit.option("--icon <url>", "icon URL");
@@ -517,7 +523,10 @@ export function adminCommand(): Command {
 
     m.command("test <modelid>")
       .description(`Test a ${kind} model`)
-      .option("--body <json>", "test request JSON")
+      .option(
+        "--body <json>",
+        "test request JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (mf-model-manager)",
+      )
       .option("--body-file <path>", "read test request JSON from a file")
       .action(async (id: string, opts, cmd: Command) => {
         const body = opts.body || opts.bodyFile ? (readBody(opts) as object) : {};
@@ -610,7 +619,9 @@ export function adminCommand(): Command {
     });
   admin
     .command("call <url>")
-    .description("Operator API passthrough (curl-style; auto-injected auth)")
+    .description(
+      "Operator API passthrough (curl-style; auto-injected auth) — paths at https://openbkn-ai.github.io/bkn-foundry/",
+    )
     .option("-X, --request <method>", "HTTP method")
     .option(
       "-H, --header <header>",
