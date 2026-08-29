@@ -76,6 +76,8 @@ export function buildProgram(): Command {
     openbkn auth login https://your-platform -u <user> -p <pass>
     openbkn bkn list                       # knowledge networks you can see
     openbkn bkn --help                     # every group has its own help
+    openbkn describe --depth 1             # the whole map as one table; \`describe <command>\`
+                                           # drills in, --json ships the same tree as data
 
   COMMON TASKS
     Answer a question    bkn search <kn-id> "<q>"  ->  context search-schema  ->
@@ -95,7 +97,8 @@ export function buildProgram(): Command {
     with a person first.
     Add --json to any command for machine-readable output (the default view trims columns,
     --full widens it). Most list commands answer {entries, total_count}; anything else says
-    so in its own description. Ids come from list/search output — opaque, never guess one.
+    so in its own description. Ids come from list/search output — opaque, never guess one,
+    and the key holding one is not always \`id\` (\`skill_id\`, \`conversation_id\`, \`ot_id\` …).
     Multi-tenant deploys: --biz-domain picks the domain, --user switches saved logins.
     \`openbkn call\` reaches any endpoint a command does not cover, auth injected. Look the
     path up at https://openbkn-ai.github.io/bkn-foundry/ first — do not guess one.`,

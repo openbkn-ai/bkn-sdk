@@ -77,7 +77,11 @@ export function skillCommand(): Command {
       .option("--page <n>", "page", int, 1);
 
   listOpts(
-    cmd.command("list").description("List skills → {data, total, page, page_size, has_next}"),
+    cmd
+      .command("list")
+      .description(
+        "List skills → {data, total, page, page_size, has_next}; the id to reuse is `skill_id`",
+      ),
   )
     .option("--create-user <s>", "filter by creator")
     .action(async (opts, cmd: Command) => {

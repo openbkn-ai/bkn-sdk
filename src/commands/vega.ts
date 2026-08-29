@@ -752,7 +752,7 @@ export function vegaCommand(): Command {
   vega
     .command("sql")
     .description(
-      "Run SQL / OpenSearch DSL straight against a data source (dialects: vega-backend docs)",
+      "Read-only SQL straight against a data source — no knowledge network, no Trace record",
     )
     .option(
       "--query <sql>",

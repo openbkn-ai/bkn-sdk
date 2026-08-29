@@ -9,7 +9,7 @@
  */
 import { createOperationTraceContext } from "../trace-context.js";
 import type { RequestContext } from "../types.js";
-import { HttpError, ToolError } from "../utils/errors.js";
+import { HttpError, ToolError, readableServerError } from "../utils/errors.js";
 import { parseBigIntJSON, stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
@@ -168,10 +168,13 @@ function unwrapToolResult(parsed: unknown): UnwrappedToolResult {
     ?.bkn_receipt;
   const content = result.content;
   if (result.isError === true) {
-    const message =
+    const raw =
       Array.isArray(content) && content[0] && typeof content[0].text === "string"
         ? content[0].text
         : "tool call failed";
+    // The tool hands back the platform envelope as a JSON string; a caller wants
+    // the sentence inside it, not the envelope.
+    const message = readableServerError(raw) || raw;
     // The structured error code, not the prose, is what tells a caller whether
     // the failure is retryable — a dead lifecycle session is reopenable, a bad
     // argument is not.

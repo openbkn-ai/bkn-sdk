@@ -170,12 +170,19 @@ function renderText(tree: unknown): string {
   }
   // The whole-tree view starts at the roots; a subtree view keeps its own header.
   const nodes = root.sections ? (root.commands ?? []) : [tree as DescribedCommand];
+  const truncated = nodes.some(function deeper(n: DescribedCommand): boolean {
+    return Boolean(n.hasCommands) || (n.commands ?? []).some(deeper);
+  });
   const table = nodes.flatMap((node) => rows(node));
   const nameWidth = Math.max(...table.map((r) => r.indent.length + r.name.length));
   const sectionWidth = Math.max(...table.map((r) => r.section.length));
   for (const r of table) {
     const name = `${r.indent}${r.name}`.padEnd(nameWidth);
     out.push(`${name}  ${r.section.padEnd(sectionWidth)}  ${r.summary}`.trimEnd());
+  }
+  // Without this the ellipsis is decoration; with it, it is an instruction.
+  if (truncated) {
+    out.push("", "… has subcommands — `openbkn describe <command>`, or raise --depth");
   }
   return out.join("\n");
 }

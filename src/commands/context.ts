@@ -77,6 +77,14 @@ export function contextCommand(): Command {
     "Ask a network questions (the MCP interface agents use)",
   );
 
+  const jsonArgs = (raw: string | undefined): Record<string, unknown> => {
+    if (!raw) throw new InputError("--args is required (run with --schema to see its shape)");
+    try {
+      return parseBigIntJSON(raw) as Record<string, unknown>;
+    } catch {
+      throw new InputError("--args must be valid JSON");
+    }
+  };
   cmd
     .command("search-schema <kn-id> <query>")
     .description(
@@ -97,17 +105,14 @@ export function contextCommand(): Command {
     .description(
       'Query one object type\'s instances — `--args \'{"ot_id":"<id>","limit":10}\'` → {datas, total_count}',
     )
-    .requiredOption(
+    .option(
       "--args <json>",
-      "tool arguments as JSON; kn_id is filled from <kn-id> — input schema comes from `context tools <kn-id>`",
+      "tool arguments as JSON; kn_id is filled from <kn-id>; --schema prints the shape",
     )
+    .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
     .action(async (knId: string, opts, cmd: Command) => {
-      let args: Record<string, unknown>;
-      try {
-        args = parseBigIntJSON(opts.args) as Record<string, unknown>;
-      } catch {
-        throw new InputError("--args must be valid JSON");
-      }
+      if (opts.schema) return printToolSchema(cmd, knId, "query_object_instance");
+      const args = jsonArgs(opts.args);
       printJson(await clientFrom(cmd).context.queryObjectInstance(knId, args), outputOptions(cmd));
     });
 
@@ -201,6 +206,59 @@ export function contextCommand(): Command {
       printToolList(await clientFrom(cmd).context.info(), outputOptions(cmd));
     });
 
+  /**
+   * The deploy is the only honest source for a tool's argument shape, so
+   * `--schema` fetches it rather than restating it here, where it would drift.
+   */
+  const printToolSchema = async (cmd: Command, knId: string, tool: string): Promise<void> => {
+    const listed = (await clientFrom(cmd).context.tools(knId)) as {
+      tools?: Array<{ name: string; description?: string; inputSchema?: unknown }>;
+    };
+    const found = listed.tools?.find((t) => t.name === tool);
+    if (!found) throw new InputError(`this deploy does not advertise the ${tool} tool`);
+    printJson(
+      { tool: found.name, description: found.description, inputSchema: found.inputSchema },
+      { ...outputOptions(cmd), json: true },
+    );
+  };
+
+  cmd
+    .command("run-sql <kn-id>")
+    .description(
+      "Aggregate, rank or join with read-only SQL — what query-object-instance cannot do",
+    )
+    .requiredOption(
+      "--sql <sql>",
+      "read-only MySQL over data resources, tables named as {{<resource-id>}}",
+    )
+    .option("--timeout <sec>", "query timeout in seconds", (v) => Number.parseInt(v, 10))
+    .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
+    .addHelpText(
+      "after",
+      `
+A table is named by resource id, never by the name it carries on the source:
+
+  openbkn context search-schema <kn-id> "<what you are after>" --json
+      → object_types[].data_source.id
+
+  openbkn context run-sql <kn-id> \\
+    --sql "SELECT supplier_id, COUNT(*) c FROM {{d9g387peef0be1ifnurg}} GROUP BY supplier_id"
+
+Joining two resources means two ids, one placeholder each. Column names are the
+physical ones. Answers {columns, entries, paging} plus a bkn_receipt recording
+the operation in BKN Trace. Row limits belong in the SQL — this tool takes no
+limit argument.
+
+The same SQL runs without a knowledge network through \`openbkn vega sql\`, which
+adds paging and --need-total but records nothing in Trace.`,
+    )
+    .action(async (knId: string, opts, cmd: Command) => {
+      if (opts.schema) return printToolSchema(cmd, knId, "run_sql");
+      const args: Record<string, unknown> = { sql: opts.sql };
+      if (opts.timeout !== undefined) args.query_timeout = opts.timeout;
+      printJson(await clientFrom(cmd).context.toolCall(knId, "run_sql", args), outputOptions(cmd));
+    });
+
   cmd
     .command("tools <kn-id>")
     .description("List MCP tools advertised for a KN session")
@@ -221,7 +279,12 @@ export function contextCommand(): Command {
       collectArg,
       [],
     )
+    .option(
+      "--schema",
+      "print the named tool's argument schema from the deploy instead of calling it",
+    )
     .action(async (knId: string, name: string, opts, cmd: Command) => {
+      if (opts.schema) return printToolSchema(cmd, knId, name);
       printJson(
         await clientFrom(cmd).context.toolCall(knId, name, buildArgs(opts)),
         outputOptions(cmd),
@@ -290,21 +353,16 @@ export function contextCommand(): Command {
       printJson(await clientFrom(cmd).context.prompt(knId, name, args), outputOptions(cmd));
     });
 
-  const jsonArgs = (raw: string): Record<string, unknown> => {
-    try {
-      return parseBigIntJSON(raw) as Record<string, unknown>;
-    } catch {
-      throw new InputError("--args must be valid JSON");
-    }
-  };
   cmd
     .command("query-instance-subgraph <kn-id>")
     .description("Query an instance subgraph across relation-type paths")
-    .requiredOption(
+    .option(
       "--args <json>",
-      "tool arguments as JSON; kn_id is filled from <kn-id> — input schema comes from `context tools <kn-id>`",
+      "tool arguments as JSON; kn_id is filled from <kn-id>; --schema prints the shape",
     )
+    .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
     .action(async (knId: string, opts, cmd: Command) => {
+      if (opts.schema) return printToolSchema(cmd, knId, "query_instance_subgraph");
       printJson(
         await clientFrom(cmd).context.queryInstanceSubgraph(knId, jsonArgs(opts.args)),
         outputOptions(cmd),
@@ -313,11 +371,13 @@ export function contextCommand(): Command {
   cmd
     .command("get-logic-properties <kn-id>")
     .description("Compute logic-property values for instances")
-    .requiredOption(
+    .option(
       "--args <json>",
-      "tool arguments as JSON; kn_id is filled from <kn-id> — input schema comes from `context tools <kn-id>`",
+      "tool arguments as JSON; kn_id is filled from <kn-id>; --schema prints the shape",
     )
+    .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
     .action(async (knId: string, opts, cmd: Command) => {
+      if (opts.schema) return printToolSchema(cmd, knId, "get_logic_properties_values");
       printJson(
         await clientFrom(cmd).context.logicProperties(knId, jsonArgs(opts.args)),
         outputOptions(cmd),
@@ -326,11 +386,13 @@ export function contextCommand(): Command {
   cmd
     .command("get-action-info <kn-id>")
     .description("Fetch action info / dynamic tools for an instance")
-    .requiredOption(
+    .option(
       "--args <json>",
-      "tool arguments as JSON; kn_id is filled from <kn-id> — input schema comes from `context tools <kn-id>`",
+      "tool arguments as JSON; kn_id is filled from <kn-id>; --schema prints the shape",
     )
+    .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
     .action(async (knId: string, opts, cmd: Command) => {
+      if (opts.schema) return printToolSchema(cmd, knId, "get_action_info");
       printJson(
         await clientFrom(cmd).context.actionInfo(knId, jsonArgs(opts.args)),
         outputOptions(cmd),
@@ -355,6 +417,7 @@ export function contextCommand(): Command {
     ],
     RUN: [
       "query-object-instance",
+      "run-sql",
       "query-instance-subgraph",
       "get-logic-properties",
       "get-action-info",
