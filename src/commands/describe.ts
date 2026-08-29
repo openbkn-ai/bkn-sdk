@@ -108,10 +108,10 @@ function sourceOf(argName: string, path: string[]): string | undefined {
 interface DescribedOption {
   flags: string;
   description: string;
-  /** The flag itself must be supplied. */
-  mandatory: boolean;
-  /** The flag takes a value (`--flag <v>`) rather than standing alone. */
-  takesValue: boolean;
+  /** Present only when true: the flag itself must be supplied. */
+  mandatory?: boolean;
+  /** Present only when true: the flag takes a value rather than standing alone. */
+  takesValue?: boolean;
   default?: unknown;
 }
 
@@ -136,11 +136,12 @@ interface DescribedCommand {
 }
 
 function describeOption(opt: Option): DescribedOption {
+  // A false flag is the common case; carrying it 600 times says nothing.
   return {
     flags: opt.flags,
     description: opt.description,
-    mandatory: Boolean(opt.mandatory),
-    takesValue: Boolean(opt.required || opt.optional),
+    ...(opt.mandatory ? { mandatory: true } : {}),
+    ...(opt.required || opt.optional ? { takesValue: true } : {}),
     ...(opt.defaultValue === undefined ? {} : { default: opt.defaultValue }),
   };
 }
@@ -214,7 +215,7 @@ const FIELD_MEANINGS: Record<string, string> = {
   hasCommands: "this walk stopped here — ask for this path to see deeper",
   arguments: "positional arguments, in order",
   "arguments[].from": "the command that hands out this argument's value",
-  options: "flags; `mandatory` means the flag itself is required",
+  options: "flags; `mandatory` and `takesValue` appear only when true",
   guide: "prose the command's own --help prints under its command list",
   commands: "nested commands",
 };
