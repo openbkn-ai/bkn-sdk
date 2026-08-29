@@ -1,0 +1,73 @@
+{
+  "path": "/api/ontology-query/v1/knowledge-networks/ecommerce_ops_bkn_public/object-types/order",
+  "request": {
+    "limit": 2,
+    "response_format": "json",
+    "sort": [
+      {
+        "direction": "desc",
+        "field": "order_id"
+      }
+    ]
+  },
+  "response": {
+    "datas": [
+      {
+        "_display": "2026070788BE5BA31E284101",
+        "_instance_id": "order-28356",
+        "_instance_identity": {
+          "order_id": 28356
+        },
+        "actual_amount": "3386.23",
+        "address_id": 19594,
+        "cancel_reason": null,
+        "cancel_time": null,
+        "channel_id": 2,
+        "complete_time": null,
+        "coupon_id": null,
+        "created_at": "2024-12-06T10:47:18+08:00",
+        "delivery_time": null,
+        "discount_amount": "0.00",
+        "order_id": 28356,
+        "order_no": "2026070788BE5BA31E284101",
+        "order_status": "completed",
+        "payment_method": "alipay",
+        "payment_time": "2024-12-06T10:57:28+08:00",
+        "remark": null,
+        "shipping_fee": "0.00",
+        "total_amount": "3386.23",
+        "updated_at": "2026-07-07T21:28:43.892783+08:00",
+        "user_id": 46747
+      },
+      {
+        "_display": "202607070EBF75D668914E89",
+        "_instance_id": "order-28355",
+        "_instance_identity": {
+          "order_id": 28355
+        },
+        "actual_amount": "14760.51",
+        "address_id": 56766,
+        "cancel_reason": null,
+        "cancel_time": null,
+        "channel_id": 3,
+        "complete_time": null,
+        "coupon_id": null,
+        "created_at": "2026-01-26T19:35:24+08:00",
+        "delivery_time": null,
+        "discount_amount": "0.00",
+        "order_id": 28355,
+        "order_no": "202607070EBF75D668914E89",
+        "order_status": "shipped",
+        "payment_method": "wechat",
+        "payment_time": "2026-01-26T20:23:53+08:00",
+        "remark": null,
+        "shipping_fee": "0.00",
+        "total_amount": "14760.51",
+        "updated_at": "2026-07-07T21:28:43.892783+08:00",
+        "user_id": 49671
+      }
+    ],
+    "overall_ms": 269,
+    "search_from_index": false
+  }
+}
