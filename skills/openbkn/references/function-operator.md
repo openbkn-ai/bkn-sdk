@@ -46,6 +46,32 @@
 `[{"name":"a","type":"number","required":true,"description":"…"}]`；不写也能注册，
 只是算子没有描述。
 
+## 两条路都能到工具
+
+同一段代码有两种落地方式，按要不要复用来选：
+
+| | 命令 | 什么时候用 |
+|---|---|---|
+| 算子路线 | `operator register` → `convert-to-tool --toolbox` | 要版本、要历史、要上市场，或同一能力放进多个箱子 |
+| 直建路线 | `tool create <file> --toolbox <id>` | 只在这一个箱子里要一个函数工具，四步到底 |
+
+直建路线（见 [toolbox.md](toolbox.md)）：
+
+```bash
+openbkn toolbox create --name my_funcs --type function            # -> box_id
+openbkn tool create ./add.py --toolbox <box-id> --name add \
+    --description "把两个数相加" \
+    --inputs '[{"name":"a","type":"number","required":true}]'      # -> success_ids
+openbkn tool enable <tool-id> --toolbox <box-id>                  # 默认 disabled，这一步是硬门
+openbkn tool execute <tool-id> --toolbox <box-id> --body '{"a":1,"b":2}'
+```
+
+三个实测出来的细节：
+
+- **参数 type 只收 `string` / `number` / `boolean` / `array` / `object`**，写 `integer` 直接 400（`FunctionInvalidParameterType`）。
+- **发布箱子只影响市场可见性**，不卡执行；卡执行的是 tool 的 `enabled`。
+- **`data` 字段两个端点不一样**：`tool create --type openapi` 要的是解析后的文档（CLI 已代为解析，JSON/YAML 都行），而 `operator register --type openapi` 要的是原文字符串。
+
 ## 端到端
 
 ```bash

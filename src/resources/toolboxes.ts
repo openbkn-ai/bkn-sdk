@@ -5,21 +5,27 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import {
+  type CreateToolOptions,
   type CreateToolboxOptions,
   type ImpexType,
   type ListToolboxesOptions,
   type ListToolsOptions,
   type ToolInvokeEnvelope,
+  type UpdateToolOptions,
+  createTool,
   createToolbox,
   debugTool,
   deleteToolbox,
+  deleteTools,
   executeTool,
   exportConfig,
+  getTool,
   importConfig,
   listToolboxes,
   listTools,
   setToolStatuses,
   setToolboxStatus,
+  updateTool,
   uploadTool,
 } from "../api/toolboxes.js";
 import type { RequestContext } from "../types.js";
@@ -40,6 +46,11 @@ export function toolboxes(ctx: RequestContext) {
       ),
     upload: (boxId: string, filePath: string, metadataType?: string) =>
       uploadTool(ctx, boxId, filePath, metadataType),
+    createTool: (boxId: string, opts: CreateToolOptions) => createTool(ctx, boxId, opts),
+    getTool: (boxId: string, toolId: string) => getTool(ctx, boxId, toolId),
+    updateTool: (boxId: string, toolId: string, opts: UpdateToolOptions) =>
+      updateTool(ctx, boxId, toolId, opts),
+    deleteTools: (boxId: string, toolIds: string[]) => deleteTools(ctx, boxId, toolIds),
     /** Export a toolbox config to a local `.adp` file. */
     export: async (id: string, outPath: string, type?: ImpexType) => {
       const bytes = await exportConfig(ctx, id, type);

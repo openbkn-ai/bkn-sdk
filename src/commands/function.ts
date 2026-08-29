@@ -4,7 +4,7 @@
 /** `openbkn function …` — run code in the platform sandbox, before it is anything. */
 import { readFileSync } from "node:fs";
 import { Command } from "commander";
-import type { DependencyInfo } from "../api/functions.js";
+import type { DependencyInfo, FunctionDefinition, ParameterDef } from "../api/functions.js";
 import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
@@ -40,6 +40,54 @@ export function parseJsonOption(raw: string | undefined, label: string): unknown
   } catch {
     throw new InputError(`--${label} must be valid JSON`);
   }
+}
+
+/**
+ * The flags that describe a function. An operator and a tool are described the
+ * same way, so a caller learns them once: `openbkn function` iterates on the
+ * code, `operator register` and `tool create` keep it, all with these names.
+ */
+export interface CodeFlags {
+  name?: string;
+  description?: string;
+  type?: string;
+  inputs?: string;
+  outputs?: string;
+  dep?: DependencyInfo[];
+  indexUrl?: string;
+}
+
+export function definitionFlags(c: Command): Command {
+  return c
+    .option("--name <n>", "name; required when the definition is a function")
+    .option("--description <d>", "what it does — the model reads this to decide when to call it")
+    .option("--type <t>", "function | openapi", "function")
+    .option("--inputs <json>", "input parameters: [{name,type,required,description}]")
+    .option("--outputs <json>", "output parameters, same shape as --inputs")
+    .option("--dep <name@version>", "package to install before running (repeatable)", collectDep)
+    .option("--index-url <url>", "package index to install from");
+}
+
+/** `--inputs` / `--outputs`, parsed and checked for shape. */
+export function parameterList(raw: string | undefined, label: string): ParameterDef[] | undefined {
+  const parsed = parseJsonOption(raw, label);
+  if (parsed === undefined) return undefined;
+  if (!Array.isArray(parsed)) throw new InputError(`--${label} must be a JSON array of parameters`);
+  return parsed as ParameterDef[];
+}
+
+/** A function definition from a code file plus the shared flags. */
+export function functionDefinitionFrom(file: string, opts: CodeFlags): FunctionDefinition {
+  if (!opts.name) throw new InputError("--name is required for a function");
+  return {
+    name: opts.name,
+    description: opts.description,
+    code: readCode(file),
+    inputs: parameterList(opts.inputs, "inputs"),
+    outputs: parameterList(opts.outputs, "outputs"),
+    dependencies: opts.dep,
+    dependenciesUrl: opts.indexUrl,
+  };
 }
 
 export function functionCommand(): Command {

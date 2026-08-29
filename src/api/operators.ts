@@ -10,7 +10,14 @@
  * an operator into a toolbox, and agents call the tool, not the operator.
  */
 import type { RequestContext } from "../types.js";
-import type { DependencyInfo } from "./functions.js";
+import {
+  type DependencyInfo,
+  type FunctionDefinition,
+  type ParameterDef,
+  functionInputBody,
+} from "./functions.js";
+
+export type { ParameterDef };
 import { request } from "./http.js";
 
 const PATH = "/api/agent-operator-integration/v1/operator";
@@ -107,18 +114,6 @@ export function listOperatorCategories(ctx: RequestContext): Promise<unknown> {
   return request(ctx, `${PATH}/category`);
 }
 
-/** One parameter of a function operator, as the model will see it. */
-export interface ParameterDef {
-  name: string;
-  type?: "string" | "number" | "boolean" | "array" | "object";
-  description?: string;
-  required?: boolean;
-  default?: unknown;
-  enum?: unknown[];
-  example?: unknown;
-  sub_parameters?: ParameterDef[];
-}
-
 export interface RegisterOperatorOptions {
   metadataType: OperatorMetadataType;
   description?: string;
@@ -129,16 +124,7 @@ export interface RegisterOperatorOptions {
   /** Milliseconds, unlike the sandbox's seconds. */
   timeout?: number;
   /** Required for `function`: the code and the contract around it. */
-  function?: {
-    name: string;
-    description?: string;
-    scriptType?: string;
-    code: string;
-    inputs?: ParameterDef[];
-    outputs?: ParameterDef[];
-    dependencies?: DependencyInfo[];
-    dependenciesUrl?: string;
-  };
+  function?: FunctionDefinition;
   /** Required for `openapi`: the specification, as text. */
   data?: string;
   /** Register and publish in one step instead of registering into `unpublish`. */
@@ -156,24 +142,7 @@ function registerBody(opts: RegisterOperatorOptions): Record<string, unknown> {
       ...(opts.isDataSource !== undefined ? { is_data_source: opts.isDataSource } : {}),
     },
     ...(opts.timeout !== undefined ? { operator_execute_control: { timeout: opts.timeout } } : {}),
-    ...(opts.function
-      ? {
-          function_input: {
-            name: opts.function.name,
-            description: opts.function.description ?? "",
-            script_type: opts.function.scriptType ?? "python",
-            code: opts.function.code,
-            inputs: opts.function.inputs ?? [],
-            outputs: opts.function.outputs ?? [],
-            ...(opts.function.dependencies?.length
-              ? { dependencies: opts.function.dependencies }
-              : {}),
-            ...(opts.function.dependenciesUrl
-              ? { dependencies_url: opts.function.dependenciesUrl }
-              : {}),
-          },
-        }
-      : {}),
+    ...(opts.function ? { function_input: functionInputBody(opts.function) } : {}),
     ...(opts.data ? { data: opts.data } : {}),
     ...(opts.directPublish ? { direct_publish: true } : {}),
   };

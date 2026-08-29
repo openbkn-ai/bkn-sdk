@@ -3,36 +3,27 @@
 
 /** `openbkn operator …` — registered, versioned capabilities (Studio calls them 函数集). */
 import { Command } from "commander";
-import type { DependencyInfo } from "../api/functions.js";
-import type { OperatorStatus, ParameterDef, RegisterOperatorOptions } from "../api/operators.js";
+import type { OperatorStatus, RegisterOperatorOptions } from "../api/operators.js";
 import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, outputOptions } from "./_shared.js";
-import { collectDep, parseJsonOption, readCode } from "./function.js";
+import {
+  type CodeFlags,
+  definitionFlags,
+  functionDefinitionFrom,
+  parseJsonOption,
+  readCode,
+} from "./function.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 
 const STATUSES: OperatorStatus[] = ["unpublish", "published", "offline", "editing"];
 
-function parameterList(raw: string | undefined, label: string): ParameterDef[] | undefined {
-  const parsed = parseJsonOption(raw, label);
-  if (parsed === undefined) return undefined;
-  if (!Array.isArray(parsed)) throw new InputError(`--${label} must be a JSON array of parameters`);
-  return parsed as ParameterDef[];
-}
-
 /** The register/update body, built once because both commands take the same flags. */
-interface DefinitionOpts {
-  name?: string;
-  description?: string;
-  type?: string;
-  inputs?: string;
-  outputs?: string;
+interface DefinitionOpts extends CodeFlags {
   category?: string;
-  dep?: DependencyInfo[];
-  indexUrl?: string;
   timeout?: number;
 }
 
@@ -46,32 +37,12 @@ function definitionFrom(file: string, opts: DefinitionOpts): RegisterOperatorOpt
     return { ...common, metadataType: "openapi", data: readCode(file) };
   }
   if (opts.type !== "function") throw new InputError("--type must be function or openapi");
-  if (!opts.name) throw new InputError("--name is required for a function operator");
-  return {
-    ...common,
-    metadataType: "function",
-    function: {
-      name: opts.name,
-      description: opts.description,
-      code: readCode(file),
-      inputs: parameterList(opts.inputs, "inputs"),
-      outputs: parameterList(opts.outputs, "outputs"),
-      dependencies: opts.dep,
-      dependenciesUrl: opts.indexUrl,
-    },
-  };
+  return { ...common, metadataType: "function", function: functionDefinitionFrom(file, opts) };
 }
 
 function definitionOptions(c: Command): Command {
-  return c
-    .option("--name <n>", "operator name; required for a function operator")
-    .option("--description <d>", "what it does — the model reads this to decide when to call it")
-    .option("--type <t>", "function | openapi", "function")
-    .option("--inputs <json>", "input parameters: [{name,type,required,description}]")
-    .option("--outputs <json>", "output parameters, same shape as --inputs")
+  return definitionFlags(c)
     .option("--category <c>", "category (see `openbkn operator categories`)")
-    .option("--dep <name@version>", "package to install before running (repeatable)", collectDep)
-    .option("--index-url <url>", "package index to install from")
     .option("--timeout <ms>", "execute-control timeout in milliseconds", int);
 }
 

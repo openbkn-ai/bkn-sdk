@@ -95,6 +95,7 @@ export function buildProgram(): Command {
                          tool upload ./api.yaml --toolbox <id>  ->  toolbox publish <id>
     Ship some code       function run ./add.py  ->  operator register ./add.py --name add
                          --publish  ->  operator convert-to-tool <id> --toolbox <box-id>
+                         (just one box? tool create ./add.py --toolbox <box-id> --name add)
     Debug an answer      trace conversations list  ->  trace diagnose <conversation-id> --llm
 
   GOOD TO KNOW

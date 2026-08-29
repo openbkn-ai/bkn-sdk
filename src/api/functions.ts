@@ -20,6 +20,48 @@ export interface DependencyInfo {
   version?: string;
 }
 
+/** One parameter of a function, as the model will see it. */
+export interface ParameterDef {
+  name: string;
+  /** `integer` is not one of them — the service rejects it with a 400. */
+  type?: "string" | "number" | "boolean" | "array" | "object";
+  description?: string;
+  required?: boolean;
+  default?: unknown;
+  enum?: unknown[];
+  example?: unknown;
+  sub_parameters?: ParameterDef[];
+}
+
+/**
+ * A function with a contract around it. The same shape registers an operator
+ * and creates a function tool inside a toolbox, so it is defined once.
+ */
+export interface FunctionDefinition {
+  name: string;
+  description?: string;
+  scriptType?: string;
+  code: string;
+  inputs?: ParameterDef[];
+  outputs?: ParameterDef[];
+  dependencies?: DependencyInfo[];
+  dependenciesUrl?: string;
+}
+
+/** `FunctionDefinition` as the service spells it. */
+export function functionInputBody(def: FunctionDefinition): Record<string, unknown> {
+  return {
+    name: def.name,
+    description: def.description ?? "",
+    script_type: def.scriptType ?? "python",
+    code: def.code,
+    inputs: def.inputs ?? [],
+    outputs: def.outputs ?? [],
+    ...(def.dependencies?.length ? { dependencies: def.dependencies } : {}),
+    ...(def.dependenciesUrl ? { dependencies_url: def.dependenciesUrl } : {}),
+  };
+}
+
 export interface ExecuteFunctionOptions {
   /** Code exporting `handler(event) -> Any`. Skeleton: `functionTemplate`. */
   code: string;
