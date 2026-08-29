@@ -9,6 +9,7 @@
  */
 import { createOperationTraceContext } from "../trace-context.js";
 import type { RequestContext } from "../types.js";
+import { previewRequest } from "../utils/dry-run.js";
 import { HttpError, ToolError, readableServerError } from "../utils/errors.js";
 import { parseBigIntJSON, stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { authFetch } from "./auth-fetch.js";
@@ -85,6 +86,18 @@ async function post(
   const controller = timeoutMs === undefined ? undefined : new AbortController();
   const timer =
     controller === undefined ? undefined : setTimeout(() => controller.abort(), timeoutMs);
+  // MCP goes out on its own fetch, so it needs the same last stop as `request`.
+  // The handshake frames are noise to someone checking their arguments, so a
+  // preview waits for the frame that carries them.
+  const rpcMethod = (body as { method?: string } | undefined)?.method;
+  if (rpcMethod !== "initialize" && !rpcMethod?.startsWith("notifications/")) {
+    previewRequest({
+      method: "POST",
+      url: mcpUrl(ctx),
+      headers: headers(ctx, knId, sessionId),
+      body,
+    });
+  }
   try {
     const res = await authFetch(ctx, () =>
       tlsFetch(ctx.insecure, mcpUrl(ctx), {

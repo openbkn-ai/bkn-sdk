@@ -47,6 +47,7 @@ export function buildProgram(): Command {
       "ignore the remembered conversation for this command (see `openbkn context conversation`)",
     )
     .option("-k, --insecure", "skip TLS verification (dev / self-signed only)")
+    .option("--dry-run", "print the request this command would send, and send nothing")
     // The pointer that replaces the full-help dump is installed for every
     // command by `installGroupedHelp`, which knows each one's path.
     .showHelpAfterError();

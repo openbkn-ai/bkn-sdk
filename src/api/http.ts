@@ -7,6 +7,7 @@
  */
 import { refreshAccessToken } from "../auth/oauth.js";
 import type { RequestContext } from "../types.js";
+import { previewRequest } from "../utils/dry-run.js";
 import { HttpError, NonJsonResponseError } from "../utils/errors.js";
 import { stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { buildHeaders } from "./headers.js";
@@ -54,16 +55,21 @@ export async function request<T = unknown>(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), init.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
+  const method = init.method ?? (hasBody ? "POST" : "GET");
+  const headers = buildHeaders(ctx, {
+    ...(hasBody ? { "content-type": "application/json" } : {}),
+    ...init.headers,
+  });
+  // Last stop before the wire: `--dry-run` prints this and sends nothing.
+  previewRequest({ method, url, headers, body: hasBody ? init.body : undefined });
+
   const send = () =>
     tlsFetch(
       ctx.insecure,
       url,
       {
-        method: init.method ?? (hasBody ? "POST" : "GET"),
-        headers: buildHeaders(ctx, {
-          ...(hasBody ? { "content-type": "application/json" } : {}),
-          ...init.headers,
-        }),
+        method,
+        headers,
         body: hasBody ? stringifyBigIntJSON(init.body) : undefined,
         redirect: init.redirect,
         signal: controller.signal,

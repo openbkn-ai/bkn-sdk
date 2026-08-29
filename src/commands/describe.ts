@@ -15,6 +15,7 @@ import { SECTION_MEANINGS, group, guideOf, sectionOf } from "../help/grouped-hel
 import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { outputOptions } from "./_shared.js";
+import { type ProbeResult, availabilityOf, probeDeploy } from "./probe.js";
 
 /** Commands that have not been sorted yet render without a section label. */
 const DEFAULT_SECTION = "COMMANDS";
@@ -120,6 +121,10 @@ interface DescribedCommand {
   summary: string;
   /** Only on a node the walk stopped at, so a reader knows to ask for more. */
   hasCommands?: boolean;
+  /** Present once a deploy has been probed: true, false, or "unknown". */
+  available?: boolean | "unknown";
+  /** Why this deploy cannot answer the command. */
+  unavailable?: string;
   aliases?: string[];
   arguments?: DescribedArgument[];
   options?: DescribedOption[];
@@ -137,14 +142,20 @@ function describeOption(opt: Option): DescribedOption {
   };
 }
 
+let activeProbe: ProbeResult | undefined;
+
 function describeNode(cmd: Command, parentPath: string[], depth: number): DescribedCommand {
   const path = [...parentPath, cmd.name()];
   const children = cmd.commands.filter((c) => !c.name().startsWith("help"));
+  // Groups carry it too: at `--depth 1` the group rows are all a reader sees.
+  const state = activeProbe ? availabilityOf(path.join(" "), activeProbe) : undefined;
   const skeleton: DescribedCommand = {
     path: path.join(" "),
     name: cmd.name(),
     section: sectionOf(cmd),
     summary: cmd.description(),
+    ...(state ? { available: state.available } : {}),
+    ...(state?.reason ? { unavailable: state.reason } : {}),
   };
   // At the depth boundary a reader wants the map, not every flag of every node.
   if (depth <= 0) return children.length ? { ...skeleton, hasCommands: true } : skeleton;
@@ -178,6 +189,11 @@ function describeNode(cmd: Command, parentPath: string[], depth: number): Descri
  * subtree, so a reader never has to infer what `from` or `hasCommands` are for.
  */
 const FIELD_MEANINGS: Record<string, string> = {
+  available:
+    "whether this deploy can answer the command (only after --probe). Checked per service " +
+    "and per MCP tool, so a command can still be refused for a capability the probe cannot see",
+  unavailable: "why it cannot; absent when it can",
+  probe: "what the probe asked and found: one read per service, plus the MCP tool catalog",
   path: "full command path — run it as `openbkn <path>`",
   section: "which section the command sits in; see `sections`",
   summary: "what the command does; often names the shape it answers with",
@@ -190,6 +206,8 @@ const FIELD_MEANINGS: Record<string, string> = {
 };
 
 export interface DescribeOptions {
+  /** Annotate each command with what a probe of this deploy found. */
+  probe?: ProbeResult;
   /** Only this subtree, given as a command path (`bkn metric`). */
   path?: string[];
   /** How many levels to walk. 1 lists a node's own commands without their children. */
@@ -208,6 +226,7 @@ function resolve(program: Command, path: string[]): Command {
 }
 
 export function describeCommandTree(program: Command, opts: DescribeOptions = {}): unknown {
+  activeProbe = opts.probe;
   // `--depth 1` means "this level only", so the count is spent on the node itself.
   const depth = opts.depth === undefined ? Number.MAX_SAFE_INTEGER : opts.depth - 1;
   if (opts.path?.length) {
@@ -227,6 +246,7 @@ export function describeCommandTree(program: Command, opts: DescribeOptions = {}
     summary: program.description(),
     sections: SECTION_MEANINGS,
     fields: FIELD_MEANINGS,
+    ...(opts.probe ? { probe: opts.probe } : {}),
     commands: top.map((cmd) => describeNode(cmd, [], depth)),
     globalOptions: program.options.filter((o) => o.long !== "--help").map(describeOption),
     guide: guideOf(program),
@@ -247,7 +267,10 @@ function rows(node: DescribedCommand, indent = ""): Column[] {
       indent,
       name: `${node.path.split(" ").pop()}${node.hasCommands ? " …" : ""}`,
       section: node.section === DEFAULT_SECTION ? "" : node.section,
-      summary: node.summary,
+      summary:
+        node.available === false
+          ? `[unavailable] ${node.unavailable ?? ""} — ${node.summary}`
+          : node.summary,
     },
   ];
   for (const child of node.commands ?? []) out.push(...rows(child, `${indent}  `));
@@ -297,8 +320,10 @@ export function describeCommand(program: Command): Command {
       Number.parseInt(v, 10),
     )
     .option("--pretty", "indent the JSON instead of packing it onto one line")
-    .action((path: string[], opts, self: Command) => {
-      const tree = describeCommandTree(program, { path, depth: opts.depth });
+    .option("--probe", "ask this deploy which commands it can answer (read-only, ~7 requests)")
+    .action(async (path: string[], opts, self: Command) => {
+      const probe = opts.probe ? await probeDeploy(self, new Date().toISOString()) : undefined;
+      const tree = describeCommandTree(program, { path, depth: opts.depth, probe });
       const out = outputOptions(self);
       if (!out.json && !out.compact && !opts.pretty) {
         process.stdout.write(`${renderText(tree)}\n`);

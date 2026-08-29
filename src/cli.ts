@@ -8,6 +8,7 @@
  */
 import { releaseLifecycleSessions } from "./api/lifecycle.js";
 import { buildProgram } from "./cli-program.js";
+import { DryRunSignal, enableDryRun } from "./utils/dry-run.js";
 import { formatError, toExitCode } from "./utils/errors.js";
 
 // `openbkn describe | head` closes the pipe while we are still writing. Node
@@ -24,9 +25,18 @@ const program = buildProgram();
 // the canonical `--biz-domain` before parsing (legacy compatibility).
 const argv = process.argv.map((a) => (a === "-bd" ? "--biz-domain" : a));
 
+// The flag has to be read before commander parses, because the switch must be
+// on by the time a resource builds its first request.
+if (argv.includes("--dry-run")) enableDryRun();
+
 try {
   await program.parseAsync(argv);
 } catch (err) {
+  if (err instanceof DryRunSignal) {
+    process.stdout.write(`${JSON.stringify(err.request, null, 2)}\n`);
+    await releaseLifecycleSessions();
+    process.exit(0);
+  }
   console.error(formatError(err));
   await releaseLifecycleSessions();
   process.exit(toExitCode(err));
