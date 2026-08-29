@@ -54,3 +54,26 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+
+  # The Python OSDK under `python/` — its own toolchain, so its own job. Every
+  # test is offline: wire behaviour is asserted against exchanges recorded from a
+  # live platform under `tests/fixtures/`, not against a platform.
+  python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # The floor the package declares. Testing only the newest would leave
+          # `requires-python` a claim nothing exercises.
+          python-version: "3.10"
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: ruff format --check .
+      # Strict, because the whole point of generating types is that a consumer's
+      # type checker believes them.
+      - run: mypy
+      - run: pytest -q
