@@ -1,0 +1,43 @@
+---
+type: object_type
+id: payment_receipt
+name: 收款单
+tags: [单据, 履约]
+---
+
+## ObjectType: 收款单
+
+回款记录，含核销状态，关联发票/订单/合同。
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| id | 收款单ID | integer | 主键 | - |
+| receipt_no | 收款单号 | string | 业务唯一编码 | - |
+| customer_id | 客户ID | integer | 付款客户 | - |
+| sales_order_id | 销售订单ID | integer | 关联订单 | - |
+| contract_id | 合同ID | integer | 关联合同 | - |
+| invoice_id | 发票ID | integer | 核销发票 | - |
+| payment_method | 支付方式 | string | 支付方式 | - |
+| payment_amount | 应收金额 | decimal | 应收金额 | - |
+| received_amount | 实收金额 | decimal | 实收金额 | - |
+| receipt_date | 收款日期 | date | 收款日期 | - |
+| verification_status | 核销状态 | string | 状态 | - |
+| verification_amount | 已核销金额 | decimal | 已核销 | - |
+| unverified_amount | 未核销金额 | decimal | 未核销 | - |
+
+### Logic Properties
+
+
+### Keys
+
+Primary Keys: id
+Display Key: receipt_no
+Incremental Key: 
+

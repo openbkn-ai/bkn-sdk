@@ -1,0 +1,45 @@
+---
+type: object_type
+id: quotation_item
+name: 报价明细
+tags: [单据, 销售]
+---
+
+## ObjectType: 报价明细
+
+报价行：产品、数量、单价、折扣与毛利。
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| id | 明细ID | integer | 主键 | - |
+| quotation_id | 报价单ID | integer | 所属报价单 | - |
+| quote_no | 报价单号 | string | 报价单号 | - |
+| quote_version | 版本 | integer | 报价版本 | - |
+| product_id | 产品ID | integer | 产品 | - |
+| product_code | 产品编码 | string | 产品编码 | - |
+| product_name | 产品名称 | string | 产品名称 | - |
+| quantity | 数量 | decimal | 数量 | - |
+| unit_price | 单价 | decimal | 单价 | - |
+| discount_rate | 折扣率 | float | 折扣率 | - |
+| subtotal_amount | 小计 | decimal | 未税小计 | - |
+| tax_amount | 税额 | decimal | 税额 | - |
+| total_amount | 总金额 | decimal | 含税金额 | - |
+| gross_profit | 毛利 | decimal | 毛利额 | - |
+| gross_margin | 毛利率 | float | 毛利率 | - |
+
+### Logic Properties
+
+
+### Keys
+
+Primary Keys: id
+Display Key: product_name
+Incremental Key: 
+

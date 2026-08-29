@@ -1,0 +1,23 @@
+---
+type: relation_type
+id: order_has_item
+name: 包含订单明细
+tags: [销售]
+---
+
+## RelationType: 包含订单明细
+
+销售订单包含多行明细
+
+### Endpoint
+
+| Source | Target | Type |
+|--------|--------|------|
+| sales_order | sales_order_item | direct |
+
+### Mapping Rules
+
+| Source Property | Target Property |
+|-----------------|-----------------|
+| id | parent_id |
+

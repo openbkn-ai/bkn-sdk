@@ -1,0 +1,23 @@
+---
+type: relation_type
+id: opportunity_refs_contact
+name: 关联联系人
+tags: [销售]
+---
+
+## RelationType: 关联联系人
+
+商机关联客户联系人
+
+### Endpoint
+
+| Source | Target | Type |
+|--------|--------|------|
+| opportunity | contact | direct |
+
+### Mapping Rules
+
+| Source Property | Target Property |
+|-----------------|-----------------|
+| contact_id | contact_id |
+

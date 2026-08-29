@@ -1,0 +1,37 @@
+---
+type: object_type
+id: crm_user
+name: 系统用户
+tags: [主数据, 组织]
+---
+
+## ObjectType: 系统用户
+
+员工/销售/系统账号。
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| user_id | 用户ID | integer | 主键 | - |
+| login_name | 登录名 | string | 登录账号 | - |
+| display_name | 显示名称 | string | 姓名 | - |
+| email | 邮箱 | string | 邮箱 | - |
+| phone | 电话 | string | 电话 | - |
+| role_name | 角色 | string | 角色 | - |
+| enabled | 启用 | boolean | 是否启用 | - |
+
+### Logic Properties
+
+
+### Keys
+
+Primary Keys: user_id
+Display Key: display_name
+Incremental Key: 
+

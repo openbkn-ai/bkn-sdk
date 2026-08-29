@@ -1,0 +1,19 @@
+---
+type: concept_group
+id: product_master
+name: 产品主数据
+tags: [概念分组]
+---
+
+## ConceptGroup: 产品主数据
+
+产品及其价格、成本记录
+
+### Object Types
+
+| ID | Name | Description |
+|----|------|-------------|
+| product | 产品 | 商品主数据，含 SKU、分类、品牌与标准价格。 |
+| product_cost | 产品成本记录 | 产品成本历史/版本记录。 |
+| product_price | 产品价格记录 | 产品价格历史/版本记录。 |
+

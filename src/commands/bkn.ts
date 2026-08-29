@@ -98,7 +98,8 @@ export function bknCommand(): Command {
       });
     if (crud) {
       g.command("get <kn-id> <id>")
-        .description(`Get ${name}`)
+        // The backend route takes a list of ids, so a single get answers an envelope.
+        .description(`Get ${name} → {entries}`)
         .action(async (knId: string, id: string, _o, cmd: Command) => {
           printJson(await clientFrom(cmd).kn[`${crud}Get`](knId, id), outputOptions(cmd));
         });
@@ -321,7 +322,7 @@ export function bknCommand(): Command {
     });
   metric
     .command("get <kn-id> <metric-id>")
-    .description("Get a metric")
+    .description("Get a metric → {entries}, since the route takes a list of ids")
     .action(async (knId: string, id: string, _o, cmd: Command) => {
       printJson(await clientFrom(cmd).kn.metricGet(knId, id), outputOptions(cmd));
     });

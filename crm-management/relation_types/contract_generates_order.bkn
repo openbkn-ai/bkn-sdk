@@ -1,0 +1,23 @@
+---
+type: relation_type
+id: contract_generates_order
+name: 生成销售订单
+tags: [销售]
+---
+
+## RelationType: 生成销售订单
+
+合同生成销售订单
+
+### Endpoint
+
+| Source | Target | Type |
+|--------|--------|------|
+| contract | sales_order | direct |
+
+### Mapping Rules
+
+| Source Property | Target Property |
+|-----------------|-----------------|
+| id | contract_id |
+

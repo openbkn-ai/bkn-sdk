@@ -1,0 +1,23 @@
+---
+type: relation_type
+id: activity_refs_opportunity
+name: 关联商机
+tags: [CRM]
+---
+
+## RelationType: 关联商机
+
+跟进活动关联商机
+
+### Endpoint
+
+| Source | Target | Type |
+|--------|--------|------|
+| activity | opportunity | direct |
+
+### Mapping Rules
+
+| Source Property | Target Property |
+|-----------------|-----------------|
+| opportunity_id | opportunity_id |
+

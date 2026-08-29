@@ -126,19 +126,25 @@ export function listTools(
 
 export interface CreateToolboxOptions {
   name: string;
-  serviceUrl: string;
+  /** Required for an `openapi` box: where its tools are proxied to. */
+  serviceUrl?: string;
   description?: string;
   source?: string;
+  /**
+   * `openapi` proxies each tool to `serviceUrl`; `function` holds tools that
+   * run as platform functions and takes no service URL.
+   */
+  metadataType?: "openapi" | "function";
 }
 
 export function createToolbox(ctx: RequestContext, opts: CreateToolboxOptions): Promise<unknown> {
   return request(ctx, PATH, {
     method: "POST",
     body: {
-      metadata_type: "openapi",
+      metadata_type: opts.metadataType ?? "openapi",
       box_name: opts.name,
       box_desc: opts.description ?? "",
-      box_svc_url: opts.serviceUrl,
+      ...(opts.serviceUrl ? { box_svc_url: opts.serviceUrl } : {}),
       source: opts.source ?? "custom",
     },
   });

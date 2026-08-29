@@ -1,0 +1,33 @@
+---
+type: object_type
+id: industry
+name: 行业
+tags: [组织, 维度]
+---
+
+## ObjectType: 行业
+
+行业分类维度。
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| industry_id | 行业ID | integer | 主键 | - |
+| industry_name | 行业名称 | string | 行业名称 | - |
+| description | 描述 | string | 行业描述 | - |
+
+### Logic Properties
+
+
+### Keys
+
+Primary Keys: industry_id
+Display Key: industry_name
+Incremental Key: 
+

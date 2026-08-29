@@ -1,0 +1,39 @@
+---
+type: object_type
+id: activity
+name: 跟进活动
+tags: [CRM, 销售]
+---
+
+## ObjectType: 跟进活动
+
+拜访、电话、邮件等客户跟进记录。
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| activity_id | 活动ID | integer | 主键 | - |
+| activity_type | 活动类型 | string | 拜访/电话等 | - |
+| subject | 主题 | string | 活动主题 | - |
+| customer_id | 客户ID | integer | 关联客户 | - |
+| contact_id | 联系人ID | integer | 关联联系人 | - |
+| opportunity_id | 商机ID | integer | 关联商机 | - |
+| owner_user_id | 执行人ID | integer | 执行人 | - |
+| activity_time | 活动时间 | datetime | 活动时间 | - |
+| content | 内容 | text | 跟进内容 | - |
+
+### Logic Properties
+
+
+### Keys
+
+Primary Keys: activity_id
+Display Key: subject
+Incremental Key: 
+

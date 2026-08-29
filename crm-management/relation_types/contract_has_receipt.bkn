@@ -1,0 +1,23 @@
+---
+type: relation_type
+id: contract_has_receipt
+name: 关联收款
+tags: [履约]
+---
+
+## RelationType: 关联收款
+
+合同关联收款单
+
+### Endpoint
+
+| Source | Target | Type |
+|--------|--------|------|
+| contract | payment_receipt | direct |
+
+### Mapping Rules
+
+| Source Property | Target Property |
+|-----------------|-----------------|
+| id | contract_id |
+

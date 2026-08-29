@@ -1,0 +1,23 @@
+---
+type: relation_type
+id: activity_refs_customer
+name: 关联客户
+tags: [CRM]
+---
+
+## RelationType: 关联客户
+
+跟进活动关联客户
+
+### Endpoint
+
+| Source | Target | Type |
+|--------|--------|------|
+| activity | customer | direct |
+
+### Mapping Rules
+
+| Source Property | Target Property |
+|-----------------|-----------------|
+| customer_id | customer_id |
+

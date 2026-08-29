@@ -34,16 +34,26 @@ export function toolboxCommand(): Command {
 
   cmd
     .command("create")
-    .description("Create a toolbox")
+    .description(
+      "Create a toolbox — openapi proxies to a service, function holds platform functions",
+    )
     .requiredOption("--name <name>", "toolbox name")
-    .requiredOption("--service-url <url>", "tool service URL")
+    .option("--service-url <url>", "where an openapi box proxies its tools; required for that type")
+    .option("--type <t>", "openapi | function", "openapi")
     .option("--description <d>", "description")
     .action(async (opts, cmd: Command) => {
+      if (opts.type !== "openapi" && opts.type !== "function") {
+        throw new InputError("--type must be openapi or function");
+      }
+      if (opts.type === "openapi" && !opts.serviceUrl) {
+        throw new InputError("--service-url is required for an openapi toolbox");
+      }
       printJson(
         await clientFrom(cmd).toolboxes.create({
           name: opts.name,
           serviceUrl: opts.serviceUrl,
           description: opts.description,
+          metadataType: opts.type,
         }),
         outputOptions(cmd),
       );

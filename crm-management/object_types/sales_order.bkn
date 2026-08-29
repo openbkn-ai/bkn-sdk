@@ -1,0 +1,44 @@
+---
+type: object_type
+id: sales_order
+name: 销售订单
+tags: [单据, 销售]
+---
+
+## ObjectType: 销售订单
+
+销售订单头，关联合同/报价，含收付款与交付状态。
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| id | 订单ID | integer | 主键 | - |
+| order_no | 订单编号 | string | 业务唯一编码 | - |
+| order_name | 订单名称 | string | 订单标题 | - |
+| customer_id | 客户ID | integer | 下单客户 | - |
+| contract_id | 合同ID | integer | 来源合同 | - |
+| quotation_id | 报价单ID | integer | 来源报价单 | - |
+| order_status | 订单状态 | string | 状态 | - |
+| payment_status | 收款状态 | string | 收款进度 | - |
+| invoice_status | 开票状态 | string | 开票进度 | - |
+| delivery_status | 发货状态 | string | 发货进度 | - |
+| total_amount | 订单总额 | decimal | 含税总额 | - |
+| paid_amount | 已收金额 | decimal | 已收款 | - |
+| unpaid_amount | 未收金额 | decimal | 未收款 | - |
+| order_date | 下单日期 | date | 下单日期 | - |
+
+### Logic Properties
+
+
+### Keys
+
+Primary Keys: id
+Display Key: order_name
+Incremental Key: 
+

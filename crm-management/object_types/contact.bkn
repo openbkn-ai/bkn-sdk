@@ -1,0 +1,37 @@
+---
+type: object_type
+id: contact
+name: 联系人
+tags: [CRM, 主数据]
+---
+
+## ObjectType: 联系人
+
+客户方联系人，含职位、决策角色与联系方式。
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| contact_id | 联系人ID | integer | 主键 | - |
+| customer_id | 客户ID | integer | 所属客户 | - |
+| contact_name | 联系人姓名 | string | 姓名 | - |
+| job_title | 职位 | string | 职位 | - |
+| email | 邮箱 | string | 邮箱 | - |
+| phone | 电话 | string | 电话 | - |
+| is_primary | 是否主联系人 | boolean | 是否主要联系人 | - |
+
+### Logic Properties
+
+
+### Keys
+
+Primary Keys: contact_id
+Display Key: contact_name
+Incremental Key: 
+

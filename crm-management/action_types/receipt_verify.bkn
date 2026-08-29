@@ -1,0 +1,68 @@
+---
+type: action_type
+id: receipt_verify
+name: 收款核销
+tags: []
+action_type: modify
+action_intent: modify
+---
+
+## ActionType: 收款核销
+
+登记收款并核销对应发票
+
+### Scope of Impact
+
+| Object | Impact Description |
+|--------|---------------------|
+| invoice | 收款核销 执行影响的对象 |
+
+### Execution Description
+
+1. 校验 payment_receipt 对象状态
+2. 执行 收款核销
+3. 回写状态并记录审计
+
+### Bound Object
+
+| Bound Object |
+|--------------|
+| payment_receipt |
+
+### Affect Object
+
+| Affect Object | Affect Description |
+|---------------|--------------------|
+| invoice |  |
+
+### Impact Contracts
+
+```yaml
+impact_contracts:
+  - object_type_id: invoice
+    expected_operation: modify
+    description: ""
+```
+
+
+### Trigger Condition
+
+
+### Action Source
+
+| Type | BoxID | ToolID | McpID | ToolName |
+|------|-------|--------|-------|----------|
+
+### Parameter Binding
+
+| Name | Type | Source | Operation | ValueFrom | Value | Description |
+|------|------|--------|-----------|-----------|-------|-------------|
+| receipt_id | integer | property |  | id |  | 收款单ID |
+| invoice_id | integer | property |  | invoice_id |  | 核销发票ID |
+| received_amount | decimal | property |  | received_amount |  | 实收金额 |
+
+### Schedule
+
+| Type | Expression |
+|------|------------|
+

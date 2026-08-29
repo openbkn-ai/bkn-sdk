@@ -1,0 +1,22 @@
+---
+type: concept_group
+id: sales_documents
+name: 销售单据
+tags: [概念分组]
+---
+
+## ConceptGroup: 销售单据
+
+报价、合同、销售订单及其明细
+
+### Object Types
+
+| ID | Name | Description |
+|----|------|-------------|
+| contract | 合同 | 销售合同，含履约、发票、收款与交付状态。 |
+| contract_item | 合同明细 | 合同行：产品、数量、单价与金额。 |
+| quotation | 报价单 | 报价单头，含版本、审批状态与金额。 |
+| quotation_item | 报价明细 | 报价行：产品、数量、单价、折扣与毛利。 |
+| sales_order | 销售订单 | 销售订单头，关联合同/报价，含收付款与交付状态。 |
+| sales_order_item | 销售订单明细 | 订单行：产品、数量、单价与金额。 |
+

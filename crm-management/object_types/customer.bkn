@@ -1,0 +1,40 @@
+---
+type: object_type
+id: customer
+name: 客户
+tags: [CRM, 主数据]
+---
+
+## ObjectType: 客户
+
+企业或组织客户主数据，含行业归属、客户等级、状态及归属销售。
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| customer_id | 客户ID | integer | 主键 | - |
+| customer_no | 客户编号 | string | 业务唯一编码 | - |
+| customer_name | 客户名称 | string | 客户全称 | - |
+| industry_id | 行业ID | integer | 所属行业 | - |
+| owner_user_id | 归属销售ID | integer | 负责销售的员工 | - |
+| customer_level | 客户等级 | string | 客户等级 | - |
+| status | 客户状态 | string | 启用/停用等状态 | - |
+| website | 官网 | string | 企业官网 | - |
+| address | 地址 | string | 客户地址 | - |
+| created_at | 创建时间 | datetime | 创建时间 | - |
+
+### Logic Properties
+
+
+### Keys
+
+Primary Keys: customer_id
+Display Key: customer_name
+Incremental Key: 
+

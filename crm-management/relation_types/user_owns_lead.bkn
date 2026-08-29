@@ -1,0 +1,23 @@
+---
+type: relation_type
+id: user_owns_lead
+name: 负责线索
+tags: [组织]
+---
+
+## RelationType: 负责线索
+
+销售员工负责线索
+
+### Endpoint
+
+| Source | Target | Type |
+|--------|--------|------|
+| crm_user | lead | direct |
+
+### Mapping Rules
+
+| Source Property | Target Property |
+|-----------------|-----------------|
+| user_id | owner_user_id |
+
