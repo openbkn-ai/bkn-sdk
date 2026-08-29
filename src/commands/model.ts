@@ -4,7 +4,7 @@
 /** `openbkn model …` — model factory (llm / small-model). */
 import { Command } from "commander";
 import type { BknClient } from "../client.js";
-import { group } from "../help/grouped-help.js";
+import { group, groupChildren } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
@@ -209,6 +209,14 @@ Examples:
   $ openbkn model small get-default --type embedding            # current default
   $ openbkn model small set-default <id>                        # default embedding/reranker`,
   );
+
+  for (const kind of [llm, small]) {
+    groupChildren(kind, {
+      READ: ["list", "get", "get-default"],
+      RUN: ["chat", "embeddings", "rerank", "test"],
+      WRITE: ["add", "edit", "delete", "set-default", "unset-default"],
+    });
+  }
 
   return group(model, "MODELS");
 }

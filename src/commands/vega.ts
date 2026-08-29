@@ -23,7 +23,7 @@ import {
   type RawQueryRequest,
   SortDirection,
 } from "../api/vega.js";
-import { group, guide } from "../help/grouped-help.js";
+import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
@@ -752,7 +752,7 @@ export function vegaCommand(): Command {
   vega
     .command("sql")
     .description(
-      "Run SQL / OpenSearch DSL directly against a vega-backend data source — dialects and\nplaceholder rules: https://openbkn-ai.github.io/bkn-foundry/ (vega-backend)",
+      "Run SQL / OpenSearch DSL straight against a data source (dialects: vega-backend docs)",
     )
     .option(
       "--query <sql>",
@@ -1066,6 +1066,38 @@ export function vegaCommand(): Command {
         outputOptions(cmd),
       );
     });
+
+  groupChildren(vega, {
+    GROUPS: [
+      "catalog",
+      "resource",
+      "connector-type",
+      "dataset",
+      "discover-schedule",
+      "discover-task",
+      "semantic-task",
+    ],
+    RUN: ["sql"],
+  });
+
+  groupChildren(resource, {
+    READ: ["list", "get", "document-get"],
+    RUN: ["query", "discover"],
+    WRITE: [
+      "enable",
+      "disable",
+      "document-create",
+      "document-upsert",
+      "document-delete",
+      "document-delete-filter",
+    ],
+  });
+
+  groupChildren(catalog, {
+    READ: ["list", "get", "resources", "health", "health-check-schedule"],
+    RUN: ["test-connection", "test-connection-config", "discover"],
+    WRITE: ["create", "update", "enable", "disable", "delete", "set-health-check-schedule"],
+  });
 
   guide(
     vega,

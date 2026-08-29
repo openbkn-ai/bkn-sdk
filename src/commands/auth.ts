@@ -7,7 +7,7 @@ import { changePasswordSafe, getUserSafe } from "../api/safe.js";
 import { decodeJwt } from "../auth/jwt.js";
 import { credentialDeviceLogin, deviceLogin, isHeadless, openBrowser } from "../auth/oauth.js";
 import { resolveContext } from "../config/resolve.js";
-import { group } from "../help/grouped-help.js";
+import { group, groupChildren } from "../help/grouped-help.js";
 import * as auth from "../resources/auth.js";
 import { DEFAULT_BUSINESS_DOMAIN } from "../types.js";
 import { HttpError, InputError } from "../utils/errors.js";
@@ -334,5 +334,11 @@ export function registerAuthLeaves(cmd: Command): void {
 export function authCommand(): Command {
   const cmd = new Command("auth").description("Log in; the token is saved and reused. Start here.");
   registerAuthLeaves(cmd);
+  groupChildren(cmd, {
+    READ: ["status", "whoami", "list", "users"],
+    RUN: ["token", "export"],
+    WRITE: ["login", "logout", "use", "switch", "delete", "change-password"],
+  });
+
   return group(cmd, "SIGN IN & SETTINGS");
 }

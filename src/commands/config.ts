@@ -9,7 +9,7 @@ import {
   setActivePlatform,
   updatePlatformConfig,
 } from "../config/store.js";
-import { group } from "../help/grouped-help.js";
+import { group, groupChildren } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { outputOptions } from "./_shared.js";
@@ -66,6 +66,8 @@ export function configCommand(): Command {
     .action(() => {
       throw new InputError("Not yet implemented — requires backend business-domains API.");
     });
+
+  groupChildren(config, { READ: ["show", "list-bd"], WRITE: ["set", "set-bd"] });
 
   return group(config, "SIGN IN & SETTINGS");
 }

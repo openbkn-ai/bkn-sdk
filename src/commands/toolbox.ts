@@ -3,7 +3,7 @@
 
 /** `openbkn toolbox …` and `openbkn tool …` — agent toolboxes + tools. */
 import { Command } from "commander";
-import { group } from "../help/grouped-help.js";
+import { group, groupChildren } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
@@ -89,6 +89,11 @@ export function toolboxCommand(): Command {
     .action(async (file: string, opts, cmd: Command) => {
       printJson(await clientFrom(cmd).toolboxes.import(file, opts.type), outputOptions(cmd));
     });
+
+  groupChildren(cmd, {
+    READ: ["list", "export"],
+    WRITE: ["create", "publish", "unpublish", "delete", "import"],
+  });
 
   return group(cmd, "TOOLS & SKILLS");
 }
@@ -195,6 +200,12 @@ export function toolCommand(): Command {
         outputOptions(cmd),
       );
     });
+
+  groupChildren(cmd, {
+    READ: ["list"],
+    RUN: ["execute", "debug"],
+    WRITE: ["enable", "disable", "upload"],
+  });
 
   return group(cmd, "TOOLS & SKILLS");
 }

@@ -3,7 +3,7 @@
 
 /** `openbkn bkn …` — knowledge networks. */
 import { Command } from "commander";
-import { group, guide } from "../help/grouped-help.js";
+import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { validateBknDirectory } from "../utils/bkn-validate.js";
 import { printJson } from "../utils/output.js";
@@ -578,6 +578,38 @@ export function bknCommand(): Command {
       printJson(result, outputOptions(cmd));
       if (!result.valid) process.exitCode = 1;
     });
+
+  groupChildren(bkn, {
+    GROUPS: [
+      "object-type",
+      "relation-type",
+      "action-type",
+      "metric",
+      "concept-group",
+      "action-log",
+      "action-schedule",
+    ],
+    READ: [
+      "pull",
+      "list",
+      "get",
+      "stats",
+      "export",
+      "search",
+      "subgraph",
+      "relation-type-paths",
+      "resources",
+      "action-execution",
+      "validate",
+    ],
+    WRITE: ["create", "update", "delete", "push", "create-from-catalog"],
+  });
+
+  groupChildren(metric, {
+    READ: ["list", "get"],
+    RUN: ["query", "dry-run", "validate"],
+    WRITE: ["create", "update", "delete"],
+  });
 
   guide(
     bkn,

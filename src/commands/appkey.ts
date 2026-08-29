@@ -9,7 +9,7 @@
  */
 import { Command } from "commander";
 import type { CreatedApiKey } from "../api/app-keys.js";
-import { group } from "../help/grouped-help.js";
+import { group, groupChildren } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
 import { type OutputOptions, printJson } from "../utils/output.js";
 import { clientFrom, outputOptions } from "./_shared.js";
@@ -117,6 +117,14 @@ export function appkeyCommand(): Command {
       await clientFrom(cmd).appKeys.adminRevoke(id);
       printJson({ revoked: id }, outputOptions(cmd));
     });
+
+  groupChildren(appkey, {
+    GROUPS: ["admin"],
+    READ: ["list"],
+    WRITE: ["create", "regenerate", "revoke"],
+  });
+  const appkeyAdmin = appkey.commands.find((c) => c.name() === "admin");
+  if (appkeyAdmin) groupChildren(appkeyAdmin, { READ: ["list"], WRITE: ["revoke"] });
 
   return group(appkey, "SIGN IN & SETTINGS");
 }

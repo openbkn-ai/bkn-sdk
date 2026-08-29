@@ -11,7 +11,7 @@ import { Command } from "commander";
 import { rawCall } from "../api/call.js";
 import { resolveContext } from "../config/resolve.js";
 import { activePlatform, setActivePlatform } from "../config/store.js";
-import { group } from "../help/grouped-help.js";
+import { group, groupChildren } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
@@ -654,6 +654,11 @@ export function adminCommand(): Command {
       }
       if (res.status >= 400) process.exitCode = 1;
     });
+
+  groupChildren(admin, {
+    GROUPS: ["org", "user", "role", "llm", "small-model", "license", "audit", "auth", "config"],
+    RUN: ["call"],
+  });
 
   return group(admin, "ADMINISTRATION");
 }

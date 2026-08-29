@@ -3,7 +3,7 @@
 
 /** `openbkn skill …` — skill registry and market. */
 import { Command } from "commander";
-import { group, guide } from "../help/grouped-help.js";
+import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
@@ -338,6 +338,30 @@ export function skillCommand(): Command {
         outputOptions(cmd),
       );
     });
+
+  groupChildren(cmd, {
+    READ: [
+      "list",
+      "market",
+      "get",
+      "market-get",
+      "names",
+      "content",
+      "read-file",
+      "files",
+      "history",
+    ],
+    RUN: ["execute", "download", "install"],
+    WRITE: [
+      "register",
+      "update-metadata",
+      "update-package",
+      "set-status",
+      "republish",
+      "publish-history",
+      "delete",
+    ],
+  });
 
   guide(
     cmd,

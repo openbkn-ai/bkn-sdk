@@ -4,7 +4,7 @@
 /** `openbkn context …` (alias of legacy context-loader) — MCP retrieval. */
 import { Command } from "commander";
 import { readPlatformConfig, updatePlatformConfig } from "../config/store.js";
-import { group, guide } from "../help/grouped-help.js";
+import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
@@ -336,6 +336,32 @@ export function contextCommand(): Command {
         outputOptions(cmd),
       );
     });
+
+  groupChildren(cmd, {
+    GROUPS: ["conversation"],
+    READ: [
+      "search-schema",
+      "kn-detail",
+      "object-types",
+      "relation-types",
+      "info",
+      "tools",
+      "resources",
+      "resource",
+      "templates",
+      "prompts",
+      "prompt",
+      "find-skills",
+    ],
+    RUN: [
+      "query-object-instance",
+      "query-instance-subgraph",
+      "get-logic-properties",
+      "get-action-info",
+      "tool-call",
+      "call-method",
+    ],
+  });
 
   guide(
     cmd,

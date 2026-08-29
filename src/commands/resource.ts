@@ -3,7 +3,7 @@
 
 /** `openbkn resource` (alias `res`) — vega-backend resources. */
 import { Command } from "commander";
-import { group } from "../help/grouped-help.js";
+import { group, groupChildren } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT, DEFAULT_QUERY_LIMIT } from "../types.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, outputOptions } from "./_shared.js";
@@ -103,6 +103,12 @@ export function resourceCommand(): Command {
     .action(async (id: string, _opts, cmd: Command) => {
       printJson(await clientFrom(cmd).resource.delete(id), outputOptions(cmd));
     });
+
+  groupChildren(cmd, {
+    READ: ["list", "find", "get"],
+    RUN: ["query"],
+    WRITE: ["enable", "disable", "delete"],
+  });
 
   return group(cmd, "DATA & KNOWLEDGE");
 }

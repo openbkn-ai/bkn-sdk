@@ -13,7 +13,7 @@ import type { TechnicalTraceDetail } from "../api/trace.js";
 import { renderReportMarkdown } from "../bkn-trace/diagnose.js";
 import { validateFixturePath } from "../bkn-trace/fixture-validate.js";
 import { validateSchemaFile } from "../bkn-trace/schema-validate.js";
-import { group, guide } from "../help/grouped-help.js";
+import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON, stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
@@ -372,6 +372,12 @@ export function traceCommand(): Command {
       printJson(result, outputOptions(cmd));
       if (!result.ok) process.exitCode = 1;
     });
+
+  groupChildren(cmd, {
+    GROUPS: ["conversations", "interactions", "operations", "receipts", "eval-set", "schema"],
+    READ: ["graph", "get", "search", "detail", "spans"],
+    RUN: ["diagnose", "scan", "validate-fixture"],
+  });
 
   guide(
     cmd,
