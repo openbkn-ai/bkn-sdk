@@ -54,13 +54,25 @@ export function bknCommand(): Command {
 
   bkn
     .command("search <kn-id> <query>")
-    .description("Semantic search within a knowledge network → {concepts} (schema, not instances)")
-    .option("--max-concepts <n>", "max concepts to return", int, 10)
-    .option("--mode <mode>", "retrieval mode", "keyword_vector_retrieval")
+    .description(
+      "Recall instances from a plain sentence — no object type or field names needed → {nodes, object_types}",
+    )
+    .option("--object-types <ids>", "pin recall to these object-type ids (comma-separated)")
+    .option("--exclude-object-types <ids>", "drop these object-type ids (comma-separated)")
+    .option("--concept-groups <names>", "limit recall to these concept groups (comma-separated)")
+    .option("--max-object-types <n>", "how many object types may take part", int)
+    .option("--max-instances <n>", "instances per object type", int)
+    .option("--rerank", "re-rank hits with a cross-encoder (needs a rerank model deployed)")
+    .option("--no-object-types-detail", "omit the object-type definitions that come with hits")
     .action(async (knId: string, query: string, opts, cmd: Command) => {
       const data = await clientFrom(cmd).kn.search(knId, query, {
-        maxConcepts: opts.maxConcepts,
-        mode: opts.mode,
+        objectTypes: csv(opts.objectTypes),
+        excludeObjectTypes: csv(opts.excludeObjectTypes),
+        conceptGroups: csv(opts.conceptGroups),
+        maxObjectTypes: opts.maxObjectTypes,
+        maxInstancesPerType: opts.maxInstances,
+        rerank: opts.rerank,
+        includeObjectTypes: opts.objectTypesDetail === false ? false : undefined,
       });
       printJson(data, outputOptions(cmd));
     });
@@ -615,6 +627,13 @@ export function bknCommand(): Command {
     bkn,
     `WHERE IDS COME FROM
   \`list\` gives kn ids; \`object-type list <kn-id>\` and \`search <kn-id> "<q>"\` give the rest.
+
+SEARCH VS THE MCP SIDE
+  \`search\` recalls instance rows from one sentence and ships the object-type definitions
+  needed to read them — start here when you do not know the schema yet. It only reaches
+  properties indexed for match/knn, so an unindexed object type yields nothing, and no hits
+  comes back as empty nodes with a message rather than an error. For schema alone use
+  \`openbkn context search-schema\`; for a structured filter use \`object-type query\`.
 
 EDITING SCHEMA AS FILES
   pull <kn-id> ./dir  ->  edit  ->  validate ./dir  ->  push ./dir

@@ -3,7 +3,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { callTool, searchSchema } from "../../src/api/context-loader.js";
-import { semanticSearch } from "../../src/api/knowledge-networks.js";
+import { searchInstance } from "../../src/api/knowledge-networks.js";
 import { releaseLifecycleSessions, resetLifecycleCaches } from "../../src/api/lifecycle.js";
 import type { RequestContext } from "../../src/types.js";
 import { HttpError, ToolError } from "../../src/utils/errors.js";
@@ -156,7 +156,7 @@ function mockDeploy(opts: MockOptions = {}): Recorded {
         );
       }
 
-      if (url.includes("/kn/semantic-search")) {
+      if (url.includes("/kn/search_instance")) {
         recorded.retrievalBodies.push(JSON.parse(init?.body as string));
         const reply = retrieval[Math.min(retrievalIndex, retrieval.length - 1)] ?? {
           status: 200,
@@ -172,10 +172,10 @@ function mockDeploy(opts: MockOptions = {}): Recorded {
   return recorded;
 }
 
-/** The body of the most recent `/kn/semantic-search` POST. */
+/** The body of the most recent `/kn/search_instance` POST. */
 function lastRetrievalBody(f: typeof fetch): Record<string, unknown> {
   const calls = (f as unknown as { mock: { calls: [string | URL, RequestInit][] } }).mock.calls;
-  const hit = calls.filter(([url]) => String(url).includes("/kn/semantic-search")).pop();
+  const hit = calls.filter(([url]) => String(url).includes("/kn/search_instance")).pop();
   if (!hit) throw new Error("no retrieval POST captured");
   return JSON.parse(hit[1].body as string) as Record<string, unknown>;
 }
@@ -192,7 +192,7 @@ afterEach(() => {
 describe("managed lifecycle on semantic search", () => {
   it("omits bkn_context on a deploy without the lifecycle tools", async () => {
     const recorded = mockDeploy({ catalog: LEGACY_CATALOG });
-    await semanticSearch(freshCtx(), "kn-legacy", "物料");
+    await searchInstance(freshCtx(), "kn-legacy", "物料");
 
     expect(recorded.toolCalls).toHaveLength(0);
     expect(recorded.retrievalBodies[0]).not.toHaveProperty("bkn_context");
@@ -201,14 +201,14 @@ describe("managed lifecycle on semantic search", () => {
 
   it("omits bkn_context when the catalog probe fails", async () => {
     const recorded = mockDeploy({ catalog: { unexpected: "shape" } });
-    await semanticSearch(freshCtx(), "kn-odd", "物料");
+    await searchInstance(freshCtx(), "kn-odd", "物料");
 
     expect(recorded.retrievalBodies[0]).not.toHaveProperty("bkn_context");
   });
 
   it("v1: creates a conversation, starts an interaction, and sends an operation_key", async () => {
     const recorded = mockDeploy({ catalog: V1_CATALOG });
-    await semanticSearch(freshCtx(), "kn-managed", "物料");
+    await searchInstance(freshCtx(), "kn-managed", "物料");
 
     expect(recorded.toolCalls.map((c) => c.name)).toEqual([
       "bkn_create_conversation",
@@ -228,7 +228,7 @@ describe("managed lifecycle on semantic search", () => {
   it("reports a conversation it minted, and one it did not", async () => {
     const minted: string[] = [];
     mockDeploy({ catalog: V2_CATALOG });
-    await semanticSearch(
+    await searchInstance(
       freshCtx({ onConversationOpened: (id) => minted.push(id) }),
       "kn-managed",
       "物料",
@@ -239,7 +239,7 @@ describe("managed lifecycle on semantic search", () => {
     // let a `--conversation-id` meant for one command become the stored default.
     const borrowed: string[] = [];
     mockDeploy({ catalog: V2_CATALOG });
-    await semanticSearch(
+    await searchInstance(
       freshCtx({
         onConversationOpened: (id) => borrowed.push(id),
         trace: { requestId: "req_x", traceparent: "00-x-y-01", conversationId: "conv_theirs" },
@@ -253,7 +253,7 @@ describe("managed lifecycle on semantic search", () => {
   it("stays silent on v1, where a later command could not use the conversation", async () => {
     const seen: string[] = [];
     mockDeploy({ catalog: V1_CATALOG });
-    await semanticSearch(
+    await searchInstance(
       freshCtx({ onConversationOpened: (id) => seen.push(id) }),
       "kn-v1",
       "物料",
@@ -270,7 +270,7 @@ describe("managed lifecycle on semantic search", () => {
       // The stored conversation was swept, or still holds an interaction.
       toolErrorsOnce: { bkn_start_interaction: "conversation_required" },
     });
-    await semanticSearch(
+    await searchInstance(
       freshCtx({
         rememberedConversationId: "conv_stale",
         onConversationOpened: (id) => seen.push(id),
@@ -293,7 +293,7 @@ describe("managed lifecycle on semantic search", () => {
       catalog: V2_CATALOG,
       toolErrorsOnce: { bkn_start_interaction: "conversation_required" },
     });
-    await semanticSearch(
+    await searchInstance(
       freshCtx({
         trace: { requestId: "req_x", traceparent: "00-x-y-01", conversationId: "conv_same" },
         rememberedConversationId: "conv_same",
@@ -326,7 +326,7 @@ describe("managed lifecycle on semantic search", () => {
         catalog: V2_CATALOG,
         toolHttpOnce: { bkn_start_interaction: status },
       });
-      await semanticSearch(
+      await searchInstance(
         freshCtx({ rememberedConversationId: "conv_stale" }),
         "kn-managed",
         "物料",
@@ -342,19 +342,19 @@ describe("managed lifecycle on semantic search", () => {
     // the refusal surfaces as the server's `conversation_required` on the
     // business call — naming neither the field nor the handshake.
     const withMode = mockDeploy({ catalog: V2_CATALOG_WITH_MODE });
-    await semanticSearch(freshCtx(), "kn-managed", "物料");
+    await searchInstance(freshCtx(), "kn-managed", "物料");
     expect(withMode.toolCalls[0]?.arguments.conversation_mode).toBe("new");
 
     // And not where it is absent: v2 validates strictly, and a deploy may
     // reject an argument it never published.
     const without = mockDeploy({ catalog: V2_CATALOG });
-    await semanticSearch(freshCtx(), "kn-managed", "物料");
+    await searchInstance(freshCtx(), "kn-managed", "物料");
     expect(without.toolCalls[0]?.arguments).not.toHaveProperty("conversation_mode");
   });
 
   it("joins with continue, not new", async () => {
     const recorded = mockDeploy({ catalog: V2_CATALOG_WITH_MODE });
-    await semanticSearch(
+    await searchInstance(
       freshCtx({
         trace: { requestId: "req_x", traceparent: "00-x-y-01", conversationId: "conv_theirs" },
       }),
@@ -371,7 +371,7 @@ describe("managed lifecycle on semantic search", () => {
   it("does not report a conversation it only joined", async () => {
     const seen: string[] = [];
     mockDeploy({ catalog: V2_CATALOG });
-    await semanticSearch(
+    await searchInstance(
       freshCtx({
         rememberedConversationId: "conv_kept",
         onConversationOpened: (id) => seen.push(id),
@@ -386,7 +386,7 @@ describe("managed lifecycle on semantic search", () => {
 
   it("ignores a remembered conversation on v1, where joining one traps the next call", async () => {
     const recorded = mockDeploy({ catalog: V1_CATALOG });
-    await semanticSearch(freshCtx({ rememberedConversationId: "conv_v1" }), "kn-v1", "物料");
+    await searchInstance(freshCtx({ rememberedConversationId: "conv_v1" }), "kn-v1", "物料");
     // v1 opens its own conversation; the field is public, so an SDK caller must
     // not be able to reach the hole the CLI's write side already avoids.
     const start = recorded.toolCalls.find((c) => c.name === "bkn_start_interaction");
@@ -397,8 +397,8 @@ describe("managed lifecycle on semantic search", () => {
     const recorded = mockDeploy({ catalog: V2_CATALOG });
     // Same deploy, same identity, same KN — only the wanted conversation differs.
     const base = freshCtx();
-    await semanticSearch({ ...base, rememberedConversationId: "conv_a" }, "kn-managed", "物料");
-    await semanticSearch({ ...base, rememberedConversationId: "conv_b" }, "kn-managed", "物料");
+    await searchInstance({ ...base, rememberedConversationId: "conv_a" }, "kn-managed", "物料");
+    await searchInstance({ ...base, rememberedConversationId: "conv_b" }, "kn-managed", "物料");
 
     // A caller that asked for B must not be handed the session opened on A —
     // the guarantee `sessionKey` already documents for a named conversation.
@@ -413,7 +413,7 @@ describe("managed lifecycle on semantic search", () => {
 
   it("v2: mints both ids in one call and omits operation_key", async () => {
     const recorded = mockDeploy({ catalog: V2_CATALOG });
-    await semanticSearch(freshCtx(), "kn-managed", "物料");
+    await searchInstance(freshCtx(), "kn-managed", "物料");
 
     expect(recorded.toolCalls.map((c) => c.name)).toEqual(["bkn_start_interaction"]);
     expect(recorded.toolCalls[0]?.arguments).toEqual({
@@ -435,7 +435,7 @@ describe("managed lifecycle on semantic search", () => {
       toolErrorsOnce: { bkn_start_interaction: "invalid_params" },
     });
 
-    await expect(semanticSearch(freshCtx(), "kn-managed", "物料")).rejects.toThrow(
+    await expect(searchInstance(freshCtx(), "kn-managed", "物料")).rejects.toThrow(
       /Context-loader error:.*invalid_params/,
     );
     expect(recorded.retrievalBodies).toHaveLength(0);
@@ -444,8 +444,8 @@ describe("managed lifecycle on semantic search", () => {
   it("v1: reuses one session across calls but never reuses an operation_key", async () => {
     const recorded = mockDeploy({ catalog: V1_CATALOG });
     const ctx = freshCtx();
-    await semanticSearch(ctx, "kn-managed", "物料");
-    await semanticSearch(ctx, "kn-managed", "供应商");
+    await searchInstance(ctx, "kn-managed", "物料");
+    await searchInstance(ctx, "kn-managed", "供应商");
 
     // A replayed operation_key returns the receipt instead of the payload, so
     // the second search would come back empty.
@@ -460,8 +460,8 @@ describe("managed lifecycle on semantic search", () => {
   it("v2: reuses one session and probes the catalog once", async () => {
     const recorded = mockDeploy({ catalog: V2_CATALOG });
     const ctx = freshCtx();
-    await semanticSearch(ctx, "kn-managed", "物料");
-    await semanticSearch(ctx, "kn-managed", "供应商");
+    await searchInstance(ctx, "kn-managed", "物料");
+    await searchInstance(ctx, "kn-managed", "供应商");
 
     expect(recorded.toolCalls).toHaveLength(1);
     expect(recorded.infoCount).toBe(1);
@@ -477,7 +477,7 @@ describe("managed lifecycle on semantic search", () => {
         interactionId: "int_caller_owned",
       },
     });
-    await semanticSearch(ctx, "kn-managed", "物料");
+    await searchInstance(ctx, "kn-managed", "物料");
 
     expect(recorded.toolCalls).toHaveLength(0);
     const context = recorded.retrievalBodies[0]?.bkn_context as Record<string, string>;
@@ -495,7 +495,7 @@ describe("managed lifecycle on semantic search", () => {
         conversationId: "conv_caller_named",
       },
     });
-    await semanticSearch(ctx, "kn-managed", "物料");
+    await searchInstance(ctx, "kn-managed", "物料");
 
     // Opening a fresh conversation would file the evidence somewhere the caller
     // never asked for, silently.
@@ -515,8 +515,8 @@ describe("managed lifecycle on semantic search", () => {
   it("keeps one session per KN rather than reusing another KN's conversation", async () => {
     const recorded = mockDeploy();
     const ctx = freshCtx();
-    await semanticSearch(ctx, "kn-alpha", "物料");
-    await semanticSearch(ctx, "kn-beta", "物料");
+    await searchInstance(ctx, "kn-alpha", "物料");
+    await searchInstance(ctx, "kn-beta", "物料");
 
     // The conversation is opened over an MCP session bound to `x-kn-id`.
     const alpha = recorded.retrievalBodies[0]?.bkn_context as Record<string, string>;
@@ -542,8 +542,8 @@ describe("managed lifecycle on semantic search", () => {
       baseUrl: host,
       trace: { ...trace, conversationId: "conv_B" },
     };
-    await semanticSearch(a, "kn-1", "物料");
-    await semanticSearch(b, "kn-1", "供应商");
+    await searchInstance(a, "kn-1", "物料");
+    await searchInstance(b, "kn-1", "供应商");
 
     // A caller who named conv_B must not silently get an interaction on conv_A,
     // nor have it released on their behalf at exit.
@@ -595,14 +595,14 @@ describe("managed lifecycle on semantic search", () => {
     vi.setSystemTime(new Date("2026-08-05T00:00:00.000Z"));
     const ctx = freshCtx();
 
-    await semanticSearch(ctx, "kn-1", "物料");
+    await searchInstance(ctx, "kn-1", "物料");
     // Inside the failure window the probe is not repeated: a durably missing
     // catalog would otherwise cost a doomed round trip on every business call.
-    await semanticSearch(ctx, "kn-1", "供应商");
+    await searchInstance(ctx, "kn-1", "供应商");
     expect(probes).toBe(1);
 
     vi.setSystemTime(new Date("2026-08-05T00:01:00.000Z"));
-    await semanticSearch(ctx, "kn-1", "订单");
+    await searchInstance(ctx, "kn-1", "订单");
     // And past it, the deploy gets another chance — caching the failure for
     // good would leave a long-lived process sending no bkn_context for the
     // rest of its life, with no path back.
@@ -614,8 +614,8 @@ describe("managed lifecycle on semantic search", () => {
     const host = `https://shared-${Date.now()}.example.com`;
     const alice: RequestContext = { ...freshCtx(), baseUrl: host, token: "alice" };
     const bob: RequestContext = { ...freshCtx(), baseUrl: host, token: "bob" };
-    await semanticSearch(alice, "kn-managed", "物料");
-    await semanticSearch(bob, "kn-managed", "物料");
+    await searchInstance(alice, "kn-managed", "物料");
+    await searchInstance(bob, "kn-managed", "物料");
 
     // Sharing would file Bob's evidence under Alice's turn, and release it with
     // her credential.
@@ -666,8 +666,8 @@ describe("managed lifecycle on semantic search", () => {
     const host = `https://tenants-${hostSeq}.example.com`;
     const alice: RequestContext = { ...freshCtx(), baseUrl: host, token: "stale" };
     const bob: RequestContext = { ...freshCtx(), baseUrl: host, token: "good" };
-    await semanticSearch(alice, "kn-1", "物料");
-    const bobBody = await semanticSearch(bob, "kn-1", "物料").then(() =>
+    await searchInstance(alice, "kn-1", "物料");
+    const bobBody = await searchInstance(bob, "kn-1", "物料").then(() =>
       lastRetrievalBody(fetch as unknown as typeof fetch),
     );
 
@@ -684,7 +684,7 @@ describe("managed lifecycle on semantic search", () => {
       interaction_id: "int_owned",
       operation_key: "op:pre-registered",
     };
-    await semanticSearch(freshCtx(), "kn-managed", "物料", { bknContext: owned });
+    await searchInstance(freshCtx(), "kn-managed", "物料", { bknContext: owned });
 
     // The same escape hatch context.toolCall has: a pre-registered
     // operation_key must reach the server unchanged.
@@ -702,7 +702,7 @@ describe("managed lifecycle on semantic search", () => {
         { status: 200, body: { concepts: [{ id: "material" }] } },
       ],
     });
-    const result = (await semanticSearch(freshCtx(), "kn-managed", "物料")) as {
+    const result = (await searchInstance(freshCtx(), "kn-managed", "物料")) as {
       concepts: unknown[];
     };
 
@@ -723,7 +723,7 @@ describe("managed lifecycle on semantic search", () => {
   it("releases a v2 interaction so the conversation does not linger", async () => {
     const recorded = mockDeploy({ catalog: V2_CATALOG });
     const ctx = freshCtx();
-    await semanticSearch(ctx, "kn-managed", "物料");
+    await searchInstance(ctx, "kn-managed", "物料");
     await releaseLifecycleSessions();
 
     const finish = recorded.toolCalls.at(-1);
@@ -736,7 +736,7 @@ describe("managed lifecycle on semantic search", () => {
   it("leaves a v1 interaction to the idle sweeper rather than mis-closing it", async () => {
     const recorded = mockDeploy({ catalog: V1_CATALOG });
     const ctx = freshCtx();
-    await semanticSearch(ctx, "kn-managed", "物料");
+    await searchInstance(ctx, "kn-managed", "物料");
     await releaseLifecycleSessions();
 
     expect(recorded.toolCalls.map((c) => c.name)).not.toContain("bkn_finish_interaction");
@@ -767,7 +767,7 @@ describe("managed lifecycle on semantic search", () => {
       },
     });
 
-    await expect(semanticSearch(ctx, "kn-managed", "物料")).rejects.toBeInstanceOf(HttpError);
+    await expect(searchInstance(ctx, "kn-managed", "物料")).rejects.toBeInstanceOf(HttpError);
     expect(recorded.retrievalBodies).toHaveLength(1);
     expect(recorded.toolCalls).toHaveLength(0);
   });
@@ -777,7 +777,7 @@ describe("managed lifecycle on semantic search", () => {
       retrieval: [{ status: 400, body: { error: { code: "kn_not_found" } } }],
     });
 
-    await expect(semanticSearch(freshCtx(), "kn-missing", "物料")).rejects.toBeInstanceOf(
+    await expect(searchInstance(freshCtx(), "kn-missing", "物料")).rejects.toBeInstanceOf(
       HttpError,
     );
     expect(recorded.retrievalBodies).toHaveLength(1);
