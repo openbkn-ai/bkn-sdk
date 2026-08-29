@@ -15,11 +15,12 @@ interface Described {
   path: string;
   section: string;
   summary: string;
-  commands: Described[];
+  /** Absent on a leaf, which is why the walk has to tolerate it. */
+  commands?: Described[];
 }
 
 function flatten(cmds: Described[]): Described[] {
-  return cmds.flatMap((c) => [c, ...flatten(c.commands)]);
+  return cmds.flatMap((c) => [c, ...flatten(c.commands ?? [])]);
 }
 
 function tree() {
