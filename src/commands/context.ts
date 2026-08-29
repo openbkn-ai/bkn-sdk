@@ -260,6 +260,66 @@ adds paging and --need-total but records nothing in Trace.`,
     });
 
   cmd
+    .command("explore-subgraph <kn-id> <object-type-id>")
+    .description("Follow relations outward from one object type without naming a path first")
+    .requiredOption("--hops <n>", "how many hops to walk, 1-3", (v) => Number.parseInt(v, 10))
+    .option(
+      "--direction <d>",
+      "forward | backward | bidirectional — pick bidirectional when unsure how the relation reads",
+      "bidirectional",
+    )
+    .option("--limit <n>", "instances of the STARTING type, not paths or total objects", (v) =>
+      Number.parseInt(v, 10),
+    )
+    .option("--args <json>", "extra tool arguments merged in (condition, sort, offset …)")
+    .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
+    .addHelpText(
+      "after",
+      `
+Use this when the topology is the question — "what does this supplier touch?" —
+and \`query-instance-subgraph\` when you already know which relations to walk.
+Paths multiply with each hop, so start at 1 or 2.`,
+    )
+    .action(async (knId: string, objectTypeId: string, opts, cmd: Command) => {
+      if (opts.schema) return printToolSchema(cmd, knId, "explore_subgraph");
+      const args: Record<string, unknown> = {
+        ...(opts.args ? jsonArgs(opts.args) : {}),
+        source_object_type_id: objectTypeId,
+        direction: opts.direction,
+        path_length: opts.hops,
+      };
+      if (opts.limit !== undefined) args.limit = opts.limit;
+      printJson(
+        await clientFrom(cmd).context.toolCall(knId, "explore_subgraph", args),
+        outputOptions(cmd),
+      );
+    });
+
+  cmd
+    .command("query-metric <kn-id> <metric-id>")
+    .description("Read a modelled metric through its own definition — do not restate it in SQL")
+    .option(
+      "--args <json>",
+      "tool arguments: analysis_dimensions, time, condition, having, order_by",
+    )
+    .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
+    .addHelpText(
+      "after",
+      `
+Metric ids come from an object type: \`context object-types <kn-id> <ot-id>\`
+lists them under related_metrics. The definition owns the arithmetic, so
+rewriting it with \`run-sql\` produces a number the platform will not agree with.`,
+    )
+    .action(async (knId: string, metricId: string, opts, cmd: Command) => {
+      if (opts.schema) return printToolSchema(cmd, knId, "query_metric");
+      const args = { ...(opts.args ? jsonArgs(opts.args) : {}), metric_id: metricId };
+      printJson(
+        await clientFrom(cmd).context.toolCall(knId, "query_metric", args),
+        outputOptions(cmd),
+      );
+    });
+
+  cmd
     .command("tools <kn-id>")
     .description("List MCP tools advertised for a KN session")
     .action(async (knId: string, _opts, cmd: Command) => {
@@ -418,6 +478,8 @@ adds paging and --need-total but records nothing in Trace.`,
     RUN: [
       "query-object-instance",
       "run-sql",
+      "explore-subgraph",
+      "query-metric",
       "query-instance-subgraph",
       "get-logic-properties",
       "get-action-info",
