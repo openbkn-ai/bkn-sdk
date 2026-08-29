@@ -8,6 +8,7 @@
  */
 import { readFileSync } from "node:fs";
 import type { RequestContext } from "../types.js";
+import { previewRequest } from "../utils/dry-run.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { tlsFetch } from "./tls.js";
@@ -85,6 +86,15 @@ export async function rawCall(
     buildHeaders({ ...ctx, businessDomain: opts.businessDomain ?? ctx.businessDomain }, extra);
 
   if (opts.verbose) process.stderr.write(`> ${method} ${url}\n`);
+
+  // `call` builds its own request rather than going through `request()`, so it
+  // needs the same last stop — without this a `--dry-run` DELETE really deleted.
+  previewRequest({
+    method,
+    url,
+    headers: headersFor(),
+    body: body instanceof FormData ? "<multipart form>" : body,
+  });
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 30_000);

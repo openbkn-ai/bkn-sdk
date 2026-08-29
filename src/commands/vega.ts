@@ -1106,8 +1106,8 @@ export function vegaCommand(): Command {
   can be discovered and written; a logical one cannot.
 
 QUERYING DIRECTLY
-  sql --resource-type <t> --query "<sql>" runs against the source itself. Reference a
-  resource with a {{<resource-id>}} placeholder rather than a physical table name.
+  sql --query "<sql>" runs against the source itself. Name a resource with a
+  {{<resource-id>}} placeholder rather than the physical table it happens to have.
 
 BUILDING AN INDEX
   dataset build <resource-id> creates a BuildTask; build-status / build-list follow it.

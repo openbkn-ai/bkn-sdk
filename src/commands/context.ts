@@ -227,10 +227,8 @@ export function contextCommand(): Command {
     .description(
       "Aggregate, rank or join with read-only SQL — what query-object-instance cannot do",
     )
-    .requiredOption(
-      "--sql <sql>",
-      "read-only MySQL over data resources, tables named as {{<resource-id>}}",
-    )
+    // Not a requiredOption: `--schema` is a valid call that sends no SQL at all.
+    .option("--sql <sql>", "read-only MySQL over data resources, tables named as {{<resource-id>}}")
     .option("--timeout <sec>", "query timeout in seconds", (v) => Number.parseInt(v, 10))
     .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
     .addHelpText(
@@ -254,6 +252,7 @@ adds paging and --need-total but records nothing in Trace.`,
     )
     .action(async (knId: string, opts, cmd: Command) => {
       if (opts.schema) return printToolSchema(cmd, knId, "run_sql");
+      if (!opts.sql) throw new InputError("--sql is required (or use --schema to see the shape)");
       const args: Record<string, unknown> = { sql: opts.sql };
       if (opts.timeout !== undefined) args.query_timeout = opts.timeout;
       printJson(await clientFrom(cmd).context.toolCall(knId, "run_sql", args), outputOptions(cmd));
@@ -262,7 +261,8 @@ adds paging and --need-total but records nothing in Trace.`,
   cmd
     .command("explore-subgraph <kn-id> <object-type-id>")
     .description("Follow relations outward from one object type without naming a path first")
-    .requiredOption("--hops <n>", "how many hops to walk, 1-3", (v) => Number.parseInt(v, 10))
+    // Same reason as run-sql: `--schema` answers without walking anything.
+    .option("--hops <n>", "how many hops to walk, 1-3", (v) => Number.parseInt(v, 10))
     .option(
       "--direction <d>",
       "forward | backward | bidirectional — pick bidirectional when unsure how the relation reads",
@@ -282,6 +282,9 @@ Paths multiply with each hop, so start at 1 or 2.`,
     )
     .action(async (knId: string, objectTypeId: string, opts, cmd: Command) => {
       if (opts.schema) return printToolSchema(cmd, knId, "explore_subgraph");
+      if (opts.hops === undefined) {
+        throw new InputError("--hops is required (or use --schema to see the shape)");
+      }
       const args: Record<string, unknown> = {
         ...(opts.args ? jsonArgs(opts.args) : {}),
         source_object_type_id: objectTypeId,

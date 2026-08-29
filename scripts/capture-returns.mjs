@@ -101,8 +101,22 @@ async function resolveArg(name, from, depth = 0) {
 
 const returns = {};
 let attempted = 0;
+/**
+ * READ means "changes nothing on the platform" — it says nothing about the
+ * local filesystem. `bkn pull` reads a network and unpacks it into the working
+ * directory, which once put 77 downloaded files into this repository.
+ */
+const WRITES_LOCALLY = new Set([
+  "bkn pull",
+  "bkn export",
+  "skill download",
+  "skill install",
+  "toolbox export",
+]);
+
 for (const cmd of leaves) {
   if (cmd.section !== "READ") continue;
+  if (WRITES_LOCALLY.has(cmd.path)) continue;
   if ((cmd.options ?? []).some((o) => o.mandatory)) continue;
   const argv = cmd.path.split(" ");
   let ok = true;

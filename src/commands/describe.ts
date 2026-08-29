@@ -59,6 +59,27 @@ const ID_SOURCES: Record<string, string> = {
   "tool-ids": "openbkn tool list --toolbox <box-id>",
   "document-id": "openbkn vega resource document-get <resource-id> <document-id>",
   "document-ids": "openbkn vega resource document-get <resource-id> <document-id>",
+  // Named entities, wherever they appear; the overrides below cover the cases
+  // where the same word means something else.
+  role: "openbkn admin role list",
+  user: "openbkn admin user list",
+};
+
+/**
+ * The handful of arguments a group cannot answer for, because the command acts
+ * across two entities: `admin role add-member <role> <id>` takes a role and a
+ * member, and `auth switch <url> <user>` names a locally saved login, not a
+ * directory user.
+ */
+const ARGUMENT_OVERRIDES: Record<string, string | null> = {
+  "admin role add-member|id": "openbkn admin user list",
+  "admin role remove-member|id": "openbkn admin user list",
+  "admin user assign-role|role": "openbkn admin role list",
+  "admin user revoke-role|role": "openbkn admin role list",
+  "admin user roles|user": "openbkn admin user list",
+  "admin role members|role": "openbkn admin role list",
+  "auth switch|user": "openbkn auth users <url>",
+  "admin auth switch|user": "openbkn admin auth users <url>",
 };
 
 /**
@@ -80,6 +101,7 @@ const GROUP_ID_SOURCES: Array<[RegExp, string]> = [
   [/^tool\b/, "openbkn tool list --toolbox <box-id>"],
   [/^appkey\b/, "openbkn appkey list"],
   [/^admin org\b/, "openbkn admin org list"],
+  [/^auth\b/, "openbkn auth list"],
   [/^admin user\b/, "openbkn admin user list"],
   [/^admin role\b/, "openbkn admin role list"],
   [/^admin llm\b/, "openbkn admin llm list"],
@@ -94,10 +116,21 @@ const GROUP_ID_SOURCES: Array<[RegExp, string]> = [
   [/^bkn action-log\b/, "openbkn bkn action-log list <kn-id>"],
 ];
 
-/** Where an argument's value comes from: by name first, then by the group it sits in. */
-function sourceOf(argName: string, path: string[]): string | undefined {
+/**
+ * Where an argument's value comes from: by name first, then by the group it
+ * sits in. The group fallback answers only for the first argument, because a
+ * group lists one kind of thing — `admin role add-member <role> <id>` takes a
+ * role and a *member*, and answering "the role list" for both would hand a
+ * caller a role id to send where a user id belongs.
+ */
+function sourceOf(argName: string, path: string[], isLast: boolean): string | undefined {
+  const override = ARGUMENT_OVERRIDES[`${path.join(" ")}|${argName}`];
+  if (override !== undefined) return override ?? undefined;
   const byName = ID_SOURCES[argName];
   if (byName) return byName;
+  // The group answers for the thing the command acts on, which is the last
+  // argument; the ones before it scope the lookup and are named specifically.
+  if (!isLast) return undefined;
   const generic =
     /^(id|ids|cg-id|modelid|role|user|schedule-id|schedule-ids|task-id|log-id)$/i.test(argName);
   if (!generic) return undefined;
@@ -179,13 +212,16 @@ function describeNode(cmd: Command, parentPath: string[], depth: number): Descri
     ...(aliases.length ? { aliases } : {}),
     ...(cmd.registeredArguments.length
       ? {
-          arguments: cmd.registeredArguments.map((arg) => ({
-            name: arg.name(),
-            required: arg.required,
-            variadic: arg.variadic,
-            ...(arg.description ? { description: arg.description } : {}),
-            ...(sourceOf(arg.name(), path) ? { from: sourceOf(arg.name(), path) } : {}),
-          })),
+          arguments: cmd.registeredArguments.map((arg, index, all) => {
+            const from = sourceOf(arg.name(), path, index === all.length - 1);
+            return {
+              name: arg.name(),
+              required: arg.required,
+              variadic: arg.variadic,
+              ...(arg.description ? { description: arg.description } : {}),
+              ...(from ? { from } : {}),
+            };
+          }),
         }
       : {}),
     ...(options.length ? { options: options.map(describeOption) } : {}),
