@@ -78,25 +78,15 @@ guide(
   openbkn bkn --help                     # every group has its own help
 
 COMMON TASKS
-  Answer a question about the business
-      openbkn bkn search <kn-id> "customer churn"
-      openbkn context search-schema <kn-id> "orders last quarter"
-      openbkn context query-object-instance <kn-id> --args '<json>'
-  Look at the underlying data
-      openbkn vega catalog list
-      openbkn resource find --name orders
-      openbkn resource query <resource-id>
-  Build a network from a data catalog
-      openbkn bkn create-from-catalog <catalog-id> --name "Supply chain"
-      openbkn vega dataset build <resource-id>          # index it
-  Edit a network as files
-      openbkn bkn pull <kn-id> ./kn && openbkn bkn validate ./kn && openbkn bkn push ./kn
-  Give an agent a new capability
-      openbkn skill register ./my-skill
-      openbkn toolbox create --name "Billing" && openbkn tool upload ./api.yaml --toolbox <id>
-  Work out why an answer was wrong
-      openbkn trace conversations list
-      openbkn trace diagnose <conversation-id> --llm
+  Answer a question    bkn search <kn-id> "<q>"  ->  context search-schema  ->
+                       context query-object-instance --args '<json>'
+  Look at the data     vega catalog list  ->  resource find --name <t>  ->  resource query <id>
+  Build from a catalog bkn create-from-catalog <catalog-id> --name "<n>"  ->
+                       vega dataset build <resource-id>
+  Edit as files        bkn pull <kn-id> ./kn  ->  bkn validate ./kn  ->  bkn push ./kn
+  Ship a capability    skill register ./my-skill; toolbox create --name "<n>"  ->
+                       tool upload ./api.yaml --toolbox <id>  ->  toolbox publish <id>
+  Debug an answer      trace conversations list  ->  trace diagnose <conversation-id> --llm
 
 GOOD TO KNOW
   Add --json to any command for machine-readable output (the default view trims columns,
