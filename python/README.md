@@ -15,6 +15,12 @@ namespaces in HTTP calls, which buys a Python caller nothing that
 `bkn_osdk.call("/api/…")` does not. Generated classes over an ontology cannot be
 replaced by a raw call, which is why they are worth a second language.
 
+**Targets platform 0.1.5.** Payloads are taken as the platform sends them, and
+0.1.4 does not send the same ones — it wraps `get_kn_detail`, `list_resources`,
+`list_skills`, `get_object_types` and `list_knowledge_networks` in a `result`
+key, and serves a `semantic-search` route that 0.1.5 withdrew. Reading against
+an older deploy is possible but is the caller's own adaptation, not this SDK's.
+
 ## Install
 
 Not on PyPI. Install from a tag — the package lives in a subdirectory of this

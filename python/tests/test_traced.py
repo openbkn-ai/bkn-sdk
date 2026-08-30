@@ -130,30 +130,6 @@ class Deploy:
         return httpx.Response(200, text=text, headers={"content-type": "text/event-stream"})
 
 
-def test_an_older_deploys_result_wrapper_is_unwrapped() -> None:
-    """One deploy wraps a tool's payload in `result` and another does not, and a
-    caller cannot tell which it reached — so the transport settles it."""
-    from bkn_osdk.mcp import _unwrap
-
-    wrapped = {
-        "result": {
-            "content": [{"type": "text", "text": json.dumps({"result": {"id": "kn", "types": []}})}]
-        }
-    }
-
-    assert _unwrap(wrapped).value == {"id": "kn", "types": []}
-
-
-def test_a_payload_whose_own_field_is_called_result_is_left_alone() -> None:
-    """Unwrapping is for the envelope, not for a field that happens to share its name."""
-    from bkn_osdk.mcp import _unwrap
-
-    payload = {"result": "ok", "count": 2}
-    body = {"result": {"content": [{"type": "text", "text": json.dumps(payload)}]}}
-
-    assert _unwrap(body).value == payload
-
-
 @pytest.fixture(autouse=True)
 def clean_caches() -> Iterator[None]:
     mcp_module._reset_for_tests()
