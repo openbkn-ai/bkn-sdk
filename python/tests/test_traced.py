@@ -534,3 +534,47 @@ def test_the_mcp_transport_refreshes_an_expired_stored_token(
     mcp_module._raw_post(stored, KN, None, {"jsonrpc": "2.0", "method": "initialize"})
 
     assert seen == ["Bearer stale", "Bearer fresh"]
+
+
+# ---- what a dead session looks like, and what is not one --------------------
+
+
+def rejecting(monkeypatch: pytest.MonkeyPatch, status: int, body: str) -> list[str]:
+    """A deploy that answers every tool call with one status, recording the calls."""
+    seen: list[str] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.read())
+        method = payload.get("method", "")
+        if method == "initialize":
+            return httpx.Response(200, json={"result": {}}, headers={"mcp-session-id": "sess-1"})
+        if method == "notifications/initialized":
+            return httpx.Response(202, json={})
+        seen.append(payload["params"]["name"])
+        return httpx.Response(status, text=body)
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+    monkeypatch.setattr(http_module, "_client", lambda _ctx: client)
+    return seen
+
+
+def test_a_400_is_not_treated_as_a_dead_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only 404 means the session is gone — both deploys answer `404 Invalid
+    session ID`. Re-handshaking on a 400 would send a non-idempotent tool twice."""
+    seen = rejecting(monkeypatch, 400, "bad argument")
+    ctx = Context(base_url=PLATFORM, token="t-1")
+
+    with pytest.raises(BknError, match="MCP transport failed: HTTP 400"):
+        mcp_module.call_tool(ctx, KN, "bkn_start_interaction", {})
+
+    assert seen == ["bkn_start_interaction"]  # sent once, not twice
+
+
+def test_a_404_reopens_the_session_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen = rejecting(monkeypatch, 404, "Invalid session ID")
+    ctx = Context(base_url=PLATFORM, token="t-1")
+
+    with pytest.raises(BknError, match="just issued"):
+        mcp_module.call_tool(ctx, KN, "search_schema", {})
+
+    assert seen == ["search_schema", "search_schema"]  # one retry, then a real message

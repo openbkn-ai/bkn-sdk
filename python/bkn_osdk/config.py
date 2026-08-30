@@ -297,7 +297,10 @@ def resolve_context() -> Context:
         # repeat it. The opt-out is scoped to this platform's own requests.
         insecure = bool(stored.get("tlsInsecure", False))
 
-    business_domain = pick("business_domain") or _read_platform_config(base_url).get(
+    # The same user the token came from, not whoever the CLI last logged in as:
+    # `session(user=…)` would otherwise read one user's token and another's
+    # business domain, and send the pair out together.
+    business_domain = pick("business_domain") or _read_platform_config(base_url, user_id).get(
         "businessDomain"
     )
 
@@ -375,8 +378,8 @@ def _read_token(base_url: str, user_id: str | None) -> dict[str, Any] | None:
     return _read_json(_user_dir(base_url, user_id) / "token.json")
 
 
-def _read_platform_config(base_url: str) -> dict[str, Any]:
-    user_id = _active_user_id(base_url)
+def _read_platform_config(base_url: str, user_id: str | None = None) -> dict[str, Any]:
+    user_id = user_id or _active_user_id(base_url)
     if not user_id:
         return {}
     return _read_json(_user_dir(base_url, user_id) / "config.json") or {}

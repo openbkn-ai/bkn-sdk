@@ -84,7 +84,16 @@ def call_tool(ctx: Context, kn_id: str, name: str, arguments: dict[str, Any]) ->
         # is the connection, not the business lifecycle: no evidence is lost.
         with _lock:
             _sessions.pop((ctx.base_url, kn_id), None)
-        return _unwrap(_post(ctx, kn_id, _session(ctx, kn_id), _tool_call(name, arguments)))
+        try:
+            return _unwrap(_post(ctx, kn_id, _session(ctx, kn_id), _tool_call(name, arguments)))
+        except _SessionGone as gone:
+            # A session opened seconds ago and already rejected is not something
+            # a third attempt fixes, and `_SessionGone` is an internal signal:
+            # let it out as itself and the caller learns nothing usable.
+            raise BknError(
+                f"The MCP endpoint rejected a session it had just issued ({gone}). "
+                "This is a deploy-side problem rather than a bad request."
+            ) from gone
 
 
 class _SessionGone(BknError):
@@ -173,7 +182,11 @@ def _raw_post(ctx: Context, kn_id: str, session_id: str | None, body: dict[str, 
         refreshed = refreshed_token(ctx, token)
         if refreshed is not None:
             response = send(refreshed)
-    if response.status_code in (400, 404) and session_id is not None:
+    if response.status_code == 404 and session_id is not None:
+        # What a forgotten session answers, measured on both deploys: `404
+        # Invalid session ID`. A 400 is not that — a tool given bad arguments
+        # answers 200 with an `isError` result — so treating one as a dead
+        # session would re-handshake and send a non-idempotent call twice.
         raise _SessionGone(f"MCP session rejected: HTTP {response.status_code}")
     if response.is_error:
         raise BknError(f"MCP transport failed: HTTP {response.status_code} {response.text[:300]}")

@@ -158,6 +158,33 @@ def test_user_selects_a_saved_identity_by_username(isolated_config: Path) -> Non
     assert resolve_context().token == "first"
 
 
+def test_the_business_domain_follows_the_user_whose_token_is_used(
+    isolated_config: Path,
+) -> None:
+    """Reading one user's token beside another's config would send the pair out
+    together — the wrong `x-business-domain` on a request the token authorises."""
+    write_store(
+        isolated_config,
+        PLATFORM,
+        user_id="u-1",
+        token={"accessToken": "first"},
+        config={"businessDomain": "active-domain"},
+    )
+    write_store(
+        isolated_config,
+        PLATFORM,
+        user_id="u-2",
+        token={"accessToken": "second", "username": "ops@example.com"},
+        config={"businessDomain": "other-domain"},
+        active=False,
+    )
+
+    with session(user="ops@example.com") as ctx:
+        assert (ctx.token, ctx.business_domain) == ("second", "other-domain")
+
+    assert resolve_context().business_domain == "active-domain"
+
+
 def test_unknown_user_lists_what_is_saved_instead(isolated_config: Path) -> None:
     write_store(isolated_config, PLATFORM, user_id="u-1")
 
