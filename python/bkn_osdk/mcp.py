@@ -76,9 +76,10 @@ def tool_catalog(ctx: Context) -> Any:
 
 def call_tool(ctx: Context, kn_id: str, name: str, arguments: dict[str, Any]) -> ToolResult:
     """Call one MCP tool, opening the transport session if this process has none."""
-    session_id = _session(ctx, kn_id)
     try:
-        return _unwrap(_post(ctx, kn_id, session_id, _tool_call(name, arguments)))
+        # Inside the try: the handshake's own `initialized` notification carries
+        # the new session id, so it can be refused the same way a call can.
+        return _unwrap(_post(ctx, kn_id, _session(ctx, kn_id), _tool_call(name, arguments)))
     except _SessionGone:
         # The server forgot the transport session — reopen once and repeat. This
         # is the connection, not the business lifecycle: no evidence is lost.

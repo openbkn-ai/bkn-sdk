@@ -646,3 +646,23 @@ def test_an_unreadable_catalog_is_retried_rather_than_remembered(
     starts = tool_calls(stub, "bkn_start_interaction")
     assert "conversation_mode" not in starts[0]
     assert starts[1]["conversation_mode"] == "new"
+
+
+def test_a_handshake_refused_at_its_own_notification_reads_as_a_deploy_problem(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The `initialized` notification carries the session id the server just
+    issued, so it can be refused too — and that is not an internal signal to
+    hand the caller."""
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.read())
+        if body.get("method") == "initialize":
+            return httpx.Response(200, json={"result": {}}, headers={"mcp-session-id": "sess-1"})
+        return httpx.Response(404, text="Invalid session ID")
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+    monkeypatch.setattr(http_module, "_client", lambda _ctx: client)
+
+    with pytest.raises(BknError, match="just issued"):
+        mcp_module.call_tool(Context(base_url=PLATFORM, token="t-1"), KN, "search_schema", {})

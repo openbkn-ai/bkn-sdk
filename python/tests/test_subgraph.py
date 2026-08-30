@@ -381,6 +381,17 @@ def test_the_limit_counts_matches_rather_than_walked_objects(deploy: Deploy) -> 
     assert [row.confederation_name for row in rows] == ["UEFA"]
 
 
+def test_extending_a_path_past_a_filter_is_refused(deploy: Deploy) -> None:
+    """Dropping the condition and answering anyway would hand back rows the
+    caller believes were filtered."""
+    with pytest.raises(InputError, match="narrows the far end"):
+        (
+            AwardWinners.team.then(Teams.confederation)
+            .where(Confederations.confederation_name == "UEFA")
+            .then(Teams.confederation)
+        )
+
+
 def test_an_empty_walk_is_an_empty_list(deploy: Deploy) -> None:
     deploy.payload = {"objects": {}, "relation_paths": []}
 

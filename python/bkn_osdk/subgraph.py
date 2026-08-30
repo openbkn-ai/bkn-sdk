@@ -53,8 +53,20 @@ class RelationPath:
     end_condition: Filter | None = None
 
     def then(self, relation: Relation[Any]) -> RelationPath:
-        """Extend the chain by one hop."""
-        return replace(self, steps=(*self.steps, relation), end_condition=None)
+        """Extend the chain by one hop.
+
+        A filter belongs to the end it was written against, and the walk can
+        only be narrowed at its far end — so extending past a `where` is
+        refused rather than dropping the condition and answering as if it had
+        been applied.
+        """
+        if self.end_condition is not None:
+            raise InputError(
+                "`where(...)` narrows the far end of a path, and this path now continues "
+                "past it. Move the filter to the last hop, or walk to the intermediate "
+                "type and query it directly."
+            )
+        return replace(self, steps=(*self.steps, relation))
 
     def where(self, condition: Filter) -> RelationPath:
         """Narrow the far end. Applied after the walk, since the endpoint's
