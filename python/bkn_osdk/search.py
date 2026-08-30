@@ -50,15 +50,7 @@ def search(
     include_columns: bool | None = None,
     context: Context | None = None,
 ) -> Any:
-    """Search one network, returning the platform's result verbatim.
-
-    A turn already in scope is attached, so the search is recorded beside the
-    reads it led to; outside a traced scope the call goes bare, and only a
-    deploy that refuses it gets a short-lived turn opened for the retry.
-    """
-    from .lifecycle import interaction_scope, with_context_retry
-    from .mcp import call_tool
-
+    """Search one network, returning the platform's result verbatim."""
     ctx = context or resolve_context()
     arguments: dict[str, Any] = {"query": query, "response_format": "json"}
     if max_concepts is not None:
@@ -67,16 +59,7 @@ def search(
         arguments["search_scope"] = search_scope
     if include_columns is not None:
         arguments["include_columns"] = include_columns
-
-    def send(bkn_context: dict[str, str] | None) -> Any:
-        payload = arguments if bkn_context is None else {**arguments, "bkn_context": bkn_context}
-        result = call_tool(ctx, kn_id, SEARCH_TOOL, payload)
-        scope = interaction_scope().get()
-        if result.receipt is not None and scope is not None and kn_id in scope:
-            scope[kn_id].receipts.append(result.receipt)
-        return result.value
-
-    return with_context_retry(ctx, kn_id, send)
+    return _call(ctx, kn_id, SEARCH_TOOL, arguments)
 
 
 def search_instances(
@@ -103,13 +86,7 @@ def search_instances(
     beside them. Turning a row into a typed instance means one more query: the
     type ids come back with it, so `ObjectSet.where` is a step away.
 
-    Unlike the rest of the read surface, this tool requires a `bkn_context` —
-    the catalog says so — so a turn is opened when the caller has none, rather
-    than spending a first attempt learning what the schema already states.
     """
-    from .lifecycle import borrowed_interaction
-    from .mcp import call_tool
-
     ctx = context or resolve_context()
     arguments: dict[str, Any] = {"kn_id": kn_id, "query": query, "response_format": "json"}
     for name, value in (
@@ -122,14 +99,24 @@ def search_instances(
     ):
         if value is not None:
             arguments[name] = value
+    return _call(ctx, kn_id, INSTANCE_SEARCH_TOOL, arguments)
+
+
+def _call(ctx: Context, kn_id: str, tool: str, arguments: dict[str, Any]) -> Any:
+    """Call a capability tool on a turn, opening one where the caller has none.
+
+    The whole agent-retrieval surface requires a `bkn_context`: every tool in
+    the catalog declares it required bar the two lifecycle tools, and both
+    deploys refuse a context-free call on the MCP endpoint and on the REST
+    twin alike. Only the ontology-query routes — instances, subgraph, metrics —
+    serve a bare read, which is why they keep the send-and-adapt path and this
+    does not. Probing here would buy a refusal already written in the schema.
+    """
+    from .lifecycle import borrowed_interaction
+    from .mcp import call_tool
 
     with borrowed_interaction(ctx, kn_id) as interaction:
-        result = call_tool(
-            ctx,
-            kn_id,
-            INSTANCE_SEARCH_TOOL,
-            {**arguments, "bkn_context": interaction.bkn_context},
-        )
+        result = call_tool(ctx, kn_id, tool, {**arguments, "bkn_context": interaction.bkn_context})
         if result.receipt is not None:
             interaction.receipts.append(result.receipt)
         return result.value

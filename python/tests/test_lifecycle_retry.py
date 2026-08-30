@@ -158,12 +158,14 @@ def test_inside_a_traced_scope_the_scope_owns_the_turn(enforcing: Deploy) -> Non
     assert enforcing.tool_calls.count("bkn_finish_interaction") == 1
 
 
-def test_search_takes_the_same_path(enforcing: Deploy) -> None:
-    """Search is an MCP tool, but the lifecycle rule it meets is the same one."""
+def test_a_capability_tool_carries_a_turn_on_the_first_attempt(enforcing: Deploy) -> None:
+    """No probe here, unlike a read. Every tool in the catalog bar the two
+    lifecycle ones declares `bkn_context` required, and both deploys refuse a
+    context-free tool call — so the refusal is known before it is asked for."""
     search(KN, "world cup winners")
 
-    assert [("bkn_context" in args) for args in enforcing.tool_args] == [False, True]
-    assert enforcing.tool_args[1]["bkn_context"] == {
+    assert [("bkn_context" in args) for args in enforcing.tool_args] == [True]
+    assert enforcing.tool_args[0]["bkn_context"] == {
         "conversation_id": "c1",
         "interaction_id": "i1",
     }
@@ -204,7 +206,7 @@ def test_a_traced_scope_attaches_the_turn_without_being_asked(relaxed: Deploy) -
     """A deploy that does not demand a context still records the call, because the
     scope asked for evidence. Waiting for a refusal would drop it in silence.
 
-    Shown on `search`, whose tool call carries the turn on the first attempt.
+    Shown on `search`, which joins the scope's turn rather than opening one.
     """
     with session(traced=True):
         search(KN, "who owns supply chain")

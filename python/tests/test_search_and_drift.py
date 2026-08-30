@@ -121,7 +121,9 @@ def test_search_calls_the_same_tool_the_typescript_sdk_calls(sent: Sent) -> None
     search(KN, "who owns supply chain", context=CONTEXT)
 
     assert sent.tools[0][0] == "search_schema"
-    assert sent.arguments == {"query": "who owns supply chain", "response_format": "json"}
+    assert sent.arguments["query"] == "who owns supply chain"
+    assert sent.arguments["response_format"] == "json"
+    assert "kn_id" not in sent.arguments  # the network rides in the header
     assert sent.paths[-1] == "/api/agent-retrieval/v1/mcp"
 
 
@@ -148,8 +150,8 @@ def test_instance_search_asks_for_rows_rather_than_types(sent: Sent) -> None:
     assert sent.arguments["kn_id"] == KN
 
 
-def test_instance_search_opens_a_turn_rather_than_being_refused_once(sent: Sent) -> None:
-    """The catalog declares `bkn_context` required for this tool, so spending a
+def test_a_capability_tool_opens_a_turn_rather_than_being_refused_once(sent: Sent) -> None:
+    """The catalog declares `bkn_context` required for all of them, so spending a
     first attempt to be told that would be a round trip bought with nothing."""
     search_instances(KN, "Lionel Messi", context=CONTEXT)
 
