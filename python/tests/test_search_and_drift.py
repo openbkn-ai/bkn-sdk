@@ -3,9 +3,12 @@
 
 """Two capabilities that hang off the package rather than off a class.
 
-`search` is network-level — its request body has no object-type dimension at
-all — and the schema check is per network too. Both are therefore reached
-through the generated package, not through `People`.
+`search` is network-level — its request carries no object-type dimension at all
+— and the schema check is per network too. Both are therefore reached through
+the generated package, not through `People`.
+
+Search goes out as the `search_schema` MCP tool, the same call the TypeScript
+SDK makes, so one contract covers both clients.
 """
 
 from __future__ import annotations
@@ -21,6 +24,8 @@ from schema_fixtures import DEMO_SCHEMA
 
 from bkn_osdk import Context, SchemaDriftError, configure, search
 from bkn_osdk import http as http_module
+from bkn_osdk import lifecycle as lifecycle_module
+from bkn_osdk import mcp as mcp_module
 from bkn_osdk import meta as meta_module
 from bkn_osdk.schema import PropertyDef, fingerprint
 from bkn_osdk.types import ObjectType, Property
@@ -37,15 +42,39 @@ class Order(ObjectType):
     order_id = Property[int]("order_id")
 
 
+RESULT = {"object_types": [{"id": "people"}], "relation_types": []}
+
+
 class Sent:
+    """Records the REST reads and the MCP tool calls a test provokes."""
+
     def __init__(self) -> None:
         self.paths: list[str] = []
         self.bodies: list[dict[str, Any]] = []
+        self.tools: list[tuple[str, dict[str, Any]]] = []
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.paths.append(request.url.path)
-        self.bodies.append(json.loads(request.read()))
-        return httpx.Response(200, json={"concepts": [], "datas": []})
+        if not request.url.path.endswith("/mcp"):
+            self.bodies.append(json.loads(request.read()))
+            return httpx.Response(200, json={"datas": []})
+
+        body = json.loads(request.read())
+        if body["method"] != "tools/call":
+            return httpx.Response(200, json={"result": {}}, headers={"mcp-session-id": "s"})
+        self.tools.append((body["params"]["name"], body["params"]["arguments"]))
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {"content": [{"type": "text", "text": json.dumps(RESULT)}]},
+            },
+        )
+
+    @property
+    def arguments(self) -> dict[str, Any]:
+        return self.tools[0][1]
 
 
 @pytest.fixture
@@ -53,37 +82,35 @@ def sent(monkeypatch: pytest.MonkeyPatch) -> Sent:
     recorder = Sent()
     client = httpx.Client(transport=httpx.MockTransport(recorder.handle))
     monkeypatch.setattr(http_module, "_client", lambda _ctx: client)
+    mcp_module._reset_for_tests()
+    lifecycle_module._reset_for_tests()
     return recorder
 
 
 # ---- search -----------------------------------------------------------------
 
 
-def test_search_sends_the_network_level_body(sent: Sent) -> None:
-    """No object-type dimension exists in this request — which is why it is not on a class."""
+def test_search_calls_the_same_tool_the_typescript_sdk_calls(sent: Sent) -> None:
+    """One contract for both clients — and the network rides in the header, not the body."""
     search(KN, "who owns supply chain", context=CONTEXT)
 
-    assert sent.paths == ["/api/agent-retrieval/v1/kn/semantic-search"]
-    assert sent.bodies[0] == {
-        "kn_id": KN,
-        "query": "who owns supply chain",
-        "mode": "keyword_vector_retrieval",
-        "max_concepts": 10,
-        "return_query_understanding": False,
-    }
+    assert sent.tools[0][0] == "search_schema"
+    assert sent.arguments == {"query": "who owns supply chain", "response_format": "json"}
+    assert sent.paths[-1] == "/api/agent-retrieval/v1/mcp"
 
 
-def test_search_options_reach_the_body(sent: Sent) -> None:
-    search(KN, "q", mode="vector", max_concepts=3, return_query_understanding=True, context=CONTEXT)
+def test_only_the_options_that_were_given_are_sent(sent: Sent) -> None:
+    """An omitted option is left out rather than sent as a guessed default."""
+    search(KN, "q", max_concepts=3, search_scope={"include_action_types": False}, context=CONTEXT)
 
-    assert sent.bodies[0]["mode"] == "vector"
-    assert sent.bodies[0]["max_concepts"] == 3
-    assert sent.bodies[0]["return_query_understanding"] is True
+    assert sent.arguments["max_concepts"] == 3
+    assert sent.arguments["search_scope"] == {"include_action_types": False}
+    assert "include_columns" not in sent.arguments
 
 
 def test_search_returns_the_platform_result_unchanged(sent: Sent) -> None:
     """Whether a hit resolves to a typed instance is not yet known, so nothing is invented."""
-    assert search(KN, "q", context=CONTEXT) == {"concepts": [], "datas": []}
+    assert search(KN, "q", context=CONTEXT) == RESULT
 
 
 # ---- the opt-in schema check -------------------------------------------------

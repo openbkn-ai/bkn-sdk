@@ -30,6 +30,9 @@ from .relation_types import (
     ORDER_TO_LINE,
     RELATION_TYPES,
 )
+from .metrics import (
+    METRICS,
+)
 
 validate_package(
     __name__,
@@ -44,7 +47,7 @@ OBJECT_TYPES: tuple[type[ObjectType], ...] = (Order, OrderLine, People)
 
 
 def search(query: str, **options: Any) -> Any:
-    """Semantic search over this knowledge network.
+    """Search this knowledge network by natural language.
 
     Network-level rather than object-type-level, which is why it lives here
     and not on a class. Returns the platform's result unchanged.
@@ -57,6 +60,7 @@ __all__ = [
     "FORMAT_VERSION",
     "GENERATED_BY",
     "KN_ID",
+    "METRICS",
     "OBJECT_TYPES",
     "ORDER_TO_BUYER",
     "ORDER_TO_LINE",

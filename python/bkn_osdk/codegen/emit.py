@@ -455,7 +455,7 @@ def _emit_init(
             *class_names,
             *relation_names.values(),
             *metric_names,
-            *(["METRICS"] if metric_names else []),
+            "METRICS",
         ]
     )
     lines = [
@@ -484,8 +484,9 @@ def _emit_init(
     if class_names:
         lines += _from_import(".object_types", class_names)
     lines += _from_import(".relation_types", ["RELATION_TYPES", *relation_names.values()])
-    if metric_names:
-        lines += _from_import(".metrics", ["METRICS", *metric_names])
+    # `METRICS` is exported even when the network declares none, so a caller can
+    # write `for metric in bkn.METRICS` without first asking whether it exists.
+    lines += _from_import(".metrics", ["METRICS", *metric_names])
     lines += [
         "",
         # The one piece of behaviour in a generated package: refuse a runtime
@@ -505,7 +506,7 @@ def _emit_init(
         "",
         "",
         "def search(query: str, **options: Any) -> Any:",
-        '    """Semantic search over this knowledge network.',
+        '    """Search this knowledge network by natural language.',
         "",
         "    Network-level rather than object-type-level, which is why it lives here",
         "    and not on a class. Returns the platform's result unchanged.",

@@ -3,21 +3,22 @@
 
 """The MCP transport: JSON-RPC over one POST endpoint.
 
-**A narrow seam, not the read path.** Every read — instances, metrics, subgraph
-— goes over REST, which is faster, strictly more capable (only it sorts and
-totals), and needs no session. Two things still come through here, and both are
-retirable:
+**The runtime channel.** This is how an agent reaches a knowledge network at
+run time, and it is the surface the TypeScript SDK calls for every
+context-loader capability, so keeping to it keeps one contract across the two
+clients. It carries what REST does not:
 
-1. opening and closing a managed interaction, where a deploy demands a
-   `bkn_context` for REST as well;
-2. `session(traced=True)`, whose whole point is the in-band `bkn_receipt` that
-   REST records server-side but does not hand back.
+* the `bkn_receipt` — operation id, payload hash, business refs down to the
+  property — that puts a read in the evidence chain in-band, rather than only
+  server-side;
+* the capability tools themselves (`search_schema` and its neighbours), which
+  have no stable REST equivalent: `semantic-search` was withdrawn between two
+  deploys this SDK was tested against, while the tool name did not move;
+* the managed lifecycle, `bkn_start_interaction` / `bkn_finish_interaction`.
 
-The evidence layer has its own REST surface (`agent-observability`
-`/interactions/…`), so (1) and possibly (2) move off this transport once that
-surface is confirmed usable with an end-user token — it was not deployed on the
-platform this was built against.
-
+REST still owns the typed read path — instances, metrics, subgraph — because
+only it sorts, totals and pages, and it needs no session. The two are a
+division of labour, not a migration.
 
 `initialize` → the server hands back a session id in a header → an
 `initialized` notification → `tools/call`. The session is per (deploy, network)
@@ -27,8 +28,7 @@ say nothing about the query.
 Two response encodings are in the wild on the same endpoint — plain JSON and an
 SSE `data:` stream — so both are parsed. A tool's real payload arrives as JSON
 inside `content[0].text`, with the evidence receipt beside it in
-`structuredContent.bkn_receipt`; keeping that receipt is the whole reason this
-path exists, since REST answers faster and carries none.
+`structuredContent.bkn_receipt`.
 """
 
 from __future__ import annotations
@@ -204,8 +204,7 @@ def _unwrap(parsed: Any) -> ToolResult:
     )
 
     if result.get("isError") is True:
-        error = structured.get("error") if isinstance(structured, dict) else None
-        error = error if isinstance(error, dict) else {}
+        error = _error_of(structured) or _error_of(_loads(text)) or {}
         raise ToolError(
             str(error.get("code") or "tool_error"),
             str(text or "tool call failed"),
@@ -224,6 +223,29 @@ def _unwrap(parsed: Any) -> ToolResult:
     if isinstance(structured, dict):
         return ToolResult(structured, receipt if isinstance(receipt, dict) else None)
     return ToolResult(result, receipt if isinstance(receipt, dict) else None)
+
+
+def _error_of(payload: Any) -> dict[str, Any] | None:
+    """The structured error, wherever this deploy put it.
+
+    A refusal arrives with its machine-readable part in `structuredContent` on
+    one deploy and only inside the text payload on another — and the code is
+    what decides whether the call is retryable, so both are read. Missing it
+    turns "open a session and try again" into a hard failure.
+    """
+    if not isinstance(payload, dict):
+        return None
+    error = payload.get("error")
+    return error if isinstance(error, dict) else None
+
+
+def _loads(text: str | None) -> Any:
+    if not isinstance(text, str):
+        return None
+    try:
+        return json.loads(text)
+    except ValueError:
+        return None
 
 
 def _str_or_none(value: Any) -> str | None:

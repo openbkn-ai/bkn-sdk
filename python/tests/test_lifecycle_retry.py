@@ -1,13 +1,14 @@
 # Copyright (c) 2026 OpenBKN. All rights reserved.
 # Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
-"""Deploys that enforce the lifecycle contract on the REST surface too.
+"""Deploys that enforce the lifecycle contract on calls that carry no turn.
 
-One live deploy answers a plain semantic-search POST with
-`{"error": {"code": "conversation_required", "required_action":
-"create_conversation"}}`, while another serves the same request happily. Rather
-than pre-opening an interaction for a deploy that may not want one, the first
-attempt goes out bare and the requirement is learned from the refusal.
+One live deploy answers a context-free read with `{"error": {"code":
+"conversation_required", "required_action": "create_conversation"}}`, while
+another serves the same request happily. Rather than pre-opening an interaction
+for a deploy that may not want one, a call with no turn to attach goes out bare
+and the requirement is learned from the refusal — over REST and over the MCP
+tool alike, since both surfaces sit behind the same middleware.
 """
 
 from __future__ import annotations
@@ -53,6 +54,8 @@ class Deploy:
         self.enforces = enforces
         self.rest_bodies: list[dict[str, Any]] = []
         self.tool_calls: list[str] = []
+        #: Arguments of every non-lifecycle tool call, in order.
+        self.tool_args: list[dict[str, Any]] = []
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
@@ -80,19 +83,25 @@ class Deploy:
             return httpx.Response(200, json={"result": {}}, headers={"mcp-session-id": "s"})
         name = body["params"]["name"]
         self.tool_calls.append(name)
-        payload = (
-            {"conversation_id": "c1", "interaction_id": "i1"}
-            if name == "bkn_start_interaction"
-            else {"execution_status": "completed"}
-        )
-        return httpx.Response(
-            200,
-            json={
-                "jsonrpc": "2.0",
-                "id": 1,
-                "result": {"content": [{"type": "text", "text": json.dumps(payload)}]},
-            },
-        )
+        if name == "bkn_start_interaction":
+            return self._rpc({"conversation_id": "c1", "interaction_id": "i1"})
+        if name == "bkn_finish_interaction":
+            return self._rpc({"execution_status": "completed"})
+
+        arguments = body["params"]["arguments"]
+        self.tool_args.append(arguments)
+        if self.enforces and "bkn_context" not in arguments:
+            return self._rpc({"error": {"code": "conversation_required"}}, is_error=True)
+        return self._rpc({"object_types": [], "relation_types": []})
+
+    def _rpc(self, payload: dict[str, Any], *, is_error: bool = False) -> httpx.Response:
+        result: dict[str, Any] = {
+            "content": [{"type": "text", "text": json.dumps(payload)}],
+            "structuredContent": payload,
+        }
+        if is_error:
+            result["isError"] = True
+        return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": result})
 
 
 @pytest.fixture(autouse=True)
@@ -150,10 +159,11 @@ def test_inside_a_traced_scope_the_scope_owns_the_turn(enforcing: Deploy) -> Non
 
 
 def test_search_takes_the_same_path(enforcing: Deploy) -> None:
+    """Search is an MCP tool, but the lifecycle rule it meets is the same one."""
     search(KN, "world cup winners")
 
-    assert [("bkn_context" in body) for body in enforcing.rest_bodies] == [False, True]
-    assert enforcing.rest_bodies[1]["bkn_context"] == {
+    assert [("bkn_context" in args) for args in enforcing.tool_args] == [False, True]
+    assert enforcing.tool_args[1]["bkn_context"] == {
         "conversation_id": "c1",
         "interaction_id": "i1",
     }
@@ -194,17 +204,16 @@ def test_a_traced_scope_attaches_the_turn_without_being_asked(relaxed: Deploy) -
     """A deploy that does not demand a context still records the call, because the
     scope asked for evidence. Waiting for a refusal would drop it in silence.
 
-    Shown on `search`, which stays REST inside a traced scope — an instance query
-    switches to the MCP tool there, for the receipt REST does not return.
+    Shown on `search`, whose tool call carries the turn on the first attempt.
     """
     with session(traced=True):
         search(KN, "who owns supply chain")
 
-    assert relaxed.rest_bodies[0]["bkn_context"] == {
+    assert relaxed.tool_args[0]["bkn_context"] == {
         "conversation_id": "c1",
         "interaction_id": "i1",
     }
-    assert len(relaxed.rest_bodies) == 1  # attached first time, no retry
+    assert len(relaxed.tool_args) == 1  # attached first time, no retry
 
 
 def test_a_caller_named_turn_is_attached_without_a_traced_scope(
@@ -217,11 +226,11 @@ def test_a_caller_named_turn_is_attached_without_a_traced_scope(
 
     search(KN, "who owns supply chain")
 
-    assert relaxed.rest_bodies[0]["bkn_context"] == {
+    assert relaxed.tool_args[0]["bkn_context"] == {
         "conversation_id": "host-conv",
         "interaction_id": "host-int",
     }
-    assert relaxed.tool_calls == []  # nothing opened, nothing finished
+    assert "bkn_start_interaction" not in relaxed.tool_calls  # nothing opened or finished
 
 
 def test_without_a_turn_none_is_minted(relaxed: Deploy) -> None:

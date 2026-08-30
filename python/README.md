@@ -223,13 +223,16 @@ deploy that does not enforce it pays nothing.
 
 ## Search
 
-Semantic search is network-level — its request has no object-type dimension — so
-it lives on the package:
+Search is network-level — its request has no object-type dimension — so it lives
+on the package. It calls the `search_schema` MCP tool, the same one the
+TypeScript SDK calls, and answers with the object, relation, action and metric
+types a question touches:
 
 ```python
 import bkn
 
 bkn.search("who owns supply chain")
+bkn.search("orders and their buyers", max_concepts=3, search_scope={"include_action_types": False})
 ```
 
 ## Everything else
@@ -274,3 +277,18 @@ python -m ruff check . && python -m ruff format --check .
 Wire behaviour is pinned by exchanges recorded from a live platform under
 `tests/fixtures/`; re-record with `scripts/capture_schema_fixtures.py` and
 `scripts/capture_query_fixtures.py` when a contract moves.
+
+Recorded fixtures cannot notice a route being withdrawn, so there is a live
+suite as well. It generates a package for a real network, type-checks it, reads
+through it and closes a real interaction — and it skips itself unless asked for:
+
+```bash
+BKN_E2E=1 BKN_E2E_KN=ecommerce_ops_bkn_public BKN_BASE_URL=https://your-platform \
+  python -m pytest tests/e2e -q
+```
+
+`BKN_E2E_OBJECT_TYPE` pins the class under test; without it the suite picks a
+populated type that has relations to walk. Credentials resolve as they do for
+any caller, so `openbkn auth login` is enough. Run it against more than one
+deploy: the two this SDK was built against have disagreed about route names,
+metrics, and which reads their data resources can serve.

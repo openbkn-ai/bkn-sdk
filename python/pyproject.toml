@@ -54,3 +54,5 @@ exclude = ["tests/fixtures/golden/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The live suite skips itself unless BKN_E2E=1, so a plain run stays offline.
+markers = ["e2e: runs against a live platform"]

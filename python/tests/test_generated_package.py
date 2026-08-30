@@ -91,6 +91,13 @@ def test_the_relation_registry_is_importable(generated: ModuleType) -> None:
     assert generated.ORDER_TO_LINE.target == "order_line"
 
 
+def test_a_network_with_no_metrics_still_exports_an_empty_registry(
+    generated: ModuleType,
+) -> None:
+    """`for m in bkn.METRICS` must not depend on whether this network has any."""
+    assert generated.METRICS == ()
+
+
 def test_the_fingerprint_is_recorded_in_the_package(generated: ModuleType) -> None:
     from bkn_osdk.schema import fingerprint
 

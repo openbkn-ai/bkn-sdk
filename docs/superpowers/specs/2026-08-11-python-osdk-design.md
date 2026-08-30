@@ -184,11 +184,13 @@ def rank(people: list[People]) -> list[People]: ...
 `count()` and `order_by()` ride the REST read path, which is the only one that offers a total
 or a sort — see [Instance query contract](#instance-query-contract).
 
-Semantic search is **network-level, not object-type-level**: its request body is
-`{kn_id, query, mode, max_concepts, return_query_understanding}` with no object-type
-dimension ([`api/knowledge-networks.ts:429-437`](../../../src/api/knowledge-networks.ts#L429-L437)).
-It is therefore exposed on the package, not on a class, and returns the platform's search
-result rather than a typed object set:
+Search is **network-level, not object-type-level**: its request carries a network and a
+query with no object-type dimension. It goes out as the `search_schema` MCP tool — the same
+call the TypeScript SDK makes
+([`api/context-loader.ts:366-376`](../../../src/api/context-loader.ts#L366-L376)) — and
+answers with the object, relation, action and metric types a question touches. It is
+therefore exposed on the package, not on a class, and returns the platform's result rather
+than a typed object set:
 
 ```python
 import bkn
@@ -334,7 +336,7 @@ bkn_osdk/
   query.py       # Filter → condition tree; ObjectSet evaluation; where/take/iterate
   mcp.py         # MCP transport: tools/call, receipt extraction
   lifecycle.py   # managed session — every read needs one
-  search.py      # network-level semantic search
+  search.py      # network-level search, over the search_schema tool
   meta.py        # schema fingerprint + runtime version-range checks
   codegen/       # pure generator + the bkn-osdk console script
 ```
