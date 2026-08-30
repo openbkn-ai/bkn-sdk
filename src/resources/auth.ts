@@ -23,6 +23,7 @@ import {
   usersOfPlatform,
   writeToken,
 } from "../config/store.js";
+import { trimTrailingSlashes } from "../utils/base-url.js";
 import { isDryRun } from "../utils/dry-run.js";
 import { InputError } from "../utils/errors.js";
 
@@ -35,7 +36,7 @@ export function hostOf(baseUrl: string): string {
 }
 
 function normalize(baseUrl: string): string {
-  return baseUrl.replace(/\/+$/, "");
+  return trimTrailingSlashes(baseUrl);
 }
 
 function usernameOf(token: TokenConfig | undefined): string | undefined {

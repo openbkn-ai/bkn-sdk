@@ -3,6 +3,7 @@
 
 import { createTraceContext } from "../trace-context.js";
 import { type ClientOptions, DEFAULT_BUSINESS_DOMAIN, type RequestContext } from "../types.js";
+import { trimTrailingSlashes } from "../utils/base-url.js";
 import { InputError } from "../utils/errors.js";
 import {
   activePlatform,
@@ -38,7 +39,7 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
       "No base URL. Pass --base-url, set BKN_BASE_URL, or run `openbkn auth login`.",
     );
   }
-  const normalized = baseUrl.replace(/\/+$/, "");
+  const normalized = trimTrailingSlashes(baseUrl);
 
   const user = opts.user ?? process.env.BKN_USER;
   const stored = user

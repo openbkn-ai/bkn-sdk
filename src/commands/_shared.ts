@@ -7,6 +7,7 @@ import type { Command } from "commander";
 import { type BknClient, createClient } from "../client.js";
 import { activePlatform, readPlatformConfig, updatePlatformConfig } from "../config/store.js";
 import type { TraceContextOptions } from "../types.js";
+import { trimTrailingSlashes } from "../utils/base-url.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import type { OutputOptions } from "../utils/output.js";
@@ -21,7 +22,7 @@ export function platformOf(o: Record<string, unknown>): string | undefined {
     (typeof o.baseUrl === "string" ? o.baseUrl : undefined) ??
     process.env.BKN_BASE_URL ??
     activePlatform();
-  return baseUrl?.replace(/\/+$/, "");
+  return baseUrl === undefined ? undefined : trimTrailingSlashes(baseUrl);
 }
 
 /**
