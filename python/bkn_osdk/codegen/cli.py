@@ -244,6 +244,9 @@ def _check(args: argparse.Namespace) -> int:
         live = fetch_schema(scoped, meta["KN_ID"], meta["BRANCH"])
     live_fingerprint = fingerprint(live)
 
+    from ..meta import SUPPORTED_FORMAT_VERSIONS
+
+    refused = meta["FORMAT_VERSION"] not in SUPPORTED_FORMAT_VERSIONS
     if meta["FORMAT_VERSION"] != FORMAT_VERSION:
         print(
             f"format: package is {meta['FORMAT_VERSION']}, this generator writes "
@@ -252,7 +255,10 @@ def _check(args: argparse.Namespace) -> int:
 
     if live_fingerprint == meta["SCHEMA_FINGERPRINT"]:
         print(f"{package_dir}: up to date ({live_fingerprint[:12]}…)")
-        return EXIT_OK
+        # A format this runtime refuses to import is not "up to date": leaving
+        # CI green here would defer the failure to the first `import bkn` in
+        # production, which is the one place it helps nobody.
+        return EXIT_DRIFT if refused else EXIT_OK
 
     delta = compare(_installed_view(package_dir), view_of_schema(live))
     _report(package_dir, meta["SCHEMA_FINGERPRINT"], live_fingerprint, delta, meta["KN_ID"])
@@ -308,7 +314,14 @@ def _installed_view(package_dir: Path) -> PackageView:
     Parsed rather than imported for the same reason as `_meta.py`: `check` must
     work on a package this runtime refuses to import.
     """
-    source = (package_dir / "object_types.py").read_text(encoding="utf-8")
+    path = package_dir / "object_types.py"
+    try:
+        source = path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise BknError(
+            f"{path} could not be read ({error.strerror or error}), so this package cannot "
+            "be compared against the live schema. Regenerate it with `bkn-osdk generate`."
+        ) from None
     object_types: dict[str, dict[str, str]] = {}
     primary_keys: dict[str, tuple[str, ...]] = {}
 

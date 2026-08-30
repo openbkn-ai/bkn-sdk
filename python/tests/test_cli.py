@@ -11,6 +11,7 @@ platform.
 from __future__ import annotations
 
 import io
+import re
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -428,3 +429,35 @@ def test_check_reports_a_stale_emitted_format(
     check(out)
 
     assert "format: package is 0" in capsys.readouterr().out
+
+
+def test_check_fails_a_package_this_runtime_would_refuse_to_import(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An unimportable package is not "up to date". Passing here would defer the
+    failure to the first `import bkn` in production."""
+    package = package_at(tmp_path)
+    meta = package / "_meta.py"
+    meta.write_text(
+        meta.read_text(encoding="utf-8").replace("FORMAT_VERSION = 1", "FORMAT_VERSION = 99"),
+        encoding="utf-8",
+    )
+
+    assert cli.main(["check", str(package)]) == cli.EXIT_DRIFT
+    assert "regenerate" in capsys.readouterr().out
+
+
+def test_check_says_what_is_missing_rather_than_tracing_back(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A half-written package is a thing that happens; a traceback is not an answer."""
+    package = package_at(tmp_path)
+    meta = package / "_meta.py"
+    meta.write_text(
+        re.sub(r'SCHEMA_FINGERPRINT = "\w+"', 'SCHEMA_FINGERPRINT = "moved"', meta.read_text()),
+        encoding="utf-8",
+    )
+    (package / "object_types.py").unlink()
+
+    assert cli.main(["check", str(package)]) == cli.EXIT_ERROR
+    assert "bkn-osdk generate" in capsys.readouterr().err
