@@ -23,24 +23,34 @@ an older deploy is possible but is the caller's own adaptation, not this SDK's.
 
 ## Install
 
-Not on PyPI. Install from a tag — the package lives in a subdirectory of this
-repository, which pip addresses directly:
+Not on PyPI. The package lives in a subdirectory of this repository, which pip
+addresses directly:
 
 ```bash
-pip install "bkn-osdk @ git+https://github.com/openbkn-ai/bkn-sdk@v0.1.0#subdirectory=python"
+pip install "bkn-osdk @ git+https://github.com/openbkn-ai/bkn-sdk@<sha>#subdirectory=python"
 ```
 
 Its only dependency is `httpx`, so an image build is one line:
 
 ```dockerfile
 RUN pip install --no-cache-dir \
-    "bkn-osdk @ git+https://github.com/openbkn-ai/bkn-sdk@v0.1.0#subdirectory=python"
+    "bkn-osdk @ git+https://github.com/openbkn-ai/bkn-sdk@<sha>#subdirectory=python"
 ```
 
-A direct URL dependency carries no index, so the tag pins the version and
-`pip install -U` will not find a newer one — moving versions means editing that
-line. Where git is unavailable, the release tarball works the same way:
-`…/archive/refs/tags/v0.1.0.tar.gz#subdirectory=python`.
+**Pin a commit, not a branch.** A direct URL carries no index, so nothing
+resolves a "latest" for you and moving versions means editing that line —
+which is the point. A branch name looks like it saves that edit and does not:
+pip's wheel cache is keyed by URL, so a rebuild against the same branch can
+reinstall the build it already has, reporting success while installing the old
+commit. `direct_url.json` in the installed distribution records which commit
+actually landed.
+
+Where git is not installed — the sandbox image is one such place — the archive
+URL takes the same fragment:
+
+```bash
+pip install "bkn-osdk @ https://github.com/openbkn-ai/bkn-sdk/archive/<sha>.zip#subdirectory=python"
+```
 
 ## Generate
 
