@@ -10,6 +10,7 @@ platform.
 
 from __future__ import annotations
 
+import io
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -32,15 +33,102 @@ GENERATED_FILES = {
 
 @pytest.fixture(autouse=True)
 def offline(monkeypatch: pytest.MonkeyPatch) -> list[KnSchema]:
-    """Serve the fixture schema, and record that credentials were resolved first."""
+    """Serve the fixture schema, with credentials the scope can actually resolve."""
     served = [DEMO_SCHEMA]
-    monkeypatch.setattr(cli, "resolve_context", lambda: object())
+    monkeypatch.setenv("BKN_BASE_URL", "https://platform.example")
+    monkeypatch.setenv("BKN_TOKEN", "t-1")
     monkeypatch.setattr(cli, "fetch_schema", lambda _ctx, _kn, _branch: served[0])
     return served
 
 
+def contexts(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
+    """Record the context each command resolved, so its credentials can be asserted."""
+    seen: list[Any] = []
+
+    def fetch(ctx: Any, _kn: str, _branch: str) -> KnSchema:
+        seen.append(ctx)
+        return DEMO_SCHEMA
+
+    monkeypatch.setattr(cli, "fetch_schema", fetch)
+    return seen
+
+
 def generate(out: Path, *extra: str) -> int:
     return cli.main(["generate", "ecommerce_ops_bkn_public", "--out", str(out), *extra])
+
+
+# ---- which platform, and as whom -------------------------------------------
+
+
+def test_arguments_beat_the_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A CI job generating from two deploys should not have to mutate its own
+    environment between the two calls."""
+    seen = contexts(monkeypatch)
+
+    generate(tmp_path / "bkn", "--base-url", "https://other.example", "--token", "t-2")
+
+    assert seen[0].base_url == "https://other.example"
+    assert seen[0].token == "t-2"
+
+
+def test_the_environment_still_answers_when_nothing_is_passed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen = contexts(monkeypatch)
+
+    generate(tmp_path / "bkn")
+
+    assert seen[0].base_url == "https://platform.example"
+    assert seen[0].token == "t-1"
+
+
+def test_a_token_can_come_from_a_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The form CI wants: a mounted secret, not an argument visible in `ps`."""
+    seen = contexts(monkeypatch)
+    secret = tmp_path / "token"
+    secret.write_text("t-from-file\n", encoding="utf-8")
+
+    generate(tmp_path / "bkn", "--token-file", str(secret))
+
+    assert seen[0].token == "t-from-file"  # the trailing newline is not part of it
+
+
+def test_a_token_can_come_from_stdin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seen = contexts(monkeypatch)
+    monkeypatch.setattr("sys.stdin", io.StringIO("t-piped\n"))
+
+    generate(tmp_path / "bkn", "--token-file", "-")
+
+    assert seen[0].token == "t-piped"
+
+
+def test_an_empty_token_file_is_refused(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Empty means the secret did not mount, which is worth saying rather than
+    falling back to whatever the environment happens to hold."""
+    empty = tmp_path / "token"
+    empty.write_text("   \n", encoding="utf-8")
+
+    assert generate(tmp_path / "bkn", "--token-file", str(empty)) == cli.EXIT_ERROR
+    assert "empty" in capsys.readouterr().err
+
+
+def test_the_two_token_forms_cannot_both_be_given(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit):
+        generate(tmp_path / "bkn", "--token", "t", "--token-file", "/dev/null")
+
+
+def test_check_takes_the_same_platform_options(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Generating and checking against one deploy is one flag in each command."""
+    package = package_at(tmp_path)
+    seen = contexts(monkeypatch)
+
+    cli.main(["check", str(package), "--base-url", "https://other.example", "--token", "t-2"])
+
+    assert seen[0].base_url == "https://other.example"
 
 
 def package_at(tmp_path: Path, name: str = "bkn") -> Path:

@@ -72,6 +72,19 @@ keeps working) or *breaking* (removed, retyped, or rekeyed).
 
 ## Credentials
 
+Both commands take `--base-url`, `--token` or `--token-file`, `--user` and
+`--insecure`, which beat the environment and the store. That is what a CI job
+wants, and what lets one Makefile generate from two deploys without editing its
+own environment between the calls:
+
+```bash
+bkn-osdk generate <kn-id> --out ./bkn --base-url https://staging --token-file /run/secrets/bkn
+bkn-osdk check ./bkn --base-url https://staging --token-file -   # or read it from stdin
+```
+
+A token passed as `--token` is visible in `ps` and in shell history; outside a
+local shell, mount it and use `--token-file`.
+
 Nothing is compiled into the generated package: the same KN commonly exists on a
 dev and a prod platform, so it pins only `kn_id` and `branch`. Credentials
 resolve at call time, innermost first:

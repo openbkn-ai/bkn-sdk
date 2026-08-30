@@ -24,10 +24,12 @@ from __future__ import annotations
 import argparse
 import ast
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from ..config import resolve_context
+from ..config import Context, session
 from ..errors import BknError
 from ..schema import KnSchema, fetch_schema, fingerprint
 from .diff import Delta, PackageView, compare, view_of_schema
@@ -61,8 +63,13 @@ def main(argv: list[str] | None = None) -> int:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="bkn-osdk", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+    platform = _platform_options()
 
-    generate = commands.add_parser("generate", help="generate a package for a knowledge network")
+    generate = commands.add_parser(
+        "generate",
+        parents=[platform],
+        help="generate a package for a knowledge network",
+    )
     generate.add_argument("kn_id", help="knowledge network id")
     generate.add_argument("--out", type=Path, required=True, help="directory to write")
     generate.add_argument("--branch", default="main")
@@ -79,9 +86,71 @@ def _parser() -> argparse.ArgumentParser:
         help="version range of bkn-osdk the emitted package will declare",
     )
 
-    check = commands.add_parser("check", help="compare a generated package against live schema")
+    check = commands.add_parser(
+        "check",
+        parents=[platform],
+        help="compare a generated package against live schema",
+    )
     check.add_argument("package_dir", type=Path, help="directory of a generated package")
     return parser
+
+
+def _platform_options() -> argparse.ArgumentParser:
+    """Which platform to talk to, and as whom.
+
+    Without these the only ways in are the environment and the `~/.bkn` store,
+    which is fine on a laptop and wrong everywhere else: a CI job, a Makefile
+    generating two packages from two deploys, or anything that would otherwise
+    have to mutate the environment around the call.
+
+    These win over both, matching the library's own order — an argument beats a
+    variable beats the store.
+    """
+    options = argparse.ArgumentParser(add_help=False)
+    options.add_argument("--base-url", help="platform base URL; overrides BKN_BASE_URL")
+    credential = options.add_mutually_exclusive_group()
+    credential.add_argument(
+        "--token",
+        help=(
+            "access token or AppKey; overrides BKN_TOKEN. Visible in `ps` and in shell "
+            "history — prefer --token-file outside a local shell"
+        ),
+    )
+    credential.add_argument(
+        "--token-file",
+        type=Path,
+        help="read the token from this file, or from stdin when given as -",
+    )
+    options.add_argument("--user", help="user id to read from the ~/.bkn store")
+    options.add_argument(
+        "--insecure",
+        action="store_true",
+        default=None,
+        help="skip TLS verification, for a deploy with a self-signed certificate",
+    )
+    return options
+
+
+@contextmanager
+def _platform(args: argparse.Namespace) -> Iterator[Context]:
+    """The scope these arguments ask for — the library's own level 1."""
+    token = args.token
+    if args.token_file is not None:
+        raw = sys.stdin.read() if str(args.token_file) == "-" else _read_token(args.token_file)
+        token = raw.strip()
+        if not token:
+            raise BknError(f"{args.token_file} is empty, so there is no token to use.")
+    with session(
+        base_url=args.base_url, token=token, user=args.user, insecure=args.insecure
+    ) as scoped:
+        yield scoped
+
+
+def _read_token(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise BknError(f"Could not read the token from {path}: {error}") from None
 
 
 # ---- generate ---------------------------------------------------------------
@@ -94,7 +163,8 @@ def _generate(args: argparse.Namespace) -> int:
 
     # Credentials resolve, and the schema is fetched, before a single file is
     # opened for writing.
-    schema = fetch_schema(resolve_context(), args.kn_id, args.branch)
+    with _platform(args) as scoped:
+        schema = fetch_schema(scoped, args.kn_id, args.branch)
     _refuse_empty(schema, args.kn_id, args.branch)
 
     files = generate(
@@ -170,7 +240,8 @@ def _check(args: argparse.Namespace) -> int:
     package_dir: Path = args.package_dir
     meta = _read_meta(package_dir)
 
-    live = fetch_schema(resolve_context(), meta["KN_ID"], meta["BRANCH"])
+    with _platform(args) as scoped:
+        live = fetch_schema(scoped, meta["KN_ID"], meta["BRANCH"])
     live_fingerprint = fingerprint(live)
 
     if meta["FORMAT_VERSION"] != FORMAT_VERSION:
