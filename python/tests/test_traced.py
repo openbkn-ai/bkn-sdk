@@ -592,3 +592,57 @@ def test_a_404_reopens_the_session_once(monkeypatch: pytest.MonkeyPatch) -> None
         mcp_module.call_tool(ctx, KN, "search_schema", {})
 
     assert seen == ["search_schema", "search_schema"]  # one retry, then a real message
+
+
+def test_a_deploy_that_does_not_serve_the_catalog_can_still_open_a_turn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`/mcp/info` is a probe, not the read path. Losing it should cost the
+    argument it informs, not every traced read."""
+    stub = Deploy()
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/mcp/info"):
+            return httpx.Response(404, text="not found")
+        return stub.handle(request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+    monkeypatch.setattr(http_module, "_client", lambda _ctx: client)
+    monkeypatch.setenv("BKN_BASE_URL", PLATFORM)
+    monkeypatch.setenv("BKN_TOKEN", "t-1")
+
+    with session(traced=True):
+        Tournaments.objects().take(1)
+
+    started = tool_calls(stub, "bkn_start_interaction")[0]
+    assert "conversation_mode" not in started  # unknown means unsent, not guessed
+    assert stub.interactions == 1
+
+
+def test_an_unreadable_catalog_is_retried_rather_than_remembered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A probe that fails once should not disable `conversation_mode` for the
+    life of the process."""
+    stub = Deploy(declares_conversation_mode=True)
+    failures = [True]
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/mcp/info") and failures:
+            failures.pop()
+            return httpx.Response(503, text="try later")
+        return stub.handle(request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+    monkeypatch.setattr(http_module, "_client", lambda _ctx: client)
+    monkeypatch.setenv("BKN_BASE_URL", PLATFORM)
+    monkeypatch.setenv("BKN_TOKEN", "t-1")
+
+    with session(traced=True):
+        Tournaments.objects().take(1)
+    with session(traced=True):
+        Tournaments.objects().take(1)
+
+    starts = tool_calls(stub, "bkn_start_interaction")
+    assert "conversation_mode" not in starts[0]
+    assert starts[1]["conversation_mode"] == "new"

@@ -65,6 +65,11 @@ class Catalog:
     tools: frozenset[str]
     #: True when the start tool declares `conversation_mode`.
     declares_conversation_mode: bool = False
+    #: False when the catalog could not be read at all. An absent tool and an
+    #: unreadable catalog look identical in `tools`, and they are not the same
+    #: thing: one is a deploy that cannot open a turn, the other is a deploy
+    #: this SDK knows nothing about yet.
+    known: bool = True
 
 
 @dataclass
@@ -135,12 +140,12 @@ def _start(ctx: Context, kn_id: str, question: str = DEFAULT_QUESTION) -> Intera
 
     catalog = _catalog(ctx)
     tools = catalog.tools
-    if START_TOOL not in tools:
+    if catalog.known and START_TOOL not in tools:
         raise BknError(
             f"This deploy's tool catalog has no {START_TOOL}, so no managed interaction can "
             "be opened. Read without `traced=True`; the REST path needs no session."
         )
-    if CREATE_TOOL in tools:
+    if catalog.known and CREATE_TOOL in tools:
         # The older contract mints the conversation separately. Nothing here has
         # been able to test it, so it is refused rather than guessed at.
         raise BknError(
@@ -284,7 +289,16 @@ def _catalog(ctx: Context) -> Catalog:
     if cached is not None:
         return cached
 
-    payload = tool_catalog(ctx)
+    try:
+        payload = tool_catalog(ctx)
+    except BknError:
+        # `/mcp/info` is a convenience, not the read path. A deploy that does not
+        # serve it is one this SDK cannot describe — so it sends what has always
+        # worked and lets the tool itself refuse if it must, rather than turning
+        # every traced read into an error about a probe. Not cached: a broken
+        # probe is usually temporary, and the next call should find out.
+        return Catalog(tools=frozenset(), known=False)
+
     entries = payload.get("tools") if isinstance(payload, dict) else None
     tools = [entry for entry in (entries or []) if isinstance(entry, dict)]
     names = frozenset(entry["name"] for entry in tools if isinstance(entry.get("name"), str))
