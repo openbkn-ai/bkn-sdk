@@ -22,7 +22,7 @@ import httpx
 import pytest
 from schema_fixtures import DEMO_SCHEMA
 
-from bkn_osdk import Context, SchemaDriftError, configure, search
+from bkn_osdk import Context, SchemaDriftError, configure, search, search_instances
 from bkn_osdk import http as http_module
 from bkn_osdk import lifecycle as lifecycle_module
 from bkn_osdk import mcp as mcp_module
@@ -55,6 +55,13 @@ class Sent:
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.paths.append(request.url.path)
+        if request.url.path.endswith("/mcp/info"):
+            return httpx.Response(
+                200,
+                json={
+                    "tools": [{"name": "bkn_start_interaction"}, {"name": "bkn_finish_interaction"}]
+                },
+            )
         if not request.url.path.endswith("/mcp"):
             self.bodies.append(json.loads(request.read()))
             return httpx.Response(200, json={"datas": []})
@@ -62,7 +69,22 @@ class Sent:
         body = json.loads(request.read())
         if body["method"] != "tools/call":
             return httpx.Response(200, json={"result": {}}, headers={"mcp-session-id": "s"})
-        self.tools.append((body["params"]["name"], body["params"]["arguments"]))
+        name = body["params"]["name"]
+        if name in ("bkn_start_interaction", "bkn_finish_interaction"):
+            payload = (
+                {"conversation_id": "c1", "interaction_id": "i1"}
+                if name == "bkn_start_interaction"
+                else {"execution_status": "completed"}
+            )
+            return httpx.Response(
+                200,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": {"content": [{"type": "text", "text": json.dumps(payload)}]},
+                },
+            )
+        self.tools.append((name, body["params"]["arguments"]))
         return httpx.Response(
             200,
             json={
@@ -75,6 +97,10 @@ class Sent:
     @property
     def arguments(self) -> dict[str, Any]:
         return self.tools[0][1]
+
+    @property
+    def tool_names(self) -> list[str]:
+        return [name for name, _ in self.tools]
 
 
 @pytest.fixture
@@ -111,6 +137,31 @@ def test_only_the_options_that_were_given_are_sent(sent: Sent) -> None:
 def test_search_returns_the_platform_result_unchanged(sent: Sent) -> None:
     """Whether a hit resolves to a typed instance is not yet known, so nothing is invented."""
     assert search(KN, "q", context=CONTEXT) == RESULT
+
+
+def test_instance_search_asks_for_rows_rather_than_types(sent: Sent) -> None:
+    """The other question: not "which types answer this" but "which rows do"."""
+    search_instances(KN, "Lionel Messi", context=CONTEXT)
+
+    assert sent.tool_names == ["search_instance"]
+    assert sent.arguments["query"] == "Lionel Messi"
+    assert sent.arguments["kn_id"] == KN
+
+
+def test_instance_search_opens_a_turn_rather_than_being_refused_once(sent: Sent) -> None:
+    """The catalog declares `bkn_context` required for this tool, so spending a
+    first attempt to be told that would be a round trip bought with nothing."""
+    search_instances(KN, "Lionel Messi", context=CONTEXT)
+
+    assert sent.arguments["bkn_context"] == {"conversation_id": "c1", "interaction_id": "i1"}
+
+
+def test_instance_search_narrows_to_the_types_it_was_given(sent: Sent) -> None:
+    search_instances(KN, "Messi", object_types=["players"], rerank=True, context=CONTEXT)
+
+    assert sent.arguments["object_types"] == ["players"]
+    assert sent.arguments["rerank"] is True
+    assert "max_object_types" not in sent.arguments  # unset stays unsent
 
 
 # ---- the opt-in schema check -------------------------------------------------

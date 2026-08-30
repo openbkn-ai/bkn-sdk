@@ -11,6 +11,7 @@ from typing import Any
 from bkn_osdk import ObjectType
 from bkn_osdk.meta import validate_package
 from bkn_osdk.search import search as _search
+from bkn_osdk.search import search_instances as _search_instances
 
 from ._meta import (
     BRANCH,
@@ -55,6 +56,15 @@ def search(query: str, **options: Any) -> Any:
     return _search(KN_ID, query, **options)
 
 
+def search_instances(query: str, **options: Any) -> Any:
+    """Recall instances of this network by natural language.
+
+    Answers with rows rather than types, across whichever object types have
+    a searchable property. Returns the platform's result unchanged.
+    """
+    return _search_instances(KN_ID, query, **options)
+
+
 __all__ = [
     "BRANCH",
     "FORMAT_VERSION",
@@ -71,4 +81,5 @@ __all__ = [
     "OrderLine",
     "People",
     "search",
+    "search_instances",
 ]

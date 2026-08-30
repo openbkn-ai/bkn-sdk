@@ -317,6 +317,16 @@ def test_search_reaches_the_tool_the_typescript_sdk_calls(package: Any) -> None:
     assert "object_types" in result
 
 
+def test_instance_search_answers_with_rows_or_says_it_found_none(package: Any) -> None:
+    """Recall depends on which properties carry a `match`/`knn` index, so an empty
+    result is a fact about the network, not a failure. What is being tested is
+    that the call is accepted and shaped as the platform documents."""
+    result = package.search_instances("Lionel Messi", max_instances_per_type=2)
+
+    assert isinstance(result, dict)
+    assert "nodes" in result or "message" in result
+
+
 def test_the_deploy_publishes_its_tool_catalog(context: Context) -> None:
     catalog = tool_catalog(context)
 

@@ -48,7 +48,7 @@ from .schema import (
 # Rebinds the `search` attribute from the submodule to the function it exports —
 # `bkn_osdk.search(kn_id, query)` is the surface, `bkn_osdk.search` the module is
 # an implementation detail. `import bkn_osdk.search` still resolves the module.
-from .search import search
+from .search import search, search_instances
 from .subgraph import RelationPath
 from .types import ObjectType, Property, PropertyRef, Relation
 
@@ -92,6 +92,7 @@ __all__ = [
     "request",
     "resolve_context",
     "search",
+    "search_instances",
     "session",
     "to_condition",
 ]
