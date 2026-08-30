@@ -143,25 +143,36 @@ def _post(ctx: Context, kn_id: str, session_id: str, body: dict[str, Any]) -> An
 
 
 def _raw_post(ctx: Context, kn_id: str, session_id: str | None, body: dict[str, Any]) -> Any:
-    from .auth import token_for
+    from .auth import refreshed_token, token_for
     from .http import _client, _headers
 
-    headers = _headers(
-        ctx,
-        token_for(ctx),
-        has_body=True,
-        extra={
-            # Both encodings are accepted because the server picks; see `_parse`.
-            "accept": "application/json, text/event-stream",
-            "x-kn-id": kn_id,
-            "mcp-protocol-version": PROTOCOL_VERSION,
-            **({"mcp-session-id": session_id} if session_id else {}),
-        },
-        method_override=None,
-    )
-    response = _client(ctx).post(
-        f"{ctx.base_url}{MCP_PATH}", json=body, headers=headers, timeout=ctx.timeout
-    )
+    def send(bearer: str) -> Any:
+        headers = _headers(
+            ctx,
+            bearer,
+            has_body=True,
+            extra={
+                # Both encodings are accepted because the server picks; see `_parse`.
+                "accept": "application/json, text/event-stream",
+                "x-kn-id": kn_id,
+                "mcp-protocol-version": PROTOCOL_VERSION,
+                **({"mcp-session-id": session_id} if session_id else {}),
+            },
+            method_override=None,
+        )
+        return _client(ctx).post(
+            f"{ctx.base_url}{MCP_PATH}", json=body, headers=headers, timeout=ctx.timeout
+        )
+
+    token = token_for(ctx)
+    response = send(token)
+    if response.status_code == 401 and ctx.credential is not None:
+        # A stored session that expired mid-process, exactly as the REST path
+        # handles it. Without this a long-lived process keeps reading over REST
+        # while every traced read and every tool call fails for good.
+        refreshed = refreshed_token(ctx, token)
+        if refreshed is not None:
+            response = send(refreshed)
     if response.status_code in (400, 404) and session_id is not None:
         raise _SessionGone(f"MCP session rejected: HTTP {response.status_code}")
     if response.is_error:

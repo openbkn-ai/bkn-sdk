@@ -114,7 +114,8 @@ class RelationPath:
     def _decode(self, response: Any, target: type[ObjectType], step_limit: int) -> list[Any]:
         """Keep the paths that walked *this* chain, and decode where they ended."""
         payload = response if isinstance(response, dict) else {}
-        objects = payload.get("objects") or {}
+        objects = payload.get("objects")
+        objects = objects if isinstance(objects, dict) else {}
         wanted = [step.bkn_id for step in self.steps]
 
         found: dict[str, ObjectType] = {}

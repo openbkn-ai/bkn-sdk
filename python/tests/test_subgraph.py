@@ -360,3 +360,16 @@ def test_an_empty_walk_is_an_empty_list(deploy: Deploy) -> None:
     deploy.payload = {"objects": {}, "relation_paths": []}
 
     assert AwardWinners.team.then(Teams.confederation).of(seed()) == []
+
+
+def test_a_payload_shaped_unexpectedly_is_skipped_rather_than_raised_on(deploy: Deploy) -> None:
+    """`relation_paths` is a list, so `objects` arriving as one is a shape worth
+    surviving — every other branch here guards, and this one now does too."""
+    deploy.payload = {
+        "objects": [obj("confederations-4", "confederations", confederation_name="UEFA")],
+        "relation_paths": [
+            walked("rel_award_winners_team", "rel_teams_confederation", target="confederations-4")
+        ],
+    }
+
+    assert AwardWinners.team.then(Teams.confederation).of(seed()) == []

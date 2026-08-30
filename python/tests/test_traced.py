@@ -18,10 +18,11 @@ from typing import Any
 import httpx
 import pytest
 
-from bkn_osdk import BknError, ToolError, session
+from bkn_osdk import BknError, Context, ToolError, search, session
 from bkn_osdk import http as http_module
 from bkn_osdk import lifecycle as lifecycle_module
 from bkn_osdk import mcp as mcp_module
+from bkn_osdk.config import StoredCredential
 from bkn_osdk.types import ObjectType, Property
 
 KN = "worldcup_vega_catalog_bkn"
@@ -470,3 +471,66 @@ def test_our_own_turn_is_still_finished(deploy: Deploy) -> None:
         Tournaments.objects().page(limit=1)
 
     assert len(tool_calls(deploy, "bkn_finish_interaction")) == 1
+
+
+# ---- the scope's registry, put back rather than blanked ---------------------
+
+
+def test_a_traced_scope_that_read_nothing_leaves_no_scope_behind(deploy: Deploy) -> None:
+    """An empty registry left installed looks like an open scope to the next
+    call, which would then open a turn nobody is left to finish."""
+    with session(traced=True):
+        pass
+
+    assert lifecycle_module.interaction_scope().get() is None
+
+    search(KN, "who owns supply chain")  # outside any scope, so its own turn
+
+    assert deploy.calls[-1][0] == "bkn_finish_interaction"
+
+
+def test_an_inner_scope_does_not_stand_the_outer_one_down(deploy: Deploy) -> None:
+    """Scopes nest, so what an inner one restores is the outer registry — not nothing."""
+    with session(traced=True):
+        Tournaments.take(1)
+        with session(traced=True):
+            Tournaments.take(1)
+        Tournaments.take(1)  # the outer scope is still live and must still read
+
+    assert deploy.calls.count(("bkn_start_interaction", deploy.calls[0][1])) >= 1
+    assert [name for name, _ in deploy.calls].count("bkn_finish_interaction") == 2
+
+
+# ---- an expired stored token, on the MCP transport too ----------------------
+
+
+def test_the_mcp_transport_refreshes_an_expired_stored_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """REST self-heals; before this, every tool call in the same process did not."""
+    seen: list[str] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers.get("authorization", ""))
+        if request.url.path.endswith("/mcp/info"):
+            return httpx.Response(200, json={"tools": []})
+        if seen[-1] == "Bearer stale":
+            return httpx.Response(401, json={"error": "expired"})
+        return httpx.Response(
+            200,
+            json={"jsonrpc": "2.0", "id": 1, "result": {}},
+            headers={"mcp-session-id": "sess-1"},
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+    monkeypatch.setattr(http_module, "_client", lambda _ctx: client)
+    monkeypatch.setattr("bkn_osdk.auth.refreshed_token", lambda _ctx, _token: "fresh")
+    stored = Context(
+        base_url=PLATFORM,
+        token="stale",
+        credential=StoredCredential(base_url=PLATFORM, user_id="u", refresh_token="r"),
+    )
+
+    mcp_module._raw_post(stored, KN, None, {"jsonrpc": "2.0", "method": "initialize"})
+
+    assert seen == ["Bearer stale", "Bearer fresh"]

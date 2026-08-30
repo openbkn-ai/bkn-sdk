@@ -29,7 +29,7 @@ import os
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -195,43 +195,57 @@ def session(
         # Inside the try: a scope that cannot be resolved must still be popped,
         # or the failed `with` would leak its overrides into the whole process.
         resolved = resolve_context()
-        interactions = _open_interactions(resolved)
+        opened = _open_interactions(resolved)
         try:
             yield resolved
         except BaseException:
-            _finish_interactions(resolved, interactions, "failed")
+            _finish_interactions(resolved, opened, "failed")
             raise
         else:
-            _finish_interactions(resolved, interactions, "completed")
+            _finish_interactions(resolved, opened, "completed")
     finally:
         _scope.reset(reset_to)
 
 
-def _open_interactions(ctx: Context) -> dict[str, Any] | None:
+#: A traced scope's registry, and the token that puts back whatever was there
+#: before it — scopes nest, so "before" is not always nothing.
+_Opened = tuple[dict[str, Any], "Token[dict[str, Any] | None]"]
+
+
+def _open_interactions(ctx: Context) -> _Opened | None:
     """A traced scope holds one managed interaction per network it reads.
 
     The registry is created empty here and filled by the first read of each
-    network, so a scope that ends up reading nothing costs no round trip.
+    network, so a scope that ends up reading nothing costs no round trip. The
+    reset token comes back with it: scopes nest, and an inner one that blanked
+    the variable on exit would strand the outer scope's own registry.
     """
     if not ctx.traced:
         return None
     from .lifecycle import interaction_scope
 
     registry: dict[str, Any] = {}
-    interaction_scope().set(registry)
-    return registry
+    return registry, interaction_scope().set(registry)
 
 
-def _finish_interactions(ctx: Context, registry: dict[str, Any] | None, outcome: str) -> None:
-    """Close every interaction the scope opened, including on the way out of an error."""
-    if not registry:
+def _finish_interactions(ctx: Context, opened: _Opened | None, outcome: str) -> None:
+    """Close every interaction the scope opened, including on the way out of an error.
+
+    The variable is restored even when the scope read nothing — an empty
+    registry left installed would look like an open scope to the next call,
+    which would then open a turn nobody finishes.
+    """
+    if opened is None:
         return
     from .lifecycle import finish, interaction_scope
 
-    for interaction in registry.values():
-        finish(ctx, interaction, outcome, None)
-    registry.clear()
-    interaction_scope().set(None)
+    registry, reset_to = opened
+    try:
+        for interaction in registry.values():
+            finish(ctx, interaction, outcome, None)
+        registry.clear()
+    finally:
+        interaction_scope().reset(reset_to)
 
 
 def resolve_context() -> Context:
