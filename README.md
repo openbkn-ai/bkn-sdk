@@ -102,7 +102,7 @@ ecosystem) that lets an AI drive the `openbkn` CLI from natural language. It
 ships a `SKILL.md` (trigger intents, `allowed-tools: Bash(openbkn *)`, a
 command-group map, examples, and cautions) plus per-domain cheat sheets under
 `references/` (auth, bkn, model, vega, resource, context,
-skill, toolbox, function/operator, trace, admin, call) and two how-tos
+skill, toolbox, function, trace, admin, call) and two how-tos
 (build-a-KN, troubleshooting).
 
 A second skill, `skills/create-bkn/`, guides an AI through **authoring** a BKN

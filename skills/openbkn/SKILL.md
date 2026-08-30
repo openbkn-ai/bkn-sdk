@@ -14,7 +14,7 @@ description: >-
   当用户提到：知识网络 / 知识图谱 / 对象类 / 关系 / 行动 / 指标 metric /
   语义搜索 / 建索引 / create-from-catalog / 大模型 / 小模型 /
   embedding / rerank / Skill / 技能包 /
-  toolbox / 工具箱 / tool / 算子 operator / 函数集 / 沙箱函数 /
+  toolbox / 工具箱 / tool / 沙箱函数 / function /
   trace / 证据链 / diagnose /
   eval-set / Vega / Catalog / 数据源 / 组织 / 用户 / 角色 / 审计 audit /
   AppKey / api-key / bak_ 凭据 / 签发 key / 撤销 key 等意图时使用。
@@ -87,7 +87,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 | `model` | 模型工厂 | `llm/small list/get/add/edit/delete/test`、`llm chat <name\|id> -m "…" [--stream]`（id 自动解析成 name）、`small embeddings/rerank <name>`（只收 name，填数字 id 会 400；与 chat 不同，暂不解析 id）、`llm set-default/unset-default <id>`、`small set-default/unset-default <id>`、`small get-default [--type embedding\|reranker]` |
 | `skill` | Skill 注册/市场/生命周期/沙箱执行 | `list`/`market`/`get`/`names <id...>`/`content`/`read-file`/`files [path] [--tree]`/`history`/`set-status`、`execute <id> --entry '<shell>'`、`register <dir>`/`download`/`install`、`update-metadata`/`update-package`、`republish`/`publish-history`；读类命令带 `--raw`（要正文而非对象存储 URL）与 `--draft`（读草稿版而非已发布版） |
 | `toolbox` / `tool` | 工具箱与工具 | toolbox `list/create [--type openapi\|function]/publish/delete/export/import`；tool `create <file> --toolbox <id>`（函数工具唯一入口）/`get`/`update`/`delete`/`upload <spec>`、`enable`/`disable`、`execute`/`debug`（结果在 `body.result`） |
-| `function` / `operator` | 沙箱函数与算子（执行工厂） | function `run <file> --event '<json>'`/`infer-schema`/`deps`/`versions`/`template`（入口函数必须叫 `handler`，看 `exit_code` 不是 HTTP 码）；operator `list/get/names/categories/history/market`、`register <file> --name … [--publish]`、`update`、`debug <id> <version>`、`publish`/`offline`/`delete`、`convert-to-tool <id> --toolbox <box-id>` |
+| `function` | 沙箱函数（执行工厂） | `run <file> --event '<json>' [--pass-token]`、`infer-schema`、`deps`、`versions`、`template`。入口函数必须叫 `handler`；成败看 `exit_code` 不是 HTTP 码；留下来就用 `tool create --toolbox` |
 | `trace` | BKN Trace | `get`、`search`、`diagnose <conv> [--llm]`（符号规则 + LLM rubric + synthesizer）、`scan <conv,…>`、`eval-set build <queries>`、`schema validate <file>` |
 | `admin` | 运营 | `org/user/role …` CRUD + `reset-password`、`license show/import/receipt/activate/remove/fingerprint`（集群授权）、`audit list`、`llm/small-model …`、`auth …`、`config`、`call` |
 | `call`（别名 `curl`） | 通用 API 透传 | `call <url> [-X POST] [-d '<json>']` |
@@ -97,7 +97,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 **本 CLI 暂未覆盖的平台能力**（别猜命令，直接用 `openbkn call` 打原始接口）：
 
 - Agent 运行时 `bkn-agent`（`/api/bkn-agent/v1/agents`、`/chat`、`/run`、`/tasks`、`/prompts`）
-- 执行工厂的 MCP 注册面（`/api/agent-operator-integration/v1/mcp`；算子与沙箱函数已有 `operator` / `function` 命令）
+- 执行工厂的 MCP 注册面（`/api/agent-operator-integration/v1/mcp`）
 - Skill 索引构建任务（`/api/agent-operator-integration/v1/skills/index/build`）
 - `openbkn call /api/<service>/v1/... [-X POST] [-d '<json>']` 会自动注入认证头
 - **接口文档在 https://openbkn-ai.github.io/bkn-foundry/** —— 按模块分组的交互式
@@ -122,7 +122,7 @@ BuildTask 产出；`trace` 的 business-provenance 摘要（requests/interaction
 | Context Loader（MCP） | [context.md](references/context.md) |
 | Skill 注册 / 生命周期 | [skill.md](references/skill.md) |
 | Toolbox / Tool | [toolbox.md](references/toolbox.md) |
-| 沙箱函数 / 算子（代码→算子→工具） | [function-operator.md](references/function-operator.md) |
+| 沙箱函数（代码→工具） | [function.md](references/function.md) |
 | BKN Trace（diagnose / eval-set） | [trace.md](references/trace.md) |
 | 运营（org/user/role/audit） | [admin.md](references/admin.md) |
 | 通用 API 透传 | [call.md](references/call.md) |

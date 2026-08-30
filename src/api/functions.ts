@@ -4,10 +4,10 @@
 /**
  * Sandbox function client (agent-operator-integration, `/function` + `/template`).
  *
- * This is the layer below an operator: code runs here without being registered
- * as anything, which is what makes it the place to iterate. The entry point is
- * always a function named `handler`, and the response is 200 even when the code
- * throws — `exit_code` decides, not the HTTP status.
+ * Code runs here without being registered as anything, which is what makes it
+ * the place to iterate: `tool create` is the same code kept in a toolbox. The
+ * entry point is always a function named `handler`, and the response is 200
+ * even when the code throws — `exit_code` decides, not the HTTP status.
  */
 import type { RequestContext } from "../types.js";
 import { request } from "./http.js";
@@ -35,8 +35,8 @@ export interface ParameterDef {
 }
 
 /**
- * A function with a contract around it. The same shape registers an operator
- * and creates a function tool inside a toolbox, so it is defined once.
+ * A function with a contract around it — the shape that creates a function tool
+ * inside a toolbox.
  */
 export interface FunctionDefinition {
   name: string;

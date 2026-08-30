@@ -84,17 +84,10 @@ export { functions } from "./resources/functions.js";
 export type {
   DependencyInfo,
   ExecuteFunctionOptions,
+  FunctionDefinition,
   FunctionExecuteResult,
-} from "./api/functions.js";
-export { operators } from "./resources/operators.js";
-export type {
-  DebugOperatorOptions,
-  ListOperatorsOptions,
-  OperatorMetadataType,
-  OperatorStatus,
   ParameterDef,
-  RegisterOperatorOptions,
-} from "./api/operators.js";
+} from "./api/functions.js";
 export { toolboxes } from "./resources/toolboxes.js";
 export { trace } from "./resources/trace.js";
 export { vega } from "./resources/vega.js";

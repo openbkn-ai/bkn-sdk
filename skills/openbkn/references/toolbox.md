@@ -15,4 +15,4 @@
 | `tool list --toolbox <id> [--limit n] [--page n] [--all]` / `tool enable\|disable <tool-ids...> --toolbox <id>` | List / enable-disable. `tool list` backend defaults to 10; `--all` returns every tool. |
 | `tool execute\|debug <tool-id> --toolbox <id> [--header/--query/--path/--body JSON]` | 调用（`debug` 不受 enabled 限制）。**函数工具的返回套两层**：结果在 `body.result`。 |
 
-算子转成的工具见 [function-operator.md](function-operator.md)。
+函数工具的代码怎么写见 [function.md](function.md)。

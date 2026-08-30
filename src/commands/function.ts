@@ -43,9 +43,9 @@ export function parseJsonOption(raw: string | undefined, label: string): unknown
 }
 
 /**
- * The flags that describe a function. An operator and a tool are described the
- * same way, so a caller learns them once: `openbkn function` iterates on the
- * code, `operator register` and `tool create` keep it, all with these names.
+ * The flags that describe a function, shared with `tool create` so a caller
+ * learns them once: `openbkn function` iterates on the code, `tool create`
+ * keeps it, both with these names.
  */
 export interface CodeFlags {
   name?: string;
@@ -194,9 +194,11 @@ export function functionCommand(): Command {
 
   ORDER OF WORK
   function deps                      what is already importable
-  function run ./add.py --event ...  iterate here; nothing is registered yet
-  operator register ./add.py ...     keep it: a named, versioned capability
-  operator convert-to-tool <id>      put it in a toolbox for agents to call`,
+  function run ./add.py --event ...  iterate here; nothing is kept
+  toolbox create --type function     a box to keep it in
+  tool create ./add.py --toolbox     the same code, now a tool
+  tool enable <tool-id> --toolbox    a tool is off until enabled, then agents
+                                     can call it`,
   );
 
   return group(cmd, "TOOLS & SKILLS");

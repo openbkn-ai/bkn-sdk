@@ -46,8 +46,6 @@ const ID_SOURCES: Record<string, string> = {
   "skill-id": "openbkn skill list",
   "box-id": "openbkn toolbox list",
   "tool-id": "openbkn tool list --toolbox <box-id>",
-  "operator-id": "openbkn operator list",
-  "operator-ids": "openbkn operator list",
   "conversation-id": "openbkn trace conversations list",
   "trace-id": "openbkn trace search",
   "interaction-id": "openbkn trace search",
@@ -81,8 +79,6 @@ const ARGUMENT_OVERRIDES: Record<string, string | null> = {
   "admin user roles|user": "openbkn admin user list",
   "admin role members|role": "openbkn admin role list",
   "auth switch|user": "openbkn auth users <url>",
-  "operator debug|version": "openbkn operator history <operator-id>",
-  "operator history|version": "openbkn operator history <operator-id>",
   "admin auth switch|user": "openbkn admin auth users <url>",
 };
 
@@ -103,7 +99,6 @@ const GROUP_ID_SOURCES: Array<[RegExp, string]> = [
   [/^skill\b/, "openbkn skill list"],
   [/^toolbox\b/, "openbkn toolbox list"],
   [/^tool\b/, "openbkn tool list --toolbox <box-id>"],
-  [/^operator\b/, "openbkn operator list"],
   [/^appkey\b/, "openbkn appkey list"],
   [/^admin org\b/, "openbkn admin org list"],
   [/^auth\b/, "openbkn auth list"],
