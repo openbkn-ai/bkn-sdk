@@ -131,14 +131,17 @@ class RelationPath:
                 continue
             if payload_for.get("object_type_id") != target.__bkn_id__:
                 continue
-            found[instance_id] = target(_flatten(payload_for))
+            row = target(_flatten(payload_for))
+            if self.end_condition is not None and not _matches(row, self.end_condition):
+                # Filtered before it counts: `step_limit` caps what comes back,
+                # and truncating first would answer "none" for a filter whose
+                # matches sit further down the walk.
+                continue
+            found[instance_id] = row
             if len(found) >= step_limit:
                 break
 
-        rows = list(found.values())
-        if self.end_condition is None:
-            return rows
-        return [row for row in rows if _matches(row, self.end_condition)]
+        return list(found.values())
 
 
 def _flatten(payload: dict[str, Any]) -> dict[str, Any]:

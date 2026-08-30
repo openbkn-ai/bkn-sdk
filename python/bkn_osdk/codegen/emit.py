@@ -317,6 +317,8 @@ def _emit_metrics(schema: KnSchema, metrics: tuple[tuple[str, MetricDef], ...]) 
         "",
         "from __future__ import annotations",
         "",
+        # Used by the `METRICS` annotation even where the network declares none,
+        # so this is not an unused import in the empty case.
         "from bkn_osdk import Metric",
     ]
     for name, metric in metrics:

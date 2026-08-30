@@ -380,7 +380,12 @@ class ObjectSet(Generic[OT]):
         # A no-op unless `configure(check_schema=True)` asked for it, and then
         # exactly once per network per process.
         ensure_schema_checked(context, self.object_type.__kn_id__)
-        if context.traced:
+        if context.traced and not _REST_ONLY_ARGUMENTS & body.keys():
+            # The tool accepts `sort` and `need_total` and honours neither, so a
+            # query needing either goes over REST even inside a traced scope —
+            # carrying the scope's turn, so the read is still recorded. Handing
+            # back an unsorted page, or a count of zero for a set with matches,
+            # would be a wrong answer bought with a receipt.
             return self._send_traced(context, body)
         from .lifecycle import with_context_retry
 

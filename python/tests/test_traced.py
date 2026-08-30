@@ -64,13 +64,15 @@ class Deploy:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.rpc_methods: list[str] = []
         self.headers: list[dict[str, str]] = []
+        self.rest_bodies: list[dict[str, Any]] = []
         self.interactions = 0
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/mcp/info"):
             return httpx.Response(200, json={"tools": [self._tool(n) for n in self.tools]})
         if not request.url.path.endswith("/mcp"):
-            return httpx.Response(200, json={"datas": []})  # the REST read path
+            self.rest_bodies.append(json.loads(request.read()))
+            return httpx.Response(200, json={"datas": [], "total_count": 0})  # the REST read path
 
         body = json.loads(request.read())
         self.rpc_methods.append(body["method"])
@@ -279,14 +281,26 @@ def test_the_query_arguments_name_the_network_and_object_type(deploy: Deploy) ->
     assert arguments["condition"]["field"] == "tournament_id"
 
 
-def test_rest_only_arguments_are_dropped_rather_than_ignored_in_silence(deploy: Deploy) -> None:
-    """The tool accepts neither `sort` nor `need_total`, and says nothing about it."""
+def test_a_query_the_tool_cannot_answer_takes_the_rest_path(deploy: Deploy) -> None:
+    """The tool accepts `sort` and `need_total` and honours neither. Dropping them
+    would answer an unsorted page, or a count of zero for a set with matches —
+    so the query goes over REST instead, carrying the scope's turn."""
     with session(traced=True):
         Tournaments.objects().order_by(Tournaments.tournament_id.desc()).count()
 
-    arguments = tool_calls(deploy, "query_object_instance")[0]
-    assert "sort" not in arguments
-    assert "need_total" not in arguments
+    assert tool_calls(deploy, "query_object_instance") == []
+    read = deploy.rest_bodies[-1]
+    assert read["sort"] == [{"field": "tournament_id", "direction": "desc"}]
+    assert read["need_total"] is True
+    assert read["bkn_context"]["interaction_id"] == "int_1"
+
+
+def test_a_query_the_tool_can_answer_still_goes_over_it(deploy: Deploy) -> None:
+    """Only what the tool cannot do moves; a plain read keeps its receipt."""
+    with session(traced=True):
+        Tournaments.objects().take(1)
+
+    assert len(tool_calls(deploy, "query_object_instance")) == 1
 
 
 def test_the_receipt_reaches_the_page_and_every_row(deploy: Deploy) -> None:

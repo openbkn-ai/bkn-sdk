@@ -356,6 +356,31 @@ def test_a_filter_that_cannot_be_evaluated_locally_says_so(deploy: Deploy) -> No
         )
 
 
+def test_the_limit_counts_matches_rather_than_walked_objects(deploy: Deploy) -> None:
+    """Truncating before filtering answers "none" for a filter whose matches sit
+    further down the walk — the far end is filtered here, not by the endpoint."""
+    deploy.payload = {
+        "objects": {
+            "confederations-9": obj("confederations-9", "confederations", confederation_name="AFC"),
+            "confederations-4": obj(
+                "confederations-4", "confederations", confederation_name="UEFA"
+            ),
+        },
+        "relation_paths": [
+            walked("rel_award_winners_team", "rel_teams_confederation", target="confederations-9"),
+            walked("rel_award_winners_team", "rel_teams_confederation", target="confederations-4"),
+        ],
+    }
+
+    rows = (
+        AwardWinners.team.then(Teams.confederation)
+        .where(Confederations.confederation_name == "UEFA")
+        .of(seed(), step_limit=1)
+    )
+
+    assert [row.confederation_name for row in rows] == ["UEFA"]
+
+
 def test_an_empty_walk_is_an_empty_list(deploy: Deploy) -> None:
     deploy.payload = {"objects": {}, "relation_paths": []}
 
