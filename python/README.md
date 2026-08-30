@@ -57,7 +57,8 @@ regeneration shows up as a reviewable `git diff`.
 
 ```text
 bkn/
-  __init__.py        # KN_ID, BRANCH, OBJECT_TYPES, RELATION_TYPES, METRICS, search()
+  __init__.py        # KN_ID, BRANCH, OBJECT_TYPES, RELATION_TYPES, METRICS,
+                     #   search(), search_instances()
   object_types.py    # one class per object type
   relation_types.py  # relation endpoints and their join columns
   metrics.py         # one class per metric, with the dimensions it allows
@@ -220,12 +221,20 @@ accepts neither `sort` nor `need_total` — so those keys are dropped rather tha
 sent and ignored in silence. Untraced reads take the REST path, which is faster
 and strictly more capable for reading, and carry no receipt.
 
-Some deploys enforce the lifecycle contract on the REST surface as well, and
-answer a context-free read with `conversation_required`. Nothing has to be
-configured for that: the first request goes out bare, and if it is refused this
-way an interaction is opened and the request repeated — inside the scope's own
-interaction where there is one, otherwise on a short-lived turn of its own. A
-deploy that does not enforce it pays nothing.
+Which calls need a turn is a matter of surface, not of tool. The capability
+surface — the MCP tools and their REST twins under `/kn/` — refuses a
+context-free call: every tool in the catalog bar the two lifecycle ones declares
+`bkn_context` required. So `search`, `search_instances` and any direct
+`call_tool` carry a turn on the first attempt, joining the scope's own where
+there is one and opening a short-lived turn where there is not. The read routes
+under `ontology-query` — instances, subgraph, metrics — serve a bare request, so
+they send one and mint nothing; only a deploy that refuses gets a turn opened
+for the retry.
+
+A caller that already has a turn passes it in without a traced scope, which is
+how the sandbox does it — `BKN_CONVERSATION_ID` and `BKN_INTERACTION_ID` in the
+environment, inherited with no argument passing, and never finished by this SDK
+because it does not own them.
 
 ## Search
 
@@ -241,13 +250,36 @@ bkn.search("who owns supply chain")
 bkn.search("orders and their buyers", max_concepts=3, search_scope={"include_action_types": False})
 ```
 
+`search_instances` asks the other question — not which types a question touches
+but which rows answer it — over the `search_instance` tool. Recall runs two
+channels, vector and full text, so only properties whose `condition_operations`
+include `match` or `knn` take part and a type with no index contributes nothing:
+
+```python
+bkn.search_instances("Lionel Messi")
+bkn.search_instances("欠款最多的客户", object_types=["customer"], rerank=True)
+```
+
+It is where to start when neither the type name nor the field name is known.
+Once both are, a typed query is cheaper and exact.
+
 ## Everything else
 
-The remaining backend surface is reachable without a typed wrapper:
+The remaining backend surface is reachable without a typed wrapper — REST by
+path, and any tool in the deploy's catalog by name:
 
 ```python
 bkn_osdk.call("/api/dataflow-manager/v1/flows")
+
+from bkn_osdk.mcp import call_tool, tool_catalog
+tool_catalog(bkn_osdk.resolve_context())              # what this deploy publishes
+call_tool(ctx, KN_ID, "describe_resource", {"resource_id": "…", "bkn_context": …})
 ```
+
+`call_tool` is the raw seam: it takes the arguments the catalog declares and
+returns what the tool answered, with no shape of its own. Passing a
+`bkn_context` is the caller's job there — `search` and `search_instances` are
+what that looks like once wrapped.
 
 ## Upgrades
 
@@ -265,9 +297,10 @@ than read a stale attribute.
 ## Not in this release
 
 Writes and action execution, aggregation over an object set (no endpoint exists —
-see above), generated MCP
-tool wrappers, an async client, and offline generation from a local `.bkn`
-directory. Each has a section in
+see above), typed wrappers for the rest of the catalog's tools — `find_skills`,
+`describe_resource`, `query_instance_subgraph` and the others reachable today
+only through `call_tool` — an async client, and offline generation from a local
+`.bkn` directory. Each has a section in
 [the design](../docs/superpowers/specs/2026-08-11-python-osdk-design.md)
 describing the shape it takes when it lands.
 
