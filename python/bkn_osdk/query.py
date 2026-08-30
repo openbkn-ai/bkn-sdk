@@ -26,7 +26,7 @@ from functools import reduce
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from .config import Context, resolve_context
-from .errors import InputError
+from .errors import BknError, InputError
 from .http import request
 
 if TYPE_CHECKING:
@@ -434,7 +434,17 @@ class ObjectSet(Generic[OT]):
         response, receipt = sent
         payload = response if isinstance(response, dict) else {}
         rows = payload.get("datas") or []
-        instances = [self.object_type(row) for row in rows if isinstance(row, dict)]
+        for index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                # Dropping it would shorten the page, and `iterate` reads a short
+                # page as the last one — so one malformed row would silently
+                # truncate the whole walk. Better to say which row it was.
+                raise BknError(
+                    f"Row {index} of this page is a {type(row).__name__}, not an object: "
+                    f"{str(row)[:80]}. The platform's response does not match the read "
+                    "contract, so the page is not decoded rather than decoded short."
+                )
+        instances = [self.object_type(row) for row in rows]
         for instance in instances:
             # The receipt travels with the rows it accounts for, so a caller can
             # cite a specific instance without threading the page around.

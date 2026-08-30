@@ -23,7 +23,7 @@ from typing import Any
 import httpx
 import pytest
 
-from bkn_osdk import Context, InputError
+from bkn_osdk import BknError, Context, InputError
 from bkn_osdk import http as http_module
 from bkn_osdk.query import MAX_LIMIT, Filter, ObjectSet, to_condition
 from bkn_osdk.types import ObjectType, Property
@@ -157,6 +157,24 @@ def test_a_foreign_node_is_refused_rather_than_half_serialised() -> None:
 
     with pytest.raises(InputError):
         to_condition(Impostor())
+
+
+def test_a_malformed_row_stops_the_page_rather_than_shortening_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`iterate` reads a short page as the last one, so dropping a row quietly
+    would truncate the whole walk at the first bad entry."""
+    client = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(
+                200, json={"datas": [{"order_id": 1}, "not-an-object", {"order_id": 3}]}
+            )
+        )
+    )
+    monkeypatch.setattr(http_module, "_client", lambda _ctx: client)
+
+    with pytest.raises(BknError, match="Row 1 of this page"):
+        orders().take(3)
 
 
 # ---- the request body -------------------------------------------------------

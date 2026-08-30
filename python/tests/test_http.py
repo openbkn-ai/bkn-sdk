@@ -244,3 +244,25 @@ def test_a_closed_client_is_replaced_rather_than_handed_out() -> None:
     stale.close()
 
     assert http_module._client(ctx()) is not stale
+
+
+def test_a_cross_host_redirect_does_not_replay_the_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The token rides in `authorization` precisely because httpx drops that
+    header when a redirect changes origin — pinned here so a custom header is
+    never quietly substituted for it."""
+    seen: list[tuple[str, str | None]] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        seen.append((request.url.host, request.headers.get("authorization")))
+        if request.url.host == "platform.example":
+            return httpx.Response(301, headers={"location": "https://elsewhere.example/x"})
+        return httpx.Response(200, json={})
+
+    client = httpx.Client(transport=httpx.MockTransport(handle), follow_redirects=True)
+    monkeypatch.setattr(http_module, "_client", lambda _ctx: client)
+
+    http_module.request(Context(base_url="https://platform.example", token="secret"), "/x")
+
+    assert seen == [("platform.example", "Bearer secret"), ("elsewhere.example", None)]
