@@ -217,12 +217,34 @@ def _unwrap(parsed: Any) -> ToolResult:
 
     if isinstance(text, str):
         try:
-            return ToolResult(json.loads(text), receipt if isinstance(receipt, dict) else None)
+            payload = json.loads(text)
         except ValueError:
-            pass
-    if isinstance(structured, dict):
-        return ToolResult(structured, receipt if isinstance(receipt, dict) else None)
-    return ToolResult(result, receipt if isinstance(receipt, dict) else None)
+            payload = structured if isinstance(structured, dict) else result
+    else:
+        payload = structured if isinstance(structured, dict) else result
+    return ToolResult(_flat(payload), receipt if isinstance(receipt, dict) else None)
+
+
+def _flat(payload: Any) -> Any:
+    """One shape for a tool's answer, whichever deploy answered.
+
+    An older deploy wraps some tools' payloads in a `result` key — `get_kn_detail`,
+    `list_resources`, `list_skills`, `get_object_types`, `list_knowledge_networks`
+    — while answering the query tools flat; a newer one is flat throughout. A
+    caller cannot tell from a response which platform it reached, so it would
+    have to handle both forever. Unwrapped only when `result` is the *whole*
+    payload, so a tool that genuinely returns a field called `result` beside
+    others keeps it.
+    """
+    if not isinstance(payload, dict):
+        return payload
+    body = {key: value for key, value in payload.items() if key != "bkn_receipt"}
+    if list(body) != ["result"] or not isinstance(body["result"], dict):
+        return payload
+    inner: dict[str, Any] = dict(body["result"])
+    if "bkn_receipt" in payload:
+        inner.setdefault("bkn_receipt", payload["bkn_receipt"])
+    return inner
 
 
 def _error_of(payload: Any) -> dict[str, Any] | None:
