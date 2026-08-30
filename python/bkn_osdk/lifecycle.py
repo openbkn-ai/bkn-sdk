@@ -200,19 +200,27 @@ def borrowed_interaction(ctx: Context, kn_id: str) -> Iterator[Interaction]:
 
 
 def with_context_retry(ctx: Context, kn_id: str, send: Callable[[dict[str, str] | None], T]) -> T:
-    """Send once bare; if the deploy demands a session, open one and repeat.
+    """Attach the turn where there is one; otherwise send bare and adapt.
 
-    Some deploys enforce the lifecycle contract on the REST surface too, and
-    answer `conversation_required` to a request with no `bkn_context`. Rather
-    than making every caller pre-open an interaction for a deploy that may not
-    want one, the first attempt goes out bare and the requirement is discovered
-    from the refusal.
+    The platform's own rule for its REST capability layer is one line: name a
+    session and the call is managed, name none and it is ad hoc. This follows it.
 
-    Inside a `session(traced=True)` scope the scope's own interaction is used, so
-    the evidence stays on one turn. Outside one, a short-lived interaction is
-    opened and finished around the retry — the read still lands in the chain,
-    just on a turn of its own.
+    **Where a turn exists, every call carries it.** Inside a `session(traced=True)`
+    scope, or when the caller handed one in — the sandbox injects both ids per
+    execution — the context goes out on the first attempt. Waiting for a refusal
+    would silently drop the evidence on any deploy that does not demand one, and
+    a traced scope asked for exactly that evidence.
+
+    **Where none exists, none is minted.** A read outside a traced scope is a
+    capability call, not an agent turn; opening a session to satisfy a guard
+    would file a single-operation record that dilutes the concept rather than
+    documenting anything. So the call goes bare — and only where a deploy still
+    refuses it is a short-lived turn opened for the retry.
     """
+    if _has_turn(ctx):
+        with borrowed_interaction(ctx, kn_id) as interaction:
+            return send(interaction.bkn_context)
+
     try:
         return send(None)
     except (HttpError, ToolError) as error:
@@ -221,6 +229,11 @@ def with_context_retry(ctx: Context, kn_id: str, send: Callable[[dict[str, str] 
 
     with borrowed_interaction(ctx, kn_id) as interaction:
         return send(interaction.bkn_context)
+
+
+def _has_turn(ctx: Context) -> bool:
+    """Whether there is a turn to attach to without minting one."""
+    return ctx.traced or bool(ctx.conversation_id and ctx.interaction_id)
 
 
 def _needs_context(error: HttpError | ToolError) -> bool:

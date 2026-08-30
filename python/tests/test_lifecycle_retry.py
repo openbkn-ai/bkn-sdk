@@ -185,3 +185,49 @@ def test_an_unrelated_error_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> N
 
     assert excinfo.value.status == 400
     assert stub.tool_calls == []
+
+
+# ---- where a turn exists, every call carries it --------------------------------
+
+
+def test_a_traced_scope_attaches_the_turn_without_being_asked(relaxed: Deploy) -> None:
+    """A deploy that does not demand a context still records the call, because the
+    scope asked for evidence. Waiting for a refusal would drop it in silence.
+
+    Shown on `search`, which stays REST inside a traced scope — an instance query
+    switches to the MCP tool there, for the receipt REST does not return.
+    """
+    with session(traced=True):
+        search(KN, "who owns supply chain")
+
+    assert relaxed.rest_bodies[0]["bkn_context"] == {
+        "conversation_id": "c1",
+        "interaction_id": "i1",
+    }
+    assert len(relaxed.rest_bodies) == 1  # attached first time, no retry
+
+
+def test_a_caller_named_turn_is_attached_without_a_traced_scope(
+    relaxed: Deploy, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The platform's rule: name a session and the call is managed. The sandbox
+    names one per execution, so its reads land on the host's turn."""
+    monkeypatch.setenv("BKN_CONVERSATION_ID", "host-conv")
+    monkeypatch.setenv("BKN_INTERACTION_ID", "host-int")
+
+    search(KN, "who owns supply chain")
+
+    assert relaxed.rest_bodies[0]["bkn_context"] == {
+        "conversation_id": "host-conv",
+        "interaction_id": "host-int",
+    }
+    assert relaxed.tool_calls == []  # nothing opened, nothing finished
+
+
+def test_without_a_turn_none_is_minted(relaxed: Deploy) -> None:
+    """A capability call is not an agent turn; minting one would file a
+    single-operation record that documents nothing."""
+    Tournaments.take(1)
+
+    assert "bkn_context" not in relaxed.rest_bodies[0]
+    assert relaxed.tool_calls == []

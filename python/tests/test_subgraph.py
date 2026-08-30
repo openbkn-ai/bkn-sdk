@@ -106,13 +106,45 @@ SUBGRAPH = {
 
 
 class Deploy:
+    """Answers the subgraph endpoint, plus the lifecycle transport a traced
+    scope needs to open the turn it attaches to every call."""
+
     def __init__(self, payload: dict[str, Any] | None = None) -> None:
         self.payload = SUBGRAPH if payload is None else payload
         self.paths: list[str] = []
         self.bodies: list[dict[str, Any]] = []
 
     def handle(self, request: httpx.Request) -> httpx.Response:
-        self.paths.append(request.url.path)
+        path = request.url.path
+        if path.endswith("/mcp/info"):
+            return httpx.Response(
+                200,
+                json={
+                    "tools": [
+                        {"name": "bkn_start_interaction"},
+                        {"name": "bkn_finish_interaction"},
+                    ]
+                },
+            )
+        if path.endswith("/mcp"):
+            body = json.loads(request.read())
+            if body["method"] != "tools/call":
+                return httpx.Response(200, json={"result": {}}, headers={"mcp-session-id": "s"})
+            payload = (
+                {"conversation_id": "c1", "interaction_id": "i1"}
+                if body["params"]["name"] == "bkn_start_interaction"
+                else {"execution_status": "completed"}
+            )
+            return httpx.Response(
+                200,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": {"content": [{"type": "text", "text": json.dumps(payload)}]},
+                },
+            )
+
+        self.paths.append(path)
         self.bodies.append(json.loads(request.read()))
         return httpx.Response(200, json=self.payload)
 
@@ -217,11 +249,17 @@ def test_no_managed_session_is_opened_for_a_walk(deploy: Deploy) -> None:
     assert "bkn_context" not in deploy.bodies[0]
 
 
-def test_a_traced_scope_does_not_change_the_transport(deploy: Deploy) -> None:
+def test_a_traced_scope_keeps_the_transport_and_adds_the_turn(deploy: Deploy) -> None:
+    """Still an ordinary REST read — but a scope that asked for evidence gets it,
+    rather than losing it on a deploy that does not demand a context."""
     with session(traced=True):
         AwardWinners.team.then(Teams.confederation).of(seed())
 
     assert deploy.paths[0].endswith("/subgraph")
+    assert deploy.bodies[0]["bkn_context"] == {
+        "conversation_id": "c1",
+        "interaction_id": "i1",
+    }
 
 
 def test_an_instance_without_an_identity_cannot_start_a_path(deploy: Deploy) -> None:
