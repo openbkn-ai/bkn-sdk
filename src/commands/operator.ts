@@ -182,10 +182,40 @@ export function operatorCommand(): Command {
   definitionOptions(
     cmd
       .command("update <operator-id> <file>")
-      .description("Replace an operator's definition wholesale, producing a new version"),
-  ).action(async (id: string, file: string, opts, cmd: Command) => {
+      .description("Replace an operator's code, keeping the settings you do not name"),
+  ).action(async (id: string, file: string, opts: DefinitionOpts, cmd: Command) => {
+    const client = clientFrom(cmd);
+    // The endpoint replaces the whole package: whatever this request omits comes
+    // back as a server default, so an update that only changed the code moved a
+    // `data_analysis` operator into `other_category` and dropped its name and
+    // description. Read the current definition and carry forward everything the
+    // caller did not name — measured against a live deploy, in both directions.
+    const current = (await client.operators.get(id)) as {
+      name?: string;
+      metadata?: { description?: string };
+      operator_info?: {
+        category?: string;
+        operator_type?: "basic" | "composite";
+        execution_mode?: "sync" | "async" | "stream";
+        is_data_source?: boolean;
+      };
+      operator_execute_control?: { timeout?: number };
+    };
+    const kept = current.operator_info ?? {};
+    const definition = definitionFrom(file, {
+      ...opts,
+      name: opts.name ?? current.name,
+      description: opts.description ?? current.metadata?.description,
+      category: opts.category ?? kept.category,
+    });
     printJson(
-      await clientFrom(cmd).operators.update(id, definitionFrom(file, opts)),
+      await client.operators.update(id, {
+        ...definition,
+        operatorType: kept.operator_type,
+        executionMode: kept.execution_mode,
+        isDataSource: kept.is_data_source,
+        timeout: opts.timeout ?? current.operator_execute_control?.timeout,
+      }),
       outputOptions(cmd),
     );
   });

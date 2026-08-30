@@ -27,6 +27,17 @@ function call(f: typeof fetch): CallArgs {
 }
 afterEach(() => vi.unstubAllGlobals());
 
+/** The dispatcher undici was handed, or undefined when the global fetch was used. */
+function dispatcherOf(f: typeof fetch): { headersTimeout?: number } | undefined {
+  const init = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls[0]?.[1] as
+    | (RequestInit & { dispatcher?: unknown })
+    | undefined;
+  const agent = init?.dispatcher as Record<symbol, unknown> | undefined;
+  if (!agent) return undefined;
+  const key = Object.getOwnPropertySymbols(agent).find((sym) => String(sym).includes("options"));
+  return key ? (agent[key] as { headersTimeout?: number }) : {};
+}
+
 describe("function endpoints", () => {
   it("execute posts code and event, and always sends an event", async () => {
     const f = mockFetch();
@@ -88,6 +99,20 @@ describe("function endpoints", () => {
     const body = JSON.parse(String(call(f)[1].body));
     expect(body).not.toHaveProperty("bkn_token");
     expect(body).not.toHaveProperty("bkn_interaction_id");
+  });
+
+  it("budgets past undici's 300s header deadline, which the abort budget cannot lift", async () => {
+    const f = mockFetch();
+    await executeFunction(ctx, { code: "x", timeout: 600 });
+    // `function/execute` sends no response header until the sandbox is done, so
+    // a 600s run dies at 300s unless the header deadline moves with the budget.
+    expect(dispatcherOf(f)?.headersTimeout).toBe(600 * 1000 + 15_000);
+  });
+
+  it("budgets against the sandbox ceiling when no timeout is given", async () => {
+    const f = mockFetch();
+    await executeFunction(ctx, { code: "x" });
+    expect(dispatcherOf(f)?.headersTimeout).toBe(3600 * 1000 + 15_000);
   });
 
   it("infer-schema posts only the code", async () => {

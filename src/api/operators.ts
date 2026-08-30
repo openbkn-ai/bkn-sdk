@@ -19,6 +19,7 @@ import {
 
 export type { ParameterDef };
 import { request } from "./http.js";
+import { sandboxBudgetMs } from "./sandbox-budget.js";
 
 const PATH = "/api/agent-operator-integration/v1/operator";
 
@@ -132,15 +133,20 @@ export interface RegisterOperatorOptions {
 }
 
 function registerBody(opts: RegisterOperatorOptions): Record<string, unknown> {
+  // Only what the caller named. `updateOperator` replaces the whole package
+  // through this same builder, so a field defaulted here is a field silently
+  // rewritten there: filling `category` with `other_category` moved an operator
+  // out of `data_analysis` on an update that never mentioned categories.
+  const info = {
+    ...(opts.operatorType ? { operator_type: opts.operatorType } : {}),
+    ...(opts.executionMode ? { execution_mode: opts.executionMode } : {}),
+    ...(opts.category ? { category: opts.category } : {}),
+    ...(opts.isDataSource !== undefined ? { is_data_source: opts.isDataSource } : {}),
+  };
   return {
     operator_metadata_type: opts.metadataType,
     ...(opts.description ? { description: opts.description } : {}),
-    operator_info: {
-      operator_type: opts.operatorType ?? "basic",
-      execution_mode: opts.executionMode ?? "sync",
-      category: opts.category ?? "other_category",
-      ...(opts.isDataSource !== undefined ? { is_data_source: opts.isDataSource } : {}),
-    },
+    ...(Object.keys(info).length ? { operator_info: info } : {}),
     ...(opts.timeout !== undefined ? { operator_execute_control: { timeout: opts.timeout } } : {}),
     ...(opts.function ? { function_input: functionInputBody(opts.function) } : {}),
     ...(opts.data ? { data: opts.data } : {}),
@@ -205,7 +211,9 @@ export function debugOperator(
 ): Promise<unknown> {
   return request(ctx, `${PATH}/debug`, {
     method: "POST",
-    timeoutMs: Math.max(60_000, (opts.timeout ?? 0) * 1000 + 30_000),
+    // A debug run is a sandbox run: it answers only when the code is done.
+    timeoutMs: sandboxBudgetMs(opts.timeout),
+    headersTimeoutMs: sandboxBudgetMs(opts.timeout),
     body: {
       operator_id: operatorId,
       version: opts.version,

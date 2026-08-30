@@ -11,6 +11,7 @@
  */
 import type { RequestContext } from "../types.js";
 import { request } from "./http.js";
+import { sandboxBudgetMs } from "./sandbox-budget.js";
 
 const PATH = "/api/agent-operator-integration/v1";
 
@@ -109,9 +110,11 @@ export function executeFunction(
 ): Promise<FunctionExecuteResult> {
   return request<FunctionExecuteResult>(ctx, `${PATH}/function/execute`, {
     method: "POST",
-    // The sandbox has to boot, install, and run before it answers; the default
-    // 30s is a comfortable ceiling for an HTTP call and a tight one for this.
-    timeoutMs: Math.max(60_000, (opts.timeout ?? 0) * 1000 + 30_000),
+    // The sandbox has to boot, install, and run before it answers, and it sends
+    // no header until it does — so the abort budget and undici's 300s header
+    // deadline both have to move, or a long run dies at 300s regardless.
+    timeoutMs: sandboxBudgetMs(opts.timeout),
+    headersTimeoutMs: sandboxBudgetMs(opts.timeout),
     body: {
       code: opts.code,
       event: opts.event ?? {},
@@ -136,7 +139,9 @@ export function executeFunction(
 export function inferFunctionSchema(ctx: RequestContext, code: string): Promise<unknown> {
   return request(ctx, `${PATH}/function/infer-schema`, {
     method: "POST",
-    timeoutMs: 60_000,
+    // Deriving a schema runs the code, so it is a sandbox run like any other.
+    timeoutMs: sandboxBudgetMs(undefined),
+    headersTimeoutMs: sandboxBudgetMs(undefined),
     body: { code },
   });
 }

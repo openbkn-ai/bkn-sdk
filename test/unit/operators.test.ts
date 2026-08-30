@@ -92,7 +92,9 @@ describe("operator endpoints", () => {
     expect(body.function_input.inputs).toHaveLength(1);
     // Undescribed parameters still register; the field must exist, not be dropped.
     expect(body.function_input.outputs).toEqual([]);
-    expect(body.operator_info.operator_type).toBe("basic");
+    // Nothing was said about type or category, so nothing is sent about them —
+    // `updateOperator` shares this builder and would rewrite them.
+    expect(body).not.toHaveProperty("operator_info");
     expect(body.direct_publish).toBe(true);
   });
 
@@ -103,6 +105,17 @@ describe("operator endpoints", () => {
     expect(body.data).toBe('{"openapi":"3.0.0"}');
     expect(body.function_input).toBeUndefined();
     expect(body.direct_publish).toBeUndefined();
+  });
+
+  it("sends operator_info only for the fields the caller named", async () => {
+    const f = mockFetch();
+    await registerOperator(ctx, {
+      metadataType: "openapi",
+      data: "{}",
+      category: "data_analysis",
+    });
+    const body = JSON.parse(String(call(f)[1].body));
+    expect(body.operator_info).toEqual({ category: "data_analysis" });
   });
 
   it("update posts to info/update with the id alongside the definition", async () => {
@@ -147,6 +160,22 @@ describe("operator endpoints", () => {
       query: {},
       path: {},
     });
+  });
+
+  it("gives a debug run the same header deadline as its abort budget", async () => {
+    const f = mockFetch();
+    await debugOperator(ctx, "op1", { version: "v1", timeout: 600 });
+    const init = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls[0]?.[1] as
+      | (RequestInit & { dispatcher?: unknown })
+      | undefined;
+    const agent = init?.dispatcher as Record<symbol, unknown> | undefined;
+    const key = agent
+      ? Object.getOwnPropertySymbols(agent).find((sym) => String(sym).includes("options"))
+      : undefined;
+    // A debug run answers only when the code is done — same wall as the sandbox.
+    expect(key ? (agent?.[key] as { headersTimeout?: number }).headersTimeout : undefined).toBe(
+      600 * 1000 + 15_000,
+    );
   });
 
   it("convert-to-tool posts the operator and the target box", async () => {
