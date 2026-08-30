@@ -39,6 +39,7 @@ flat, and reading against one means unwrapping at the call site.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
 from dataclasses import dataclass
@@ -54,8 +55,11 @@ MCP_PATH = "/api/agent-retrieval/v1/mcp"
 PROTOCOL_VERSION = "2024-11-05"
 
 _lock = threading.Lock()
-#: (base URL, kn id) -> MCP session id. The handshake is not worth repeating.
-_sessions: dict[tuple[str, str], str] = {}
+#: (base URL, kn id, who) -> MCP session id. The handshake is not worth
+#: repeating, but it is not shareable either: the server binds a session to the
+#: credential that opened it, so a process reading as two users must not hand
+#: one user's session to the other. `who` is a digest, never the token itself.
+_sessions: dict[tuple[str, str, str], str] = {}
 _rpc_id = 0
 
 
@@ -84,7 +88,7 @@ def call_tool(ctx: Context, kn_id: str, name: str, arguments: dict[str, Any]) ->
         # The server forgot the transport session — reopen once and repeat. This
         # is the connection, not the business lifecycle: no evidence is lost.
         with _lock:
-            _sessions.pop((ctx.base_url, kn_id), None)
+            _sessions.pop(_session_key(ctx, kn_id), None)
         try:
             return _unwrap(_post(ctx, kn_id, _session(ctx, kn_id), _tool_call(name, arguments)))
         except _SessionGone as gone:
@@ -114,8 +118,12 @@ def _tool_call(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _session_key(ctx: Context, kn_id: str) -> tuple[str, str, str]:
+    return (ctx.base_url, kn_id, hashlib.sha256(ctx.token.encode()).hexdigest()[:16])
+
+
 def _session(ctx: Context, kn_id: str) -> str:
-    key = (ctx.base_url, kn_id)
+    key = _session_key(ctx, kn_id)
     with _lock:
         cached = _sessions.get(key)
     if cached is not None:

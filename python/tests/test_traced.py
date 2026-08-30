@@ -666,3 +666,38 @@ def test_a_handshake_refused_at_its_own_notification_reads_as_a_deploy_problem(
 
     with pytest.raises(BknError, match="just issued"):
         mcp_module.call_tool(Context(base_url=PLATFORM, token="t-1"), KN, "search_schema", {})
+
+
+def test_two_credentials_against_one_deploy_do_not_share_a_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The server binds a session to whoever opened it, so handing one user's
+    session to another reads as the wrong user — or is refused outright."""
+    handshakes: list[str] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.read())
+        if body.get("method") == "initialize":
+            bearer = request.headers["authorization"]
+            handshakes.append(bearer)
+            return httpx.Response(
+                200, json={"result": {}}, headers={"mcp-session-id": f"sess-{len(handshakes)}"}
+            )
+        if body.get("method") == "notifications/initialized":
+            return httpx.Response(202, json={})
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {"content": [{"type": "text", "text": json.dumps({"ok": True})}]},
+            },
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+    monkeypatch.setattr(http_module, "_client", lambda _ctx: client)
+
+    for token in ("token-a", "token-b", "token-a"):
+        mcp_module.call_tool(Context(base_url=PLATFORM, token=token), KN, "search_schema", {})
+
+    assert handshakes == ["Bearer token-a", "Bearer token-b"]  # third call reuses the first
