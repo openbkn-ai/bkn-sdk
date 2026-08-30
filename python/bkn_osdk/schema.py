@@ -137,7 +137,11 @@ def fingerprint(schema: KnSchema) -> str:
 
     for object_type in sorted(schema.object_types, key=lambda o: o.bkn_id):
         digest.update(f"ot:{object_type.bkn_id}\n".encode())
-        digest.update(f"pk:{','.join(sorted(object_type.primary_key))}\n".encode())
+        # In declared order, not sorted: `get(*values)` maps positional values
+        # onto the key parts in order, so a reordered composite key reads a
+        # different row. Sorting here would hide that from both drift gates —
+        # and `diff.compare` already calls it breaking.
+        digest.update(f"pk:{','.join(object_type.primary_key)}\n".encode())
         digest.update(f"dk:{object_type.display_key or ''}\n".encode())
         for prop in sorted(object_type.properties, key=lambda p: p.bkn_id):
             digest.update(f"prop:{prop.bkn_id}:{prop.type}\n".encode())

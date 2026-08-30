@@ -97,8 +97,13 @@ def ensure_schema_checked(ctx: Context, kn_id: str) -> None:
     """
     if not ctx.check_schema:
         return
-    branch = _branch_of(kn_id)
-    if branch is None or (kn_id, branch) in _checked:
+    for branch in _branches_of(kn_id):
+        _check_branch(ctx, kn_id, branch)
+
+
+def _check_branch(ctx: Context, kn_id: str, branch: str) -> None:
+    """Compare one generated package against the network it was generated from."""
+    if (kn_id, branch) in _checked:
         return
 
     from .schema import fetch_schema, fingerprint
@@ -115,11 +120,14 @@ def ensure_schema_checked(ctx: Context, kn_id: str) -> None:
         )
 
 
-def _branch_of(kn_id: str) -> str | None:
-    for known_kn, branch in _packages:
-        if known_kn == kn_id:
-            return branch
-    return None
+def _branches_of(kn_id: str) -> list[str]:
+    """Every branch of this network a generated package was imported for.
+
+    Usually one. Two packages for the same network on different branches is a
+    real thing to do — comparing a release branch against main — and checking
+    only whichever was registered first would test the wrong one.
+    """
+    return [branch for known_kn, branch in _packages if known_kn == kn_id]
 
 
 def satisfies(version: str, specifier: str) -> bool:

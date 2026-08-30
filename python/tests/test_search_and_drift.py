@@ -279,3 +279,24 @@ def test_an_added_property_is_drift_too(sent: Sent, monkeypatch: pytest.MonkeyPa
 
     with pytest.raises(SchemaDriftError):
         Order.objects().with_context(replace(CONTEXT, check_schema=True)).take(1)
+
+
+def test_two_branches_of_one_network_are_both_checked(
+    sent: Sent, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Comparing a release branch against main means two packages for one
+    network in one process; checking only whichever registered first would
+    compare against the wrong one."""
+    meta_module.validate_package(
+        "bkn", 1, ">=0.1,<0.2", kn_id=KN, branch="main", fingerprint=fingerprint(DEMO_SCHEMA)
+    )
+    meta_module.validate_package(
+        "bkn_release", 1, ">=0.1,<0.2", kn_id=KN, branch="release", fingerprint="a3f9c2e1" * 8
+    )
+    calls = serve_schema(monkeypatch, DEMO_SCHEMA)
+    checked = replace(CONTEXT, check_schema=True)
+
+    with pytest.raises(SchemaDriftError, match="branch release"):
+        Order.objects().with_context(checked).take(1)
+
+    assert calls == [KN, KN]  # both branches, not just the first registered

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from schema_fixtures import DEMO_SCHEMA
+
 from bkn_osdk.schema import KnSchema, ObjectTypeDef, PropertyDef, RelationTypeDef, fingerprint
 
 
@@ -105,3 +107,21 @@ def test_two_object_types_cannot_swap_their_properties_unnoticed() -> None:
     assert fingerprint(schema(object_types=(a, b))) != fingerprint(
         schema(object_types=(swapped_a, swapped_b))
     )
+
+
+def test_a_reordered_composite_key_is_drift() -> None:
+    """`get(a, b)` maps positional values onto the key parts in order, so the
+    order is part of the contract — and the other drift gate already says so."""
+    from bkn_osdk.codegen.diff import compare, view_of_schema
+
+    original = next(o for o in DEMO_SCHEMA.object_types if len(o.primary_key) > 1)
+    swapped = replace(original, primary_key=tuple(reversed(original.primary_key)))
+    moved = replace(
+        DEMO_SCHEMA,
+        object_types=tuple(
+            swapped if o.bkn_id == original.bkn_id else o for o in DEMO_SCHEMA.object_types
+        ),
+    )
+
+    assert fingerprint(moved) != fingerprint(DEMO_SCHEMA)
+    assert compare(view_of_schema(DEMO_SCHEMA), view_of_schema(moved)).breaking
