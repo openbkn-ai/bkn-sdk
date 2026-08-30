@@ -175,3 +175,16 @@ def test_a_relation_with_no_join_columns_is_refused() -> None:
 def test_a_relation_pointing_outside_the_package_says_to_regenerate() -> None:
     with pytest.raises(SchemaDriftError, match="does not define"):
         Order(ROW).orphan  # noqa: B018
+
+
+def test_a_hop_reads_from_the_platform_the_row_came_from(sent: Sent) -> None:
+    """Re-resolving would find whatever the process happens to hold now — in a
+    multi-tenant process, another tenant's token; in a bare one, nothing."""
+    parent = Order.objects().with_context(CONTEXT).where(Order.order_id == 10357).take(1)[0]
+
+    assert parent.buyer.context is CONTEXT
+
+
+def test_a_hop_outside_any_scope_still_works_where_the_row_carried_none() -> None:
+    """A hand-built instance has no context, so the hop resolves one as before."""
+    assert Order(ROW).buyer.context is None

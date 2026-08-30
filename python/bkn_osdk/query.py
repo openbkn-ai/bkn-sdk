@@ -344,7 +344,8 @@ class ObjectSet(Generic[OT]):
         because the backend can grow fields faster than this runtime models
         them. Nothing here is merged in except the response format.
         """
-        return self._decode(self._send({"response_format": "json", **arguments}))
+        context = self.context or resolve_context()
+        return self._decode(self._send({"response_format": "json", **arguments}, context), context)
 
     def page(
         self, *, limit: int = DEFAULT_TAKE, offset: int = 0, need_total: bool = False
@@ -369,14 +370,14 @@ class ObjectSet(Generic[OT]):
             body["properties"] = list(dict.fromkeys(self.properties))
         if need_total:
             body["need_total"] = True
-        return self._decode(self._send(body))
+        context = self.context or resolve_context()
+        return self._decode(self._send(body, context), context)
 
     # ---- internals ----
 
-    def _send(self, body: dict[str, Any]) -> Any:
+    def _send(self, body: dict[str, Any], context: Context) -> Any:
         from .meta import ensure_schema_checked
 
-        context = self.context or resolve_context()
         # A no-op unless `configure(check_schema=True)` asked for it, and then
         # exactly once per network per process.
         ensure_schema_checked(context, self.object_type.__kn_id__)
@@ -430,7 +431,7 @@ class ObjectSet(Generic[OT]):
             interaction.receipts.append(result.receipt)
         return result.value, result.receipt
 
-    def _decode(self, sent: tuple[Any, Any]) -> Page[OT]:
+    def _decode(self, sent: tuple[Any, Any], context: Context | None = None) -> Page[OT]:
         response, receipt = sent
         payload = response if isinstance(response, dict) else {}
         rows = payload.get("datas") or []
@@ -449,6 +450,7 @@ class ObjectSet(Generic[OT]):
             # The receipt travels with the rows it accounts for, so a caller can
             # cite a specific instance without threading the page around.
             instance.__receipt__ = receipt
+            instance.__context__ = context
         total = payload.get("total_count")
         return Page(
             rows=instances,

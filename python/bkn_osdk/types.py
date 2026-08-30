@@ -255,7 +255,8 @@ class Relation(Generic[T]):
             value = self._source_value(instance, source_property)
             node = Comparison("==", target_property, value)
             combined = node if combined is None else combined & node
-        return ObjectSet(target).where(combined) if combined is not None else ObjectSet(target)
+        hop: ObjectSet[Any] = ObjectSet(target, context=instance.__context__)
+        return hop.where(combined) if combined is not None else hop
 
     def _source_value(self, instance: ObjectType, source_property: str) -> Any:
         data = instance.__data__
@@ -312,6 +313,10 @@ class ObjectType:
         self.__display__: Any = data.get(DISPLAY_KEY)
         #: Set on a traced read: the receipt that accounts for this instance.
         self.__receipt__: dict[str, Any] | None = None
+        #: Where this row was read from. A hop off it goes back to the same
+        #: platform as the same user, rather than re-resolving and possibly
+        #: finding a different one — or nothing at all.
+        self.__context__: Any = None
 
     # ---- query entry points --------------------------------------------------
     #

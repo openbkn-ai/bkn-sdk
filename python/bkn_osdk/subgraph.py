@@ -119,11 +119,13 @@ class RelationPath:
             return request(ctx, path, body=payload, method_override="GET")
 
         response = with_context_retry(ctx, kn_id, send)
-        return self._decode(response, target, step_limit)
+        return self._decode(response, target, step_limit, ctx)
 
     # ---- response ----
 
-    def _decode(self, response: Any, target: type[ObjectType], step_limit: int) -> list[Any]:
+    def _decode(
+        self, response: Any, target: type[ObjectType], step_limit: int, ctx: Context | None = None
+    ) -> list[Any]:
         """Keep the paths that walked *this* chain, and decode where they ended."""
         payload = response if isinstance(response, dict) else {}
         objects = payload.get("objects")
@@ -144,6 +146,9 @@ class RelationPath:
             if payload_for.get("object_type_id") != target.__bkn_id__:
                 continue
             row = target(_flatten(payload_for))
+            # The far end of a walk is read the same way a page is, so a hop off
+            # one of these rows goes back to the platform it came from.
+            row.__context__ = ctx
             if self.end_condition is not None and not _matches(row, self.end_condition):
                 # Filtered before it counts: `step_limit` caps what comes back,
                 # and truncating first would answer "none" for a filter whose
