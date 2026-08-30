@@ -76,6 +76,7 @@ Unified TypeScript SDK + CLI for the **BKN** (Business Knowledge Network) platfo
 | `src/auth/` | OAuth, token resolution |
 | `src/config/` | Config store, base-url/TLS resolution |
 | `src/utils/` | Output formatting, errors, prompts |
+| `src/help/` | Grouped-help formatter, section taxonomy, captured return shapes |
 | `src/index.ts` | Library entry (exports `resources/`) |
 | `src/cli.ts` | CLI entry (`openbkn` bin) |
 | `docs/` | Harness: design, specs, plans, references |
@@ -83,6 +84,41 @@ Unified TypeScript SDK + CLI for the **BKN** (Business Knowledge Network) platfo
 ## Architecture (layered)
 
 Dependency direction is one-way: `commands → resources → api → auth/config`. Commands never call `fetch` directly; resources never parse argv. See [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Self-describing surface
+
+An agent reaches this CLI with no docs and has to work out what exists, what each
+thing costs, and where an id comes from — from the CLI itself. That is a contract,
+not a nicety, and it is checked by `test/unit/help-contract.test.ts`.
+
+Every command sits in one of four sections, and the vocabulary is the same at every
+level: **GROUPS** nests deeper, **READ** changes nothing, **RUN** acts without
+changing configuration, **WRITE** changes platform state. Sections are assigned by
+structure and verb in `src/help/grouped-help.ts`; a name the verb table does not know
+falls into `COMMANDS`, which is visible rather than silently wrong. Override with
+`groupChildren(cmd, {...})` in the command module — never by editing the verb table
+for a one-off.
+
+When you add a command, it is not done until:
+
+- it has a one-line description that says what it answers, not what it calls;
+- its section is right — if the verb table guessed, check that it guessed correctly;
+- ids it takes are resolvable: add the minting command to `ID_SOURCES` /
+  `GROUP_ID_SOURCES` in `src/commands/describe.ts`, or `ARGUMENT_OVERRIDES` when a
+  command takes two different kinds of id;
+- anything a caller must know before running it (order of work, a gate, a field that
+  decides success) is in the group's `guide()` — prose belongs there, not in 30
+  per-command descriptions;
+- `--dry-run` still sends nothing: the preview hook lives in `tlsFetch`, the one
+  choke point, and redacts credential-shaped headers *and* body fields;
+- `--probe` knows which service answers it (`COMMAND_SERVICE` in
+  `src/commands/probe.ts`);
+- if it is READ, `scripts/capture-returns.mjs` can reach it — rerun that against a
+  live deploy to refresh `src/help/returns.json`. READ means "changes nothing on the
+  platform"; a command that writes to the local filesystem goes in its blacklist.
+
+`openbkn describe [path] [--json] [--depth n] [--probe]` is the machine-readable view
+of all of it. Check your work by reading it, not by reading the source.
 
 ## Secrets & logging
 

@@ -16,6 +16,7 @@
  */
 import { spawn } from "node:child_process";
 import { tlsFetch } from "../api/tls.js";
+import { trimTrailingSlashes } from "../utils/base-url.js";
 import { InputError } from "../utils/errors.js";
 
 export interface OAuthTokens {
@@ -25,7 +26,7 @@ export interface OAuthTokens {
 }
 
 export function normalizeBaseUrl(value: string): string {
-  return value.replace(/\/+$/, "");
+  return trimTrailingSlashes(value);
 }
 
 function mapToken(data: {

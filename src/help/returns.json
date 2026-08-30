@@ -245,6 +245,8 @@
     "skill names": ["entries"],
     "skill history": "array",
     "toolbox list": ["data", "has_next", "has_prev", "page", "page_size", "total", "total_pages"],
+    "function deps": ["dependencies", "session_id"],
+    "function template": ["code_template", "template_type"],
     "trace graph": [
       "data",
       "duration_nano",

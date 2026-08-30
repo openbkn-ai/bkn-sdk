@@ -6,6 +6,7 @@ import { resolveContext } from "./config/resolve.js";
 import { admin } from "./resources/admin.js";
 import { appKeys } from "./resources/app-keys.js";
 import { context } from "./resources/context-loader.js";
+import { functions } from "./resources/functions.js";
 import { kn } from "./resources/knowledge-networks.js";
 import { models } from "./resources/models.js";
 import { resources } from "./resources/resources.js";
@@ -30,6 +31,7 @@ export interface BknClient {
   readonly resource: ReturnType<typeof resources>;
   readonly context: ReturnType<typeof context>;
   readonly models: ReturnType<typeof models>;
+  readonly functions: ReturnType<typeof functions>;
   readonly skills: ReturnType<typeof skills>;
   readonly toolboxes: ReturnType<typeof toolboxes>;
   readonly trace: ReturnType<typeof trace>;
@@ -48,6 +50,7 @@ export function createClient(opts: ClientOptions = {}): BknClient {
     resource: resources(ctx),
     context: context(ctx),
     models: models(ctx),
+    functions: functions(ctx),
     skills: skills(ctx),
     toolboxes: toolboxes(ctx),
     trace: trace(ctx),

@@ -10,6 +10,7 @@ import {
   updatePlatformConfig,
 } from "../config/store.js";
 import { group, groupChildren } from "../help/grouped-help.js";
+import { trimTrailingSlashes } from "../utils/base-url.js";
 import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { outputOptions } from "./_shared.js";
@@ -42,7 +43,7 @@ export function configCommand(): Command {
     .description("Set a config value (baseUrl | businessDomain)")
     .action((key: string, value: string, _opts, cmd: Command) => {
       if (key === "baseUrl") {
-        setActivePlatform(value.replace(/\/+$/, ""));
+        setActivePlatform(trimTrailingSlashes(value));
       } else if (key === "businessDomain") {
         updatePlatformConfig(requireActive(), { businessDomain: value });
       } else {

@@ -10,6 +10,7 @@ import { resolveContext } from "../config/resolve.js";
 import { group, groupChildren, guide } from "../help/grouped-help.js";
 import * as auth from "../resources/auth.js";
 import { DEFAULT_BUSINESS_DOMAIN } from "../types.js";
+import { trimTrailingSlashes } from "../utils/base-url.js";
 import { HttpError, InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { promptLine } from "../utils/prompt.js";
@@ -275,7 +276,7 @@ export function registerAuthLeaves(cmd: Command): void {
     .command("users <url>")
     .description("List saved users for a platform (* = active)")
     .action((url: string, _opts, cmd: Command) => {
-      const norm = url.replace(/\/+$/, "");
+      const norm = trimTrailingSlashes(url);
       const items = auth.listPlatforms().filter((i) => i.baseUrl === norm);
       const out = outputOptions(cmd);
       if (out.json || out.compact) printJson(items, out);

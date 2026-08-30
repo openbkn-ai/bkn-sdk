@@ -78,6 +78,25 @@ function redact(headers: HeaderInput): Record<string, string> {
   return out;
 }
 
+/** Field names whose value is a credential wherever it appears. */
+const SECRET_FIELD = /^(bkn_token|token|access_token|refresh_token|password|secret|api_key)$/i;
+
+/**
+ * The same rule as headers, applied to the body: a credential can travel as a
+ * field too — `function run --pass-token` puts one in `bkn_token` so the
+ * sandbox can call BKN as the caller — and a preview is something a caller
+ * pastes into a terminal, an issue, or a log.
+ */
+function redactBody(body: unknown): unknown {
+  if (Array.isArray(body)) return body.map(redactBody);
+  if (!body || typeof body !== "object") return body;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(body)) {
+    out[k] = SECRET_FIELD.test(k) ? "<redacted>" : redactBody(v);
+  }
+  return out;
+}
+
 /**
  * Stop here when previewing. `body` is parsed back from JSON where possible so
  * the preview shows the structure a caller is checking, not an escaped string.
@@ -102,6 +121,6 @@ export function previewRequest(input: {
     method: input.method,
     url: String(input.url),
     headers: redact(input.headers),
-    ...(body === undefined ? {} : { body }),
+    ...(body === undefined ? {} : { body: redactBody(body) }),
   });
 }

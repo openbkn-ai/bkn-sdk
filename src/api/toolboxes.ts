@@ -11,6 +11,7 @@ import type { RequestContext } from "../types.js";
 import { HttpError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { authFetch } from "./auth-fetch.js";
+import { type FunctionDefinition, functionInputBody } from "./functions.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
 import { tlsFetch } from "./tls.js";
@@ -64,6 +65,10 @@ export async function importConfig(
 /**
  * Upload a tool definition file (e.g. an OpenAPI spec) into a toolbox.
  * `POST /tool-box/:id/tool` multipart: `metadata_type` + `data` (file).
+ *
+ * The same endpoint as {@link createTool}, in its other encoding: this one
+ * streams the file, that one carries the definition as JSON and can therefore
+ * also describe a function.
  */
 export async function uploadTool(
   ctx: RequestContext,
@@ -85,6 +90,88 @@ export async function uploadTool(
   const text = await res.text();
   if (!res.ok) throw new HttpError(res.status, res.statusText, text);
   return text ? parseBigIntJSON(text) : text;
+}
+
+export type ToolMetadataType = "openapi" | "function";
+
+export interface CreateToolOptions {
+  metadataType: ToolMetadataType;
+  /** Required for `function`. */
+  function?: FunctionDefinition;
+  /**
+   * Required for `openapi`: the specification as a **parsed document**, not as
+   * text. This endpoint unmarshals `data` straight into an OpenAPI type, so a
+   * string is a 400 here — while `/operator/register` takes the same field as
+   * a string. Verified against a live deploy, in both directions.
+   */
+  data?: unknown;
+  useRule?: string;
+}
+
+function toolBody(opts: CreateToolOptions): Record<string, unknown> {
+  return {
+    metadata_type: opts.metadataType,
+    ...(opts.function ? { function_input: functionInputBody(opts.function) } : {}),
+    ...(opts.data !== undefined ? { data: opts.data } : {}),
+    ...(opts.useRule ? { use_rule: opts.useRule } : {}),
+  };
+}
+
+/**
+ * Create tools in a box from JSON — the only way to add a `function` tool, and
+ * the same endpoint `uploadTool` posts a spec file to. One OpenAPI document
+ * makes as many tools as it has operations, so the answer is a batch result:
+ * `failure_count` can be non-zero on an HTTP 200.
+ */
+export function createTool(
+  ctx: RequestContext,
+  boxId: string,
+  opts: CreateToolOptions,
+): Promise<unknown> {
+  return request(ctx, `${PATH}/${encodeURIComponent(boxId)}/tool`, {
+    method: "POST",
+    body: toolBody(opts),
+  });
+}
+
+/** One tool in full: metadata, global parameters, usage rule. */
+export function getTool(ctx: RequestContext, boxId: string, toolId: string): Promise<unknown> {
+  return request(ctx, `${PATH}/${encodeURIComponent(boxId)}/tool/${encodeURIComponent(toolId)}`);
+}
+
+export interface UpdateToolOptions extends CreateToolOptions {
+  /** Required by the service even when unchanged — this replaces, not patches. */
+  name: string;
+  description: string;
+}
+
+/**
+ * Replace a tool's definition. POST, not PUT, and the id survives: a new
+ * metadata version is generated behind the same `tool_id`, so nothing that
+ * points at the tool has to be rebound and an enabled tool stays enabled.
+ */
+export function updateTool(
+  ctx: RequestContext,
+  boxId: string,
+  toolId: string,
+  opts: UpdateToolOptions,
+): Promise<unknown> {
+  return request(ctx, `${PATH}/${encodeURIComponent(boxId)}/tool/${encodeURIComponent(toolId)}`, {
+    method: "POST",
+    body: { name: opts.name, description: opts.description, ...toolBody(opts) },
+  });
+}
+
+/** Delete tools from a box. */
+export function deleteTools(
+  ctx: RequestContext,
+  boxId: string,
+  toolIds: string[],
+): Promise<unknown> {
+  return request(ctx, `${PATH}/${encodeURIComponent(boxId)}/tools/batch-delete`, {
+    method: "POST",
+    body: { tool_ids: toolIds },
+  });
 }
 
 export interface ListToolboxesOptions {

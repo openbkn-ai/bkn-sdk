@@ -78,3 +78,29 @@ describe("non-JSON responses", () => {
     await expect(request(ctx, "/api/vega-backend/v1/resources/r-1")).resolves.toBeUndefined();
   });
 });
+
+describe("gateway error pages", () => {
+  it("does not call a timed-out backend missing", async () => {
+    respond("<html><head><title>504 Gateway Time-out</title></head></html>", {
+      status: 504,
+      headers: { "content-type": "text/html" },
+    });
+    const err = await request(ctx, "/api/agent-operator-integration/v1/function/execute", {
+      body: {},
+    }).catch((e) => e);
+    // A 504 means the service is routed and slow — a sandbox run that blocks on
+    // an unreachable address produces one. Telling the caller their backend is
+    // absent sends them to debug the wrong thing.
+    expect(formatError(err)).toMatch(/gateway timed out/i);
+    expect(formatError(err)).not.toMatch(/not deployed/i);
+  });
+
+  it("still says missing when the gateway says the route is gone", async () => {
+    respond("<html><body>404 Not Found</body></html>", {
+      status: 404,
+      headers: { "content-type": "text/html" },
+    });
+    const err = await request(ctx, "/api/x/v1/thing").catch((e) => e);
+    expect(formatError(err)).toMatch(/not deployed or not routed/i);
+  });
+});

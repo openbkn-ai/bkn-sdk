@@ -3,12 +3,14 @@
 
 /** `openbkn toolbox …` and `openbkn tool …` — agent toolboxes + tools. */
 import { Command } from "commander";
+import yaml from "js-yaml";
 import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, outputOptions } from "./_shared.js";
+import { type CodeFlags, definitionFlags, functionDefinitionFrom, readCode } from "./function.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 
@@ -107,13 +109,20 @@ export function toolboxCommand(): Command {
 
   guide(
     cmd,
-    `ORDER OF WORK
+    `TWO KINDS OF BOX
+  --type openapi   its tools proxy to --service-url; they come from a spec
+  --type function  its tools are platform functions, no service URL to give
+
+  ORDER OF WORK
   toolbox create --name "<n>"        an empty box, in draft
-  tool upload <openapi> --toolbox    each tool comes from an OpenAPI definition
+  tool create ./add.py --toolbox     a function tool, or --type openapi for a spec
   tool enable <tool-ids...>          a tool is off until enabled
-  toolbox publish <box-id>           the box becomes callable by agents
-  tool execute <tool-id>             call a published, enabled tool
-  tool debug <tool-id>               call one that is neither, while building it
+  toolbox publish <box-id>           the box becomes visible in the market
+  tool execute <tool-id>             call an enabled tool
+  tool debug <tool-id>               call one that is not, while building it
+
+  Publishing the box is about the market, not about calling: an enabled tool in
+  an unpublished box executes. \`tool enable\` is the gate.
 
   export / import move a whole box between deploys as an .adp file.`,
   );
@@ -123,7 +132,7 @@ export function toolboxCommand(): Command {
 
 export function toolCommand(): Command {
   const cmd = new Command("tool").description(
-    "Tools in a box: upload an OpenAPI spec, enable, call",
+    "Tools in a box: add one from code or a spec, enable it, call it",
   );
 
   cmd
@@ -195,16 +204,16 @@ export function toolCommand(): Command {
     timeout: opts.timeout ? Number(opts.timeout) : undefined,
   });
 
+  invokeOpts(cmd.command("execute <tool-id>").description("Invoke an enabled tool")).action(
+    async (toolId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).toolboxes.execute(opts.toolbox, toolId, buildEnvelope(opts)),
+        outputOptions(cmd),
+      );
+    },
+  );
   invokeOpts(
-    cmd.command("execute <tool-id>").description("Invoke a published+enabled tool"),
-  ).action(async (toolId: string, opts, cmd: Command) => {
-    printJson(
-      await clientFrom(cmd).toolboxes.execute(opts.toolbox, toolId, buildEnvelope(opts)),
-      outputOptions(cmd),
-    );
-  });
-  invokeOpts(
-    cmd.command("debug <tool-id>").description("Invoke a tool (draft/disabled too)"),
+    cmd.command("debug <tool-id>").description("Invoke a tool that is not enabled yet"),
   ).action(async (toolId: string, opts, cmd: Command) => {
     printJson(
       await clientFrom(cmd).toolboxes.debug(opts.toolbox, toolId, buildEnvelope(opts)),
@@ -212,9 +221,98 @@ export function toolCommand(): Command {
     );
   });
 
+  interface ToolFlags extends CodeFlags {
+    toolbox: string;
+    useRule?: string;
+  }
+
+  /** What goes into a tool, from a code file or a spec file plus the shared flags. */
+  const toolFrom = (file: string, opts: ToolFlags) => {
+    if (opts.type === "openapi") {
+      // Parsed, not raw: this endpoint wants the document itself. `js-yaml`
+      // reads JSON too, so one call covers both spellings of a spec.
+      let data: unknown;
+      try {
+        data = yaml.load(readCode(file));
+      } catch (err) {
+        throw new InputError(
+          `${file} is not valid JSON or YAML: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+      return { metadataType: "openapi" as const, data, useRule: opts.useRule };
+    }
+    if (opts.type !== "function") throw new InputError("--type must be function or openapi");
+    return {
+      metadataType: "function" as const,
+      function: functionDefinitionFrom(file, opts),
+      useRule: opts.useRule,
+    };
+  };
+
+  definitionFlags(
+    cmd
+      .command("create <file>")
+      .description(
+        "Create a tool from code (or a spec) — the only way to add a function tool to a box",
+      )
+      .requiredOption("--toolbox <box-id>", "target toolbox id")
+      .option("--use-rule <s>", "usage rule carried onto the tool"),
+  ).action(async (file: string, opts: ToolFlags, cmd: Command) => {
+    const result = (await clientFrom(cmd).toolboxes.createTool(
+      opts.toolbox,
+      toolFrom(file, opts),
+    )) as { failure_count?: number };
+    printJson(result, outputOptions(cmd));
+    // One spec makes one tool per operation, so some can fail while the
+    // request succeeds. A caller should not have to read JSON to notice.
+    if (result?.failure_count) process.exitCode = 1;
+  });
+
+  cmd
+    .command("get <tool-id>")
+    .description("One tool in full: metadata, parameters, usage rule")
+    .requiredOption("--toolbox <box-id>", "toolbox id")
+    .action(async (toolId: string, opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).toolboxes.getTool(opts.toolbox, toolId), outputOptions(cmd));
+    });
+
+  definitionFlags(
+    cmd
+      .command("update <tool-id> <file>")
+      .description("Replace a tool's definition; the id survives and an enabled tool stays enabled")
+      .requiredOption("--toolbox <box-id>", "toolbox id")
+      .option("--use-rule <s>", "usage rule carried onto the tool"),
+  ).action(async (toolId: string, file: string, opts: ToolFlags, cmd: Command) => {
+    if (!opts.name || !opts.description) {
+      throw new InputError(
+        "--name and --description are required: update replaces the tool, it does not patch it",
+      );
+    }
+    printJson(
+      await clientFrom(cmd).toolboxes.updateTool(opts.toolbox, toolId, {
+        ...toolFrom(file, opts),
+        name: opts.name,
+        description: opts.description,
+      }),
+      outputOptions(cmd),
+    );
+  });
+
+  cmd
+    .command("delete <tool-ids...>")
+    .description("Delete tools from a toolbox")
+    .requiredOption("--toolbox <box-id>", "toolbox id")
+    .option("-y, --yes", "skip confirmation")
+    .action(async (toolIds: string[], opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).toolboxes.deleteTools(opts.toolbox, toolIds),
+        outputOptions(cmd),
+      );
+    });
+
   cmd
     .command("upload <file>")
-    .description("Upload a tool definition file (OpenAPI spec) into a toolbox")
+    .description("Add tools from an OpenAPI file — `tool create` is the same endpoint, as JSON")
     .requiredOption("--toolbox <id>", "target toolbox id")
     .option("--metadata-type <t>", "metadata type", "openapi")
     .action(async (file: string, opts, cmd: Command) => {
@@ -225,9 +323,9 @@ export function toolCommand(): Command {
     });
 
   groupChildren(cmd, {
-    READ: ["list"],
+    READ: ["list", "get"],
     RUN: ["execute", "debug"],
-    WRITE: ["enable", "disable", "upload"],
+    WRITE: ["create", "update", "delete", "enable", "disable", "upload"],
   });
 
   return group(cmd, "TOOLS & SKILLS");

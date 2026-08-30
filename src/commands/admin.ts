@@ -13,6 +13,7 @@ import { resolveContext } from "../config/resolve.js";
 import { activePlatform, setActivePlatform } from "../config/store.js";
 import { group, groupChildren } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
+import { trimTrailingSlashes } from "../utils/base-url.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { renderOrgTree } from "../utils/org-tree.js";
@@ -614,7 +615,7 @@ export function adminCommand(): Command {
       if (key !== "baseUrl") {
         throw new Error(`Unknown config key: ${key} (only baseUrl supported)`);
       }
-      setActivePlatform(value.replace(/\/+$/, ""));
+      setActivePlatform(trimTrailingSlashes(value));
       printJson({ ok: true, baseUrl: value }, outputOptions(cmd));
     });
   admin

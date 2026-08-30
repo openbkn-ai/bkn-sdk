@@ -11,6 +11,7 @@ import { parseBigIntJSON, stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
+import { sandboxBudgetMs } from "./sandbox-budget.js";
 import { tlsFetch } from "./tls.js";
 
 const BASE = "/api/agent-operator-integration/v1";
@@ -131,31 +132,11 @@ export function executeSkill(
     // caller never learns the exit code. With no stated limit the sandbox
     // applies its own — 300s by default, 3600s at most — so the budget has to
     // cover that rather than a number of ours.
-    timeoutMs: executeBudgetMs(opts.timeout),
+    timeoutMs: sandboxBudgetMs(opts.timeout),
     // The abort deadline alone tops out at undici's 300s header deadline,
     // because `execute-sync` blocks and sends no headers until the run is over.
-    headersTimeoutMs: executeBudgetMs(opts.timeout),
+    headersTimeoutMs: sandboxBudgetMs(opts.timeout),
   }) as Promise<SkillExecutionResult>;
-}
-
-/**
- * The sandbox's own ceiling, used as the client's abort budget when the caller
- * names no limit.
- *
- * Every hop passes `timeout` through untouched — `ExecuteSkill` to
- * `ExecuteShell` to the sandbox control plane's `execute-sync`, `omitempty`
- * throughout — so with the field absent the limit is the sandbox's: 300s by
- * default, 3600s as the documented maximum (`infra/sandbox/CLAUDE.md`). Budget
- * against the maximum, because a deploy may raise the default and a client that
- * gave up first would report an abort where an exit code was coming.
- *
- * Only ever a local budget: it is never sent, and it never shortens a run.
- */
-export const SANDBOX_MAX_TIMEOUT_SEC = 3600;
-
-/** Client-side budget for one run: the sandbox's limit, plus room for the round trip. */
-function executeBudgetMs(timeoutSec: number | undefined): number {
-  return (timeoutSec ?? SANDBOX_MAX_TIMEOUT_SEC) * 1000 + 15_000;
 }
 
 /** Resolve skill ids to names in one call. Unknown ids are skipped by the backend. */

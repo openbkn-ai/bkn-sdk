@@ -80,6 +80,14 @@ export { kn } from "./resources/knowledge-networks.js";
 export { models } from "./resources/models.js";
 export { resources } from "./resources/resources.js";
 export { skills } from "./resources/skills.js";
+export { functions } from "./resources/functions.js";
+export type {
+  DependencyInfo,
+  ExecuteFunctionOptions,
+  FunctionDefinition,
+  FunctionExecuteResult,
+  ParameterDef,
+} from "./api/functions.js";
 export { toolboxes } from "./resources/toolboxes.js";
 export { trace } from "./resources/trace.js";
 export { vega } from "./resources/vega.js";
