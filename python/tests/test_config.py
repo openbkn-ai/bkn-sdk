@@ -26,7 +26,6 @@ def test_env_alone_resolves(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert ctx.base_url == PLATFORM  # trailing slash stripped
     assert ctx.token == "env-token"
-    assert ctx.business_domain == "bd_public"
     assert ctx.insecure is False
 
 
@@ -35,14 +34,12 @@ def test_store_is_the_last_resort(isolated_config: Path) -> None:
         isolated_config,
         PLATFORM,
         token={"accessToken": "stored-token", "tlsInsecure": True},
-        config={"businessDomain": "bd_ops"},
     )
 
     ctx = resolve_context()
 
     assert (ctx.base_url, ctx.token) == (PLATFORM, "stored-token")
     assert ctx.insecure is True
-    assert ctx.business_domain == "bd_ops"
 
 
 def test_env_token_wins_over_the_store_while_base_url_still_comes_from_it(
@@ -77,11 +74,11 @@ def test_configure_with_no_arguments_clears_the_process_default(
 
 
 def test_session_beats_configure_and_inherits_what_it_omits() -> None:
-    configure(base_url=PLATFORM, token="process-token", business_domain="bd_ops")
+    configure(base_url=PLATFORM, token="process-token", insecure=True)
 
     with session(token="scoped-token") as ctx:
         assert (ctx.base_url, ctx.token) == (PLATFORM, "scoped-token")
-        assert ctx.business_domain == "bd_ops"
+        assert ctx.insecure is True
 
     assert resolve_context().token == "process-token"
 
@@ -158,33 +155,6 @@ def test_user_selects_a_saved_identity_by_username(isolated_config: Path) -> Non
     assert resolve_context().token == "first"
 
 
-def test_the_business_domain_follows_the_user_whose_token_is_used(
-    isolated_config: Path,
-) -> None:
-    """Reading one user's token beside another's config would send the pair out
-    together — the wrong `x-business-domain` on a request the token authorises."""
-    write_store(
-        isolated_config,
-        PLATFORM,
-        user_id="u-1",
-        token={"accessToken": "first"},
-        config={"businessDomain": "active-domain"},
-    )
-    write_store(
-        isolated_config,
-        PLATFORM,
-        user_id="u-2",
-        token={"accessToken": "second", "username": "ops@example.com"},
-        config={"businessDomain": "other-domain"},
-        active=False,
-    )
-
-    with session(user="ops@example.com") as ctx:
-        assert (ctx.token, ctx.business_domain) == ("second", "other-domain")
-
-    assert resolve_context().business_domain == "active-domain"
-
-
 def test_unknown_user_lists_what_is_saved_instead(isolated_config: Path) -> None:
     write_store(isolated_config, PLATFORM, user_id="u-1")
 
@@ -249,17 +219,6 @@ def test_a_stored_tls_opt_out_can_be_overridden_explicitly(isolated_config: Path
         assert ctx.insecure is False
 
     assert resolve_context().insecure is True
-
-
-def test_business_domain_prefers_the_scope_over_the_stored_platform_config(
-    isolated_config: Path,
-) -> None:
-    write_store(isolated_config, PLATFORM, config={"businessDomain": "bd_ops"})
-
-    with session(business_domain="bd_finance") as ctx:
-        assert ctx.business_domain == "bd_finance"
-
-    assert resolve_context().business_domain == "bd_ops"
 
 
 def test_the_timeout_has_a_default_and_a_scope_override(monkeypatch: pytest.MonkeyPatch) -> None:

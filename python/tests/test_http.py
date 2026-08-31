@@ -73,11 +73,16 @@ def test_a_body_implies_post_and_sets_content_type(record: list[httpx.Request]) 
     assert json.loads(record[0].read()) == {"a": 1}
 
 
-def test_auth_and_business_domain_headers(record: list[httpx.Request]) -> None:
-    http_module.request(ctx(business_domain="bd_ops"), "/api/thing")
+def test_the_token_rides_in_authorization_and_nothing_else_is_added(
+    record: list[httpx.Request],
+) -> None:
+    """`x-business-domain` was removed platform-side (bkn-sdk#78); sending a
+    stale one is worse than sending none — a wrong domain filters a read to
+    zero rows and reports success."""
+    http_module.request(ctx(), "/api/thing")
 
     assert record[0].headers["authorization"] == "Bearer t-1"
-    assert record[0].headers["x-business-domain"] == "bd_ops"
+    assert "x-business-domain" not in record[0].headers
 
 
 def test_method_override_rides_a_header(record: list[httpx.Request]) -> None:

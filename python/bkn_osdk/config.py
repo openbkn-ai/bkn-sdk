@@ -37,7 +37,6 @@ from typing import Any
 from .errors import InputError
 
 __all__ = [
-    "DEFAULT_BUSINESS_DOMAIN",
     "DEFAULT_CLIENT_ID",
     "DEFAULT_TIMEOUT",
     "Context",
@@ -48,7 +47,6 @@ __all__ = [
     "write_refreshed_token",
 ]
 
-DEFAULT_BUSINESS_DOMAIN = "bd_public"
 DEFAULT_TIMEOUT = 30.0
 #: The public OAuth client the CLI logs in as; the refresh grant needs the same one.
 DEFAULT_CLIENT_ID = "openbkn-sdk"
@@ -77,7 +75,6 @@ class Context:
 
     base_url: str
     token: str
-    business_domain: str = DEFAULT_BUSINESS_DOMAIN
     insecure: bool = False
     timeout: float = DEFAULT_TIMEOUT
     #: Set when the token came from the store and can be refreshed in place.
@@ -98,7 +95,6 @@ class _Overrides:
 
     base_url: str | None = None
     token: str | None = None
-    business_domain: str | None = None
     insecure: bool | None = None
     timeout: float | None = None
     user: str | None = None
@@ -122,7 +118,6 @@ def configure(
     *,
     base_url: str | None = None,
     token: str | None = None,
-    business_domain: str | None = None,
     insecure: bool | None = None,
     timeout: float | None = None,
     user: str | None = None,
@@ -141,7 +136,6 @@ def configure(
     _process_default = _Overrides(
         base_url=base_url,
         token=token,
-        business_domain=business_domain,
         insecure=insecure,
         timeout=timeout,
         user=user,
@@ -157,7 +151,6 @@ def session(
     *,
     base_url: str | None = None,
     token: str | None = None,
-    business_domain: str | None = None,
     insecure: bool | None = None,
     timeout: float | None = None,
     user: str | None = None,
@@ -179,7 +172,6 @@ def session(
         overrides=_Overrides(
             base_url=base_url,
             token=token,
-            business_domain=business_domain,
             insecure=insecure,
             timeout=timeout,
             user=user,
@@ -297,20 +289,12 @@ def resolve_context() -> Context:
         # repeat it. The opt-out is scoped to this platform's own requests.
         insecure = bool(stored.get("tlsInsecure", False))
 
-    # The same user the token came from, not whoever the CLI last logged in as:
-    # `session(user=…)` would otherwise read one user's token and another's
-    # business domain, and send the pair out together.
-    business_domain = pick("business_domain") or _read_platform_config(base_url, user_id).get(
-        "businessDomain"
-    )
-
     timeout = pick("timeout")
 
     return Context(
         base_url=base_url,
         token=token,
         credential=credential,
-        business_domain=business_domain or DEFAULT_BUSINESS_DOMAIN,
         insecure=bool(insecure),
         timeout=float(timeout) if timeout is not None else DEFAULT_TIMEOUT,
         check_schema=bool(pick("check_schema")),
