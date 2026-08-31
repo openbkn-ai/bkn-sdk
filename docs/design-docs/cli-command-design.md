@@ -67,7 +67,7 @@ RAW API              call (curl)
 
 Then, before FLAGS: FIRST STEPS · COMMON TASKS · GOOD TO KNOW · NOT HERE YET
 
-FLAGS        --base-url · --token · --user · --json/--compact · -bd · --insecure
+FLAGS        --base-url · --token · --user · --json/--compact · --insecure
 ENVIRONMENT  BKN_BASE_URL · BKN_TOKEN · BKN_USER · BKN_PROFILE · BKN_CONFIG_DIR
 EXAMPLES / LEARN MORE
 ```
