@@ -49,12 +49,11 @@ npm install -g @openbkn/bkn-sdk      # 提供 `openbkn` 命令
 
 ```bash
 openbkn [--base-url <url>] [--token <tok>] [--user <id|name>] \
-        [--json | --compact] [-bd|--biz-domain <d>] [-k|--insecure] <group> <sub> [options]
+        [--json | --compact] [-k|--insecure] <group> <sub> [options]
 ```
 
 - 默认输出为**人类可读表格**；`--json`（或 `--compact`）输出可被脚本解析的精确 JSON。
 - `-k/--insecure` 关闭 TLS 校验（自签名平台）。`auth login -k` 会按平台记住，之后该平台的命令无需再带；免校验只作用于该平台的请求，不碰进程全局，无需 `NODE_TLS_REJECT_UNAUTHORIZED`。
-- `-bd <domain>` 覆盖 `x-business-domain`（默认 `bd_public`）。
 - **以实时 `--help` 为准。** `openbkn --help` 看分组命令地图，`openbkn <group> <sub> --help` 看确切参数。**不要猜参数**。
 
 ## 认证（凭据按平台/用户分层存于 `~/.bkn/`，可用 `BKN_CONFIG_DIR` 覆盖）
@@ -150,7 +149,7 @@ BuildTask 产出；`trace` 的 business-provenance 摘要（requests/interaction
 ## 注意事项
 
 - **不要预检**：直接执行目标命令，认证由 CLI 处理(token 模式不自动续期；`~/.bkn/` 凭据可用 refresh)。
-- **不要猜 business domain / 参数**：用 `--help`；列表为空时确认 `-bd`。
+- **不要猜参数**：使用实时 `--help`；列表为空时先确认当前账号权限和目标资源是否存在。
 - **不要猜请求体字段**：带 `--body` / `--body-file` 的命令，其 `--body` 说明里写着该去
   https://openbkn-ai.github.io/bkn-foundry/ 的哪个模块查形状（改定义看 bkn-backend，
   取数/执行看 ontology-query，skill/tool 看 execution-factory，受管交互看

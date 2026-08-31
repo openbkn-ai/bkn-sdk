@@ -4,7 +4,7 @@
 /**
  * Local config + token store under `~/.bkn/` (override: `BKN_CONFIG_DIR`).
  *
- * Multi-user by design (platforms are multi-tenant), aligned with the
+ * Multi-user by design, aligned with the
  * legacy layout — reimplemented slim, no legacy-migration paths:
  *
  *   <root>/state.json                      (or profiles/<BKN_PROFILE>/state.json)
@@ -50,7 +50,6 @@ export interface TokenConfig {
 
 /** Per-platform, per-user non-auth settings. */
 export interface PlatformConfig {
-  businessDomain?: string;
   /**
    * The last conversation the managed lifecycle opened for this identity, so
    * consecutive commands file their evidence under one thread instead of a new
@@ -202,7 +201,14 @@ export function readPlatformConfig(
   userId = activeUserId(baseUrl),
 ): PlatformConfig {
   if (!userId) return {};
-  return readJson<PlatformConfig>(join(userDir(baseUrl, userId), "config.json")) ?? {};
+  const stored = readJson<Record<string, unknown>>(join(userDir(baseUrl, userId), "config.json"));
+  if (!stored) return {};
+  return {
+    ...(typeof stored.conversationId === "string" ? { conversationId: stored.conversationId } : {}),
+    ...(typeof stored.conversationOpenedAt === "string"
+      ? { conversationOpenedAt: stored.conversationOpenedAt }
+      : {}),
+  };
 }
 
 export function writePlatformConfig(baseUrl: string, config: PlatformConfig): void {

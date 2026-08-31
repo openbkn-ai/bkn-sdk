@@ -23,7 +23,6 @@ import type { RequestContext } from "../../src/types.js";
 const ctx: RequestContext = {
   baseUrl: "https://demo.example.com",
   token: "t",
-  businessDomain: "bd_public",
   insecure: false,
 };
 
@@ -142,7 +141,6 @@ describe("emitEvidenceEvents", () => {
         trace_id: "8c0d0000000000000000000000000001",
         traceparent: "00-8c0d0000000000000000000000000001-1f12000000000001-01",
         "bkn.request.id": "req_phase2_001",
-        business_domain: "bd_demo",
         "bkn.account.id": "acct_demo",
         "bkn.account.type": "app",
       },
@@ -194,7 +192,6 @@ describe("BKN Trace 2.2 business runs and artifacts", () => {
       observed_at: "2026-07-27T09:00:00Z",
       content_hash: `sha256:${"1".repeat(64)}`,
       content: "test",
-      business_domain: "bd_public",
       "bkn.account.id": "account_1",
       "bkn.account.type": "app",
     };
@@ -224,7 +221,6 @@ describe("BKN Trace 2.2 business runs and artifacts", () => {
       observed_at: "2026-07-27T09:00:00Z",
       content_hash: `sha256:${"1".repeat(64)}`,
       content: "客户 A 的风险为什么上升？",
-      business_domain: "customer-risk",
       "bkn.account.id": "account_1",
       "bkn.account.type": "app",
     };

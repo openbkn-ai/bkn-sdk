@@ -5,17 +5,12 @@ import type { RequestContext } from "../../src/types.js";
 const ctx: RequestContext = {
   baseUrl: "https://demo.example.com",
   token: "SECRET",
-  businessDomain: "bd_public",
   insecure: false,
 };
 
 describe("buildHeaders", () => {
   it("sends the token as a Bearer authorization", () => {
     expect(buildHeaders(ctx).authorization).toBe("Bearer SECRET");
-  });
-
-  it("injects the business domain", () => {
-    expect(buildHeaders(ctx)["x-business-domain"]).toBe("bd_public");
   });
 
   it("merges extra headers", () => {

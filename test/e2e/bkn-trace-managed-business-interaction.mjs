@@ -3,10 +3,9 @@
 import { createClient } from "../../dist/index.js";
 
 const baseUrl = process.env.BKN_BASE_URL ?? "http://localhost";
-const businessDomain = process.env.BKN_BUSINESS_DOMAIN ?? "bd_public";
 const knId = process.env.BKN_KN_ID ?? "supplychain_hd0202";
 const agentName = process.env.BKN_AGENT_NAME ?? "供应链分析助手";
-const client = createClient({ baseUrl, businessDomain });
+const client = createClient({ baseUrl });
 const hostConversationKey = `sdk-e2e:${Date.now()}`;
 
 let conversationId;
@@ -192,7 +191,7 @@ function summarizeReceipts(receipts) {
 }
 
 function operationClient() {
-  return createClient({ baseUrl, businessDomain });
+  return createClient({ baseUrl });
 }
 
 function managedOperation(interactionId, invocationSuffix, toolName, args) {

@@ -2,17 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 import { createTraceContext } from "../trace-context.js";
-import { type ClientOptions, DEFAULT_BUSINESS_DOMAIN, type RequestContext } from "../types.js";
+import type { ClientOptions, RequestContext } from "../types.js";
 import { trimTrailingSlashes } from "../utils/base-url.js";
 import { InputError } from "../utils/errors.js";
-import {
-  activePlatform,
-  findUserId,
-  readPlatformConfig,
-  readToken,
-  usersOfPlatform,
-  writeToken,
-} from "./store.js";
+import { activePlatform, findUserId, readToken, usersOfPlatform, writeToken } from "./store.js";
 
 /**
  * Resolve a full RequestContext from explicit options → env → store.
@@ -82,10 +75,6 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
   return {
     baseUrl: normalized,
     token,
-    businessDomain:
-      opts.businessDomain ??
-      readPlatformConfig(normalized).businessDomain ??
-      DEFAULT_BUSINESS_DOMAIN,
     insecure,
     ...((opts.evidenceIngestToken ?? process.env.BKN_TRACE_EVIDENCE_INGEST_TOKEN)
       ? {

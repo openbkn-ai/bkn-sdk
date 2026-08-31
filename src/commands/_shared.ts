@@ -91,7 +91,6 @@ export function clientFrom(cmd: Command): BknClient {
     baseUrl: o.baseUrl,
     token: o.token,
     user: o.user,
-    businessDomain: o.bizDomain,
     insecure: o.insecure,
     ...(trace ? { trace } : {}),
     ...(remembered.source === "stored" && remembered.id

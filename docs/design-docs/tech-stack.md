@@ -9,7 +9,7 @@ tools; this records what the rewrite picks and why. Update here if a choice chan
 | ------- | ------ | --- |
 | Language | TypeScript (ESM), Node ≥ 22.19.0 | The floor is what the code needs, not the newest runtime that meets it: lossless BIGINT parsing uses native JSON source-text access, and `undici` wants Node ≥22.19, so 22.19.0 is where both are satisfied. A higher floor was tried and reverted — npm resolves past a version whose `engines` the caller cannot meet, so declaring 24.19.0 did not prompt anyone to upgrade, it silently served them the previous release instead. Security-lifecycle preferences belong in guidance, not in a field that decides installability. |
 | CLI framework | **commander** | Mature, 0 runtime deps, clean command tree, biggest ecosystem. Needs a custom grouped-help renderer (see below) |
-| Interactive prompts | **@clack/prompts** | Pretty modern prompts for login / business-domain selection. Replaces `ink`/`inquirer` — lighter, no TUI |
+| Interactive prompts | **@clack/prompts** | Pretty modern prompts for login and confirmations. Replaces `ink`/`inquirer` — lighter, no TUI |
 | Pretty output | **chalk** + **cli-table3** | Color + aligned tables for human output |
 | Validation | **zod** | Parse at IO boundaries (argv, HTTP responses); already used by the legacy SDK |
 | HTTP | native `fetch` | No axios/node-fetch dep; available throughout the supported Node ≥22.19 range |

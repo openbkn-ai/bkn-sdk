@@ -9,8 +9,6 @@ export interface ClientOptions {
   token?: string;
   /** Specific user credentials (transient); maps to legacy `--user`. */
   user?: string;
-  /** Business domain header; defaults to `bd_public`. */
-  businessDomain?: string;
   /** Skip TLS verification (dev / self-signed only). */
   insecure?: boolean;
   /** Dedicated producer credential, sent only to BKN Trace evidence write endpoints. */
@@ -64,7 +62,6 @@ export interface RefreshableTokens {
 export interface RequestContext {
   baseUrl: string;
   token: string;
-  businessDomain: string;
   insecure: boolean;
   /** Dedicated producer credential; never sent to read or non-Trace endpoints. */
   evidenceIngestToken?: string;
@@ -114,8 +111,6 @@ export interface TraceContext {
   observedAt?: string;
   baggage?: Record<string, string>;
 }
-
-export const DEFAULT_BUSINESS_DOMAIN = "bd_public";
 
 /** Default list/query limits — see AGENTS.md conventions. */
 export const DEFAULT_LIST_LIMIT = 30;

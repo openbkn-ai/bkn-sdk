@@ -47,7 +47,7 @@ openbkn admin role list
 # Raw passthrough to any endpoint
 openbkn call /api/bkn-backend/v1/knowledge-networks
 
-# Global flags: --base-url, --token, --user, --json/--compact, -bd/--biz-domain, -k/--insecure,
+# Global flags: --base-url, --token, --user, --json/--compact, -k/--insecure,
 #               --conversation-id/--interaction-id (BKN Trace correlation; also BKN_CONVERSATION_ID/BKN_INTERACTION_ID)
 #               --new-conversation (ignore the remembered conversation for this command)
 openbkn --help        # grouped command map

@@ -40,7 +40,6 @@ export function buildProgram(): Command {
     .option("--json", "machine-readable JSON output")
     .option("--compact", "single-line JSON output")
     .option("--full", "human view: show all columns (default trims to the key ones)")
-    .option("--biz-domain <s>", "business domain (alias: -bd)")
     .option("--conversation-id <id>", "BKN Trace conversation id (env: BKN_CONVERSATION_ID)")
     .option("--interaction-id <id>", "BKN Trace interaction id (env: BKN_INTERACTION_ID)")
     .option(
@@ -105,7 +104,7 @@ export function buildProgram(): Command {
     --full widens it). Most list commands answer {entries, total_count}; anything else says
     so in its own description. Ids come from list/search output — opaque, never guess one,
     and the key holding one is not always \`id\` (\`skill_id\`, \`conversation_id\`, \`ot_id\` …).
-    Multi-tenant deploys: --biz-domain picks the domain, --user switches saved logins.
+    Saved logins are selected with --user; access follows the account's platform grants.
     \`openbkn call\` reaches any endpoint a command does not cover, auth injected. Look the
     path up at https://openbkn-ai.github.io/bkn-foundry/ first — do not guess one.`,
   );

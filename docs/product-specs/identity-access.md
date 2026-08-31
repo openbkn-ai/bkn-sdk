@@ -19,7 +19,7 @@ Operator-side management merged from the legacy operator CLI: authentication, or
 
 ## SDK touchpoints
 
-- `resources/` identity surface over `api/business-domains.ts` and user/org/role/audit clients; OAuth in `auth/oauth.ts`; token + base-url resolution in `config/`.
+- `resources/` identity surface over user/org/role/audit clients; OAuth in `auth/oauth.ts`; token + base-url resolution in `config/`.
 
 ## Edge cases
 

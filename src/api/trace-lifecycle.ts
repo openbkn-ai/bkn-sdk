@@ -11,7 +11,6 @@ const FORBIDDEN_INPUT_FIELDS = new Set([
   "on_behalf_of",
   "onBehalfOf",
   "owner",
-  "tenant_id",
   "application_principal_id",
   "actor_subject",
   "actor_subject_type",
@@ -58,8 +57,6 @@ export interface LifecycleErrorEnvelope {
 }
 
 export interface LifecycleOwner {
-  tenant_id: string;
-  business_domain_id: string;
   application_principal_id: string;
   effective_subject_type: "user" | "service";
   effective_subject_id: string;
@@ -195,7 +192,6 @@ export interface ManagedOperation {
 export interface LifecycleBusinessRef {
   ref_type: string;
   ref_id: string;
-  business_domain_id: string;
   version: string;
   as_of?: string;
   display_hint?: string;

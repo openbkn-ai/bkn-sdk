@@ -9,7 +9,6 @@ import { credentialDeviceLogin, deviceLogin, isHeadless, openBrowser } from "../
 import { resolveContext } from "../config/resolve.js";
 import { group, groupChildren, guide } from "../help/grouped-help.js";
 import * as auth from "../resources/auth.js";
-import { DEFAULT_BUSINESS_DOMAIN } from "../types.js";
 import { trimTrailingSlashes } from "../utils/base-url.js";
 import { HttpError, InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
@@ -26,10 +25,9 @@ async function resolveAccount(
   const sub = decodeJwt(idToken ?? accessToken)?.sub;
   if (!sub) return undefined;
   try {
-    const u = (await getUserSafe(
-      { baseUrl, token: accessToken, businessDomain: DEFAULT_BUSINESS_DOMAIN, insecure },
-      sub,
-    )) as { account?: string };
+    const u = (await getUserSafe({ baseUrl, token: accessToken, insecure }, sub)) as {
+      account?: string;
+    };
     return u.account; // needs admin; ignored on 403 for non-admins
   } catch {
     return undefined;
@@ -191,7 +189,6 @@ export function registerAuthLeaves(cmd: Command): void {
             {
               baseUrl: me.baseUrl,
               token: auth.currentToken({ user: g.user }),
-              businessDomain: DEFAULT_BUSINESS_DOMAIN,
               insecure: Boolean(g.insecure),
             },
             me.sub,
@@ -302,7 +299,6 @@ export function registerAuthLeaves(cmd: Command): void {
         baseUrl: url ?? g.baseUrl,
         token: g.token,
         user: g.user,
-        businessDomain: g.bizDomain,
         insecure: g.insecure,
       });
       const account = opts.account ?? (await promptLine("Account: "));

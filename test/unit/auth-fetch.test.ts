@@ -6,7 +6,6 @@ function ctx(over: Partial<RequestContext> = {}): RequestContext {
   return {
     baseUrl: "https://demo.example.com",
     token: "OLD",
-    businessDomain: "bd_public",
     insecure: false,
     ...over,
   };

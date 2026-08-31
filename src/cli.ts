@@ -21,16 +21,12 @@ process.stdout.on("error", (err: NodeJS.ErrnoException) => {
 
 const program = buildProgram();
 
-// Legacy `-bd` is a 2-char short flag commander can't declare; rewrite it to
-// the canonical `--biz-domain` before parsing (legacy compatibility).
-const argv = process.argv.map((a) => (a === "-bd" ? "--biz-domain" : a));
-
 // The flag has to be read before commander parses, because the switch must be
 // on by the time a resource builds its first request.
-if (argv.includes("--dry-run")) enableDryRun();
+if (process.argv.includes("--dry-run")) enableDryRun();
 
 try {
-  await program.parseAsync(argv);
+  await program.parseAsync(process.argv);
 } catch (err) {
   if (err instanceof DryRunSignal) {
     process.stdout.write(`${JSON.stringify(err.request, null, 2)}\n`);

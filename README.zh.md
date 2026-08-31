@@ -41,7 +41,7 @@ openbkn admin role list
 # 任意端点的原始透传
 openbkn call /api/bkn-backend/v1/knowledge-networks
 
-# 全局参数：--base-url --token --user --json/--compact -bd/--biz-domain -k/--insecure
+# 全局参数：--base-url --token --user --json/--compact -k/--insecure
 #           --conversation-id/--interaction-id（BKN Trace 关联，等价 env：BKN_CONVERSATION_ID/BKN_INTERACTION_ID）
 #           --new-conversation（这条命令不沿用记住的 conversation）
 openbkn --help        # 分组命令树

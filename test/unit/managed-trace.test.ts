@@ -14,8 +14,6 @@ function conversation(id = "conversation-1"): ManagedConversation {
   return {
     conversation_id: id,
     owner: {
-      tenant_id: "tenant-1",
-      business_domain_id: "domain-1",
       application_principal_id: "app-1",
       effective_subject_type: "user",
       effective_subject_id: "user-1",

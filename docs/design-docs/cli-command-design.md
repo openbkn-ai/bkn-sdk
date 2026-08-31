@@ -10,7 +10,7 @@ a user/agent surface + an operator surface (nested under `admin`). Built on
 openbkn
   # auth & config
   auth      login | logout | status | whoami | list | use | switch | users | token | change-password | export | delete
-  config    show | set | set-bd | list-bd
+  config    show | set
   call      (curl)  curl-style passthrough with auto-injected auth headers
 
   # knowledge networks
@@ -67,7 +67,7 @@ RAW API              call (curl)
 
 Then, before FLAGS: FIRST STEPS · COMMON TASKS · GOOD TO KNOW · NOT HERE YET
 
-FLAGS        --base-url · --token · --user · --json/--compact · -bd · --insecure
+FLAGS        --base-url · --token · --user · --json/--compact · --insecure
 ENVIRONMENT  BKN_BASE_URL · BKN_TOKEN · BKN_USER · BKN_PROFILE · BKN_CONFIG_DIR
 EXAMPLES / LEARN MORE
 ```
@@ -106,7 +106,6 @@ naming the binary `openbkn` — distinct from its `bkn` subcommand — avoids an
 | `--token <v>` | Access token (read-only mode if set) | `BKN_TOKEN` |
 | `--user <id\|name>` | Use specific user credentials | `BKN_USER` |
 | `--json` / `--compact` | Machine-readable output | — |
-| `-bd, --biz-domain <s>` | Business domain | — |
 | `--insecure, -k` | Skip TLS verification (dev only) | — |
 
 ## Conventions

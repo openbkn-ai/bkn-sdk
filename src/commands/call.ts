@@ -39,7 +39,6 @@ export function callCommand(): Command {
         baseUrl: g.baseUrl,
         token: g.token,
         user: g.user,
-        businessDomain: g.bizDomain,
         insecure: g.insecure,
         ...(trace ? { trace } : {}),
       });
@@ -48,7 +47,6 @@ export function callCommand(): Command {
         header: opts.header,
         data: opts.data ?? opts.dataRaw,
         form: opts.form,
-        businessDomain: g.bizDomain,
         verbose: opts.verbose,
       });
 
@@ -78,8 +76,8 @@ export function callCommand(): Command {
 
 FINDING THE PATH
   Every service's API is documented at https://openbkn-ai.github.io/bkn-foundry/ —
-  read the path and request body there rather than guessing. Auth, business domain
-  and TLS flags are injected the same way as for any other command.`,
+  read the path and request body there rather than guessing. Authentication and
+  TLS flags are injected the same way as for any other command.`,
   );
   return group(cmd, "RAW API");
 }

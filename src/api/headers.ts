@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 import { serializeBaggage } from "../trace-context.js";
-/** Build request headers with auth + business domain injected. */
+/** Build request headers with authentication and Trace context. */
 import type { RequestContext } from "../types.js";
 
 export function buildHeaders(
@@ -16,7 +16,6 @@ export function buildHeaders(
   // rejects a request that carries one anyway.
   return {
     authorization: `Bearer ${ctx.token}`,
-    "x-business-domain": ctx.businessDomain,
     ...(ctx.trace
       ? {
           "bkn-request-id": ctx.trace.requestId,

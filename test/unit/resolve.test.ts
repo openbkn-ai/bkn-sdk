@@ -21,7 +21,6 @@ describe("resolveContext", () => {
     const ctx = resolveContext({ baseUrl: "https://opt.example.com", token: "opt-token" });
     expect(ctx.baseUrl).toBe("https://opt.example.com");
     expect(ctx.token).toBe("opt-token");
-    expect(ctx.businessDomain).toBe("bd_public");
   });
 
   it("falls back to env vars", () => {

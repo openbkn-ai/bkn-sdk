@@ -15,7 +15,6 @@ import { HttpError } from "../../src/utils/errors.js";
 const ctx: RequestContext = {
   baseUrl: "https://demo.example.com",
   token: "token",
-  businessDomain: "bd_supply_chain",
   insecure: false,
 };
 
@@ -119,7 +118,6 @@ describe("traceLifecycleApi conversations", () => {
 
     const headers = new Headers(ensure[1].headers);
     expect(headers.get("authorization")).toBe("Bearer token");
-    expect(headers.get("x-business-domain")).toBe("bd_supply_chain");
     expect(headers.get("content-type")).toBe("application/json");
   });
 });
@@ -301,7 +299,7 @@ describe("trace lifecycle contract boundaries", () => {
     const api = traceLifecycleApi(ctx);
     const businessInput = {
       owner: "采购负责人",
-      tenant_id: "supplier-tenant",
+      supplier_region: "east",
       generation: 3,
     };
 
@@ -328,7 +326,6 @@ describe("trace lifecycle contract boundaries", () => {
     "generation",
     "on_behalf_of",
     "onBehalfOf",
-    "tenant_id",
     "application_principal_id",
     "effective_subject_id",
     "delegation_id",
@@ -348,9 +345,9 @@ describe("trace lifecycle contract boundaries", () => {
     await expect(
       api.ensureConversation({
         external_conversation_key: "external-1",
-        metadata: { input: { tenant_id: "forbidden" } },
+        metadata: { input: { application_principal_id: "forbidden" } },
       } as never),
-    ).rejects.toThrow("tenant_id");
+    ).rejects.toThrow("application_principal_id");
     expect(calls(fetchMock)).toHaveLength(0);
   });
 

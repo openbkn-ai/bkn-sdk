@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clientFrom, conversationSource, traceOptionsFrom } from "../../src/commands/_shared.js";
 import { contextCommand } from "../../src/commands/context.js";
 import {
+  type PlatformConfig,
   readPlatformConfig,
   setActivePlatform,
   updatePlatformConfig,
@@ -71,7 +72,7 @@ describe("remembered conversation", () => {
       // user, so its thread is not theirs to join.
       { user: "someone-else" },
       // Identity here is the token, and an explicit one may belong to another
-      // tenant entirely while the store still points at the active user.
+      // account entirely while the store still points at the active user.
       { token: "someone-elses-token" },
     ]) {
       expect(conversationSource(o)).toEqual({ source: "none" });
@@ -90,19 +91,22 @@ describe("remembered conversation", () => {
 
 describe("platform config merge", () => {
   it("keeps the other fields when one is set", () => {
-    updatePlatformConfig(platform, { businessDomain: "bd_x" });
+    updatePlatformConfig(platform, { conversationOpenedAt: "2026-08-28T00:00:00Z" });
     updatePlatformConfig(platform, { conversationId: "conv-1" });
     expect(readPlatformConfig(platform)).toMatchObject({
-      businessDomain: "bd_x",
+      conversationOpenedAt: "2026-08-28T00:00:00Z",
       conversationId: "conv-1",
     });
   });
 
   it("removes a field set to undefined", () => {
-    updatePlatformConfig(platform, { businessDomain: "bd_x", conversationId: "conv-1" });
+    updatePlatformConfig(platform, {
+      conversationId: "conv-1",
+      conversationOpenedAt: "2026-08-28T00:00:00Z",
+    });
     updatePlatformConfig(platform, { conversationId: undefined });
     const after = readPlatformConfig(platform);
-    expect(after.businessDomain).toBe("bd_x");
+    expect(after.conversationOpenedAt).toBe("2026-08-28T00:00:00Z");
     expect(after.conversationId).toBeUndefined();
   });
 
@@ -110,8 +114,22 @@ describe("platform config merge", () => {
     updatePlatformConfig(platform, { conversationId: "conv-1" });
     // The wholesale writer is still available and still replaces everything —
     // this pins why callers changing one setting must not reach for it.
-    writePlatformConfig(platform, { businessDomain: "bd_x" });
+    writePlatformConfig(platform, { conversationOpenedAt: "2026-08-28T00:00:00Z" });
     expect(readPlatformConfig(platform).conversationId).toBeUndefined();
+  });
+
+  it("drops unknown persisted settings when reading and updating config", () => {
+    writePlatformConfig(platform, {
+      conversationId: "conv-1",
+      obsoleteScope: "scope-1",
+    } as PlatformConfig & { obsoleteScope: string });
+
+    expect(readPlatformConfig(platform)).toEqual({ conversationId: "conv-1" });
+    updatePlatformConfig(platform, { conversationOpenedAt: "2026-08-28T00:00:00Z" });
+    expect(readPlatformConfig(platform)).toEqual({
+      conversationId: "conv-1",
+      conversationOpenedAt: "2026-08-28T00:00:00Z",
+    });
   });
 });
 
