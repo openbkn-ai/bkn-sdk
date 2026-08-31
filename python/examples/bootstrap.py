@@ -8,9 +8,11 @@ other module — that is the point of generating it. A script or a notebook is
 the case where that ceremony costs more than it pays, so this writes the package
 into a cache directory the first time and imports it from there.
 
-Every example takes its network from `BKN_KN_ID` and its platform from the usual
-places (`BKN_BASE_URL`, or `openbkn auth login`), so they run against whichever
-deploy you are pointed at.
+Every example takes its network from `BKN_KN_ID`. Nothing here names a platform
+or a token: they resolve through the usual chain — a `session(...)` scope, then
+`configure(...)`, then `BKN_BASE_URL` / `BKN_TOKEN`, then the store
+`openbkn auth login` wrote, self-signed-certificate opt-out included. See
+`examples/credentials.py` for what each level answers.
 """
 
 from __future__ import annotations

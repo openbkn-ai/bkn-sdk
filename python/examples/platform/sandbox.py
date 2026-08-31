@@ -12,9 +12,12 @@ so the SDK running in there inherits the caller's turn with no argument passing
 and the reads land on one chain rather than two.
 
 Measured on both deploys: `BKN_TOKEN`, `BKN_CONVERSATION_ID`, `BKN_INTERACTION_ID`
-and `user_id` are present inside; `BKN_BASE_URL` is **not**, so the code names
-its platform. The image has `pip` and `httpx` but no `git`, which is why the
-install below uses the archive URL rather than `git+https://`.
+and `user_id` are present inside; `BKN_BASE_URL` is **not**, and there is no
+`~/.bkn` store in there either — so the code that runs inside is the one place
+that has to name its platform, which it does with `configure(base_url=…)`.
+Everything else it needs arrives in the environment. The image has `pip` and
+`httpx` but no `git`, which is why the install below uses the archive URL rather
+than `git+https://`.
 """
 
 from __future__ import annotations
