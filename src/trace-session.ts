@@ -410,9 +410,6 @@ function assertSessionOptions(options: TraceSessionOptions): void {
   ) {
     throw new Error("conversationId conflicts with trace bkn.conversation.id");
   }
-  if (!trace["bkn.tenant.id"]) {
-    throw new Error("trace requires bkn.tenant.id");
-  }
   if (!trace["bkn.account.id"] || !trace["bkn.account.type"]) {
     throw new Error("trace requires account id and type");
   }

@@ -40,7 +40,6 @@ export interface EvidenceTraceContext {
   traceparent: string;
   "bkn.request.id": string;
   "bkn.conversation.id"?: string;
-  "bkn.tenant.id"?: string;
   "bkn.account.id": string;
   "bkn.account.type": string;
 }
@@ -116,7 +115,6 @@ export interface EvidenceArtifact {
   content_hash: string;
   content?: unknown;
   snapshot_ref?: string;
-  "bkn.tenant.id"?: string;
   "bkn.account.id": string;
   "bkn.account.type": string;
   initiator?: string;

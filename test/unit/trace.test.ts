@@ -141,7 +141,6 @@ describe("emitEvidenceEvents", () => {
         trace_id: "8c0d0000000000000000000000000001",
         traceparent: "00-8c0d0000000000000000000000000001-1f12000000000001-01",
         "bkn.request.id": "req_phase2_001",
-        "bkn.tenant.id": "tenant_demo",
         "bkn.account.id": "acct_demo",
         "bkn.account.type": "app",
       },
@@ -193,7 +192,6 @@ describe("BKN Trace 2.2 business runs and artifacts", () => {
       observed_at: "2026-07-27T09:00:00Z",
       content_hash: `sha256:${"1".repeat(64)}`,
       content: "test",
-      "bkn.tenant.id": "tenant_demo",
       "bkn.account.id": "account_1",
       "bkn.account.type": "app",
     };
@@ -223,7 +221,6 @@ describe("BKN Trace 2.2 business runs and artifacts", () => {
       observed_at: "2026-07-27T09:00:00Z",
       content_hash: `sha256:${"1".repeat(64)}`,
       content: "客户 A 的风险为什么上升？",
-      "bkn.tenant.id": "tenant_demo",
       "bkn.account.id": "account_1",
       "bkn.account.type": "app",
     };

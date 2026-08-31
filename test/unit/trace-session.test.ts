@@ -36,7 +36,6 @@ function session(overrides: Partial<ConstructorParameters<typeof TraceSession>[0
         trace_id: "11111111111111111111111111111111",
         traceparent: "00-11111111111111111111111111111111-2222222222222222-01",
         "bkn.request.id": "req_session_001",
-        "bkn.tenant.id": "tenant_test",
         "bkn.account.id": "account_1",
         "bkn.account.type": "app",
       },

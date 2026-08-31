@@ -97,10 +97,10 @@ its `required_action`. Never invent IDs, retry the business operation blindly,
 or silently fall back to raw CLI, ontology-query, or Vega calls; those paths
 cannot produce a complete managed business conversation.
 
-The MCP connection itself must carry a trusted tenant identity. For an
-AppKey-based local Cursor connection, configure `Authorization`; the platform
-resolves and verifies the tenant boundary. Missing tenant context is an
-authorization configuration error, not a reason to bypass the managed lifecycle.
+The MCP connection itself must carry trusted authentication. For an AppKey-based
+local Cursor connection, configure `Authorization`; the platform resolves and
+verifies the caller identity and grants. Missing authentication is a configuration
+error, not a reason to bypass the managed lifecycle.
 
 A host adapter may attach an opaque host conversation key and a per-call client
 invocation ID using `X-OpenBKN-Host-Conversation-Key` /
@@ -108,7 +108,7 @@ invocation ID using `X-OpenBKN-Host-Conversation-Key` /
 `openbkn.ai/host-conversation-key` / `openbkn.ai/client-invocation-id` MCP
 metadata. These are adapter hints for continuity and retry idempotency inside the already
 authenticated owner scope; they are not model arguments and never establish
-tenant, user, application, or data permissions. A generic MCP
+user, application, or data permissions. A generic MCP
 client needs only to retain and reuse the returned `conversation_id`. MCP
 transport session IDs are not business Conversation IDs.
 

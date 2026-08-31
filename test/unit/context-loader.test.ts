@@ -360,7 +360,6 @@ describe("managed MCP tool calls", () => {
       row_version: 2,
       issued_at: "2026-08-02T06:00:00Z",
       owner: {
-        tenant_id: "tenant-1",
         application_principal_id: "openbkn-sdk",
         effective_subject_type: "user",
         effective_subject_id: "user-1",

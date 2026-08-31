@@ -299,7 +299,7 @@ describe("trace lifecycle contract boundaries", () => {
     const api = traceLifecycleApi(ctx);
     const businessInput = {
       owner: "采购负责人",
-      tenant_id: "supplier-tenant",
+      supplier_region: "east",
       generation: 3,
     };
 
@@ -326,7 +326,6 @@ describe("trace lifecycle contract boundaries", () => {
     "generation",
     "on_behalf_of",
     "onBehalfOf",
-    "tenant_id",
     "application_principal_id",
     "effective_subject_id",
     "delegation_id",
@@ -346,9 +345,9 @@ describe("trace lifecycle contract boundaries", () => {
     await expect(
       api.ensureConversation({
         external_conversation_key: "external-1",
-        metadata: { input: { tenant_id: "forbidden" } },
+        metadata: { input: { application_principal_id: "forbidden" } },
       } as never),
-    ).rejects.toThrow("tenant_id");
+    ).rejects.toThrow("application_principal_id");
     expect(calls(fetchMock)).toHaveLength(0);
   });
 

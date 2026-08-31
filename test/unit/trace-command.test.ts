@@ -7,7 +7,6 @@ function receipt(status: "completed" | "failed"): OperationReceipt {
     receipt_id: `receipt-${status}`,
     schema_version: "3.0.0",
     owner: {
-      tenant_id: "tenant-1",
       application_principal_id: "app-1",
       effective_subject_type: "user",
       effective_subject_id: "user-1",

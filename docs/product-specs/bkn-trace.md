@@ -13,7 +13,7 @@
 - `one_shot`：每次创建独立临时 Conversation。
 - `create_new_generation`：显式开始下一 generation。
 
-generation、owner、tenant、应用主体、effective subject 和 delegation 由 Core 与可信认证上下文确定。SDK 拒绝调用方在 JSON 中自报这些身份字段。
+generation、owner、应用主体、effective subject 和 delegation 由 Core 与可信认证上下文确定。SDK 拒绝调用方在 JSON 中自报这些身份字段。
 
 包装层负责开始 Interaction、唯一终止、回调异常时 fail、显式 cancel/handoff 去重，以及进程异常后由服务端 lease recovery 标记 abandoned。同一 SDK 实例不允许同一 Conversation 并行两个 active Interaction；跨进程冲突由 Core 权威约束。
 

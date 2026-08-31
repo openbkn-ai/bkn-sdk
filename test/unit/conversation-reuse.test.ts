@@ -72,7 +72,7 @@ describe("remembered conversation", () => {
       // user, so its thread is not theirs to join.
       { user: "someone-else" },
       // Identity here is the token, and an explicit one may belong to another
-      // tenant entirely while the store still points at the active user.
+      // account entirely while the store still points at the active user.
       { token: "someone-elses-token" },
     ]) {
       expect(conversationSource(o)).toEqual({ source: "none" });

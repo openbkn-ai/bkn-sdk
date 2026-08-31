@@ -671,7 +671,7 @@ describe("managed lifecycle on semantic search", () => {
     );
 
     // A 401 is a fact about one identity. Filing it under the host would make
-    // every other tenant on it look like a deploy with no lifecycle at all.
+    // every other identity on it look like a deploy with no lifecycle at all.
     expect(bobBody).toHaveProperty("bkn_context");
     expect(probes).toBe(2);
   });

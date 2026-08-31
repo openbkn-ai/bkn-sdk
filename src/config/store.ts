@@ -4,7 +4,7 @@
 /**
  * Local config + token store under `~/.bkn/` (override: `BKN_CONFIG_DIR`).
  *
- * Multi-user by design (platforms are multi-tenant), aligned with the
+ * Multi-user by design, aligned with the
  * legacy layout — reimplemented slim, no legacy-migration paths:
  *
  *   <root>/state.json                      (or profiles/<BKN_PROFILE>/state.json)

@@ -125,7 +125,7 @@ const contracts = new Map<string, Promise<Lifecycle>>();
  *
  * Recorded per caller, not per deploy. The probe carries `ctx.token`, so a 401
  * is a fact about one identity; filing it under the base URL alone would let
- * one expired token answer "no lifecycle here" for every other tenant sharing
+ * one expired token answer "no lifecycle here" for every other identity using
  * that host. Same distinction the session key draws — that one decides whose
  * session a request joins, this one decides whose failure it inherits.
  */
