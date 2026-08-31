@@ -33,8 +33,8 @@ from .mcp import call_tool, tool_catalog
 
 __all__ = [
     "Interaction",
-    "borrowed_interaction",
     "current_interaction",
+    "ensure_interaction",
     "interaction_scope",
     "with_context_retry",
 ]
@@ -183,14 +183,20 @@ def _start(ctx: Context, kn_id: str, question: str = DEFAULT_QUESTION) -> Intera
 
 
 @contextmanager
-def borrowed_interaction(ctx: Context, kn_id: str) -> Iterator[Interaction]:
-    """An interaction to attach a call to, whoever owns it.
+def ensure_interaction(ctx: Context, kn_id: str) -> Iterator[Interaction]:
+    """A turn to attach a call to: the one in scope, or a new one.
 
-    Inside a `session(traced=True)` scope this is the scope's own turn, so the
-    evidence stays together. Outside one, a short-lived turn is opened and
-    finished around the call — some tools require a `bkn_context` unconditionally,
-    and refusing to run outside a traced scope would make them unusable for no
-    gain.
+    Three cases, and the difference that matters is who closes it:
+
+    * inside a `session(traced=True)` scope — the scope's own turn, left open
+      for the scope to finish, so the evidence stays together;
+    * where the caller named one, as the sandbox does through the environment —
+      joined and never finished, because ending someone else's business turn
+      early is not this SDK's call to make;
+    * otherwise — opened here and finished on exit, which costs a round trip.
+
+    `current_interaction` is the same thing without the last case: it raises
+    where there is no scope, rather than opening one.
     """
     scope = _current.get()
     if scope is not None:
@@ -223,7 +229,7 @@ def with_context_retry(ctx: Context, kn_id: str, send: Callable[[dict[str, str] 
     refuses it is a short-lived turn opened for the retry.
     """
     if _has_turn(ctx):
-        with borrowed_interaction(ctx, kn_id) as interaction:
+        with ensure_interaction(ctx, kn_id) as interaction:
             return send(interaction.bkn_context)
 
     try:
@@ -232,7 +238,7 @@ def with_context_retry(ctx: Context, kn_id: str, send: Callable[[dict[str, str] 
         if not _needs_context(error):
             raise
 
-    with borrowed_interaction(ctx, kn_id) as interaction:
+    with ensure_interaction(ctx, kn_id) as interaction:
         return send(interaction.bkn_context)
 
 

@@ -1,0 +1,1363 @@
+{
+  "operations": [
+    {
+      "path": "/api/agent-retrieval/v1/kn/describe_resource",
+      "method": "POST",
+      "operation": "describe_resource",
+      "summary": "查看资源的物理结构",
+      "description": "取单个资源的物理列与连接器类型——写 `run_sql` 之前该看的东西。 `connector_type` 决定实际目标方言；`run_sql` 仅支持 `mysql` / `mariadb` / `postgresql` / `sqlserver` 资源，统一接收 MySQL 方言。目标方言不是 MySQL 时由 Vega 转译，MySQL / MariaDB 资源则直接下发；其他连接器（如 `opensearch`）会被拒绝。",
+      "query": [
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "resource_id",
+          "type": "string",
+          "required": true,
+          "description": "资源 ID。"
+        }
+      ],
+      "declares_context": true,
+      "returns": [
+        "columns",
+        "connector_type",
+        "resource_id"
+      ],
+      "source": "data-access.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/execute_action",
+      "method": "POST",
+      "operation": "execute_action",
+      "summary": "触发行动执行（异步）",
+      "description": "对一批对象实例执行某个行动类。**异步**：返回 `execution_id` 即代表已受理， 执行结果用 `get_action_execution` 轮询。 `dynamic_params` 填 `get_action_info` 返回的 schema 里 `value_from=input` 的那些参数。`_instance_identities` 留空表示按行动类自身的条件扫描目标实例 （由下游决定命中范围），不是「不执行」。",
+      "query": [
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "kn_id",
+          "type": "string",
+          "required": true,
+          "description": "知识网络 ID。"
+        },
+        {
+          "name": "at_id",
+          "type": "string",
+          "required": true,
+          "description": "行动类 ID。"
+        },
+        {
+          "name": "_instance_identities",
+          "type": "array",
+          "required": false,
+          "description": "目标对象实例。留空表示按行动类自身的条件扫描目标实例。"
+        },
+        {
+          "name": "dynamic_params",
+          "type": "object",
+          "required": false,
+          "description": "动态参数取值，对应行动定义中 `value_from=input` 的参数。完整性校验在 下游 ontology-query 完成。"
+        }
+      ],
+      "declares_context": true,
+      "returns": [
+        "created_at",
+        "execution_id",
+        "message",
+        "status"
+      ],
+      "source": "action.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/execute_skill",
+      "method": "POST",
+      "operation": "execute_skill",
+      "summary": "在沙箱内执行 Skill 入口命令",
+      "description": "把 Skill 包投进沙箱会话解压，执行 `entry_shell` 指定的入口命令，回收 `exit_code` / `stdout` / `stderr`。 **`entry_shell` 必须取自 SKILL.md 声明的入口**，先用 `get_skill_content` 读清楚再调；这条接口不校验命令与 Skill 的对应关系。 授权由 execution-factory 按账户强制：需要该 Skill 的 `execute` 或 `public_access` 权限，无权限返回 403。 `stdout` / `stderr` 各自超过 8000 字符会截断（`truncated=true`）。 **本端点由技能执行总闸控制**：`EXECUTE_SKILL_ENABLED=true` 时才注册这条 路由，同名 MCP 工具也才出现在 `tools/list` 与 `GET /mcp/info`。默认关闭， 此时这条路径返回 404——「这个部署没有技能执行能力」在路由表上成立。 （旧名 `MCP_EXECUTE_SKILL_ENABLED` 仍被识别，用于兼容已按旧名配置的部署。）",
+      "query": [],
+      "body": [
+        {
+          "name": "skill_id",
+          "type": "string",
+          "required": true,
+          "description": ""
+        },
+        {
+          "name": "entry_shell",
+          "type": "string",
+          "required": true,
+          "description": "沙箱内执行的入口命令，取自 SKILL.md 声明的入口。技能包已解压到工作目录， 命令相对该目录执行。"
+        },
+        {
+          "name": "timeout",
+          "type": "integer",
+          "required": false,
+          "description": "执行超时秒数。"
+        }
+      ],
+      "declares_context": true,
+      "returns": [
+        "command",
+        "execution_time",
+        "exit_code",
+        "mocked",
+        "skill_id",
+        "stderr",
+        "stdout",
+        "truncated",
+        "work_dir"
+      ],
+      "source": "skill.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/explore_subgraph",
+      "method": "POST",
+      "operation": "explore_subgraph",
+      "summary": "从起点探索关联子图",
+      "description": "不需要预先知道拓扑：给起点对象类、方向与最大跳数，引擎沿概念定义的关系散开， 返回命中的对象与它们之间的路径。 **分页与排序只切起点**：`limit` / `sort` / `offset` / `search_after` 全部作用于 **起点对象类**的实例集合，不是路径条数、也不是返回对象总数。`limit: 10` 的含义 是「从至多 10 个起点出发」，每个起点散出多少条路径由拓扑决定。 **`path_length` 必填，取 1-3**，缺失或越界都在 Context Loader 侧返回 400。 下界必须拦在这里：`path_length` 为 0 时下游不报错，只返回空子图，会被读成 「什么都没连上」。路径数随跳数快速增长，先从 1-2 起步，不够再加。 **`condition` 只过滤起点**，不约束路径上的其他对象类。要约束中间节点就说明 路径其实是已知的，改用 `query_instance_subgraph` 逐节点加条件。 **`isolated_objects` 是有效结论不是失败**：它明确回答了「这些起点在给定方向与 跳数内没有关联」。不要因为它有值就重试或改问法。 **取主键**：与 `query_instance_subgraph` 一致，对象主键在 `_instance_identity` 里，可直接喂给 [action.yaml](",
+      "query": [
+        {
+          "name": "kn_id",
+          "type": "string",
+          "required": true,
+          "description": ""
+        },
+        {
+          "name": "include_logic_params",
+          "type": "boolean",
+          "required": false,
+          "description": ""
+        },
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "source_object_type_id",
+          "type": "string",
+          "required": true,
+          "description": "探索起点的对象类 ID。"
+        },
+        {
+          "name": "direction",
+          "type": "string",
+          "required": true,
+          "description": "探索方向。`forward` 沿关系定义的出边，`backward` 沿入边， `bidirectional` 两个方向都走。不确定关系怎么建模时用 `bidirectional`。",
+          "enum": [
+            "forward",
+            "backward",
+            "bidirectional"
+          ]
+        },
+        {
+          "name": "path_length",
+          "type": "integer",
+          "required": true,
+          "description": "最大跳数，取 1-3。超出返回 400。"
+        },
+        {
+          "name": "condition",
+          "type": "object",
+          "required": false,
+          "description": "过滤条件。逻辑算子（`and` / `or`）用 `sub_conditions` 组合；叶子条件用 `field` + `operation` + `value` + `value_from`。`value` 与 `value_from` 必须成对出现，`value_from` 目前只支持 `const`。 可用算子以对象类的 `condition_operations` 为准，见 [kn-explore.yaml](kn-explore.yaml)。"
+        },
+        {
+          "name": "concept_groups",
+          "type": "array",
+          "required": false,
+          "description": "概念分组 ID，把探索范围限定在这些分组内的概念上。不传则不限。"
+        },
+        {
+          "name": "include_incomplete_path",
+          "type": "boolean",
+          "required": false,
+          "description": "是否返回残缺路径——已走过至少一条边、但未走满 `path_length` 就无路可走 的那些。默认只返回完整路径。零边路径任何情况下都不返回。"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "**起点对象类**的实例数量上限，不是路径条数上限。"
+        },
+        {
+          "name": "sort",
+          "type": "array",
+          "required": false,
+          "description": "**起点对象类**的排序，按数组顺序依次比较。与 `limit` 配合决定「从哪些 起点出发」，不影响路径本身的顺序。元素不可为 `null`。"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "起点对象类的偏移翻页。与 `search_after` 互斥。"
+        },
+        {
+          "name": "search_after",
+          "type": "array",
+          "required": false,
+          "description": "起点对象类的游标翻页。与 `offset` 互斥。"
+        }
+      ],
+      "declares_context": false,
+      "returns": [
+        "current_path_number",
+        "isolated_objects",
+        "objects",
+        "overall_ms",
+        "relation_paths",
+        "search_after",
+        "total_count"
+      ],
+      "source": "instance-subgraph.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/find_skills",
+      "method": "POST",
+      "operation": "find_skills",
+      "summary": "按业务上下文召回 Skill",
+      "description": "**召回模式由参数自动决定，不用显式指定**： | 传入参数 | 模式 | |---|---| | `kn_id` + `object_type_id` | 对象类级：沿对象类与 `skills` 之间的关系路径召回 | | 再加 `instance_identities` | 实例级：从具体实例出发召回，并补充对象类级结果 | **`skill_query` 的检索方式随索引能力降级**：对 `skills` 实例的 `name` / `description` 追加文本过滤——BKN 已建向量索引时用 `knn`，已建全文索引时用 `match`，都没有时退化为 `like`。 `skills` 对象类至少要有 `skill_id` 与 `name` 两个数据属性，`description` 可选；不满足时返回 400 并在 `details` 里列出缺失属性。 **空结果是 200 不是错误**：没有匹配时返回 `entries: []`，并可能带一个 `message` 说明为什么为空（如该对象类未绑定任何 Skill）以及下一步建议。",
+      "query": [
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "kn_id",
+          "type": "string",
+          "required": true,
+          "description": "知识网络 ID。"
+        },
+        {
+          "name": "object_type_id",
+          "type": "string",
+          "required": true,
+          "description": "业务对象类 ID（取自 `search_schema` 返回的概念 ID）。必填，且必须存在于 该知识网络中。"
+        },
+        {
+          "name": "instance_identities",
+          "type": "array",
+          "required": false,
+          "description": "对象实例标识列表，**必须从 `query_object_instance` 或 `query_instance_subgraph` 结果里的 `_instance_identity` 取，不可自拼**。 传入即切换到实例级召回。"
+        },
+        {
+          "name": "skill_query",
+          "type": "string",
+          "required": false,
+          "description": "Skill 语义过滤词，对 `skills` 实例的 `name` / `description` 追加文本过滤。 检索方式按索引能力降级：向量索引用 `knn`，全文索引用 `match`，否则 `like`。"
+        },
+        {
+          "name": "top_k",
+          "type": "integer",
+          "required": false,
+          "description": "最多返回的 Skill 数量。"
+        }
+      ],
+      "declares_context": true,
+      "returns": [
+        "entries",
+        "message"
+      ],
+      "source": "skill.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/get_action_execution",
+      "method": "POST",
+      "operation": "get_action_execution",
+      "summary": "查询单次行动执行",
+      "description": "按 `execute_action` 返回的 `execution_id` 查这次执行的状态与逐对象结果。 `status` 为 `pending` / `running` 时结果尚未齐全；`completed` 表示执行流程 结束，**不代表全部成功**——逐对象成败看 `success_count` / `failed_count` 与 `results[].status`。",
+      "query": [
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "kn_id",
+          "type": "string",
+          "required": true,
+          "description": "知识网络 ID。"
+        },
+        {
+          "name": "execution_id",
+          "type": "string",
+          "required": true,
+          "description": "`execute_action` 返回的执行 ID。"
+        }
+      ],
+      "declares_context": true,
+      "returns": [
+        "action_type_id",
+        "action_type_name",
+        "duration_ms",
+        "dynamic_params",
+        "end_time",
+        "execution_mode",
+        "failed_count",
+        "id",
+        "kn_id",
+        "results",
+        "start_time",
+        "status",
+        "success_count",
+        "target_count",
+        "total_count",
+        "trigger_type"
+      ],
+      "source": "action.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/get_action_info",
+      "method": "POST",
+      "operation": "get_action_info",
+      "summary": "召回行动的可执行定义",
+      "description": "按行动类 ID（可选再加对象实例标识）召回行动，返回符合 Function Call 规范的 工具定义 `_dynamic_tools`。Agent 可以直接把它塞进自己的工具列表。 不传 `_instance_identities` 时召回的是行动类级别的定义；传了则返回已就该批 实例实例化过的参数。 工具声明了输出契约时，还会带上 `output_schema`——执行结果的形状，供 Agent 把 `get_action_execution` 拿到的 `result` 复述成自然语言。",
+      "query": [
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "kn_id",
+          "type": "string",
+          "required": true,
+          "description": "知识网络 ID。"
+        },
+        {
+          "name": "at_id",
+          "type": "string",
+          "required": true,
+          "description": "行动类 ID（从 Schema 检索结果里取）。"
+        },
+        {
+          "name": "_instance_identities",
+          "type": "array",
+          "required": false,
+          "description": "目标对象实例标识列表。不传则返回行动类级别的定义。"
+        },
+        {
+          "name": "_instance_identity",
+          "type": "object",
+          "required": false,
+          "description": "一个对象实例的主键键值对。**必须从上游查询结果里取**： `query_object_instance` 或 `query_instance_subgraph` 结果里的 `_instance_identity`。"
+        }
+      ],
+      "declares_context": true,
+      "returns": [
+        "_dynamic_tools",
+        "headers"
+      ],
+      "source": "action.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/get_kn_detail",
+      "method": "POST",
+      "operation": "get_kn_detail",
+      "summary": "获取知识网络详情",
+      "description": "返回一张知识网络的概念全景：概念组、对象类、关系类、行动类。 **`detail_level` 决定返回多少**： | 级别 | 保留 | 剥掉 | |---|---|---| | `summary`（默认） | 骨架 + 每个属性的 `name` / `type` | 属性的 `display_name` / `comment` / `mapped_field` / `condition_operations`，逻辑属性的 `data_source` / `parameters`，关系类的 `mapping_rules` 与起终点对象类详情 | | `full` | 全部 | —— | 两种级别都会**去掉 `concept_groups` 里嵌套的对象类 / 关系类 / 行动类副本**： 这些是顶层数组的重复拷贝，概念组只保留 `object_type_ids` 作为分组边界。 被剥掉的细节按需用 `get_object_types` / `get_relation_types` 取回。 对象类条目带 `related_metric_count`（该对象类下已建模指标数），`>0` 才值得 为取指标下钻。",
+      "query": [
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "kn_id",
+          "type": "string",
+          "required": false,
+          "description": "知识网络 ID。与 `x-kn-id` 头二选一，本字段优先。"
+        },
+        {
+          "name": "detail_level",
+          "type": "string",
+          "required": false,
+          "description": "详情级别，见端点说明。",
+          "enum": [
+            "summary",
+            "full"
+          ]
+        }
+      ],
+      "declares_context": true,
+      "returns": [
+        "action_types",
+        "comment",
+        "concept_groups",
+        "id",
+        "name",
+        "object_types",
+        "relation_types"
+      ],
+      "source": "kn-explore.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/get_object_types",
+      "method": "POST",
+      "operation": "get_object_types",
+      "summary": "按 ID 批量取对象类完整定义",
+      "description": "取 `get_kn_detail` 在 summary 级别剥掉的对象类细节：属性的 `mapped_field` （写 `run_sql` 要的物理列名）、`condition_operations`（该属性可用的查询算子）、 逻辑属性的 `data_source` 与 `parameters`。 同时返回 `related_metrics`——挂在该对象类下的指标，**包括没绑到逻辑属性、 因而在 `logic_properties` 里根本看不见的那些**。这是 Agent 选指标的权威清单， 选定后走 [logic-property.yaml](logic-property.yaml) 的 `logic-property-resolver`（实例 + 已绑逻辑属性）或 `query_metric`（其余）。 `ids` 里既可以传对象类 ID，也可以传对象类名（ID 优先，名称仅作兜底）； 匹配不到的 ID 原样回填在 `missing` 里，不报错。属性的 `display_name` （纯 UI 标签）在本接口也会被去掉。",
+      "query": [
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "kn_id",
+          "type": "string",
+          "required": false,
+          "description": "知识网络 ID。与 `x-kn-id` 头二选一，本字段优先。"
+        },
+        {
+          "name": "ids",
+          "type": "array",
+          "required": true,
+          "description": "要下钻的概念 ID 列表（取自 `get_kn_detail`）。也接受概念名称作为兜底匹配。 为空时返回 400。"
+        }
+      ],
+      "declares_context": true,
+      "returns": [
+        "kn_id",
+        "missing",
+        "object_types"
+      ],
+      "source": "kn-explore.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/get_relation_types",
+      "method": "POST",
+      "operation": "get_relation_types",
+      "summary": "按 ID 批量取关系类完整定义",
+      "description": "`get_object_types` 的关系类版本：取回 summary 级别剥掉的 `mapping_rules` 与起终点对象类详情。同样支持按名称兜底匹配，未命中的 ID 落 `missing`。",
+      "query": [
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "kn_id",
+          "type": "string",
+          "required": false,
+          "description": "知识网络 ID。与 `x-kn-id` 头二选一，本字段优先。"
+        },
+        {
+          "name": "ids",
+          "type": "array",
+          "required": true,
+          "description": "要下钻的概念 ID 列表（取自 `get_kn_detail`）。也接受概念名称作为兜底匹配。 为空时返回 400。"
+        }
+      ],
+      "declares_context": true,
+      "returns": [
+        "kn_id",
+        "missing",
+        "relation_types"
+      ],
+      "source": "kn-explore.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/get_skill_content",
+      "method": "POST",
+      "operation": "get_skill_content",
+      "summary": "读 SKILL.md 正文与包内文件清单",
+      "description": "返回 Skill 主文档 `SKILL.md` 的正文，以及技能包内的文件清单 （`files[].rel_path`）。Skill 的用法与入口命令都写在正文里。 需要某个附属文件的内容时再调 `read_skill_file` 单取，不必整包下载。 正文超过 40000 字符会截断，此时 `truncated=true` 并带 `message` 说明。",
+      "query": [
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "skill_id",
+          "type": "string",
+          "required": true,
+          "description": "Skill ID，取自 `find_skills` 或 `list_skills`。"
+        }
+      ],
+      "declares_context": true,
+      "returns": [
+        "content",
+        "files",
+        "message",
+        "skill_id",
+        "status",
+        "truncated"
+      ],
+      "source": "skill.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/list_action_executions",
+      "method": "POST",
+      "operation": "list_action_executions",
+      "summary": "列出行动执行历史",
+      "description": "翻某张知识网络下的行动执行记录，支持按行动类、状态、触发方式与时间区间过滤。 分页两条路互斥：`offset` 偏移翻页，或把上一页响应的 `search_after` 原样回传 做游标翻页（传了 `search_after` 后 `offset` 失效）。",
+      "query": [
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "kn_id",
+          "type": "string",
+          "required": true,
+          "description": "知识网络 ID。"
+        },
+        {
+          "name": "action_type_id",
+          "type": "string",
+          "required": false,
+          "description": "按行动类过滤。"
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "description": "按状态过滤。",
+          "enum": [
+            "pending",
+            "running",
+            "completed",
+            "failed",
+            "cancelled"
+          ]
+        },
+        {
+          "name": "trigger_type",
+          "type": "string",
+          "required": false,
+          "description": "按触发方式过滤。",
+          "enum": [
+            "manual",
+            "scheduled"
+          ]
+        },
+        {
+          "name": "start_time_from",
+          "type": "integer",
+          "required": false,
+          "description": "起始时间下界（Unix 毫秒）。"
+        },
+        {
+          "name": "start_time_to",
+          "type": "integer",
+          "required": false,
+          "description": "起始时间上界（Unix 毫秒）。"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "偏移翻页。传了 `search_after` 后本字段失效。"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "分页条数。"
+        },
+        {
+          "name": "search_after",
+          "type": "array",
+          "required": false,
+          "description": "游标翻页：上一页响应返回的 `search_after` 原样回传。"
+        }
+      ],
+      "declares_context": true,
+      "returns": [
+        "entries",
+        "search_after",
+        "total_count"
+      ],
+      "source": "action.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/list_knowledge_networks",
+      "method": "POST",
+      "operation": "list_knowledge_networks",
+      "summary": "列出知识网络",
+      "description": "列出当前账户可见的知识网络，用于发现 `kn_id`。请求体可选；不传按默认分页 （`limit=20`，按更新时间倒序）返回。",
+      "query": [
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "name_pattern",
+          "type": "string",
+          "required": false,
+          "description": "按名称模糊过滤。"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "单页数量。"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "偏移，用于翻页。"
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "description": "排序字段。"
+        },
+        {
+          "name": "direction",
+          "type": "string",
+          "required": false,
+          "description": "排序方向。",
+          "enum": [
+            "asc",
+            "desc"
+          ]
+        }
+      ],
+      "declares_context": true,
+      "returns": [
+        "entries",
+        "total_count"
+      ],
+      "source": "kn-explore.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/list_resources",
+      "method": "POST",
+      "operation": "list_resources",
+      "summary": "列出可查询的数据资源",
+      "description": "列出当前账户有权查看的数据资源，输出精简字段（够用来挑一个 `resource_id`）。 请求体可选，不传则按 vega 默认分页返回。",
+      "query": [
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "catalog_id",
+          "type": "string",
+          "required": false,
+          "description": "限定某个 catalog。"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "description": "资源类别，映射 vega 的 category：`table` / `file` / `fileset` / `api` / `metric` / `topic` / `index` / `logicview` / `dataset`。"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "分页偏移；不传由 vega 取默认值 0。"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "分页大小；不传由 vega 取默认值 20。"
+        }
+      ],
+      "declares_context": true,
+      "returns": [
+        "entries",
+        "total_count"
+      ],
+      "source": "data-access.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/list_skills",
+      "method": "POST",
+      "operation": "list_skills",
+      "summary": "浏览已发布 Skill",
+      "description": "翻已发布 Skill 列表，不需要知识网络上下文。与 `find_skills` 互补：那条按对象类 / 实例召回，这条按名称或分类分页浏览。 只返回**已发布**状态的 Skill；草稿态不出现在这里。 **空结果是 200 不是错误**：无匹配时 `entries: []` 并带 `message` 说明。",
+      "query": [
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "description": "按 Skill 名称模糊过滤。"
+        },
+        {
+          "name": "category",
+          "type": "string",
+          "required": false,
+          "description": "按 Skill 分类过滤。"
+        },
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "description": "页码，从 1 开始。"
+        },
+        {
+          "name": "page_size",
+          "type": "integer",
+          "required": false,
+          "description": "每页大小。"
+        }
+      ],
+      "declares_context": true,
+      "returns": [
+        "entries",
+        "message",
+        "page",
+        "page_size",
+        "total_count"
+      ],
+      "source": "skill.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/logic-property-resolver",
+      "method": "POST",
+      "operation": "logic-property-resolver",
+      "summary": "批量求逻辑属性值",
+      "description": "**`query` 的质量决定成败**：参数由大模型从 `query`（必要时加 `additional_context`）里推断。查询里要含时间范围、统计维度等业务上下文， 否则会因缺参失败。 **缺参返回 400，不是空结果**：模型判定必需的 input 参数无法从查询推出时， 返回 400，`details` 里是 `MISSING_INPUT_PARAMS` 及逐属性的缺失说明。补上 上下文重试即可。 与之区分的是 500 `DYNAMIC_PARAMS_GENERATION_FAILED`：那是大模型或依赖服务 故障，不是调用方少给信息，重试或查服务状态。 **结果与入参对齐**：`datas` 与 `_instance_identities` 顺序一一对应，每项含 主键和本次请求的 `properties`。",
+      "query": [
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "kn_id",
+          "type": "string",
+          "required": true,
+          "description": "知识网络 ID。"
+        },
+        {
+          "name": "ot_id",
+          "type": "string",
+          "required": true,
+          "description": "对象类 ID。"
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "description": "用户查询。需要包含时间范围、统计维度、业务上下文，用于生成 `dynamic_params`。信息不足会导致 400 缺参。"
+        },
+        {
+          "name": "_instance_identities",
+          "type": "array",
+          "required": true,
+          "description": "对象实例标识数组，**必须从上游取，不可自拼**：先调 `query_object_instance` 或 `query_instance_subgraph`，从每个对象的 `_instance_identity` 取值，按原顺序组成数组。"
+        },
+        {
+          "name": "properties",
+          "type": "array",
+          "required": true,
+          "description": "要求值的逻辑属性名列表（`metric` 或 `operator`）。"
+        },
+        {
+          "name": "additional_context",
+          "type": "string",
+          "required": false,
+          "description": "补充上下文，如 timezone、instant、step 或对象属性，帮助模型生成更准的 `dynamic_params`。"
+        },
+        {
+          "name": "llm_model",
+          "type": "string",
+          "required": false,
+          "description": "覆盖用于生成动态参数的大模型；留空走系统默认大模型。"
+        },
+        {
+          "name": "options",
+          "type": "object",
+          "required": false,
+          "description": "高级选项。"
+        }
+      ],
+      "declares_context": true,
+      "returns": [
+        "datas",
+        "debug"
+      ],
+      "source": "logic-property.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/query_instance_subgraph",
+      "method": "POST",
+      "operation": "query_instance_subgraph",
+      "summary": "按关系路径查询对象子图",
+      "description": "`relation_type_paths` 可以放多条路径，每条独立查询、独立返回一个子图， 顺序与请求一致。 **路径的顺序和方向是硬约束，写错会静默查出错误结果**： - `object_types` 按节点出现顺序排列；n 跳路径长度为 n+1。即使某个节点没有 过滤条件，也必须占位保留其 `id`，否则顺序错位。 - `relation_types` 按边出现顺序排列，长度为 n；第 i 条边的 `source_object_type_id` 必须等于 `object_types[i].id`， `target_object_type_id` 必须等于 `object_types[i+1].id`。 - 边的方向由这组起终点与关系类自身定义的起终点是否一致决定：一致为正向， 相反为反向。 **取主键**：子图对象的主键在 `_instance_identity` 里，与 `query_object_instance` 同名同义。要把子图结果喂给 [action.yaml](action.yaml) 或 [logic-property.yaml](logic-property.yaml) 时， 从这里取键值对，不要自己拼。",
+      "query": [
+        {
+          "name": "kn_id",
+          "type": "string",
+          "required": true,
+          "description": ""
+        },
+        {
+          "name": "include_logic_params",
+          "type": "boolean",
+          "required": false,
+          "description": ""
+        },
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "relation_type_paths",
+          "type": "array",
+          "required": true,
+          "description": "关系路径集合。多条路径同时查询，各自返回独立子图。"
+        }
+      ],
+      "declares_context": true,
+      "returns": [
+        "entries"
+      ],
+      "source": "instance-subgraph.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/query_metric",
+      "method": "POST",
+      "operation": "query_metric",
+      "summary": "按指标口径取数",
+      "description": "按已建模指标自身的口径计算取数，是 OT-first 指标路径的第 3 步： `search_schema` / `get_kn_detail` 锁定对象类 → `get_object_types` 从 `related_metrics` 里选定 `metric_id` → 本接口计算。 与 `logic-property-resolver` 的分工：实例级、且已绑到逻辑属性的指标走那条 （它会先用大模型推参数）；**类级指标、或未绑逻辑属性的指标走本接口**，参数 由调用方显式给出，不经大模型。 `time` 在指标没有时间维度（`related_metrics[].time_dimension` 为空）时可整体 省略。给了就要自洽：**省略 `instant` 等同于 `instant=false`（序列查询）， 必须带 `step`**；`instant=true` 取单点（此时 `step` 被下游忽略）； `start` 与 `end` 要么都给要么都不给。`step` 大小写不敏感。 这些规则在本服务就地校验并返回 400，规则逐条对齐 ontology-query 的 `validateMetricQueryRequest`——本地比下游严会把合法调用误拒，比下游松只是 把同一个错误延后。 请求体与 ontology-query 的 `MetricQueryReque",
+      "query": [
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "kn_id",
+          "type": "string",
+          "required": true,
+          "description": "知识网络 ID。也可用 `x-kn-id` 头传。"
+        },
+        {
+          "name": "metric_id",
+          "type": "string",
+          "required": true,
+          "description": "指标 ID，取自 `get_object_types` 返回的 `related_metrics[].id`， 或对象类逻辑属性 `data_source` 里引用的指标 ID。"
+        },
+        {
+          "name": "time",
+          "type": "object",
+          "required": false,
+          "description": "时间窗。指标没有时间维度时可整体省略；给了就要自洽（见接口说明）。"
+        },
+        {
+          "name": "condition",
+          "type": "object",
+          "required": false,
+          "description": "过滤条件，结构与 `query_object_instance` 的 `condition` 一致 （`field` / `operation` / `value` / `value_from`，可 `and` / `or` 嵌套）。"
+        },
+        {
+          "name": "analysis_dimensions",
+          "type": "array",
+          "required": false,
+          "description": "分析维度（按维度拆分结果）。取值须来自 `related_metrics[].analysis_dimensions`。"
+        },
+        {
+          "name": "order_by",
+          "type": "array",
+          "required": false,
+          "description": "结果排序。"
+        },
+        {
+          "name": "having",
+          "type": "object",
+          "required": false,
+          "description": "对聚合结果过滤。"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "返回条数上限。"
+        },
+        {
+          "name": "fill_null",
+          "type": "boolean",
+          "required": false,
+          "description": "区间查询时，无数据的步长点是否补空。仅对序列查询有效，且必须同时给 `time.start` 与 `time.end`。"
+        }
+      ],
+      "declares_context": false,
+      "returns": [
+        "datas",
+        "kn_id",
+        "metric_id",
+        "overall_ms"
+      ],
+      "source": "logic-property.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/query_object_instance",
+      "method": "POST",
+      "operation": "query_object_instance",
+      "summary": "查询对象实例",
+      "description": "按单个对象类查询实例。`kn_id` / `ot_id` 走 **query 参数**，过滤与分页走请求体。 **条件两种写法**： - `filters`：扁平简写，多个条件按 AND 组合，`value_from` 自动取 `const`。 覆盖「字段 op 值 [AND ...]」这类绝大多数场景。 - `condition`：完整嵌套结构，需要 OR / 多层嵌套时用。 两者同传时 `condition` 优先，`filters` 被忽略。 **算子白名单以对象类为准**：可用算子看 `get_object_types` 返回的 `condition_operations`，不要照抄本文档的枚举全集。对绑定 Vega 资源的对象类， 这份清单由 BKN 按资源上**真实建成的索引**派生：字段建了全文索引才出现 `match` / `multi_match`，建了向量索引且 embedding 模型可解析才出现 `knn`。 没建索引的字段只保留按属性类型推导的比较算子。 **文本检索选哪个**：`match` 走全文索引，按分析器分词后词法命中；`knn` 走向量 索引，能召回字面不重合的表述（换个说法、跨语言）。两者是独立算子，没有隐式 融合；要同时用就放进 `or` 的 `sub_conditions`。`knn` 另需 `limit_key: k` 与 `limit",
+      "query": [
+        {
+          "name": "kn_id",
+          "type": "string",
+          "required": true,
+          "description": ""
+        },
+        {
+          "name": "ot_id",
+          "type": "string",
+          "required": true,
+          "description": ""
+        },
+        {
+          "name": "include_logic_params",
+          "type": "boolean",
+          "required": false,
+          "description": ""
+        },
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "condition",
+          "type": "object",
+          "required": false,
+          "description": "过滤条件。逻辑算子（`and` / `or`）用 `sub_conditions` 组合子条件； 叶子条件用 `field` + `operation` + `value` + `value_from`。 **`value` 与 `value_from` 必须成对出现**，且 `value_from` 目前只支持 `const`。"
+        },
+        {
+          "name": "filters",
+          "type": "array",
+          "required": false,
+          "description": "扁平过滤简写，多个条件按 AND 组合。与 `condition` 互斥，同传时 `condition` 优先。需要 OR 或嵌套时改用 `condition`。"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "返回条数。"
+        },
+        {
+          "name": "properties",
+          "type": "array",
+          "required": false,
+          "description": "指定返回的属性字段；不传返回全部属性。"
+        },
+        {
+          "name": "sort",
+          "type": "array",
+          "required": false,
+          "description": "排序字段，按数组顺序依次比较。不传时默认序不保证语义，需要「最新 / 最大 / 最小的前 N 条」时必须显式指定。"
+        },
+        {
+          "name": "search_after",
+          "type": "array",
+          "required": false,
+          "description": "游标翻页：上一页响应返回的 `search_after` 原样回传。首次查询留空。 与 `offset` 互斥。"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "偏移翻页：适用于资源（vega 表源）路径，可跳页。与 `search_after` 互斥。"
+        }
+      ],
+      "declares_context": true,
+      "returns": [
+        "datas",
+        "search_after",
+        "total_count"
+      ],
+      "source": "object-instance.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/read_skill_file",
+      "method": "POST",
+      "operation": "read_skill_file",
+      "summary": "读技能包内单个文件",
+      "description": "按 `rel_path` 取技能包内单个文件的正文。`rel_path` 取自 `get_skill_content` 返回的 `files[].rel_path`，**不接受包外路径**（`../` 被拒）。 **二进制文件不回正文**：`mime_type` 为图片 / 音视频 / 压缩包 / PDF，或正文不是 合法 UTF-8 时，只返回元数据与 `message` 说明，避免把乱码灌进模型上下文。 正文超过 40000 字符会截断（`truncated=true`）；单文件超过 5 MiB 返回 413。",
+      "query": [
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "skill_id",
+          "type": "string",
+          "required": true,
+          "description": ""
+        },
+        {
+          "name": "rel_path",
+          "type": "string",
+          "required": true,
+          "description": "技能包内相对路径，取自 `get_skill_content` 的 `files[].rel_path`。 包外路径（含 `../`）返回 400。"
+        }
+      ],
+      "declares_context": true,
+      "returns": [
+        "content",
+        "file_type",
+        "message",
+        "mime_type",
+        "rel_path",
+        "skill_id",
+        "truncated"
+      ],
+      "source": "skill.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/run_sql",
+      "method": "POST",
+      "operation": "run_sql",
+      "summary": "对数据资源执行只读 SQL",
+      "description": "以 MySQL 方言执行**只读** SQL。表名不写物理表名，写占位符 `{{.<resource_id>}}`，由服务端解析到真实数据源。 标识符需要引用时使用反引号（如 `` `order_id` ``）；双引号在 MySQL 方言下是 字符串字面量，不能用于标识符。 **两条硬约束，违反直接 400，SQL 不会下发**： 1. **必须引用占位符**。SQL 里没有 `{{.resource_id}}` 时报 `sql must reference at least one data resource via the {{.resource_id}} placeholder` ——这既是定位数据源的唯一途径，也挡住了绕开权限直接写物理表名。 2. **必须是单条只读 `SELECT` 语句**。端到端兼容性以 vega 的只读策略为准； 虽然本服务的本地守卫可接受以 `WITH` 开头的语句，但 vega 当前会拒绝 CTE， 因此调用方**不得使用 `WITH` / CTE 或 `UNION` / `INTERSECT` / `EXCEPT`**。 守卫会先剥掉注释、字符串字面量、反引号标识符与占位符， 再判定：不允许多语句（剥离后仍含 `;`）、必须以 `SELECT` 或 `WITH` 开头、不得含 写入 / DDL / 权限 / 过程类关键字（INSERT、UPD",
+      "query": [
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "sql",
+          "type": "string",
+          "required": true,
+          "description": "MySQL 方言 SQL。表名必须写成 `{{.<resource_id>}}` 占位符， 也接受 `{{<resource_id>}}` 形式；`resource_id` 必须匹配 `[a-z0-9][a-z0-9_-]{0,39}`（小写，最长 40 个字符），否则占位符不会被识别。 标识符需要引用时使用反引号；双引号在 MySQL 方言下是字符串字面量，不能用于 标识符。只允许单条 `SELECT`（不支持 `WITH` / CTE）。"
+        },
+        {
+          "name": "query_timeout",
+          "type": "integer",
+          "required": false,
+          "description": "查询超时（秒）。不传走下游默认。"
+        }
+      ],
+      "declares_context": true,
+      "returns": [
+        "columns",
+        "entries",
+        "paging",
+        "total_count",
+        "warnings"
+      ],
+      "source": "data-access.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/search_instance",
+      "method": "POST",
+      "operation": "search_instance",
+      "summary": "语义召回实例",
+      "description": "用一句自然语言直接召回实例，**不需要先知道对象类和字段名**——这是 `search_schema`（只回 Schema）与 `query_object_instance`（要先给出结构化条件） 之间缺的那一步。 执行两段：先按 `query` 锁定相关对象类，再在这些对象类上做语义实例召回； 向量（`knn`）与全文（`match`）两路并发发出后按名次融合，因此两种命中都能进入结果。 **自足**：除实例行外，还附带读懂它们所需的对象类精简定义（`object_types`， 只含真正出了实例的那几个），单次调用就够用，不必再回头查 Schema。 只有 `condition_operations` 含 `match` / `knn` 的属性参与召回， **没建索引的对象类不会出实例**。 **无命中不是错误**：返回空 `nodes` 加一句 `message`，不返回 5xx。",
+      "query": [
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "kn_id",
+          "type": "string",
+          "required": false,
+          "description": "知识网络 ID。也可改用 `X-Kn-ID` 请求头传入。"
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "description": "自然语言问题或关键词。整句直接传，不必拆成字段条件——向量通道吃整句， 全文通道由分析器分词。"
+        },
+        {
+          "name": "concept_groups",
+          "type": "array",
+          "required": false,
+          "description": "限定召回范围到指定的 BKN 概念分组；不传则在整个知识网络内召回。"
+        },
+        {
+          "name": "object_types",
+          "type": "array",
+          "required": false,
+          "description": "把召回范围钉死在这几个对象类上，只取对象类 id（例如 `material`），不接受名称。 id 来自 `search_schema` 响应的 `concept_id`、本接口响应的 `object_type_id` 或 `get_kn_detail` 的 `object_types[].id`。不传则不限。 过滤发生在相关性排序与 `max_object_types` 截断之前，因此点名的对象类不会因为 排名靠后被挤掉。列表里的 id 一个都不存在时返回空 `nodes`，并在 `message` 里 列出这些 id。"
+        },
+        {
+          "name": "exclude_object_types",
+          "type": "array",
+          "required": false,
+          "description": "从召回范围里排除这几个对象类，同样只取对象类 id。适合上一轮返回里混进了噪音 对象类、想重跑一次时用；与 `object_types` 有重叠时以排除为准。"
+        },
+        {
+          "name": "max_object_types",
+          "type": "integer",
+          "required": false,
+          "description": "参与实例召回的对象类数量上限。每多一个对象类多一轮下游查询。"
+        },
+        {
+          "name": "max_instances_per_type",
+          "type": "integer",
+          "required": false,
+          "description": "每个对象类最多返回几条实例。"
+        },
+        {
+          "name": "rerank",
+          "type": "boolean",
+          "required": false,
+          "description": "是否对召回结果做语义精排。默认关。开启后由 cross-encoder 逐条判断相关性并 **重排返回顺序**（`score` 不变，模型分单独落在 `reranker_score`， 见响应说明），能分辨名次融合分不出的语义差异。 代价是多一次模型调用（约 100~400ms），且要求部署里注册了精排小模型； 模型不可用时自动退回原顺序，不报错。"
+        },
+        {
+          "name": "include_object_types",
+          "type": "boolean",
+          "required": false,
+          "description": "是否附带命中对象类的精简定义。默认附带——不附带的话，要读懂返回的实例 还得再调一次 `get_object_types`，而那一趟会把同一个 query 的概念召回重跑一遍。"
+        }
+      ],
+      "declares_context": false,
+      "returns": [
+        "message",
+        "nodes",
+        "object_types"
+      ],
+      "source": "object-instance.yaml"
+    },
+    {
+      "path": "/api/agent-retrieval/v1/kn/search_schema",
+      "method": "POST",
+      "operation": "search_schema",
+      "summary": "探索知识网络 Schema",
+      "description": "统一的 Schema 探索入口。适用于还不确定该继续调用哪个 `query_*` / `find_*` / `get_*` 接口时，先探索相关概念。 **写 SQL 时注意 `include_columns`**：`data_properties[].name` 是逻辑名， 物理列名在 `mapped_field` 里，二者可以不同（同一份资源可被多个对象类以不同 逻辑名映射）。要用 `run_sql` 直查时置 `include_columns=true` 拿物理列名。",
+      "query": [
+        {
+          "name": "response_format",
+          "type": "string",
+          "required": false,
+          "description": "",
+          "enum": [
+            "json",
+            "toon"
+          ]
+        }
+      ],
+      "body": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "description": "用户查询问题或关键词。"
+        },
+        {
+          "name": "kn_id",
+          "type": "string",
+          "required": false,
+          "description": "知识网络 ID。与 `x-kn-id` 头二选一，本字段优先。"
+        },
+        {
+          "name": "search_scope",
+          "type": "object",
+          "required": false,
+          "description": "Schema 探索范围。不传时四类概念全开。四个开关不能同时为 `false`，否则返回 400。 `search_scope` 只约束**响应输出**，不阻断系统内部用相关线索辅助召回。"
+        },
+        {
+          "name": "max_concepts",
+          "type": "integer",
+          "required": false,
+          "description": "每类概念的候选规模上限。"
+        },
+        {
+          "name": "schema_brief",
+          "type": "boolean",
+          "required": false,
+          "description": "是否只返回精简 Schema；默认返回相对完整的 Schema。"
+        },
+        {
+          "name": "enable_rerank",
+          "type": "boolean",
+          "required": false,
+          "description": "是否对关系类做精排。"
+        },
+        {
+          "name": "rerank_model",
+          "type": "string",
+          "required": false,
+          "description": "覆盖本次请求的精排小模型名。运维 / 高级用户的逃生口，留空走部署级默认 （`concept_search_config.rerank_model`）。**不建议由 Agent 自行选择模型名**。"
+        },
+        {
+          "name": "include_columns",
+          "type": "boolean",
+          "required": false,
+          "description": "是否在每个对象类的 `data_properties` 上附带物理列名（取自 `mapped_field`）。 写 `run_sql` 需要物理列名时置 true；默认 false 以保持响应精简。"
+        }
+      ],
+      "declares_context": true,
+      "returns": [
+        "action_types",
+        "message",
+        "metric_types",
+        "nodes",
+        "object_types",
+        "relation_types"
+      ],
+      "source": "schema-search.yaml"
+    }
+  ]
+}

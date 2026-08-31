@@ -21,7 +21,7 @@ from typing import Any
 from bootstrap import kn_id
 
 import bkn_osdk
-from bkn_osdk.lifecycle import borrowed_interaction, current_interaction
+from bkn_osdk.lifecycle import current_interaction, ensure_interaction
 from bkn_osdk.mcp import call_tool, tool_catalog
 
 
@@ -68,11 +68,11 @@ def main() -> None:
     #
     # The capability surface requires a `bkn_context`: every tool in the catalog
     # but the two lifecycle ones declares it required, and both deploys refuse a
-    # call without one. `borrowed_interaction` joins the turn already in scope,
+    # call without one. `ensure_interaction` joins the turn already in scope,
     # or opens a short-lived one and finishes it — so a script does not have to
     # know which situation it is in.
     ctx = bkn_osdk.resolve_context()
-    with borrowed_interaction(ctx, network) as turn:
+    with ensure_interaction(ctx, network) as turn:
         detail = call_tool(
             ctx,
             network,

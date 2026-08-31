@@ -224,17 +224,33 @@ bkn_osdk.tool_catalog(ctx)                            # 这个部署公布了什
 bkn_osdk.call_tool(ctx, kn_id, "run_sql", {"kn_id": kn_id, "sql": …, "bkn_context": …})
 ```
 
-`call_tool` 是裸接缝：它接受 catalog 声明的参数，返回工具答的东西，不加任何自己的形状 —— 包括信封，而信封随构建版本不同。这里的 `bkn_context` 要调用方自己给，`borrowed_interaction` 是拿到它的办法：
+`call_tool` 是裸接缝：它接受 catalog 声明的参数，返回工具答的东西，不加任何自己的形状 —— 包括信封，而信封随构建版本不同。这里的 `bkn_context` 要调用方自己给，`ensure_interaction` 是拿到它的办法：
 
 ```python
-from bkn_osdk.lifecycle import borrowed_interaction
+from bkn_osdk.lifecycle import ensure_interaction
 
-with borrowed_interaction(ctx, kn_id) as turn:
+with ensure_interaction(ctx, kn_id) as turn:
     arguments = {"kn_id": kn_id, "bkn_context": turn.bkn_context}
     bkn_osdk.call_tool(ctx, kn_id, "list_skills", arguments)
 ```
 
-`search` 和 `search_instances` 就是这样一次调用包起来之后的样子。[`examples/platform/`](examples/platform) 把整个面跑了一遍。
+### 能力路由的命名函数
+
+context-loader 那一圈 —— `/api/agent-retrieval/v1/kn/` 下的 23 条路由 —— 也是生成的，源头是 foundry 自己的 OpenAPI：
+
+```python
+from bkn_osdk import kn
+
+kn.list_resources(KN_ID)
+kn.run_sql(KN_ID, "SELECT COUNT(*) AS n FROM {{.d9hff…}}")
+kn.query_object_instance(KN_ID, "order", limit=10, response_format="json")
+```
+
+包装知道三件裸调用不知道的事：**哪些参数走 query 而不是 body**（`query_object_instance` 和两条 subgraph 路由都是拆开的，把 `kn_id` 塞进 body 会得到 `Public.NotFound`「对象不存在」，看着像对象类不存在）；哪些参数必填；以及这一面每条路由都要 turn，所以 `bkn_context` 由运行时挂上、不出现在签名里。`kn_id` 是每个函数的第一个参数 —— 即使路由自己不发它，turn 也属于某个知识网络。
+
+契约冻在 `contracts/kn-rest.json`，由 `scripts/capture_kn_contract.py` 重新抓取；`bkn_osdk/kn.py` 提交进仓库，重新生成会改动它的话测试就红。没有 REST 孪生的工具、以及路由接受但没公布的参数，仍然走 `call_tool`。
+
+`search` 和 `search_instances` 就是同一件事手写的版本。[`examples/platform/`](examples/platform) 把整个面跑了一遍。
 
 ## 示例
 
