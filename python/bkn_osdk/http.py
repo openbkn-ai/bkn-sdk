@@ -124,7 +124,6 @@ def _headers(
     # the redirect target.
     headers = {
         "authorization": f"Bearer {bearer}",
-        "x-business-domain": ctx.business_domain,
         "accept": "application/json",
     }
     if has_body:

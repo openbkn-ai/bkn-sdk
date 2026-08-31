@@ -30,7 +30,6 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _version
 
 from .config import (
-    DEFAULT_BUSINESS_DOMAIN,
     DEFAULT_TIMEOUT,
     Context,
     configure,
@@ -72,7 +71,6 @@ except PackageNotFoundError:  # running from a source tree that was never instal
     __version__ = "0.0.0.dev0"
 
 __all__ = [
-    "DEFAULT_BUSINESS_DOMAIN",
     "DEFAULT_TIMEOUT",
     "BknError",
     "Comparison",

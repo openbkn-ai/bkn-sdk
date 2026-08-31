@@ -73,10 +73,7 @@ def main() -> None:
     # environment so code running there joins the caller's turn with no argument
     # passing. See examples/platform/sandbox.py.
     live = bkn_osdk.resolve_context()
-    print(
-        f"\n业务域 {live.business_domain} | "
-        f"环境里的 turn {live.conversation_id or '(无)'} / {live.interaction_id or '(无)'}"
-    )
+    print(f"\n环境里的 turn {live.conversation_id or '(无)'} / {live.interaction_id or '(无)'}")
 
     # The CLI takes the same four fields as flags, and applies them as a
     # `session(...)` scope — so the command line and the library agree on
