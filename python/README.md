@@ -1,8 +1,9 @@
 # bkn-osdk
 
-A typed, read-only Python SDK for **one** knowledge network, produced by
-generating code from that network's schema. Modelled on Palantir's OSDK: point
-the generator at a KN, get a package whose classes *are* that KN's object types.
+A Python SDK for BKN, in two layers.
+
+**The ontology layer** is typed, read-only, and specific to **one** knowledge
+network — generated from that network's schema, the way Palantir's OSDK is:
 
 ```python
 from bkn.object_types import People
@@ -10,16 +11,31 @@ from bkn.object_types import People
 People.where(People.age > 30).take(10)
 ```
 
+**The platform layer** addresses the platform itself: any REST route by path,
+and any tool the deploy publishes by name.
+
+```python
+bkn_osdk.call("/api/dataflow-manager/v1/flows")
+bkn_osdk.call_tool(ctx, kn_id, "describe_resource", {"resource_id": "…", ...})
+```
+
+The layers are named for what they address, not for how they were built — one
+happens to be generated and the other hand-written, which is an implementation
+fact rather than something a caller reasons about. Both go through the same
+credentials, the same transports, and the same managed turn, so dropping to the
+platform layer for one call and coming back up keeps the evidence on one chain.
+
 This is not a port of the TypeScript SDK. That one wraps eleven backend
 namespaces in HTTP calls, which buys a Python caller nothing that
 `bkn_osdk.call("/api/…")` does not. Generated classes over an ontology cannot be
 replaced by a raw call, which is why they are worth a second language.
 
 **Targets platform 0.1.5.** Payloads are taken as the platform sends them, and
-0.1.4 does not send the same ones — it wraps `get_kn_detail`, `list_resources`,
-`list_skills`, `get_object_types` and `list_knowledge_networks` in a `result`
-key, and serves a `semantic-search` route that 0.1.5 withdrew. Reading against
-an older deploy is possible but is the caller's own adaptation, not this SDK's.
+the 0.1.4 line does not send the same ones — it wraps `get_kn_detail`,
+`list_resources`, `list_skills`, `get_object_types` and `list_knowledge_networks`
+in a `result` key, and serves a `semantic-search` route that 0.1.5 withdrew.
+Reading against an older deploy is possible but is the caller's own adaptation,
+not this SDK's.
 
 ## Install
 
@@ -286,23 +302,34 @@ bkn.search_instances("欠款最多的客户", object_types=["customer"], rerank=
 It is where to start when neither the type name nor the field name is known.
 Once both are, a typed query is cheaper and exact.
 
-## Everything else
+## The platform layer
 
-The remaining backend surface is reachable without a typed wrapper — REST by
-path, and any tool in the deploy's catalog by name:
+Everything the generated classes do not cover — every other network, every
+capability, every route — is reached here:
 
 ```python
-bkn_osdk.call("/api/dataflow-manager/v1/flows")
+bkn_osdk.call("/api/dataflow-manager/v1/flows")       # REST, by path
 
-from bkn_osdk.mcp import call_tool, tool_catalog
-tool_catalog(bkn_osdk.resolve_context())              # what this deploy publishes
-call_tool(ctx, KN_ID, "describe_resource", {"resource_id": "…", "bkn_context": …})
+ctx = bkn_osdk.resolve_context()
+bkn_osdk.tool_catalog(ctx)                            # what this deploy publishes
+bkn_osdk.call_tool(ctx, kn_id, "run_sql", {"kn_id": kn_id, "sql": …, "bkn_context": …})
 ```
 
 `call_tool` is the raw seam: it takes the arguments the catalog declares and
-returns what the tool answered, with no shape of its own. Passing a
-`bkn_context` is the caller's job there — `search` and `search_instances` are
-what that looks like once wrapped.
+returns what the tool answered, with no shape of its own — including the
+envelope, which differs by build. Passing a `bkn_context` is the caller's job
+there, and `borrowed_interaction` is how to get one:
+
+```python
+from bkn_osdk.lifecycle import borrowed_interaction
+
+with borrowed_interaction(ctx, kn_id) as turn:
+    arguments = {"kn_id": kn_id, "bkn_context": turn.bkn_context}
+    bkn_osdk.call_tool(ctx, kn_id, "list_skills", arguments)
+```
+
+`search` and `search_instances` are what one of these looks like once wrapped.
+[`examples/platform/`](examples/platform) runs the whole surface.
 
 ## Upgrades
 

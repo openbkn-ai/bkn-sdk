@@ -3,7 +3,7 @@
 
 """Reading one object type: filters, ordering, paging, traversal.
 
-    BKN_KN_ID=ecommerce_ops_bkn_public BKN_OBJECT_TYPE=order python examples/query.py
+    BKN_KN_ID=ecommerce_ops_bkn_public BKN_OBJECT_TYPE=order python examples/ontology/query.py
 
 Everything here is a class-level call on a generated class, so the property
 names are the network's own and a typo is a type error rather than an empty

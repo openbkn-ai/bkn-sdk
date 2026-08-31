@@ -35,7 +35,35 @@ First release deliberately excludes:
 
 ## Architecture
 
-Three blocks, three lifecycles:
+### The two layers, and what they are named for
+
+A caller sees two layers, named for **what they address** rather than how they
+were built:
+
+| Layer | Addresses | Entry points |
+| --- | --- | --- |
+| Platform | the platform itself — every network, every capability | `bkn_osdk.call(path)`, `bkn_osdk.request(...)`, `bkn_osdk.call_tool(...)`, `bkn_osdk.tool_catalog(...)` |
+| Ontology | one knowledge network's ontology | the generated package: `bkn.Order.where(...)`, `bkn.search(...)`, `bkn.Gmv.query(...)` |
+
+The names follow Palantir's own split — Platform SDK beside Ontology SDK — which
+this design already borrows from, so a reader who knows that vocabulary spends
+nothing learning ours.
+
+Two namings were considered and rejected. **"Runtime layer"** collides with the
+runtime this package *is*: `REQUIRES_RUNTIME` in every generated `_meta.py` names
+`bkn-osdk` as a whole, both layers included, and the ontology layer plainly runs
+at runtime too. **"Generated layer"** names an implementation fact — one layer is
+generated, the other hand-written — which is true, uninteresting to a caller, and
+not parallel in kind with whatever the other layer would then be called.
+
+Below the two layers the implementation has four, and they are internal:
+credentials and transports (`config`, `auth`, `http`, `mcp`, `errors`), the
+managed lifecycle that cross-cuts both transports (`lifecycle`), the capabilities
+(`query`, `types`, `subgraph`, `metrics`, `search`), and — outside the runtime
+entirely, running only under `bkn-osdk generate` / `check` — generation
+(`codegen/`, `schema`, `meta`).
+
+### Three blocks, three lifecycles
 
 | Block | Language | Location | Contents |
 | --- | --- | --- | --- |

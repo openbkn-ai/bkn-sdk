@@ -3,7 +3,7 @@
 
 """From a question to rows, without knowing the network's names first.
 
-    BKN_KN_ID=ecommerce_ops_bkn_public python examples/explore.py "最近的大额订单"
+    BKN_KN_ID=ecommerce_ops_bkn_public python examples/ontology/explore.py "最近的大额订单"
 
 Three steps, each answering a different question:
 

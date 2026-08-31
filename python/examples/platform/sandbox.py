@@ -3,7 +3,7 @@
 
 """Running the OSDK inside the platform's sandbox, on the caller's own turn.
 
-    BKN_KN_ID=ecommerce_ops_bkn_public BKN_OBJECT_TYPE=order python examples/in_sandbox.py
+    BKN_KN_ID=ecommerce_ops_bkn_public BKN_OBJECT_TYPE=order python examples/platform/sandbox.py
 
 The sandbox executes a `handler(event)` and hands back what it returns. What
 makes this more than "run some code" is the last two body fields: pass the

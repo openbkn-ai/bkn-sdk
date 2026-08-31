@@ -1,11 +1,24 @@
 # Copyright (c) 2026 OpenBKN. All rights reserved.
 # Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
-"""bkn-osdk — the runtime behind generated, network-specific ontology SDKs.
+"""bkn-osdk — a Python SDK for BKN, in two layers.
 
-A generated package imports from here and from nothing else, so a runtime fix
-or a new operator reaches it through `pip install -U bkn-osdk` with no
-regeneration.
+**The platform layer** addresses the platform itself: any REST route by path
+(`call`, `request`) and any tool the deploy publishes by name (`call_tool`,
+`tool_catalog`). Every network, every capability, no generation — at the cost of
+shaping arguments yourself against what the catalog declares.
+
+**The ontology layer** addresses one knowledge network's ontology: classes
+generated from its schema, where `Order.total_amount` is a property this network
+really has and a typo is a type error rather than an empty result set.
+
+The layers are named for what they address, not for how they were built. Both
+run through the same credentials, the same transports and the same managed turn,
+so a script can drop to the platform layer for one call and come back up with
+its evidence still on one chain.
+
+A generated package imports from here and from nothing else, so a fix or a new
+operator reaches it through `pip install -U bkn-osdk` with no regeneration.
 
 Import is side-effect free: nothing resolves credentials or touches the network
 until a call is made.
@@ -34,6 +47,7 @@ from .errors import (
     ToolError,
 )
 from .http import call, request
+from .mcp import ToolResult, call_tool, tool_catalog
 from .metrics import Metric
 from .query import Comparison, Composite, Filter, ObjectSet, Page, Sort, to_condition
 from .schema import (
@@ -85,8 +99,10 @@ __all__ = [
     "SchemaDriftError",
     "Sort",
     "ToolError",
+    "ToolResult",
     "__version__",
     "call",
+    "call_tool",
     "configure",
     "fingerprint",
     "request",
@@ -95,4 +111,5 @@ __all__ = [
     "search_instances",
     "session",
     "to_condition",
+    "tool_catalog",
 ]

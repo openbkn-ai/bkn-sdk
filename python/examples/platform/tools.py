@@ -1,16 +1,16 @@
 # Copyright (c) 2026 OpenBKN. All rights reserved.
 # Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
-"""The runtime layer: REST by path, MCP tools by name, no generated package.
+"""The platform layer: REST by path, tools by name, no generated package.
 
-    BKN_KN_ID=ecommerce_ops_bkn_public python examples/runtime.py
+    BKN_KN_ID=ecommerce_ops_bkn_public python examples/platform/tools.py
 
-The generated classes cover reading one network. Everything else on the platform
-is reached here — the deploy's whole tool catalog, and any REST route — at the
-cost of shaping the arguments yourself against what the catalog declares.
+The ontology layer covers reading one network. Everything else on the platform is
+reached here — the deploy's whole tool catalog, and any REST route — at the cost
+of shaping the arguments yourself against what the catalog declares.
 
-The two layers share a context and a turn, so a script can drop down to this
-level for one call and go back up, and the evidence still lands on one chain.
+Both layers share a context and a turn, so a script can drop down to this one for
+a call and go back up, and the evidence still lands on one chain.
 """
 
 from __future__ import annotations

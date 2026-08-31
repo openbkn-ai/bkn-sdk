@@ -3,7 +3,7 @@
 
 """Reading under a managed turn, so the reads land in the evidence chain.
 
-    BKN_KN_ID=ecommerce_ops_bkn_public BKN_OBJECT_TYPE=order python examples/traced.py
+    BKN_KN_ID=ecommerce_ops_bkn_public BKN_OBJECT_TYPE=order python examples/ontology/traced.py
 
 A turn is one agent question: opened once, reused by every read inside the
 scope, finished on exit. Each read comes back with a receipt — the operation id,
