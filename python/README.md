@@ -1,5 +1,7 @@
 # bkn-osdk
 
+*[中文版](README.zh.md)*
+
 A Python SDK for BKN, in two layers.
 
 **The ontology layer** is typed, read-only, and specific to **one** knowledge
@@ -255,10 +257,12 @@ with bkn_osdk.session(traced=True):
     page.rows[0].__receipt__  # the same receipt, on each row it accounts for
 ```
 
-The trade is deliberate: the traced path cannot sort or count, because the tool
-accepts neither `sort` nor `need_total` — so those keys are dropped rather than
-sent and ignored in silence. Untraced reads take the REST path, which is faster
-and strictly more capable for reading, and carry no receipt.
+The tool accepts neither `sort` nor `need_total` and honours neither, so a query
+wanting either takes the REST path even inside a traced scope — carrying the
+scope's turn, so it is still recorded, but answering without an in-band receipt.
+Dropping the keys instead would return an unsorted page, or a count of zero for
+a set with matches: a wrong answer bought with a receipt. Untraced reads take
+REST throughout, which is faster, and carry no receipt.
 
 Which calls need a turn is a matter of surface, not of tool. The capability
 surface — the MCP tools and their REST twins under `/kn/` — refuses a
@@ -330,6 +334,13 @@ with borrowed_interaction(ctx, kn_id) as turn:
 
 `search` and `search_instances` are what one of these looks like once wrapped.
 [`examples/platform/`](examples/platform) runs the whole surface.
+
+## Examples
+
+Six runnable scripts under [`examples/`](examples): [`credentials.py`](examples/credentials.py)
+(which platform, as whom, and where that was decided), three under `ontology/`
+(explore, query, evidence) and two under `platform/` (the tool surface, the
+sandbox).
 
 ## Upgrades
 
