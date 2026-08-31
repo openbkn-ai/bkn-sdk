@@ -44,6 +44,7 @@ on:
     paths:
       - 'src/**'
       - 'test/**'
+      - 'python/**'
       - 'scripts/**'
       - 'skills/**'
       - 'fixtures/**'
@@ -204,14 +205,11 @@ jobs:
                   break
               page += 1
           paths = paths[:FILE_CAP]
-          # 截断判据要在范围过滤之前算：过滤掉的文件不是「没拿到」，而是有意不审，
-          # 拿过滤后的长度跟 changedFiles 比会把每个碰过 python/ 的 PR 都当成被截断。
+          # 本仓有两套栈：TypeScript SDK / CLI，和 python/ 下的 OSDK。两套都审——
+          # python/ 曾被整体排除，理由是「拿 TS 的尺子量 Python」，但 OSDK 落地后
+          # 那把尺子已经在下面的 prompt 里按语言分开了，而排除的代价是实测过的：
+          # #83 有 246 个文件，评审只看到非 python 的 8 个，然后盖了 APPROVED。
           fetched = len(paths)
-          # 本仓的评审范围是 TypeScript SDK 与 CLI。python/ 下的 OSDK 有自己的工具链
-          # 与评审标准，不在这套 prompt 的关注面里——放进来只会拿 TS 的尺子量 Python。
-          # 这是有意排除，不是漏审：verdict 的「未经评审」通告只针对截断，不含这里。
-          OUT_OF_SCOPE = ("python/",)
-          paths = [p_ for p_ in paths if not p_.startswith(OUT_OF_SCOPE)]
           total = int(subprocess.run(
               ["gh", "pr", "view", pr, "--json", "changedFiles", "--jq", ".changedFiles"],
               capture_output=True, text=True, check=True,
@@ -220,7 +218,7 @@ jobs:
           # 本仓是单包结构：src/ 下一层是分层边界（api / resources / commands / auth …），
           # 其余顶层目录本身就是一类。归不进这两类的（根文件、examples/、docs/）落 misc，
           # 宁可多归一类也不静默丢掉。
-          TWO_LEVEL = {"src"}
+          TWO_LEVEL = {"src", "python"}
           TOP_LEVEL = {"test", "scripts", "skills", "fixtures", "examples", "docs"}
 
           # 按类分流，代码与文档不该同规格评审：
@@ -229,14 +227,22 @@ jobs:
           #   低风险  文档/示例/lock 文件，浅审
           # 鉴权、包元数据、公共出口不在此列——它们定义对外契约与凭据处理，永远走 deep。
           def klass(path):
+              # 凭据、包元数据、公共出口定义对外契约，两套栈同理：TS 的 src/auth 与
+              # src/index.ts，Python 的 config / auth / __init__。
               risky = (path.startswith(("src/auth/", "src/index.ts"))
-                       or path == "package.json")
+                       or path == "package.json"
+                       or path in ("python/pyproject.toml",
+                                   "python/bkn_osdk/__init__.py",
+                                   "python/bkn_osdk/config.py",
+                                   "python/bkn_osdk/auth.py"))
               if risky:
                   return "deep"
-              if (path.startswith(("test/", "fixtures/"))
-                      or ".test." in path or ".spec." in path):
+              if (path.startswith(("test/", "fixtures/", "python/tests/"))
+                      or ".test." in path or ".spec." in path
+                      or path.split("/")[-1].startswith("test_")):
                   return "shallow"
-              if (path.startswith(("docs/", "examples/")) or path.endswith(".md")
+              if (path.startswith(("docs/", "examples/", "python/examples/"))
+                      or path.endswith(".md")
                       or path.endswith((".lock", "-lock.json"))):
                   return "lowrisk"
               return "deep"
@@ -316,12 +322,6 @@ jobs:
               pathlib.Path("skip-notice.txt").write_text(
                   "PR #%s 上一轮已放行，且本次改动未触及高危面，跳过自动复评。"
                   "需要复评请回复 /review。" % pr, encoding="utf-8")
-          # 改动全部落在评审范围外（例如只碰了 python/）。`/review` 与手动触发不走
-          # on.paths 过滤，会一路跑到这里；没有这条通告，作者只会看到什么都没发生。
-          elif fetched and not paths:
-              pathlib.Path("skip-notice.txt").write_text(
-                  "PR #%s 的改动不在 TypeScript 评审范围内（python/ 等目录有意排除），"
-                  "本轮不评审。" % pr, encoding="utf-8")
           print("skip_round=%s" % ("true" if skip else "false"))
           print("file_total=%d" % total)
           print("file_listed=%d" % fetched)
@@ -498,14 +498,24 @@ jobs:
 
             产出文件：${{ github.workspace }}/findings/${{ matrix.shard.key }}.json
 
-            仓库是 openbkn 平台的 TypeScript SDK 与 CLI（bin: `openbkn`），Node 22 +
-            commander + undici + zod，用 biome + tsc 做静态检查、vitest 跑单测。
-            分层：src/api（HTTP 端点）→ src/resources（客户端封装）→ src/commands
-            （CLI 子命令）。协作规范见仓库根的 AGENTS.md。
+            仓库里有**两套栈**，改动可能落在任意一侧，判据不通用：
 
-            **评审范围只有 TypeScript 这一侧。** `python/` 下的 OSDK 有自己的工具链与
-            评审标准，已在上游过滤掉，不会出现在下面的清单里；就算核查时读到了它，
-            也不要为它出结论。
+            **TypeScript SDK 与 CLI**（bin: `openbkn`）——Node 22 + commander +
+            undici + zod，biome + tsc 静态检查、vitest 单测。分层：src/api（HTTP
+            端点）→ src/resources（客户端封装）→ src/commands（CLI 子命令）。
+
+            **`python/` 下的 Python OSDK**（发布名 `bkn-osdk`）——运行时依赖只有
+            httpx，ruff + `mypy --strict` + pytest。两层对外：**平台层**
+            （`call` / `call_tool`，寻址平台自己）与**本体层**（从某个知识网络的
+            schema 生成的只读类）。内部四层：凭据与传输（config / auth / http /
+            mcp）、横跨两种传输的受管生命周期（lifecycle）、能力（query / types /
+            subgraph / metrics / search）、以及只在 `bkn-osdk generate` 时跑的
+            生成层（codegen / schema / meta）。
+
+            **不要拿一侧的尺子量另一侧。** npm / tsup / vitest / engines、zod schema、
+            `encodeURIComponent` 只对 TS 成立；`mypy --strict`、描述符、ContextVar、
+            生成包与运行时的版本边界只对 Python 成立。两侧共有的只有：契约、凭据处理、
+            正确性。协作规范见仓库根的 AGENTS.md。
 
             ## 范围
 
@@ -545,8 +555,25 @@ jobs:
                - 后端：端点路径、参数名（snake_case vs camelCase）、`encodeURIComponent`、
                  分页语义（page 0-based / 1-based / offset）。同一端点的其它调用点一并
                  `git grep`，别只改一处留下不一致。
-            4. **测试** — 新增逻辑是否有 vitest 覆盖，测试是否断言真实行为
-               （请求 URL / query / body），而非只跑通。
+            4. **测试** — 新增逻辑是否有覆盖（TS 走 vitest，Python 走 pytest），
+               测试是否断言真实行为（请求 URL / query / body），而非只跑通。
+
+            改动落在 `python/` 时，另外四条只在这一侧成立：
+
+            5. **凭据与作用域** — `session(...)` 的 ContextVar 必须存 token 再复位，
+               不能直接 `.set(None)`：作用域会嵌套，内层退出把外层一起清掉是实际
+               发生过的缺陷。凭据解析链（scope → configure → 环境 → `~/.bkn`）的
+               优先级不能被某一处绕过。
+            6. **受管 turn** — 能力面（MCP 工具与 `/kn/` REST）必须带 `bkn_context`，
+               读路径（`ontology-query`）不必；开了的 turn 必须关，别人的 turn
+               不能关。传输选择要看查询需要什么：MCP 工具收下 `sort` / `need_total`
+               却不认，需要它们的查询走 REST，否则返回的是错答案而不是降级。
+            7. **生成物的不变量** — `bkn_osdk/codegen/` 是纯函数（schema in、
+               `{路径: 内容}` out，无 IO），生成的代码要能过 `mypy --strict` 且
+               `ruff` 干净；改了 emitter 必须同时更新 golden 与指纹。生成包里只放
+               声明不放逻辑——放了逻辑，升级运行时就得重新生成。
+            8. **逐字透传** — 平台负载按原样返回。要动它（脱信封、补默认值）得有
+               实测证据，并说明两个部署上的行为差异。
 
             这是**优先级**，不是清单。三行改动不需要逐条走一遍——只看这次改动实际
             能触到的那几条。契约只在碰了端点、flag、导出符号时才成立；测试只在
@@ -584,9 +611,15 @@ jobs:
             - **被删掉的代码**：先问它在维护什么不变量、当初为什么要写。删掉一个分支
               等于不再保证那个不变量，必须确认对应的输入形态确实已经不存在，而不是
               「当前主路径不会产生」——用户手上的旧脚本仍会产生。
-            - **三层之间的连带改动**（src/api ↔ src/resources ↔ src/commands）：端点
-              签名变了，要把上下游一起读——封装层与 CLI 子命令的传参、默认值、错误处理
-              是否同步跟上；zod schema 放宽或收紧后，原本合法的响应会不会被判成非法。
+            - **跨层的连带改动**：TS 是 src/api ↔ src/resources ↔ src/commands——
+              端点签名变了要把上下游一起读，封装层与 CLI 子命令的传参、默认值、错误
+              处理是否同步跟上；zod schema 放宽或收紧后，原本合法的响应会不会被判成
+              非法。Python 是 http / mcp ↔ lifecycle ↔ query / types ↔ codegen——
+              传输或生命周期改了，要确认两条读路径（REST 与 MCP 工具）行为一致，
+              并确认生成的包不需要跟着重新生成。
+            - **两侧同时改**（`src/**` 与 `python/**` 都动了）：两个客户端调的是
+              同一个后端。确认它们对同一个契约的理解没有分叉——路由、参数名、
+              是否需要 `bkn_context`、负载信封。一侧改了另一侧没改，要说出来。
 
             ## 复评（作者推了新提交）
 
@@ -677,7 +710,7 @@ jobs:
             - 复述 PR 描述或 diff 内容
             - 自评可信度的旁白（门槛不到就不该提，提了就别再解释自己多确信）
             - 与行为无关的事：格式、命名、结尾换行、注释措辞、文件放在哪一层
-              （biome 已覆盖格式）
+              （TS 有 biome、Python 有 ruff format，格式都已被覆盖）
             - 在 not_covered 里论证「这个面在本 PR 上不适用所以不算漏审」——
               没这个面就填空串
 
