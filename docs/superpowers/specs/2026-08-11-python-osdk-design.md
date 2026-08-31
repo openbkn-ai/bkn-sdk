@@ -468,7 +468,7 @@ is exactly why it is worth building in a second language.
 So the runtime ships one generic escape hatch rather than eleven typed namespaces:
 
 ```python
-bkn_osdk.call("/api/dataflow-manager/v1/flows", method="GET")
+bkn_osdk.call("/api/agent-observability/v1/traces", query={"limit": 10})
 ```
 
 It reuses the same credential resolution, error mapping, and session handling as a query, and it

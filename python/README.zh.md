@@ -15,7 +15,7 @@ People.where(People.age > 30).take(10)
 **平台层**面向平台自己：任何 REST 路由按路径调，任何部署公布的工具按名字调。
 
 ```python
-bkn_osdk.call("/api/dataflow-manager/v1/flows")
+bkn_osdk.call("/api/agent-observability/v1/traces", query={"limit": 10})
 bkn_osdk.call_tool(ctx, kn_id, "describe_resource", {"resource_id": "…", ...})
 ```
 
@@ -216,7 +216,8 @@ bkn.search_instances("欠款最多的客户", object_types=["customer"], rerank=
 生成类覆盖不到的一切 —— 别的网络、别的能力、别的路由 —— 都从这里走：
 
 ```python
-bkn_osdk.call("/api/dataflow-manager/v1/flows")       # REST，按路径
+bkn_osdk.call("/api/agent-observability/v1/traces", query={"limit": 10})   # REST，按路径
+bkn_osdk.call("/api/safe/v1/me/api-keys")                                 # 别的什么也一样
 
 ctx = bkn_osdk.resolve_context()
 bkn_osdk.tool_catalog(ctx)                            # 这个部署公布了什么

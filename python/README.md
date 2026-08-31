@@ -17,7 +17,7 @@ People.where(People.age > 30).take(10)
 and any tool the deploy publishes by name.
 
 ```python
-bkn_osdk.call("/api/dataflow-manager/v1/flows")
+bkn_osdk.call("/api/agent-observability/v1/traces", query={"limit": 10})
 bkn_osdk.call_tool(ctx, kn_id, "describe_resource", {"resource_id": "…", ...})
 ```
 
@@ -312,7 +312,8 @@ Everything the generated classes do not cover — every other network, every
 capability, every route — is reached here:
 
 ```python
-bkn_osdk.call("/api/dataflow-manager/v1/flows")       # REST, by path
+bkn_osdk.call("/api/agent-observability/v1/traces", query={"limit": 10})   # REST, by path
+bkn_osdk.call("/api/safe/v1/me/api-keys")                                 # anything else
 
 ctx = bkn_osdk.resolve_context()
 bkn_osdk.tool_catalog(ctx)                            # what this deploy publishes
