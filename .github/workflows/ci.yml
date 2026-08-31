@@ -60,6 +60,37 @@ jobs:
   # live platform under `tests/fixtures/`, not against a platform.
   python:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: python
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both ends of what `requires-python` promises. Testing only the floor
+        # leaves the promise about newer runtimes unexercised, and testing only
+        # the newest leaves the floor a claim nothing checks.
+        python-version: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: ruff format --check .
+      # Strict, because the whole point of generating types is that a consumer's
+      # type checker believes them.
+      - run: mypy
+      - run: pytest -q
+
+  # The oldest `httpx` the package allows. Two of this runtime's decisions rest
+  # on library behaviour rather than on our own code — the bearer is dropped on
+  # a cross-origin redirect, and a stored token is refreshed once on 401 — and a
+  # floor nothing runs is a floor nobody knows is broken.
+  python-dependency-floor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: python
@@ -67,13 +98,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          # The floor the package declares. Testing only the newest would leave
-          # `requires-python` a claim nothing exercises.
           python-version: "3.10"
       - run: pip install -e ".[dev]"
-      - run: ruff check .
-      - run: ruff format --check .
-      # Strict, because the whole point of generating types is that a consumer's
-      # type checker believes them.
-      - run: mypy
+      - run: pip install "httpx==0.27.0"
       - run: pytest -q

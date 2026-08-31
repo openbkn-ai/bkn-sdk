@@ -186,7 +186,10 @@ def test_a_failed_refresh_surfaces_the_original_401(
         http_module.request(ctx, "/api/thing")
 
     assert excinfo.value.status == 401
-    assert "认证失败" in excinfo.value.body
+    # The platform's own words reach the caller. Read back through JSON rather
+    # than as a substring: `ensure_ascii` differs across httpx versions, and what
+    # matters is that the message survives, not how it was escaped in transit.
+    assert json.loads(excinfo.value.body)["description"] == "认证失败"
     assert len(exchange.refreshes) == 1  # tried once, did not loop
 
 

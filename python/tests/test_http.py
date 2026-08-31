@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from typing import Any
 
@@ -67,7 +68,9 @@ def test_a_body_implies_post_and_sets_content_type(record: list[httpx.Request]) 
 
     assert record[0].method == "POST"
     assert record[0].headers["content-type"] == "application/json"
-    assert record[0].read() == b'{"a":1}'
+    # Parsed, not compared byte for byte: httpx 0.27 separates with a space
+    # and 0.28 does not, and the wire meaning is the same either way.
+    assert json.loads(record[0].read()) == {"a": 1}
 
 
 def test_auth_and_business_domain_headers(record: list[httpx.Request]) -> None:
@@ -165,7 +168,7 @@ def test_an_empty_dict_still_counts_as_a_body(record: list[httpx.Request]) -> No
     http_module.request(ctx(), "/api/thing", body={})
 
     assert record[0].method == "POST"
-    assert record[0].read() == b"{}"
+    assert json.loads(record[0].read()) == {}
 
 
 def test_no_body_means_no_content_type(record: list[httpx.Request]) -> None:
