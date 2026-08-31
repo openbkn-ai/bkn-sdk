@@ -36,6 +36,15 @@ MANAGED = "bkn_context"
 #: through `call` and out of the generated surface.
 RETIRED = {"kn_search"}
 
+#: Measured behaviour a caller cannot learn from the spec. Kept short and rare:
+#: most surprises belong in the capture itself, not in prose beside it.
+NOTES = {
+    "find_skills": (
+        "实测：网络没有绑定技能时返回 404 BknBackend.ObjectType.ObjectTypeNotFound"
+        "(“对象类不存在”)。对象类是存在的，这个错误码指错了方向。"
+    ),
+}
+
 
 def resolve(schema: Any, spec: dict[str, Any], section: str = "schemas") -> dict[str, Any]:
     """A node with its top-level `$ref` followed, or itself if there is none.
@@ -54,11 +63,38 @@ def resolve(schema: Any, spec: dict[str, Any], section: str = "schemas") -> dict
     return dict(schema)
 
 
-def field(name: str, schema: dict[str, Any], required: bool) -> dict[str, Any]:
-    """One argument, as the generator needs to see it."""
+def _describe(name: str, schema: Any, spec: dict[str, Any]) -> str:
+    """One field of a list's element, and — one level down — of *its* elements.
+
+    `relation_type_paths[].relation_types[]` is where the shape that matters
+    lives: a `TypeEdge`, not a string. One level is enough to say that and
+    shallow enough to stay readable.
+    """
+    schema = resolve(schema if isinstance(schema, dict) else {}, spec)
+    if schema.get("type") != "array":
+        return name
+    nested = resolve(schema.get("items") or {}, spec)
+    inner = sorted((nested.get("properties") or {}).keys())
+    return f"{name}{{{', '.join(inner)}}}" if inner else name
+
+
+def field(
+    name: str, schema: dict[str, Any], required: bool, spec: dict[str, Any]
+) -> dict[str, Any]:
+    """One argument, as the generator needs to see it.
+
+    An array's `items` matter as much as the array itself. `relation_type_paths`
+    is a list of `TypeEdge`, and a capture keeping only "array" leaves the caller
+    to guess: a list of strings type-checks, reaches the platform, and comes back
+    as `cannot unmarshal string into Go struct field ... TypeEdge`. Only the
+    item's field names are kept — that is what a docstring can carry.
+    """
+    item = resolve(schema.get("items") or {}, spec) if schema.get("type") == "array" else {}
+    item_fields = [_describe(n, s, spec) for n, s in sorted((item.get("properties") or {}).items())]
     return {
         "name": name,
         "type": schema.get("type", "any"),
+        **({"item_fields": item_fields} if item_fields else {}),
         "required": required,
         "description": " ".join(str(schema.get("description", "")).split())[:400],
         **({"enum": schema["enum"]} if isinstance(schema.get("enum"), list) else {}),
@@ -72,6 +108,7 @@ def operation(path: str, method: str, op: dict[str, Any], spec: dict[str, Any]) 
             parameter["name"],
             resolve(parameter.get("schema") or {}, spec),
             bool(parameter.get("required")),
+            spec,
         )
         for parameter in parameters
         if parameter.get("in") == "query" and parameter.get("name")
@@ -81,7 +118,7 @@ def operation(path: str, method: str, op: dict[str, Any], spec: dict[str, Any]) 
     body_schema = resolve(content.get("schema") or {}, spec)
     required = set(body_schema.get("required") or [])
     body = [
-        field(name, resolve(schema, spec), name in required)
+        field(name, resolve(schema, spec), name in required, spec)
         for name, schema in (body_schema.get("properties") or {}).items()
         if name != MANAGED
     ]
@@ -89,10 +126,12 @@ def operation(path: str, method: str, op: dict[str, Any], spec: dict[str, Any]) 
     answers = ((op.get("responses") or {}).get("200") or {}).get("content") or {}
     response = resolve((answers.get("application/json") or {}).get("schema") or {}, spec)
 
+    operation_id = path.rsplit("/", 1)[-1]
     return {
         "path": path,
         "method": method.upper(),
-        "operation": path.rsplit("/", 1)[-1],
+        "operation": operation_id,
+        **({"note": NOTES[operation_id]} if operation_id in NOTES else {}),
         "summary": " ".join(str(op.get("summary", "")).split()),
         "description": " ".join(str(op.get("description", "")).split())[:600],
         "query": query,

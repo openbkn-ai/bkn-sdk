@@ -209,6 +209,10 @@
         {
           "name": "sort",
           "type": "array",
+          "item_fields": [
+            "direction",
+            "field"
+          ],
           "required": false,
           "description": "**起点对象类**的排序，按数组顺序依次比较。与 `limit` 配合决定「从哪些 起点出发」，不影响路径本身的顺序。元素不可为 `null`。"
         },
@@ -241,6 +245,7 @@
       "path": "/api/agent-retrieval/v1/kn/find_skills",
       "method": "POST",
       "operation": "find_skills",
+      "note": "实测：网络没有绑定技能时返回 404 BknBackend.ObjectType.ObjectTypeNotFound(“对象类不存在”)。对象类是存在的，这个错误码指错了方向。",
       "summary": "按业务上下文召回 Skill",
       "description": "**召回模式由参数自动决定，不用显式指定**： | 传入参数 | 模式 | |---|---| | `kn_id` + `object_type_id` | 对象类级：沿对象类与 `skills` 之间的关系路径召回 | | 再加 `instance_identities` | 实例级：从具体实例出发召回，并补充对象类级结果 | **`skill_query` 的检索方式随索引能力降级**：对 `skills` 实例的 `name` / `description` 追加文本过滤——BKN 已建向量索引时用 `knn`，已建全文索引时用 `match`，都没有时退化为 `like`。 `skills` 对象类至少要有 `skill_id` 与 `name` 两个数据属性，`description` 可选；不满足时返回 400 并在 `details` 里列出缺失属性。 **空结果是 200 不是错误**：没有匹配时返回 `entries: []`，并可能带一个 `message` 说明为什么为空（如该对象类未绑定任何 Skill）以及下一步建议。",
       "query": [
@@ -931,6 +936,11 @@
         {
           "name": "relation_type_paths",
           "type": "array",
+          "item_fields": [
+            "limit",
+            "object_types{condition, id, limit, sort}",
+            "relation_types{relation_type_id, source_object_type_id, target_object_type_id}"
+          ],
           "required": true,
           "description": "关系路径集合。多条路径同时查询，各自返回独立子图。"
         }
@@ -993,6 +1003,10 @@
         {
           "name": "order_by",
           "type": "array",
+          "item_fields": [
+            "direction",
+            "property"
+          ],
           "required": false,
           "description": "结果排序。"
         },
@@ -1070,6 +1084,11 @@
         {
           "name": "filters",
           "type": "array",
+          "item_fields": [
+            "field",
+            "op",
+            "value"
+          ],
           "required": false,
           "description": "扁平过滤简写，多个条件按 AND 组合。与 `condition` 互斥，同传时 `condition` 优先。需要 OR 或嵌套时改用 `condition`。"
         },
@@ -1088,6 +1107,10 @@
         {
           "name": "sort",
           "type": "array",
+          "item_fields": [
+            "direction",
+            "field"
+          ],
           "required": false,
           "description": "排序字段，按数组顺序依次比较。不传时默认序不保证语义，需要「最新 / 最大 / 最小的前 N 条」时必须显式指定。"
         },

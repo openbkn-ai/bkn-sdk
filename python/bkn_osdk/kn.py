@@ -233,7 +233,7 @@ def explore_subgraph(
             的那些。默认只返回完整路径。零边路径任何情况下都不返回。
         limit: **起点对象类**的实例数量上限，不是路径条数上限。
         sort: **起点对象类**的排序，按数组顺序依次比较。与 `limit` 配合决定「从哪些
-            起点出发」，不影响路径本身的顺序。元素不可为 `null`。
+            起点出发」，不影响路径本身的顺序。元素不可为 `null`。 元素字段: direction, field。
         offset: 起点对象类的偏移翻页。与 `search_after` 互斥。
         search_after: 起点对象类的游标翻页。与 `offset` 互斥。
 
@@ -284,6 +284,9 @@ def find_skills(
     对象类至少要有 `skill_id` 与 `name` 两个数据属性，`description` 可选；不满足时返回 400
     并在 `details` 里列出缺失属性。 **空结果是 200 不是错误**：没有匹配时返回 `entries:
     []`，并可能带一个 `message` 说明为什么为空（如该对象类未绑定任何 Skill）以及下一步建议。
+
+    实测：网络没有绑定技能时返回 404
+    BknBackend.ObjectType.ObjectTypeNotFound(“对象类不存在”)。对象类是存在的，这个错误码指错了方向。
 
     Args:
         kn_id: 知识网络 ID。
@@ -796,7 +799,10 @@ def query_instance_subgraph(
     [logic-property.yaml](logic-property.yaml) 时， 从这里取键值对，不要自己拼。
 
     Args:
-        relation_type_paths: 关系路径集合。多条路径同时查询，各自返回独立子图。
+        relation_type_paths: 关系路径集合。多条路径同时查询，各自返回独立子图。 元素字段: limit,
+            object_types{condition, id, limit, sort},
+            relation_types{relation_type_id, source_object_type_id,
+            target_object_type_id}。
 
     Returns the platform's own payload: entries.
     """
@@ -852,7 +858,7 @@ def query_metric(
             `operation` / `value` / `value_from`，可 `and` / `or` 嵌套）。
         analysis_dimensions: 分析维度（按维度拆分结果）。取值须来自
             `related_metrics[].analysis_dimensions`。
-        order_by: 结果排序。
+        order_by: 结果排序。 元素字段: direction, property。
         having: 对聚合结果过滤。
         limit: 返回条数上限。
         fill_null: 区间查询时，无数据的步长点是否补空。仅对序列查询有效，且必须同时给 `time.start`
@@ -916,11 +922,11 @@ def query_object_instance(
             `field` + `operation` + `value` + `value_from`。 **`value` 与 `value_from`
             必须成对出现**，且 `value_from` 目前只支持 `const`。
         filters: 扁平过滤简写，多个条件按 AND 组合。与 `condition` 互斥，同传时 `condition`
-            优先。需要 OR 或嵌套时改用 `condition`。
+            优先。需要 OR 或嵌套时改用 `condition`。 元素字段: field, op, value。
         limit: 返回条数。
         properties: 指定返回的属性字段；不传返回全部属性。
         sort: 排序字段，按数组顺序依次比较。不传时默认序不保证语义，需要「最新 / 最大 / 最小的前 N
-            条」时必须显式指定。
+            条」时必须显式指定。 元素字段: direction, field。
         search_after: 游标翻页：上一页响应返回的 `search_after` 原样回传。首次查询留空。 与
             `offset` 互斥。
         offset: 偏移翻页：适用于资源（vega 表源）路径，可跳页。与 `search_after` 互斥。

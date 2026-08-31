@@ -157,6 +157,8 @@ def _docstring(op: dict[str, Any]) -> str:
     lines = [f'    """{op["summary"] or op["operation"]}.', ""]
     if op["description"]:
         lines += [f"    {line}" for line in _wrap(op["description"], 90)] + [""]
+    if op.get("note"):
+        lines += [f"    {line}" for line in _wrap(op["note"], 90)] + [""]
 
     documented = [f for f in op["query"] + op["body"] if f["description"]]
     if documented:
@@ -165,7 +167,12 @@ def _docstring(op: dict[str, Any]) -> str:
             name = _safe(f["name"])
             # The label eats into the first line's width, and continuations are
             # indented under it, so each gets its own budget.
-            wrapped = _wrap(f["description"], 90 - _columns(name) - 2)
+            described = f["description"]
+            if f.get("item_fields"):
+                # What goes *in* the list. Without it the annotation says
+                # `list[Any]` and the caller learns the shape from a 400.
+                described += " 元素字段: " + ", ".join(f["item_fields"]) + "。"
+            wrapped = _wrap(described, 90 - _columns(name) - 2)
             lines.append(f"        {name}: {wrapped[0]}")
             lines += [f"            {line}" for line in wrapped[1:]]
         lines.append("")
