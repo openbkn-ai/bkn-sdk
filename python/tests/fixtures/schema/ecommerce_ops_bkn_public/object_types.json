@@ -1,0 +1,3833 @@
+{
+  "entries": [
+    {
+      "branch": "main",
+      "color": "",
+      "comment": "券模板发放/核销汇总视图，含预计算比率字段。",
+      "create_time": 1785312158047,
+      "creator": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      },
+      "data_properties": [
+        {
+          "comment": "优惠券模板ID",
+          "display_name": "template_id",
+          "mapped_field": {
+            "display_name": "template_id",
+            "name": "template_id",
+            "type": "integer"
+          },
+          "name": "template_id",
+          "type": "integer"
+        },
+        {
+          "comment": "模板名称",
+          "condition_operations": [
+            "==",
+            "!=",
+            "in",
+            "not_in",
+            ">",
+            ">=",
+            "<",
+            "<=",
+            "range",
+            "out_range",
+            "regex",
+            "like",
+            "not_like"
+          ],
+          "display_name": "template_name",
+          "mapped_field": {
+            "display_name": "template_name",
+            "name": "template_name",
+            "type": "string"
+          },
+          "name": "template_name",
+          "type": "string"
+        },
+        {
+          "comment": "券类型",
+          "condition_operations": [
+            "==",
+            "!=",
+            "in",
+            "not_in",
+            ">",
+            ">=",
+            "<",
+            "<=",
+            "range",
+            "out_range",
+            "regex",
+            "like",
+            "not_like"
+          ],
+          "display_name": "coupon_type",
+          "mapped_field": {
+            "display_name": "coupon_type",
+            "name": "coupon_type",
+            "type": "string"
+          },
+          "name": "coupon_type",
+          "type": "string"
+        },
+        {
+          "comment": "优惠力度",
+          "display_name": "discount_value",
+          "mapped_field": {
+            "display_name": "discount_value",
+            "name": "discount_value",
+            "type": "decimal"
+          },
+          "name": "discount_value",
+          "type": "decimal"
+        },
+        {
+          "comment": "最低消费金额",
+          "display_name": "min_order_amt",
+          "mapped_field": {
+            "display_name": "min_order_amt",
+            "name": "min_order_amt",
+            "type": "decimal"
+          },
+          "name": "min_order_amt",
+          "type": "decimal"
+        },
+        {
+          "comment": "最大优惠封顶金额",
+          "display_name": "max_discount",
+          "mapped_field": {
+            "display_name": "max_discount",
+            "name": "max_discount",
+            "type": "decimal"
+          },
+          "name": "max_discount",
+          "type": "decimal"
+        },
+        {
+          "comment": "发行总量",
+          "display_name": "total_quantity",
+          "mapped_field": {
+            "display_name": "total_quantity",
+            "name": "total_quantity",
+            "type": "integer"
+          },
+          "name": "total_quantity",
+          "type": "integer"
+        },
+        {
+          "comment": "已发放数量",
+          "display_name": "issued_quantity",
+          "mapped_field": {
+            "display_name": "issued_quantity",
+            "name": "issued_quantity",
+            "type": "integer"
+          },
+          "name": "issued_quantity",
+          "type": "integer"
+        },
+        {
+          "comment": "已使用数量",
+          "display_name": "used_quantity",
+          "mapped_field": {
+            "display_name": "used_quantity",
+            "name": "used_quantity",
+            "type": "integer"
+          },
+          "name": "used_quantity",
+          "type": "integer"
+        },
+        {
+          "comment": "发放率（%）",
+          "display_name": "issue_rate_pct",
+          "mapped_field": {
+            "display_name": "issue_rate_pct",
+            "name": "issue_rate_pct",
+            "type": "decimal"
+          },
+          "name": "issue_rate_pct",
+          "type": "decimal"
+        },
+        {
+          "comment": "使用率（%）",
+          "display_name": "usage_rate_pct",
+          "mapped_field": {
+            "display_name": "usage_rate_pct",
+            "name": "usage_rate_pct",
+            "type": "decimal"
+          },
+          "name": "usage_rate_pct",
+          "type": "decimal"
+        },
+        {
+          "comment": "有效期开始时间",
+          "display_name": "valid_start",
+          "mapped_field": {
+            "display_name": "valid_start",
+            "name": "valid_start",
+            "type": "timestamp"
+          },
+          "name": "valid_start",
+          "type": "datetime"
+        },
+        {
+          "comment": "有效期结束时间",
+          "display_name": "valid_end",
+          "mapped_field": {
+            "display_name": "valid_end",
+            "name": "valid_end",
+            "type": "timestamp"
+          },
+          "name": "valid_end",
+          "type": "datetime"
+        },
+        {
+          "comment": "模板状态",
+          "condition_operations": [
+            "==",
+            "!=",
+            "in",
+            "not_in",
+            ">",
+            ">=",
+            "<",
+            "<=",
+            "range",
+            "out_range",
+            "regex",
+            "like",
+            "not_like"
+          ],
+          "display_name": "status",
+          "mapped_field": {
+            "display_name": "status",
+            "name": "status",
+            "type": "string"
+          },
+          "name": "status",
+          "type": "string"
+        }
+      ],
+      "data_source": {
+        "id": "d9hffknoiuhu5i1d1b4g",
+        "name": "public.v_coupon_usage",
+        "type": "resource"
+      },
+      "display_key": "template_name",
+      "icon": "",
+      "id": "coupon_usage",
+      "incremental_key": "",
+      "kn_id": "ecommerce_ops_bkn_public",
+      "logic_properties": [
+        {
+          "comment": "优先可用数据属性 usage_rate_pct；本逻辑属性用 calc_ratio(used_quantity, issued_quantity) 复核。",
+          "data_source": {
+            "box_id": "80594a1d-793d-4588-b590-6f79b71ccd99",
+            "id": "",
+            "name": "calc_ratio",
+            "result_path": "$.result.rate_pct",
+            "tool_id": "49e566b4-483d-4693-b3e1-7dfbc59b6d38",
+            "type": "tool"
+          },
+          "display_name": "券核销率",
+          "name": "lp_coupon_redeem_rate",
+          "parameters": [
+            {
+              "name": "numerator",
+              "type": "number",
+              "value": "used_quantity",
+              "value_from": "property"
+            },
+            {
+              "name": "denominator",
+              "type": "number",
+              "value": "issued_quantity",
+              "value_from": "property"
+            }
+          ],
+          "type": "tool"
+        }
+      ],
+      "module_type": "object_type",
+      "name": "优惠券使用情况",
+      "primary_keys": ["template_id"],
+      "status": {
+        "doc_count": 0,
+        "incremental_key": "",
+        "incremental_value": "",
+        "index": "",
+        "index_available": false,
+        "storage_size": 0,
+        "update_time": 1785312210005
+      },
+      "tags": ["MVP", "电商"],
+      "update_time": 1785312210005,
+      "updater": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      }
+    },
+    {
+      "branch": "main",
+      "color": "",
+      "comment": "商品销售规格与库存、价格。",
+      "create_time": 1785312158047,
+      "creator": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      },
+      "data_properties": [
+        {
+          "comment": "SKU主键ID",
+          "display_name": "sku_id",
+          "mapped_field": {
+            "display_name": "sku_id",
+            "name": "sku_id",
+            "type": "integer"
+          },
+          "name": "sku_id",
+          "type": "integer"
+        },
+        {
+          "comment": "所属商品SPU ID",
+          "display_name": "product_id",
+          "mapped_field": {
+            "display_name": "product_id",
+            "name": "product_id",
+            "type": "integer"
+          },
+          "name": "product_id",
+          "type": "integer"
+        },
+        {
+          "comment": "SKU编码",
+          "condition_operations": [
+            "==",
+            "!=",
+            "in",
+            "not_in",
+            ">",
+            ">=",
+            "<",
+            "<=",
+            "range",
+            "out_range",
+            "regex",
+            "like",
+            "not_like"
+          ],
+          "display_name": "sku_code",
+          "mapped_field": {
+            "display_name": "sku_code",
+            "name": "sku_code",
+            "type": "string"
+          },
+          "name": "sku_code",
+          "type": "string"
+        },
+        {
+          "comment": "SKU名称（含规格）",
+          "condition_operations": [
+            "==",
+            "!=",
+            "in",
+            "not_in",
+            ">",
+            ">=",
+            "<",
+            "<=",
+            "range",
+            "out_range",
+            "regex",
+            "like",
+            "not_like"
+          ],
+          "display_name": "sku_name",
+          "mapped_field": {
+            "display_name": "sku_name",
+            "name": "sku_name",
+            "type": "string"
+          },
+          "name": "sku_name",
+          "type": "string"
+        },
+        {
+          "comment": "规格属性（JSON）",
+          "display_name": "spec_attributes",
+          "mapped_field": {
+            "display_name": "spec_attributes",
+            "name": "spec_attributes",
+            "type": "json"
+          },
+          "name": "spec_attributes",
+          "type": "json"
+        },
+        {
+          "comment": "销售价（元）",
+          "display_name": "price",
+          "mapped_field": {
+            "display_name": "price",
+            "name": "price",
+            "type": "decimal"
+          },
+          "name": "price",
+          "type": "decimal"
+        },
+        {
+          "comment": "市场价/划线价（元）",
+          "display_name": "market_price",
+          "mapped_field": {
+            "display_name": "market_price",
+            "name": "market_price",
+            "type": "decimal"
+          },
+          "name": "market_price",
+          "type": "decimal"
+        },
+        {
+          "comment": "成本价（元）",
+          "display_name": "cost_price",
+          "mapped_field": {
+            "display_name": "cost_price",
+            "name": "cost_price",
+            "type": "decimal"
+          },
+          "name": "cost_price",
+          "type": "decimal"
+        },
+        {
+          "comment": "库存数量",
+          "display_name": "stock_quantity",
+          "mapped_field": {
+            "display_name": "stock_quantity",
+            "name": "stock_quantity",
+            "type": "integer"
+          },
+          "name": "stock_quantity",
+          "type": "integer"
+        },
+        {
+          "comment": "库存预警阈值",
+          "display_name": "alert_quantity",
+          "mapped_field": {
+            "display_name": "alert_quantity",
+            "name": "alert_quantity",
+            "type": "integer"
+          },
+          "name": "alert_quantity",
+          "type": "integer"
+        },
+        {
+          "comment": "SKU图片URL",
+          "condition_operations": [
+            "==",
+            "!=",
+            "in",
+            "not_in",
+            ">",
+            ">=",
+            "<",
+            "<=",
+            "range",
+            "out_range",
+            "regex",
+            "like",
+            "not_like"
+          ],
+          "display_name": "image_url",
+          "mapped_field": {
+            "display_name": "image_url",
+            "name": "image_url",
+            "type": "string"
+          },
+          "name": "image_url",
+          "type": "string"
+        },
+        {
+          "comment": "条形码",
+          "condition_operations": [
+            "==",
+            "!=",
+            "in",
+            "not_in",
+            ">",
+            ">=",
+            "<",
+            "<=",
+            "range",
+            "out_range",
+            "regex",
+            "like",
+            "not_like"
+          ],
+          "display_name": "barcode",
+          "mapped_field": {
+            "display_name": "barcode",
+            "name": "barcode",
+            "type": "string"
+          },
+          "name": "barcode",
+          "type": "string"
+        },
+        {
+          "comment": "SKU状态（如active）",
+          "condition_operations": [
+            "==",
+            "!=",
+            "in",
+            "not_in",
+            ">",
+            ">=",
+            "<",
+            "<=",
+            "range",
+            "out_range",
+            "regex",
+            "like",
+            "not_like"
+          ],
+          "display_name": "status",
+          "mapped_field": {
+            "display_name": "status",
+            "name": "status",
+            "type": "string"
+          },
+          "name": "status",
+          "type": "string"
+        },
+        {
+          "comment": "创建时间",
+          "display_name": "created_at",
+          "mapped_field": {
+            "display_name": "created_at",
+            "name": "created_at",
+            "type": "timestamp"
+          },
+          "name": "created_at",
+          "type": "datetime"
+        },
+        {
+          "comment": "更新时间",
+          "display_name": "updated_at",
+          "mapped_field": {
+            "display_name": "updated_at",
+            "name": "updated_at",
+            "type": "timestamp"
+          },
+          "name": "updated_at",
+          "type": "datetime"
+        }
+      ],
+      "data_source": {
+        "id": "d9hffkfoiuhu5i1d1atg",
+        "name": "public.product_skus",
+        "type": "resource"
+      },
+      "display_key": "sku_name",
+      "icon": "",
+      "id": "product_sku",
+      "incremental_key": "updated_at",
+      "kn_id": "ecommerce_ops_bkn_public",
+      "logic_properties": [
+        {
+          "comment": "毛利率=(price-cost_price)/price；由函数 calc_gross_margin 计算。",
+          "data_source": {
+            "box_id": "80594a1d-793d-4588-b590-6f79b71ccd99",
+            "id": "",
+            "name": "calc_gross_margin",
+            "result_path": "$.result.rate_pct",
+            "tool_id": "6bc3156d-d0fc-4136-aca5-0e90b1fb79bf",
+            "type": "tool"
+          },
+          "display_name": "SKU毛利率",
+          "name": "lp_sku_gross_margin",
+          "parameters": [
+            {
+              "name": "price",
+              "type": "number",
+              "value": "price",
+              "value_from": "property"
+            },
+            {
+              "name": "cost_price",
+              "type": "number",
+              "value": "cost_price",
+              "value_from": "property"
+            }
+          ],
+          "type": "tool"
+        }
+      ],
+      "module_type": "object_type",
+      "name": "商品SKU",
+      "primary_keys": ["sku_id"],
+      "status": {
+        "doc_count": 0,
+        "incremental_key": "updated_at",
+        "incremental_value": "",
+        "index": "",
+        "index_available": false,
+        "storage_size": 0,
+        "update_time": 1785312207263
+      },
+      "tags": ["MVP", "电商"],
+      "update_time": 1785312207263,
+      "updater": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      }
+    },
+    {
+      "branch": "main",
+      "color": "",
+      "comment": "销售订单主表。已取消订单不计入 GMV 等成交类指标。",
+      "create_time": 1785312158047,
+      "creator": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      },
+      "data_properties": [
+        {
+          "comment": "订单主键ID",
+          "display_name": "order_id",
+          "mapped_field": {
+            "display_name": "order_id",
+            "name": "order_id",
+            "type": "integer"
+          },
+          "name": "order_id",
+          "type": "integer"
+        },
+        {
+          "comment": "订单号",
+          "condition_operations": [
+            "==",
+            "!=",
+            "in",
+            "not_in",
+            ">",
+            ">=",
+            "<",
+            "<=",
+            "range",
+            "out_range",
+            "regex",
+            "like",
+            "not_like"
+          ],
+          "display_name": "order_no",
+          "mapped_field": {
+            "display_name": "order_no",
+            "name": "order_no",
+            "type": "string"
+          },
+          "name": "order_no",
+          "type": "string"
+        },
+        {
+          "comment": "下单用户ID",
+          "display_name": "user_id",
+          "mapped_field": {
+            "display_name": "user_id",
+            "name": "user_id",
+            "type": "integer"
+          },
+          "name": "user_id",
+          "type": "integer"
+        },
+        {
+          "comment": "收货地址ID",
+          "display_name": "address_id",
+          "mapped_field": {
+            "display_name": "address_id",
+            "name": "address_id",
+            "type": "integer"
+          },
+          "name": "address_id",
+          "type": "integer"
+        },
+        {
+          "comment": "销售渠道ID",
+          "display_name": "channel_id",
+          "mapped_field": {
+            "display_name": "channel_id",
+            "name": "channel_id",
+            "type": "integer"
+          },
+          "name": "channel_id",
+          "type": "integer"
+        },
+        {
+          "comment": "订单状态（待支付/已发货/已完成/退款中等）",
+          "condition_operations": [
+            "==",
+            "!=",
+            "in",
+            "not_in",
+            ">",
+            ">=",
+            "<",
+            "<=",
+            "range",
+            "out_range",
+            "regex",
+            "like",
+            "not_like"
+          ],
+          "display_name": "order_status",
+          "mapped_field": {
+            "display_name": "order_status",
+            "name": "order_status",
+            "type": "string"
+          },
+          "name": "order_status",
+          "type": "string"
+        },
+        {
+          "comment": "商品总金额（元）",
+          "display_name": "total_amount",
+          "mapped_field": {
+            "display_name": "total_amount",
+            "name": "total_amount",
+            "type": "decimal"
+          },
+          "name": "total_amount",
+          "type": "decimal"
+        },
+        {
+          "comment": "优惠减免金额（元）",
+          "display_name": "discount_amount",
+          "mapped_field": {
+            "display_name": "discount_amount",
+            "name": "discount_amount",
+            "type": "decimal"
+          },
+          "name": "discount_amount",
+          "type": "decimal"
+        },
+        {
+          "comment": "使用的用户优惠券ID",
+          "display_name": "coupon_id",
+          "mapped_field": {
+            "display_name": "coupon_id",
+            "name": "coupon_id",
+            "type": "integer"
+          },
+          "name": "coupon_id",
+          "type": "integer"
+        },
+        {
+          "comment": "运费（元）",
+          "display_name": "shipping_fee",
+          "mapped_field": {
+            "display_name": "shipping_fee",
+            "name": "shipping_fee",
+            "type": "decimal"
+          },
+          "name": "shipping_fee",
+          "type": "decimal"
+        },
+        {
+          "comment": "应付/实付金额（元）",
+          "display_name": "actual_amount",
+          "mapped_field": {
+            "display_name": "actual_amount",
+            "name": "actual_amount",
+            "type": "decimal"
+          },
+          "name": "actual_amount",
+          "type": "decimal"
+        },
+        {
+          "comment": "支付方式（微信/支付宝等）",
+          "condition_operations": [
+            "==",
+            "!=",
+            "in",
+            "not_in",
+            ">",
+            ">=",
+            "<",
+            "<=",
+            "range",
+            "out_range",
+            "regex",
+            "like",
+            "not_like"
+          ],
+          "display_name": "payment_method",
+          "mapped_field": {
+            "display_name": "payment_method",
+            "name": "payment_method",
+            "type": "string"
+          },
+          "name": "payment_method",
+          "type": "string"
+        },
+        {
+          "comment": "支付完成时间",
+          "display_name": "payment_time",
+          "mapped_field": {
+            "display_name": "payment_time",
+            "name": "payment_time",
+            "type": "timestamp"
+          },
+          "name": "payment_time",
+          "type": "datetime"
+        },
+        {
+          "comment": "发货时间",
+          "display_name": "delivery_time",
+          "mapped_field": {
+            "display_name": "delivery_time",
+            "name": "delivery_time",
+            "type": "timestamp"
+          },
+          "name": "delivery_time",
+          "type": "datetime"
+        },
+        {
+          "comment": "订单完成时间",
+          "display_name": "complete_time",
+          "mapped_field": {
+            "display_name": "complete_time",
+            "name": "complete_time",
+            "type": "timestamp"
+          },
+          "name": "complete_time",
+          "type": "datetime"
+        },
+        {
+          "comment": "取消时间",
+          "display_name": "cancel_time",
+          "mapped_field": {
+            "display_name": "cancel_time",
+            "name": "cancel_time",
+            "type": "timestamp"
+          },
+          "name": "cancel_time",
+          "type": "datetime"
+        },
+        {
+          "comment": "取消原因",
+          "condition_operations": [
+            "==",
+            "!=",
+            "in",
+            "not_in",
+            ">",
+            ">=",
+            "<",
+            "<=",
+            "range",
+            "out_range",
+            "regex",
+            "like",
+            "not_like"
+          ],
+          "display_name": "cancel_reason",
+          "mapped_field": {
+            "display_name": "cancel_reason",
+            "name": "cancel_reason",
+            "type": "string"
+          },
+          "name": "cancel_reason",
+          "type": "string"
+        },
+        {
+          "comment": "订单备注",
+          "condition_operations": [
+            "match",
+            "multi_match",
+            "==",
+            "!=",
+            "in",
+            "not_in",
+            ">",
+            ">=",
+            "<",
+            "<=",
+            "range",
+            "out_range",
+            "regex",
+            "like",
+            "not_like"
+          ],
+          "display_name": "remark",
+          "mapped_field": {
+            "display_name": "remark",
+            "name": "remark",
+            "type": "text"
+          },
+          "name": "remark",
+          "type": "text"
+        },
+        {
+          "comment": "下单时间（分区键）",
+          "display_name": "created_at",
+          "mapped_field": {
+            "display_name": "created_at",
+            "name": "created_at",
+            "type": "timestamp"
+          },
+          "name": "created_at",
+          "type": "datetime"
+        },
+        {
+          "comment": "更新时间",
+          "display_name": "updated_at",
+          "mapped_field": {
+            "display_name": "updated_at",
+            "name": "updated_at",
+            "type": "timestamp"
+          },
+          "name": "updated_at",
+          "type": "datetime"
+        }
+      ],
+      "data_source": {
+        "id": "d9hffkfoiuhu5i1d1ar0",
+        "name": "public.orders",
+        "type": "resource"
+      },
+      "display_key": "order_no",
+      "icon": "",
+      "id": "order",
+      "incremental_key": "updated_at",
+      "kn_id": "ecommerce_ops_bkn_public",
+      "logic_properties": [
+        {
+          "comment": "折扣率=discount_amount/total_amount；由函数 calc_discount_rate 计算。",
+          "data_source": {
+            "box_id": "80594a1d-793d-4588-b590-6f79b71ccd99",
+            "id": "",
+            "name": "calc_discount_rate",
+            "result_path": "$.result.rate_pct",
+            "tool_id": "516022e3-4258-4f74-a603-1ec94d35cd16",
+            "type": "tool"
+          },
+          "display_name": "订单折扣率",
+          "name": "lp_order_discount_rate",
+          "parameters": [
+            {
+              "name": "discount_amount",
+              "type": "number",
+              "value": "discount_amount",
+              "value_from": "property"
+            },
+            {
+              "name": "total_amount",
+              "type": "number",
+              "value": "total_amount",
+              "value_from": "property"
+            }
+          ],
+          "type": "tool"
+        },
+        {
+          "analysis_dimensions": [
+            {
+              "name": "order_status"
+            },
+            {
+              "name": "channel_id"
+            },
+            {
+              "name": "payment_method"
+            }
+          ],
+          "comment": "挂载原子指标 m_gmv。",
+          "data_source": {
+            "id": "m_gmv",
+            "name": "GMV（成交总金额）",
+            "type": "metric"
+          },
+          "display_name": "GMV指标",
+          "name": "lp_gmv_metric",
+          "parameters": [
+            {
+              "comment": "是否是即时查询。可选，默认为 false。当 instant = true 时，表示即时查询；当 instant = false 时，表示范围查询。",
+              "if_system_generate": true,
+              "name": "instant",
+              "operation": "==",
+              "type": "boolean",
+              "value_from": "input"
+            },
+            {
+              "comment": "指标查询的开始时间。 start=<unix_timestamp>，单位到毫秒。 例如: 1646360670123",
+              "if_system_generate": true,
+              "name": "start",
+              "operation": "==",
+              "type": "integer",
+              "value_from": "input"
+            },
+            {
+              "comment": "指标查询的结束时间。end=<unix_timestamp>，单位到毫秒。例如: 1646471470123",
+              "if_system_generate": true,
+              "name": "end",
+              "operation": "==",
+              "type": "integer",
+              "value_from": "input"
+            },
+            {
+              "comment": "范围查询的步长。当 instant 为 false 时, 必须。step=<time_durations>，用一个数字，后面跟时间单位来定义。",
+              "if_system_generate": true,
+              "name": "step",
+              "operation": "==",
+              "type": "string",
+              "value_from": "input"
+            }
+          ],
+          "type": "metric"
+        }
+      ],
+      "module_type": "object_type",
+      "name": "销售订单",
+      "primary_keys": ["order_id"],
+      "status": {
+        "doc_count": 0,
+        "incremental_key": "updated_at",
+        "incremental_value": "",
+        "index": "",
+        "index_available": false,
+        "storage_size": 0,
+        "update_time": 1785312204612
+      },
+      "tags": ["MVP", "电商"],
+      "update_time": 1785312204612,
+      "updater": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      }
+    },
+    {
+      "branch": "main",
+      "color": "",
+      "comment": "商品品牌。",
+      "create_time": 1785312158047,
+      "creator": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      },
+      "data_properties": [
+        {
+          "comment": "品牌主键ID",
+          "display_name": "brand_id",
+          "mapped_field": {
+            "name": "brand_id"
+          },
+          "name": "brand_id",
+          "type": "integer"
+        },
+        {
+          "comment": "品牌中文名",
+          "display_name": "brand_name",
+          "mapped_field": {
+            "name": "brand_name"
+          },
+          "name": "brand_name",
+          "type": "string"
+        },
+        {
+          "comment": "品牌英文名",
+          "display_name": "brand_name_en",
+          "mapped_field": {
+            "name": "brand_name_en"
+          },
+          "name": "brand_name_en",
+          "type": "string"
+        },
+        {
+          "comment": "品牌Logo URL",
+          "display_name": "logo_url",
+          "mapped_field": {
+            "name": "logo_url"
+          },
+          "name": "logo_url",
+          "type": "string"
+        },
+        {
+          "comment": "品牌官网",
+          "display_name": "website",
+          "mapped_field": {
+            "name": "website"
+          },
+          "name": "website",
+          "type": "string"
+        },
+        {
+          "comment": "品牌简介",
+          "display_name": "description",
+          "mapped_field": {
+            "name": "description"
+          },
+          "name": "description",
+          "type": "text"
+        },
+        {
+          "comment": "所属国家/地区",
+          "display_name": "country",
+          "mapped_field": {
+            "name": "country"
+          },
+          "name": "country",
+          "type": "string"
+        },
+        {
+          "comment": "创立年份",
+          "display_name": "founded_year",
+          "mapped_field": {
+            "name": "founded_year"
+          },
+          "name": "founded_year",
+          "type": "integer"
+        },
+        {
+          "comment": "状态（如active）",
+          "display_name": "status",
+          "mapped_field": {
+            "name": "status"
+          },
+          "name": "status",
+          "type": "string"
+        },
+        {
+          "comment": "创建时间",
+          "display_name": "created_at",
+          "mapped_field": {
+            "name": "created_at"
+          },
+          "name": "created_at",
+          "type": "datetime"
+        }
+      ],
+      "data_source": {
+        "id": "d9hffkfoiuhu5i1d1aig",
+        "name": "public.brands",
+        "type": "resource"
+      },
+      "display_key": "brand_name",
+      "icon": "",
+      "id": "brand",
+      "incremental_key": "",
+      "kn_id": "ecommerce_ops_bkn_public",
+      "module_type": "object_type",
+      "name": "品牌",
+      "primary_keys": ["brand_id"],
+      "status": {
+        "doc_count": 0,
+        "incremental_key": "",
+        "incremental_value": "",
+        "index": "",
+        "index_available": false,
+        "storage_size": 0,
+        "update_time": 1785312158047
+      },
+      "tags": ["MVP", "电商"],
+      "update_time": 1785312158047,
+      "updater": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      }
+    },
+    {
+      "branch": "main",
+      "color": "",
+      "comment": "商品类目树节点。",
+      "create_time": 1785312158047,
+      "creator": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      },
+      "data_properties": [
+        {
+          "comment": "分类主键ID",
+          "display_name": "category_id",
+          "mapped_field": {
+            "name": "category_id"
+          },
+          "name": "category_id",
+          "type": "integer"
+        },
+        {
+          "comment": "分类名称",
+          "display_name": "category_name",
+          "mapped_field": {
+            "name": "category_name"
+          },
+          "name": "category_name",
+          "type": "string"
+        },
+        {
+          "comment": "父分类ID（顶级为空）",
+          "display_name": "parent_id",
+          "mapped_field": {
+            "name": "parent_id"
+          },
+          "name": "parent_id",
+          "type": "integer"
+        },
+        {
+          "comment": "分类层级（1/2/3）",
+          "display_name": "level",
+          "mapped_field": {
+            "name": "level"
+          },
+          "name": "level",
+          "type": "integer"
+        },
+        {
+          "comment": "分类编码",
+          "display_name": "category_code",
+          "mapped_field": {
+            "name": "category_code"
+          },
+          "name": "category_code",
+          "type": "string"
+        },
+        {
+          "comment": "分类图标URL",
+          "display_name": "icon_url",
+          "mapped_field": {
+            "name": "icon_url"
+          },
+          "name": "icon_url",
+          "type": "string"
+        },
+        {
+          "comment": "排序权重",
+          "display_name": "sort_order",
+          "mapped_field": {
+            "name": "sort_order"
+          },
+          "name": "sort_order",
+          "type": "integer"
+        },
+        {
+          "comment": "是否启用",
+          "display_name": "is_active",
+          "mapped_field": {
+            "name": "is_active"
+          },
+          "name": "is_active",
+          "type": "boolean"
+        },
+        {
+          "comment": "创建时间",
+          "display_name": "created_at",
+          "mapped_field": {
+            "name": "created_at"
+          },
+          "name": "created_at",
+          "type": "datetime"
+        }
+      ],
+      "data_source": {
+        "id": "d9hffkfoiuhu5i1d1as0",
+        "name": "public.product_categories",
+        "type": "resource"
+      },
+      "display_key": "category_name",
+      "icon": "",
+      "id": "product_category",
+      "incremental_key": "",
+      "kn_id": "ecommerce_ops_bkn_public",
+      "module_type": "object_type",
+      "name": "商品分类",
+      "primary_keys": ["category_id"],
+      "status": {
+        "doc_count": 0,
+        "incremental_key": "",
+        "incremental_value": "",
+        "index": "",
+        "index_available": false,
+        "storage_size": 0,
+        "update_time": 1785312158047
+      },
+      "tags": ["MVP", "电商"],
+      "update_time": 1785312158047,
+      "updater": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      }
+    },
+    {
+      "branch": "main",
+      "color": "",
+      "comment": "优惠券发行模板。",
+      "create_time": 1785312158047,
+      "creator": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      },
+      "data_properties": [
+        {
+          "comment": "优惠券模板主键ID",
+          "display_name": "template_id",
+          "mapped_field": {
+            "name": "template_id"
+          },
+          "name": "template_id",
+          "type": "integer"
+        },
+        {
+          "comment": "模板名称",
+          "display_name": "template_name",
+          "mapped_field": {
+            "name": "template_name"
+          },
+          "name": "template_name",
+          "type": "string"
+        },
+        {
+          "comment": "券类型（满减/折扣等）",
+          "display_name": "coupon_type",
+          "mapped_field": {
+            "name": "coupon_type"
+          },
+          "name": "coupon_type",
+          "type": "string"
+        },
+        {
+          "comment": "优惠力度（金额或折扣）",
+          "display_name": "discount_value",
+          "mapped_field": {
+            "name": "discount_value"
+          },
+          "name": "discount_value",
+          "type": "decimal"
+        },
+        {
+          "comment": "最低消费金额",
+          "display_name": "min_order_amt",
+          "mapped_field": {
+            "name": "min_order_amt"
+          },
+          "name": "min_order_amt",
+          "type": "decimal"
+        },
+        {
+          "comment": "最大优惠金额封顶",
+          "display_name": "max_discount",
+          "mapped_field": {
+            "name": "max_discount"
+          },
+          "name": "max_discount",
+          "type": "decimal"
+        },
+        {
+          "comment": "发行总量",
+          "display_name": "total_quantity",
+          "mapped_field": {
+            "name": "total_quantity"
+          },
+          "name": "total_quantity",
+          "type": "integer"
+        },
+        {
+          "comment": "已发放数量",
+          "display_name": "issued_quantity",
+          "mapped_field": {
+            "name": "issued_quantity"
+          },
+          "name": "issued_quantity",
+          "type": "integer"
+        },
+        {
+          "comment": "已使用数量",
+          "display_name": "used_quantity",
+          "mapped_field": {
+            "name": "used_quantity"
+          },
+          "name": "used_quantity",
+          "type": "integer"
+        },
+        {
+          "comment": "单用户限领数量",
+          "display_name": "per_user_limit",
+          "mapped_field": {
+            "name": "per_user_limit"
+          },
+          "name": "per_user_limit",
+          "type": "integer"
+        },
+        {
+          "comment": "有效期类型（固定区间/领取后N天）",
+          "display_name": "validity_type",
+          "mapped_field": {
+            "name": "validity_type"
+          },
+          "name": "validity_type",
+          "type": "string"
+        },
+        {
+          "comment": "有效期开始时间",
+          "display_name": "valid_start",
+          "mapped_field": {
+            "name": "valid_start"
+          },
+          "name": "valid_start",
+          "type": "datetime"
+        },
+        {
+          "comment": "有效期结束时间",
+          "display_name": "valid_end",
+          "mapped_field": {
+            "name": "valid_end"
+          },
+          "name": "valid_end",
+          "type": "datetime"
+        },
+        {
+          "comment": "领取后有效天数",
+          "display_name": "valid_days",
+          "mapped_field": {
+            "name": "valid_days"
+          },
+          "name": "valid_days",
+          "type": "integer"
+        },
+        {
+          "comment": "使用范围类型",
+          "display_name": "usage_scope",
+          "mapped_field": {
+            "name": "usage_scope"
+          },
+          "name": "usage_scope",
+          "type": "string"
+        },
+        {
+          "comment": "使用范围ID列表（JSON）",
+          "display_name": "scope_ids",
+          "mapped_field": {
+            "name": "scope_ids"
+          },
+          "name": "scope_ids",
+          "type": "json"
+        },
+        {
+          "comment": "是否可与其他优惠叠加",
+          "display_name": "is_stackable",
+          "mapped_field": {
+            "name": "is_stackable"
+          },
+          "name": "is_stackable",
+          "type": "boolean"
+        },
+        {
+          "comment": "模板状态",
+          "display_name": "status",
+          "mapped_field": {
+            "name": "status"
+          },
+          "name": "status",
+          "type": "string"
+        },
+        {
+          "comment": "创建时间",
+          "display_name": "created_at",
+          "mapped_field": {
+            "name": "created_at"
+          },
+          "name": "created_at",
+          "type": "datetime"
+        }
+      ],
+      "data_source": {
+        "id": "d9hffkfoiuhu5i1d1ak0",
+        "name": "public.coupon_templates",
+        "type": "resource"
+      },
+      "display_key": "template_name",
+      "icon": "",
+      "id": "coupon_template",
+      "incremental_key": "",
+      "kn_id": "ecommerce_ops_bkn_public",
+      "module_type": "object_type",
+      "name": "优惠券模板",
+      "primary_keys": ["template_id"],
+      "status": {
+        "doc_count": 0,
+        "incremental_key": "",
+        "incremental_value": "",
+        "index": "",
+        "index_available": false,
+        "storage_size": 0,
+        "update_time": 1785312158047
+      },
+      "tags": ["MVP", "电商"],
+      "update_time": 1785312158047,
+      "updater": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      }
+    },
+    {
+      "branch": "main",
+      "color": "",
+      "comment": "销售订单行项目。",
+      "create_time": 1785312158047,
+      "creator": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      },
+      "data_properties": [
+        {
+          "comment": "订单明细主键ID",
+          "display_name": "item_id",
+          "mapped_field": {
+            "name": "item_id"
+          },
+          "name": "item_id",
+          "type": "integer"
+        },
+        {
+          "comment": "所属订单ID",
+          "display_name": "order_id",
+          "mapped_field": {
+            "name": "order_id"
+          },
+          "name": "order_id",
+          "type": "integer"
+        },
+        {
+          "comment": "订单创建时间（与订单分区键对齐）",
+          "display_name": "order_created_at",
+          "mapped_field": {
+            "name": "order_created_at"
+          },
+          "name": "order_created_at",
+          "type": "datetime"
+        },
+        {
+          "comment": "SKU ID",
+          "display_name": "sku_id",
+          "mapped_field": {
+            "name": "sku_id"
+          },
+          "name": "sku_id",
+          "type": "integer"
+        },
+        {
+          "comment": "商品ID",
+          "display_name": "product_id",
+          "mapped_field": {
+            "name": "product_id"
+          },
+          "name": "product_id",
+          "type": "integer"
+        },
+        {
+          "comment": "下单时商品名称快照",
+          "display_name": "product_name",
+          "mapped_field": {
+            "name": "product_name"
+          },
+          "name": "product_name",
+          "type": "string"
+        },
+        {
+          "comment": "下单时SKU规格快照",
+          "display_name": "sku_spec",
+          "mapped_field": {
+            "name": "sku_spec"
+          },
+          "name": "sku_spec",
+          "type": "string"
+        },
+        {
+          "comment": "成交单价（元）",
+          "display_name": "unit_price",
+          "mapped_field": {
+            "name": "unit_price"
+          },
+          "name": "unit_price",
+          "type": "decimal"
+        },
+        {
+          "comment": "购买数量",
+          "display_name": "quantity",
+          "mapped_field": {
+            "name": "quantity"
+          },
+          "name": "quantity",
+          "type": "integer"
+        },
+        {
+          "comment": "明细小计金额（元）",
+          "display_name": "total_amount",
+          "mapped_field": {
+            "name": "total_amount"
+          },
+          "name": "total_amount",
+          "type": "decimal"
+        },
+        {
+          "comment": "明细优惠金额（元）",
+          "display_name": "discount_amount",
+          "mapped_field": {
+            "name": "discount_amount"
+          },
+          "name": "discount_amount",
+          "type": "decimal"
+        },
+        {
+          "comment": "明细实付金额（元）",
+          "display_name": "actual_amount",
+          "mapped_field": {
+            "name": "actual_amount"
+          },
+          "name": "actual_amount",
+          "type": "decimal"
+        },
+        {
+          "comment": "明细创建时间",
+          "display_name": "created_at",
+          "mapped_field": {
+            "name": "created_at"
+          },
+          "name": "created_at",
+          "type": "datetime"
+        }
+      ],
+      "data_source": {
+        "id": "d9hffkfoiuhu5i1d1aq0",
+        "name": "public.order_items",
+        "type": "resource"
+      },
+      "display_key": "product_name",
+      "icon": "",
+      "id": "order_item",
+      "incremental_key": "",
+      "kn_id": "ecommerce_ops_bkn_public",
+      "module_type": "object_type",
+      "name": "订单明细",
+      "primary_keys": ["item_id"],
+      "status": {
+        "doc_count": 0,
+        "incremental_key": "",
+        "incremental_value": "",
+        "index": "",
+        "index_available": false,
+        "storage_size": 0,
+        "update_time": 1785312158047
+      },
+      "tags": ["MVP", "电商"],
+      "update_time": 1785312158047,
+      "updater": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      }
+    },
+    {
+      "branch": "main",
+      "color": "",
+      "comment": "订单销售渠道。",
+      "create_time": 1785312158047,
+      "creator": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      },
+      "data_properties": [
+        {
+          "comment": "渠道主键ID",
+          "display_name": "channel_id",
+          "mapped_field": {
+            "name": "channel_id"
+          },
+          "name": "channel_id",
+          "type": "integer"
+        },
+        {
+          "comment": "渠道名称",
+          "display_name": "channel_name",
+          "mapped_field": {
+            "name": "channel_name"
+          },
+          "name": "channel_name",
+          "type": "string"
+        },
+        {
+          "comment": "渠道编码",
+          "display_name": "channel_code",
+          "mapped_field": {
+            "name": "channel_code"
+          },
+          "name": "channel_code",
+          "type": "string"
+        },
+        {
+          "comment": "渠道类型（app/小程序/web等）",
+          "display_name": "channel_type",
+          "mapped_field": {
+            "name": "channel_type"
+          },
+          "name": "channel_type",
+          "type": "string"
+        },
+        {
+          "comment": "渠道说明",
+          "display_name": "description",
+          "mapped_field": {
+            "name": "description"
+          },
+          "name": "description",
+          "type": "text"
+        },
+        {
+          "comment": "渠道状态",
+          "display_name": "status",
+          "mapped_field": {
+            "name": "status"
+          },
+          "name": "status",
+          "type": "string"
+        },
+        {
+          "comment": "创建时间",
+          "display_name": "created_at",
+          "mapped_field": {
+            "name": "created_at"
+          },
+          "name": "created_at",
+          "type": "datetime"
+        }
+      ],
+      "data_source": {
+        "id": "d9hffkfoiuhu5i1d1b10",
+        "name": "public.sales_channels",
+        "type": "resource"
+      },
+      "display_key": "channel_name",
+      "icon": "",
+      "id": "sales_channel",
+      "incremental_key": "",
+      "kn_id": "ecommerce_ops_bkn_public",
+      "module_type": "object_type",
+      "name": "销售渠道",
+      "primary_keys": ["channel_id"],
+      "status": {
+        "doc_count": 0,
+        "incremental_key": "",
+        "incremental_value": "",
+        "index": "",
+        "index_available": false,
+        "storage_size": 0,
+        "update_time": 1785312158047
+      },
+      "tags": ["MVP", "电商"],
+      "update_time": 1785312158047,
+      "updater": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      }
+    },
+    {
+      "branch": "main",
+      "color": "",
+      "comment": "订单支付与退款流水。",
+      "create_time": 1785312158047,
+      "creator": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      },
+      "data_properties": [
+        {
+          "comment": "支付流水主键ID",
+          "display_name": "payment_id",
+          "mapped_field": {
+            "name": "payment_id"
+          },
+          "name": "payment_id",
+          "type": "integer"
+        },
+        {
+          "comment": "支付单号",
+          "display_name": "payment_no",
+          "mapped_field": {
+            "name": "payment_no"
+          },
+          "name": "payment_no",
+          "type": "string"
+        },
+        {
+          "comment": "关联订单ID",
+          "display_name": "order_id",
+          "mapped_field": {
+            "name": "order_id"
+          },
+          "name": "order_id",
+          "type": "integer"
+        },
+        {
+          "comment": "支付用户ID",
+          "display_name": "user_id",
+          "mapped_field": {
+            "name": "user_id"
+          },
+          "name": "user_id",
+          "type": "integer"
+        },
+        {
+          "comment": "支付方式",
+          "display_name": "payment_method",
+          "mapped_field": {
+            "name": "payment_method"
+          },
+          "name": "payment_method",
+          "type": "string"
+        },
+        {
+          "comment": "支付金额（元）",
+          "display_name": "payment_amount",
+          "mapped_field": {
+            "name": "payment_amount"
+          },
+          "name": "payment_amount",
+          "type": "decimal"
+        },
+        {
+          "comment": "支付状态（成功/退款中等）",
+          "display_name": "payment_status",
+          "mapped_field": {
+            "name": "payment_status"
+          },
+          "name": "payment_status",
+          "type": "string"
+        },
+        {
+          "comment": "第三方交易流水号",
+          "display_name": "transaction_id",
+          "mapped_field": {
+            "name": "transaction_id"
+          },
+          "name": "transaction_id",
+          "type": "string"
+        },
+        {
+          "comment": "支付成功时间",
+          "display_name": "paid_at",
+          "mapped_field": {
+            "name": "paid_at"
+          },
+          "name": "paid_at",
+          "type": "datetime"
+        },
+        {
+          "comment": "退款金额（元）",
+          "display_name": "refund_amount",
+          "mapped_field": {
+            "name": "refund_amount"
+          },
+          "name": "refund_amount",
+          "type": "decimal"
+        },
+        {
+          "comment": "退款原因",
+          "display_name": "refund_reason",
+          "mapped_field": {
+            "name": "refund_reason"
+          },
+          "name": "refund_reason",
+          "type": "string"
+        },
+        {
+          "comment": "退款时间",
+          "display_name": "refund_at",
+          "mapped_field": {
+            "name": "refund_at"
+          },
+          "name": "refund_at",
+          "type": "datetime"
+        },
+        {
+          "comment": "支付单创建时间（分区键）",
+          "display_name": "created_at",
+          "mapped_field": {
+            "name": "created_at"
+          },
+          "name": "created_at",
+          "type": "datetime"
+        }
+      ],
+      "data_source": {
+        "id": "d9hffkfoiuhu5i1d1arg",
+        "name": "public.payments",
+        "type": "resource"
+      },
+      "display_key": "payment_no",
+      "icon": "",
+      "id": "payment",
+      "incremental_key": "",
+      "kn_id": "ecommerce_ops_bkn_public",
+      "module_type": "object_type",
+      "name": "支付流水",
+      "primary_keys": ["payment_id"],
+      "status": {
+        "doc_count": 0,
+        "incremental_key": "",
+        "incremental_value": "",
+        "index": "",
+        "index_available": false,
+        "storage_size": 0,
+        "update_time": 1785312158047
+      },
+      "tags": ["MVP", "电商"],
+      "update_time": 1785312158047,
+      "updater": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      }
+    },
+    {
+      "branch": "main",
+      "color": "",
+      "comment": "用户已领取的优惠券实例。",
+      "create_time": 1785312158047,
+      "creator": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      },
+      "data_properties": [
+        {
+          "comment": "用户优惠券主键ID",
+          "display_name": "user_coupon_id",
+          "mapped_field": {
+            "name": "user_coupon_id"
+          },
+          "name": "user_coupon_id",
+          "type": "integer"
+        },
+        {
+          "comment": "优惠券码",
+          "display_name": "coupon_code",
+          "mapped_field": {
+            "name": "coupon_code"
+          },
+          "name": "coupon_code",
+          "type": "string"
+        },
+        {
+          "comment": "优惠券模板ID",
+          "display_name": "template_id",
+          "mapped_field": {
+            "name": "template_id"
+          },
+          "name": "template_id",
+          "type": "integer"
+        },
+        {
+          "comment": "所属用户ID",
+          "display_name": "user_id",
+          "mapped_field": {
+            "name": "user_id"
+          },
+          "name": "user_id",
+          "type": "integer"
+        },
+        {
+          "comment": "使用关联的订单ID",
+          "display_name": "order_id",
+          "mapped_field": {
+            "name": "order_id"
+          },
+          "name": "order_id",
+          "type": "integer"
+        },
+        {
+          "comment": "状态（未使用/已使用/过期等）",
+          "display_name": "status",
+          "mapped_field": {
+            "name": "status"
+          },
+          "name": "status",
+          "type": "string"
+        },
+        {
+          "comment": "领取时间",
+          "display_name": "receive_time",
+          "mapped_field": {
+            "name": "receive_time"
+          },
+          "name": "receive_time",
+          "type": "datetime"
+        },
+        {
+          "comment": "使用时间",
+          "display_name": "use_time",
+          "mapped_field": {
+            "name": "use_time"
+          },
+          "name": "use_time",
+          "type": "datetime"
+        },
+        {
+          "comment": "过期时间",
+          "display_name": "expire_time",
+          "mapped_field": {
+            "name": "expire_time"
+          },
+          "name": "expire_time",
+          "type": "datetime"
+        },
+        {
+          "comment": "创建时间",
+          "display_name": "created_at",
+          "mapped_field": {
+            "name": "created_at"
+          },
+          "name": "created_at",
+          "type": "datetime"
+        }
+      ],
+      "data_source": {
+        "id": "d9hffkfoiuhu5i1d1b30",
+        "name": "public.user_coupons",
+        "type": "resource"
+      },
+      "display_key": "coupon_code",
+      "icon": "",
+      "id": "user_coupon",
+      "incremental_key": "",
+      "kn_id": "ecommerce_ops_bkn_public",
+      "module_type": "object_type",
+      "name": "用户优惠券",
+      "primary_keys": ["user_coupon_id"],
+      "status": {
+        "doc_count": 0,
+        "incremental_key": "",
+        "incremental_value": "",
+        "index": "",
+        "index_available": false,
+        "storage_size": 0,
+        "update_time": 1785312158047
+      },
+      "tags": ["MVP", "电商"],
+      "update_time": 1785312158047,
+      "updater": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      }
+    },
+    {
+      "branch": "main",
+      "color": "",
+      "comment": "商品标准产品单元。",
+      "create_time": 1785312158047,
+      "creator": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      },
+      "data_properties": [
+        {
+          "comment": "商品SPU主键ID",
+          "display_name": "product_id",
+          "mapped_field": {
+            "name": "product_id"
+          },
+          "name": "product_id",
+          "type": "integer"
+        },
+        {
+          "comment": "商品名称",
+          "display_name": "product_name",
+          "mapped_field": {
+            "name": "product_name"
+          },
+          "name": "product_name",
+          "type": "string"
+        },
+        {
+          "comment": "商品编码",
+          "display_name": "product_code",
+          "mapped_field": {
+            "name": "product_code"
+          },
+          "name": "product_code",
+          "type": "string"
+        },
+        {
+          "comment": "所属分类ID",
+          "display_name": "category_id",
+          "mapped_field": {
+            "name": "category_id"
+          },
+          "name": "category_id",
+          "type": "integer"
+        },
+        {
+          "comment": "所属品牌ID",
+          "display_name": "brand_id",
+          "mapped_field": {
+            "name": "brand_id"
+          },
+          "name": "brand_id",
+          "type": "integer"
+        },
+        {
+          "comment": "副标题/卖点摘要",
+          "display_name": "subtitle",
+          "mapped_field": {
+            "name": "subtitle"
+          },
+          "name": "subtitle",
+          "type": "string"
+        },
+        {
+          "comment": "商品详情描述",
+          "display_name": "description",
+          "mapped_field": {
+            "name": "description"
+          },
+          "name": "description",
+          "type": "text"
+        },
+        {
+          "comment": "主图URL",
+          "display_name": "main_image_url",
+          "mapped_field": {
+            "name": "main_image_url"
+          },
+          "name": "main_image_url",
+          "type": "string"
+        },
+        {
+          "comment": "计量单位",
+          "display_name": "unit",
+          "mapped_field": {
+            "name": "unit"
+          },
+          "name": "unit",
+          "type": "string"
+        },
+        {
+          "comment": "SKU最低售价",
+          "display_name": "min_price",
+          "mapped_field": {
+            "name": "min_price"
+          },
+          "name": "min_price",
+          "type": "decimal"
+        },
+        {
+          "comment": "SKU最高售价",
+          "display_name": "max_price",
+          "mapped_field": {
+            "name": "max_price"
+          },
+          "name": "max_price",
+          "type": "decimal"
+        },
+        {
+          "comment": "重量（克）",
+          "display_name": "weight_grams",
+          "mapped_field": {
+            "name": "weight_grams"
+          },
+          "name": "weight_grams",
+          "type": "integer"
+        },
+        {
+          "comment": "长度（厘米）",
+          "display_name": "length_cm",
+          "mapped_field": {
+            "name": "length_cm"
+          },
+          "name": "length_cm",
+          "type": "decimal"
+        },
+        {
+          "comment": "宽度（厘米）",
+          "display_name": "width_cm",
+          "mapped_field": {
+            "name": "width_cm"
+          },
+          "name": "width_cm",
+          "type": "decimal"
+        },
+        {
+          "comment": "高度（厘米）",
+          "display_name": "height_cm",
+          "mapped_field": {
+            "name": "height_cm"
+          },
+          "name": "height_cm",
+          "type": "decimal"
+        },
+        {
+          "comment": "保修月数",
+          "display_name": "warranty_months",
+          "mapped_field": {
+            "name": "warranty_months"
+          },
+          "name": "warranty_months",
+          "type": "integer"
+        },
+        {
+          "comment": "累计销量",
+          "display_name": "sales_count",
+          "mapped_field": {
+            "name": "sales_count"
+          },
+          "name": "sales_count",
+          "type": "integer"
+        },
+        {
+          "comment": "是否推荐",
+          "display_name": "is_recommended",
+          "mapped_field": {
+            "name": "is_recommended"
+          },
+          "name": "is_recommended",
+          "type": "boolean"
+        },
+        {
+          "comment": "上架状态（online/offline等）",
+          "display_name": "status",
+          "mapped_field": {
+            "name": "status"
+          },
+          "name": "status",
+          "type": "string"
+        },
+        {
+          "comment": "创建时间",
+          "display_name": "created_at",
+          "mapped_field": {
+            "name": "created_at"
+          },
+          "name": "created_at",
+          "type": "datetime"
+        },
+        {
+          "comment": "更新时间",
+          "display_name": "updated_at",
+          "mapped_field": {
+            "name": "updated_at"
+          },
+          "name": "updated_at",
+          "type": "datetime"
+        }
+      ],
+      "data_source": {
+        "id": "d9hffkfoiuhu5i1d1av0",
+        "name": "public.products",
+        "type": "resource"
+      },
+      "display_key": "product_name",
+      "icon": "",
+      "id": "product",
+      "incremental_key": "updated_at",
+      "kn_id": "ecommerce_ops_bkn_public",
+      "module_type": "object_type",
+      "name": "商品SPU",
+      "primary_keys": ["product_id"],
+      "status": {
+        "doc_count": 0,
+        "incremental_key": "updated_at",
+        "incremental_value": "",
+        "index": "",
+        "index_available": false,
+        "storage_size": 0,
+        "update_time": 1785312158047
+      },
+      "tags": ["MVP", "电商"],
+      "update_time": 1785312158047,
+      "updater": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      }
+    },
+    {
+      "branch": "main",
+      "color": "",
+      "comment": "SKU 库存与低库存预警视图。",
+      "create_time": 1785312158047,
+      "creator": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      },
+      "data_properties": [
+        {
+          "comment": "商品ID",
+          "display_name": "product_id",
+          "mapped_field": {
+            "name": "product_id"
+          },
+          "name": "product_id",
+          "type": "integer"
+        },
+        {
+          "comment": "商品名称",
+          "display_name": "product_name",
+          "mapped_field": {
+            "name": "product_name"
+          },
+          "name": "product_name",
+          "type": "string"
+        },
+        {
+          "comment": "商品编码",
+          "display_name": "product_code",
+          "mapped_field": {
+            "name": "product_code"
+          },
+          "name": "product_code",
+          "type": "string"
+        },
+        {
+          "comment": "分类名称",
+          "display_name": "category_name",
+          "mapped_field": {
+            "name": "category_name"
+          },
+          "name": "category_name",
+          "type": "string"
+        },
+        {
+          "comment": "品牌名称",
+          "display_name": "brand_name",
+          "mapped_field": {
+            "name": "brand_name"
+          },
+          "name": "brand_name",
+          "type": "string"
+        },
+        {
+          "comment": "SKU ID",
+          "display_name": "sku_id",
+          "mapped_field": {
+            "name": "sku_id"
+          },
+          "name": "sku_id",
+          "type": "integer"
+        },
+        {
+          "comment": "SKU编码",
+          "display_name": "sku_code",
+          "mapped_field": {
+            "name": "sku_code"
+          },
+          "name": "sku_code",
+          "type": "string"
+        },
+        {
+          "comment": "SKU名称",
+          "display_name": "sku_name",
+          "mapped_field": {
+            "name": "sku_name"
+          },
+          "name": "sku_name",
+          "type": "string"
+        },
+        {
+          "comment": "规格属性（JSON）",
+          "display_name": "spec_attributes",
+          "mapped_field": {
+            "name": "spec_attributes"
+          },
+          "name": "spec_attributes",
+          "type": "json"
+        },
+        {
+          "comment": "销售价（元）",
+          "display_name": "price",
+          "mapped_field": {
+            "name": "price"
+          },
+          "name": "price",
+          "type": "decimal"
+        },
+        {
+          "comment": "市场价（元）",
+          "display_name": "market_price",
+          "mapped_field": {
+            "name": "market_price"
+          },
+          "name": "market_price",
+          "type": "decimal"
+        },
+        {
+          "comment": "成本价（元）",
+          "display_name": "cost_price",
+          "mapped_field": {
+            "name": "cost_price"
+          },
+          "name": "cost_price",
+          "type": "decimal"
+        },
+        {
+          "comment": "库存数量",
+          "display_name": "stock_quantity",
+          "mapped_field": {
+            "name": "stock_quantity"
+          },
+          "name": "stock_quantity",
+          "type": "integer"
+        },
+        {
+          "comment": "库存预警阈值",
+          "display_name": "alert_quantity",
+          "mapped_field": {
+            "name": "alert_quantity"
+          },
+          "name": "alert_quantity",
+          "type": "integer"
+        },
+        {
+          "comment": "是否低于预警库存",
+          "display_name": "is_low_stock",
+          "mapped_field": {
+            "name": "is_low_stock"
+          },
+          "name": "is_low_stock",
+          "type": "boolean"
+        },
+        {
+          "comment": "商品上架状态",
+          "display_name": "product_status",
+          "mapped_field": {
+            "name": "product_status"
+          },
+          "name": "product_status",
+          "type": "string"
+        },
+        {
+          "comment": "SKU状态",
+          "display_name": "sku_status",
+          "mapped_field": {
+            "name": "sku_status"
+          },
+          "name": "sku_status",
+          "type": "string"
+        }
+      ],
+      "data_source": {
+        "id": "d9hffknoiuhu5i1d1b60",
+        "name": "public.v_product_inventory",
+        "type": "resource"
+      },
+      "display_key": "sku_name",
+      "icon": "",
+      "id": "product_inventory",
+      "incremental_key": "",
+      "kn_id": "ecommerce_ops_bkn_public",
+      "module_type": "object_type",
+      "name": "商品库存视图",
+      "primary_keys": ["sku_id"],
+      "status": {
+        "doc_count": 0,
+        "incremental_key": "",
+        "incremental_value": "",
+        "index": "",
+        "index_available": false,
+        "storage_size": 0,
+        "update_time": 1785312158047
+      },
+      "tags": ["MVP", "电商"],
+      "update_time": 1785312158047,
+      "updater": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      }
+    },
+    {
+      "branch": "main",
+      "color": "",
+      "comment": "用户商品评价。",
+      "create_time": 1785312158047,
+      "creator": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      },
+      "data_properties": [
+        {
+          "comment": "评价主键ID",
+          "display_name": "review_id",
+          "mapped_field": {
+            "name": "review_id"
+          },
+          "name": "review_id",
+          "type": "integer"
+        },
+        {
+          "comment": "商品ID",
+          "display_name": "product_id",
+          "mapped_field": {
+            "name": "product_id"
+          },
+          "name": "product_id",
+          "type": "integer"
+        },
+        {
+          "comment": "SKU ID",
+          "display_name": "sku_id",
+          "mapped_field": {
+            "name": "sku_id"
+          },
+          "name": "sku_id",
+          "type": "integer"
+        },
+        {
+          "comment": "评价用户ID",
+          "display_name": "user_id",
+          "mapped_field": {
+            "name": "user_id"
+          },
+          "name": "user_id",
+          "type": "integer"
+        },
+        {
+          "comment": "关联订单ID",
+          "display_name": "order_id",
+          "mapped_field": {
+            "name": "order_id"
+          },
+          "name": "order_id",
+          "type": "integer"
+        },
+        {
+          "comment": "评分（通常1-5）",
+          "display_name": "rating",
+          "mapped_field": {
+            "name": "rating"
+          },
+          "name": "rating",
+          "type": "integer"
+        },
+        {
+          "comment": "评价内容",
+          "display_name": "content",
+          "mapped_field": {
+            "name": "content"
+          },
+          "name": "content",
+          "type": "text"
+        },
+        {
+          "comment": "评价图片列表（JSON）",
+          "display_name": "images",
+          "mapped_field": {
+            "name": "images"
+          },
+          "name": "images",
+          "type": "json"
+        },
+        {
+          "comment": "是否匿名评价",
+          "display_name": "is_anonymous",
+          "mapped_field": {
+            "name": "is_anonymous"
+          },
+          "name": "is_anonymous",
+          "type": "boolean"
+        },
+        {
+          "comment": "是否已购认证评价",
+          "display_name": "is_verified",
+          "mapped_field": {
+            "name": "is_verified"
+          },
+          "name": "is_verified",
+          "type": "boolean"
+        },
+        {
+          "comment": "商家回复内容",
+          "display_name": "reply_content",
+          "mapped_field": {
+            "name": "reply_content"
+          },
+          "name": "reply_content",
+          "type": "text"
+        },
+        {
+          "comment": "商家回复时间",
+          "display_name": "reply_time",
+          "mapped_field": {
+            "name": "reply_time"
+          },
+          "name": "reply_time",
+          "type": "datetime"
+        },
+        {
+          "comment": "评价创建时间",
+          "display_name": "created_at",
+          "mapped_field": {
+            "name": "created_at"
+          },
+          "name": "created_at",
+          "type": "datetime"
+        }
+      ],
+      "data_source": {
+        "id": "d9hffkfoiuhu5i1d1at0",
+        "name": "public.product_reviews",
+        "type": "resource"
+      },
+      "display_key": "review_id",
+      "icon": "",
+      "id": "product_review",
+      "incremental_key": "",
+      "kn_id": "ecommerce_ops_bkn_public",
+      "module_type": "object_type",
+      "name": "商品评价",
+      "primary_keys": ["review_id"],
+      "status": {
+        "doc_count": 0,
+        "incremental_key": "",
+        "incremental_value": "",
+        "index": "",
+        "index_available": false,
+        "storage_size": 0,
+        "update_time": 1785312158047
+      },
+      "tags": ["MVP", "电商"],
+      "update_time": 1785312158047,
+      "updater": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      }
+    },
+    {
+      "branch": "main",
+      "color": "",
+      "comment": "向供应商发起的采购订单。",
+      "create_time": 1785312158047,
+      "creator": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      },
+      "data_properties": [
+        {
+          "comment": "采购单主键ID",
+          "display_name": "po_id",
+          "mapped_field": {
+            "name": "po_id"
+          },
+          "name": "po_id",
+          "type": "integer"
+        },
+        {
+          "comment": "采购单号",
+          "display_name": "po_no",
+          "mapped_field": {
+            "name": "po_no"
+          },
+          "name": "po_no",
+          "type": "string"
+        },
+        {
+          "comment": "供应商ID",
+          "display_name": "supplier_id",
+          "mapped_field": {
+            "name": "supplier_id"
+          },
+          "name": "supplier_id",
+          "type": "integer"
+        },
+        {
+          "comment": "收货仓库ID",
+          "display_name": "warehouse_id",
+          "mapped_field": {
+            "name": "warehouse_id"
+          },
+          "name": "warehouse_id",
+          "type": "integer"
+        },
+        {
+          "comment": "采购单状态",
+          "display_name": "order_status",
+          "mapped_field": {
+            "name": "order_status"
+          },
+          "name": "order_status",
+          "type": "string"
+        },
+        {
+          "comment": "采购总金额（元）",
+          "display_name": "total_amount",
+          "mapped_field": {
+            "name": "total_amount"
+          },
+          "name": "total_amount",
+          "type": "decimal"
+        },
+        {
+          "comment": "预计到货日期",
+          "display_name": "expected_date",
+          "mapped_field": {
+            "name": "expected_date"
+          },
+          "name": "expected_date",
+          "type": "date"
+        },
+        {
+          "comment": "实际到货日期",
+          "display_name": "actual_date",
+          "mapped_field": {
+            "name": "actual_date"
+          },
+          "name": "actual_date",
+          "type": "date"
+        },
+        {
+          "comment": "创建人ID",
+          "display_name": "creator_id",
+          "mapped_field": {
+            "name": "creator_id"
+          },
+          "name": "creator_id",
+          "type": "integer"
+        },
+        {
+          "comment": "审批人ID",
+          "display_name": "approver_id",
+          "mapped_field": {
+            "name": "approver_id"
+          },
+          "name": "approver_id",
+          "type": "integer"
+        },
+        {
+          "comment": "备注",
+          "display_name": "remark",
+          "mapped_field": {
+            "name": "remark"
+          },
+          "name": "remark",
+          "type": "text"
+        },
+        {
+          "comment": "创建时间",
+          "display_name": "created_at",
+          "mapped_field": {
+            "name": "created_at"
+          },
+          "name": "created_at",
+          "type": "datetime"
+        },
+        {
+          "comment": "更新时间",
+          "display_name": "updated_at",
+          "mapped_field": {
+            "name": "updated_at"
+          },
+          "name": "updated_at",
+          "type": "datetime"
+        }
+      ],
+      "data_source": {
+        "id": "d9hffkfoiuhu5i1d1b00",
+        "name": "public.purchase_orders",
+        "type": "resource"
+      },
+      "display_key": "po_no",
+      "icon": "",
+      "id": "purchase_order",
+      "incremental_key": "updated_at",
+      "kn_id": "ecommerce_ops_bkn_public",
+      "module_type": "object_type",
+      "name": "采购单",
+      "primary_keys": ["po_id"],
+      "status": {
+        "doc_count": 0,
+        "incremental_key": "updated_at",
+        "incremental_value": "",
+        "index": "",
+        "index_available": false,
+        "storage_size": 0,
+        "update_time": 1785312158047
+      },
+      "tags": ["MVP", "电商"],
+      "update_time": 1785312158047,
+      "updater": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      }
+    },
+    {
+      "branch": "main",
+      "color": "",
+      "comment": "订单发货/运单。",
+      "create_time": 1785312158047,
+      "creator": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      },
+      "data_properties": [
+        {
+          "comment": "发货单主键ID",
+          "display_name": "shipment_id",
+          "mapped_field": {
+            "name": "shipment_id"
+          },
+          "name": "shipment_id",
+          "type": "integer"
+        },
+        {
+          "comment": "发货单号",
+          "display_name": "shipment_no",
+          "mapped_field": {
+            "name": "shipment_no"
+          },
+          "name": "shipment_no",
+          "type": "string"
+        },
+        {
+          "comment": "关联订单ID",
+          "display_name": "order_id",
+          "mapped_field": {
+            "name": "order_id"
+          },
+          "name": "order_id",
+          "type": "integer"
+        },
+        {
+          "comment": "发货仓库ID",
+          "display_name": "warehouse_id",
+          "mapped_field": {
+            "name": "warehouse_id"
+          },
+          "name": "warehouse_id",
+          "type": "integer"
+        },
+        {
+          "comment": "快递公司",
+          "display_name": "express_company",
+          "mapped_field": {
+            "name": "express_company"
+          },
+          "name": "express_company",
+          "type": "string"
+        },
+        {
+          "comment": "快递单号",
+          "display_name": "express_no",
+          "mapped_field": {
+            "name": "express_no"
+          },
+          "name": "express_no",
+          "type": "string"
+        },
+        {
+          "comment": "寄件人姓名",
+          "display_name": "sender_name",
+          "mapped_field": {
+            "name": "sender_name"
+          },
+          "name": "sender_name",
+          "type": "string"
+        },
+        {
+          "comment": "寄件人电话",
+          "display_name": "sender_phone",
+          "mapped_field": {
+            "name": "sender_phone"
+          },
+          "name": "sender_phone",
+          "type": "string"
+        },
+        {
+          "comment": "寄件地址",
+          "display_name": "sender_address",
+          "mapped_field": {
+            "name": "sender_address"
+          },
+          "name": "sender_address",
+          "type": "string"
+        },
+        {
+          "comment": "收件人姓名",
+          "display_name": "receiver_name",
+          "mapped_field": {
+            "name": "receiver_name"
+          },
+          "name": "receiver_name",
+          "type": "string"
+        },
+        {
+          "comment": "收件人电话",
+          "display_name": "receiver_phone",
+          "mapped_field": {
+            "name": "receiver_phone"
+          },
+          "name": "receiver_phone",
+          "type": "string"
+        },
+        {
+          "comment": "收件省",
+          "display_name": "receiver_province",
+          "mapped_field": {
+            "name": "receiver_province"
+          },
+          "name": "receiver_province",
+          "type": "string"
+        },
+        {
+          "comment": "收件市",
+          "display_name": "receiver_city",
+          "mapped_field": {
+            "name": "receiver_city"
+          },
+          "name": "receiver_city",
+          "type": "string"
+        },
+        {
+          "comment": "收件区/县",
+          "display_name": "receiver_district",
+          "mapped_field": {
+            "name": "receiver_district"
+          },
+          "name": "receiver_district",
+          "type": "string"
+        },
+        {
+          "comment": "收件详细地址",
+          "display_name": "receiver_detail",
+          "mapped_field": {
+            "name": "receiver_detail"
+          },
+          "name": "receiver_detail",
+          "type": "string"
+        },
+        {
+          "comment": "包裹件数",
+          "display_name": "package_count",
+          "mapped_field": {
+            "name": "package_count"
+          },
+          "name": "package_count",
+          "type": "integer"
+        },
+        {
+          "comment": "包裹重量（克）",
+          "display_name": "package_weight_g",
+          "mapped_field": {
+            "name": "package_weight_g"
+          },
+          "name": "package_weight_g",
+          "type": "integer"
+        },
+        {
+          "comment": "运费（元）",
+          "display_name": "shipping_fee",
+          "mapped_field": {
+            "name": "shipping_fee"
+          },
+          "name": "shipping_fee",
+          "type": "decimal"
+        },
+        {
+          "comment": "发货/物流状态",
+          "display_name": "shipment_status",
+          "mapped_field": {
+            "name": "shipment_status"
+          },
+          "name": "shipment_status",
+          "type": "string"
+        },
+        {
+          "comment": "发货时间",
+          "display_name": "shipped_at",
+          "mapped_field": {
+            "name": "shipped_at"
+          },
+          "name": "shipped_at",
+          "type": "datetime"
+        },
+        {
+          "comment": "妥投/送达时间",
+          "display_name": "delivered_at",
+          "mapped_field": {
+            "name": "delivered_at"
+          },
+          "name": "delivered_at",
+          "type": "datetime"
+        },
+        {
+          "comment": "签收时间",
+          "display_name": "signed_at",
+          "mapped_field": {
+            "name": "signed_at"
+          },
+          "name": "signed_at",
+          "type": "datetime"
+        },
+        {
+          "comment": "创建时间",
+          "display_name": "created_at",
+          "mapped_field": {
+            "name": "created_at"
+          },
+          "name": "created_at",
+          "type": "datetime"
+        },
+        {
+          "comment": "更新时间",
+          "display_name": "updated_at",
+          "mapped_field": {
+            "name": "updated_at"
+          },
+          "name": "updated_at",
+          "type": "datetime"
+        }
+      ],
+      "data_source": {
+        "id": "d9hffkfoiuhu5i1d1b1g",
+        "name": "public.shipments",
+        "type": "resource"
+      },
+      "display_key": "shipment_no",
+      "icon": "",
+      "id": "shipment",
+      "incremental_key": "updated_at",
+      "kn_id": "ecommerce_ops_bkn_public",
+      "module_type": "object_type",
+      "name": "发货单",
+      "primary_keys": ["shipment_id"],
+      "status": {
+        "doc_count": 0,
+        "incremental_key": "updated_at",
+        "incremental_value": "",
+        "index": "",
+        "index_available": false,
+        "storage_size": 0,
+        "update_time": 1785312158047
+      },
+      "tags": ["MVP", "电商"],
+      "update_time": 1785312158047,
+      "updater": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      }
+    },
+    {
+      "branch": "main",
+      "color": "",
+      "comment": "采购供应商主数据。不含银行账号等敏感字段。",
+      "create_time": 1785312158047,
+      "creator": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      },
+      "data_properties": [
+        {
+          "comment": "供应商主键ID",
+          "display_name": "supplier_id",
+          "mapped_field": {
+            "name": "supplier_id"
+          },
+          "name": "supplier_id",
+          "type": "integer"
+        },
+        {
+          "comment": "供应商名称",
+          "display_name": "supplier_name",
+          "mapped_field": {
+            "name": "supplier_name"
+          },
+          "name": "supplier_name",
+          "type": "string"
+        },
+        {
+          "comment": "供应商编码",
+          "display_name": "supplier_code",
+          "mapped_field": {
+            "name": "supplier_code"
+          },
+          "name": "supplier_code",
+          "type": "string"
+        },
+        {
+          "comment": "联系人",
+          "display_name": "contact_person",
+          "mapped_field": {
+            "name": "contact_person"
+          },
+          "name": "contact_person",
+          "type": "string"
+        },
+        {
+          "comment": "联系电话",
+          "display_name": "contact_phone",
+          "mapped_field": {
+            "name": "contact_phone"
+          },
+          "name": "contact_phone",
+          "type": "string"
+        },
+        {
+          "comment": "联系邮箱",
+          "display_name": "email",
+          "mapped_field": {
+            "name": "email"
+          },
+          "name": "email",
+          "type": "string"
+        },
+        {
+          "comment": "省行政区ID",
+          "display_name": "province_id",
+          "mapped_field": {
+            "name": "province_id"
+          },
+          "name": "province_id",
+          "type": "integer"
+        },
+        {
+          "comment": "市行政区ID",
+          "display_name": "city_id",
+          "mapped_field": {
+            "name": "city_id"
+          },
+          "name": "city_id",
+          "type": "integer"
+        },
+        {
+          "comment": "区/县行政区ID",
+          "display_name": "district_id",
+          "mapped_field": {
+            "name": "district_id"
+          },
+          "name": "district_id",
+          "type": "integer"
+        },
+        {
+          "comment": "详细地址",
+          "display_name": "detail_address",
+          "mapped_field": {
+            "name": "detail_address"
+          },
+          "name": "detail_address",
+          "type": "string"
+        },
+        {
+          "comment": "合作状态",
+          "display_name": "cooperation_status",
+          "mapped_field": {
+            "name": "cooperation_status"
+          },
+          "name": "cooperation_status",
+          "type": "string"
+        },
+        {
+          "comment": "供应商评级",
+          "display_name": "rating",
+          "mapped_field": {
+            "name": "rating"
+          },
+          "name": "rating",
+          "type": "integer"
+        },
+        {
+          "comment": "创建时间",
+          "display_name": "created_at",
+          "mapped_field": {
+            "name": "created_at"
+          },
+          "name": "created_at",
+          "type": "datetime"
+        }
+      ],
+      "data_source": {
+        "id": "d9hffkfoiuhu5i1d1b20",
+        "name": "public.suppliers",
+        "type": "resource"
+      },
+      "display_key": "supplier_name",
+      "icon": "",
+      "id": "supplier",
+      "incremental_key": "",
+      "kn_id": "ecommerce_ops_bkn_public",
+      "module_type": "object_type",
+      "name": "供应商",
+      "primary_keys": ["supplier_id"],
+      "status": {
+        "doc_count": 0,
+        "incremental_key": "",
+        "incremental_value": "",
+        "index": "",
+        "index_available": false,
+        "storage_size": 0,
+        "update_time": 1785312158047
+      },
+      "tags": ["MVP", "电商"],
+      "update_time": 1785312158047,
+      "updater": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      }
+    },
+    {
+      "branch": "main",
+      "color": "",
+      "comment": "电商平台用户账号。不含密码哈希等敏感字段。",
+      "create_time": 1785312158047,
+      "creator": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      },
+      "data_properties": [
+        {
+          "comment": "用户主键ID",
+          "display_name": "user_id",
+          "mapped_field": {
+            "name": "user_id"
+          },
+          "name": "user_id",
+          "type": "integer"
+        },
+        {
+          "comment": "登录用户名",
+          "display_name": "username",
+          "mapped_field": {
+            "name": "username"
+          },
+          "name": "username",
+          "type": "string"
+        },
+        {
+          "comment": "真实姓名",
+          "display_name": "real_name",
+          "mapped_field": {
+            "name": "real_name"
+          },
+          "name": "real_name",
+          "type": "string"
+        },
+        {
+          "comment": "昵称",
+          "display_name": "nickname",
+          "mapped_field": {
+            "name": "nickname"
+          },
+          "name": "nickname",
+          "type": "string"
+        },
+        {
+          "comment": "性别（M/F等）",
+          "display_name": "gender",
+          "mapped_field": {
+            "name": "gender"
+          },
+          "name": "gender",
+          "type": "string"
+        },
+        {
+          "comment": "邮箱",
+          "display_name": "email",
+          "mapped_field": {
+            "name": "email"
+          },
+          "name": "email",
+          "type": "string"
+        },
+        {
+          "comment": "手机号",
+          "display_name": "phone",
+          "mapped_field": {
+            "name": "phone"
+          },
+          "name": "phone",
+          "type": "string"
+        },
+        {
+          "comment": "头像URL",
+          "display_name": "avatar_url",
+          "mapped_field": {
+            "name": "avatar_url"
+          },
+          "name": "avatar_url",
+          "type": "string"
+        },
+        {
+          "comment": "出生日期",
+          "display_name": "birthday",
+          "mapped_field": {
+            "name": "birthday"
+          },
+          "name": "birthday",
+          "type": "date"
+        },
+        {
+          "comment": "注册时间",
+          "display_name": "register_time",
+          "mapped_field": {
+            "name": "register_time"
+          },
+          "name": "register_time",
+          "type": "datetime"
+        },
+        {
+          "comment": "最近登录时间",
+          "display_name": "last_login_time",
+          "mapped_field": {
+            "name": "last_login_time"
+          },
+          "name": "last_login_time",
+          "type": "datetime"
+        },
+        {
+          "comment": "用户等级（如normal）",
+          "display_name": "user_level",
+          "mapped_field": {
+            "name": "user_level"
+          },
+          "name": "user_level",
+          "type": "string"
+        },
+        {
+          "comment": "账号状态（如active）",
+          "display_name": "status",
+          "mapped_field": {
+            "name": "status"
+          },
+          "name": "status",
+          "type": "string"
+        },
+        {
+          "comment": "创建时间",
+          "display_name": "created_at",
+          "mapped_field": {
+            "name": "created_at"
+          },
+          "name": "created_at",
+          "type": "datetime"
+        },
+        {
+          "comment": "更新时间",
+          "display_name": "updated_at",
+          "mapped_field": {
+            "name": "updated_at"
+          },
+          "name": "updated_at",
+          "type": "datetime"
+        }
+      ],
+      "data_source": {
+        "id": "d9hffknoiuhu5i1d1b40",
+        "name": "public.users",
+        "type": "resource"
+      },
+      "display_key": "username",
+      "icon": "",
+      "id": "user",
+      "incremental_key": "updated_at",
+      "kn_id": "ecommerce_ops_bkn_public",
+      "module_type": "object_type",
+      "name": "用户",
+      "primary_keys": ["user_id"],
+      "status": {
+        "doc_count": 0,
+        "incremental_key": "updated_at",
+        "incremental_value": "",
+        "index": "",
+        "index_available": false,
+        "storage_size": 0,
+        "update_time": 1785312158047
+      },
+      "tags": ["MVP", "电商"],
+      "update_time": 1785312158047,
+      "updater": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      }
+    },
+    {
+      "branch": "main",
+      "color": "",
+      "comment": "用户收货地址。",
+      "create_time": 1785312158047,
+      "creator": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      },
+      "data_properties": [
+        {
+          "comment": "地址主键ID",
+          "display_name": "address_id",
+          "mapped_field": {
+            "name": "address_id"
+          },
+          "name": "address_id",
+          "type": "integer"
+        },
+        {
+          "comment": "所属用户ID",
+          "display_name": "user_id",
+          "mapped_field": {
+            "name": "user_id"
+          },
+          "name": "user_id",
+          "type": "integer"
+        },
+        {
+          "comment": "收件人姓名",
+          "display_name": "recipient_name",
+          "mapped_field": {
+            "name": "recipient_name"
+          },
+          "name": "recipient_name",
+          "type": "string"
+        },
+        {
+          "comment": "收件人手机号",
+          "display_name": "phone",
+          "mapped_field": {
+            "name": "phone"
+          },
+          "name": "phone",
+          "type": "string"
+        },
+        {
+          "comment": "省行政区ID",
+          "display_name": "province_id",
+          "mapped_field": {
+            "name": "province_id"
+          },
+          "name": "province_id",
+          "type": "integer"
+        },
+        {
+          "comment": "市行政区ID",
+          "display_name": "city_id",
+          "mapped_field": {
+            "name": "city_id"
+          },
+          "name": "city_id",
+          "type": "integer"
+        },
+        {
+          "comment": "区/县行政区ID",
+          "display_name": "district_id",
+          "mapped_field": {
+            "name": "district_id"
+          },
+          "name": "district_id",
+          "type": "integer"
+        },
+        {
+          "comment": "详细地址",
+          "display_name": "detail_address",
+          "mapped_field": {
+            "name": "detail_address"
+          },
+          "name": "detail_address",
+          "type": "string"
+        },
+        {
+          "comment": "邮政编码",
+          "display_name": "zip_code",
+          "mapped_field": {
+            "name": "zip_code"
+          },
+          "name": "zip_code",
+          "type": "string"
+        },
+        {
+          "comment": "地址标签（如家/公司）",
+          "display_name": "address_tag",
+          "mapped_field": {
+            "name": "address_tag"
+          },
+          "name": "address_tag",
+          "type": "string"
+        },
+        {
+          "comment": "是否默认收货地址",
+          "display_name": "is_default",
+          "mapped_field": {
+            "name": "is_default"
+          },
+          "name": "is_default",
+          "type": "boolean"
+        },
+        {
+          "comment": "创建时间",
+          "display_name": "created_at",
+          "mapped_field": {
+            "name": "created_at"
+          },
+          "name": "created_at",
+          "type": "datetime"
+        },
+        {
+          "comment": "更新时间",
+          "display_name": "updated_at",
+          "mapped_field": {
+            "name": "updated_at"
+          },
+          "name": "updated_at",
+          "type": "datetime"
+        }
+      ],
+      "data_source": {
+        "id": "d9hffkfoiuhu5i1d1b2g",
+        "name": "public.user_addresses",
+        "type": "resource"
+      },
+      "display_key": "recipient_name",
+      "icon": "",
+      "id": "user_address",
+      "incremental_key": "",
+      "kn_id": "ecommerce_ops_bkn_public",
+      "module_type": "object_type",
+      "name": "收货地址",
+      "primary_keys": ["address_id"],
+      "status": {
+        "doc_count": 0,
+        "incremental_key": "",
+        "incremental_value": "",
+        "index": "",
+        "index_available": false,
+        "storage_size": 0,
+        "update_time": 1785312158047
+      },
+      "tags": ["MVP", "电商"],
+      "update_time": 1785312158047,
+      "updater": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      }
+    },
+    {
+      "branch": "main",
+      "color": "",
+      "comment": "用户消费行为与分层分析结果。",
+      "create_time": 1785312158047,
+      "creator": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      },
+      "data_properties": [
+        {
+          "comment": "user_id",
+          "display_name": "user_id",
+          "mapped_field": {
+            "name": "user_id"
+          },
+          "name": "user_id",
+          "type": "integer"
+        },
+        {
+          "comment": "real_name",
+          "display_name": "real_name",
+          "mapped_field": {
+            "name": "real_name"
+          },
+          "name": "real_name",
+          "type": "string"
+        },
+        {
+          "comment": "phone",
+          "display_name": "phone",
+          "mapped_field": {
+            "name": "phone"
+          },
+          "name": "phone",
+          "type": "string"
+        },
+        {
+          "comment": "user_level",
+          "display_name": "user_level",
+          "mapped_field": {
+            "name": "user_level"
+          },
+          "name": "user_level",
+          "type": "string"
+        },
+        {
+          "comment": "register_date",
+          "display_name": "register_date",
+          "mapped_field": {
+            "name": "register_date"
+          },
+          "name": "register_date",
+          "type": "date"
+        },
+        {
+          "comment": "total_orders",
+          "display_name": "total_orders",
+          "mapped_field": {
+            "name": "total_orders"
+          },
+          "name": "total_orders",
+          "type": "integer"
+        },
+        {
+          "comment": "total_consumption",
+          "display_name": "total_consumption",
+          "mapped_field": {
+            "name": "total_consumption"
+          },
+          "name": "total_consumption",
+          "type": "decimal"
+        },
+        {
+          "comment": "avg_order_value",
+          "display_name": "avg_order_value",
+          "mapped_field": {
+            "name": "avg_order_value"
+          },
+          "name": "avg_order_value",
+          "type": "decimal"
+        },
+        {
+          "comment": "last_order_date",
+          "display_name": "last_order_date",
+          "mapped_field": {
+            "name": "last_order_date"
+          },
+          "name": "last_order_date",
+          "type": "datetime"
+        },
+        {
+          "comment": "days_since_last_activity",
+          "display_name": "days_since_last_activity",
+          "mapped_field": {
+            "name": "days_since_last_activity"
+          },
+          "name": "days_since_last_activity",
+          "type": "integer"
+        },
+        {
+          "comment": "consumption_segment",
+          "display_name": "consumption_segment",
+          "mapped_field": {
+            "name": "consumption_segment"
+          },
+          "name": "consumption_segment",
+          "type": "text"
+        }
+      ],
+      "data_source": {
+        "id": "d9hffkfoiuhu5i1d1apg",
+        "name": "public.mv_user_consumption_analysis",
+        "type": "resource"
+      },
+      "display_key": "real_name",
+      "icon": "",
+      "id": "user_consumption",
+      "incremental_key": "",
+      "kn_id": "ecommerce_ops_bkn_public",
+      "module_type": "object_type",
+      "name": "用户消费分层",
+      "primary_keys": ["user_id"],
+      "status": {
+        "doc_count": 0,
+        "incremental_key": "",
+        "incremental_value": "",
+        "index": "",
+        "index_available": false,
+        "storage_size": 0,
+        "update_time": 1785312158047
+      },
+      "tags": ["MVP", "电商"],
+      "update_time": 1785312158047,
+      "updater": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      }
+    },
+    {
+      "branch": "main",
+      "color": "",
+      "comment": "仓储节点。",
+      "create_time": 1785312158047,
+      "creator": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      },
+      "data_properties": [
+        {
+          "comment": "仓库主键ID",
+          "display_name": "warehouse_id",
+          "mapped_field": {
+            "name": "warehouse_id"
+          },
+          "name": "warehouse_id",
+          "type": "integer"
+        },
+        {
+          "comment": "仓库名称",
+          "display_name": "warehouse_name",
+          "mapped_field": {
+            "name": "warehouse_name"
+          },
+          "name": "warehouse_name",
+          "type": "string"
+        },
+        {
+          "comment": "仓库编码",
+          "display_name": "warehouse_code",
+          "mapped_field": {
+            "name": "warehouse_code"
+          },
+          "name": "warehouse_code",
+          "type": "string"
+        },
+        {
+          "comment": "省行政区ID",
+          "display_name": "province_id",
+          "mapped_field": {
+            "name": "province_id"
+          },
+          "name": "province_id",
+          "type": "integer"
+        },
+        {
+          "comment": "市行政区ID",
+          "display_name": "city_id",
+          "mapped_field": {
+            "name": "city_id"
+          },
+          "name": "city_id",
+          "type": "integer"
+        },
+        {
+          "comment": "区/县行政区ID",
+          "display_name": "district_id",
+          "mapped_field": {
+            "name": "district_id"
+          },
+          "name": "district_id",
+          "type": "integer"
+        },
+        {
+          "comment": "仓库详细地址",
+          "display_name": "detail_address",
+          "mapped_field": {
+            "name": "detail_address"
+          },
+          "name": "detail_address",
+          "type": "string"
+        },
+        {
+          "comment": "联系人",
+          "display_name": "contact_person",
+          "mapped_field": {
+            "name": "contact_person"
+          },
+          "name": "contact_person",
+          "type": "string"
+        },
+        {
+          "comment": "联系电话",
+          "display_name": "contact_phone",
+          "mapped_field": {
+            "name": "contact_phone"
+          },
+          "name": "contact_phone",
+          "type": "string"
+        },
+        {
+          "comment": "仓库类型（自营/第三方等）",
+          "display_name": "warehouse_type",
+          "mapped_field": {
+            "name": "warehouse_type"
+          },
+          "name": "warehouse_type",
+          "type": "string"
+        },
+        {
+          "comment": "仓库面积（平方米）",
+          "display_name": "area_sqm",
+          "mapped_field": {
+            "name": "area_sqm"
+          },
+          "name": "area_sqm",
+          "type": "decimal"
+        },
+        {
+          "comment": "仓库状态",
+          "display_name": "status",
+          "mapped_field": {
+            "name": "status"
+          },
+          "name": "status",
+          "type": "string"
+        },
+        {
+          "comment": "创建时间",
+          "display_name": "created_at",
+          "mapped_field": {
+            "name": "created_at"
+          },
+          "name": "created_at",
+          "type": "datetime"
+        }
+      ],
+      "data_source": {
+        "id": "d9hffknoiuhu5i1d1b7g",
+        "name": "public.warehouses",
+        "type": "resource"
+      },
+      "display_key": "warehouse_name",
+      "icon": "",
+      "id": "warehouse",
+      "incremental_key": "",
+      "kn_id": "ecommerce_ops_bkn_public",
+      "module_type": "object_type",
+      "name": "仓库",
+      "primary_keys": ["warehouse_id"],
+      "status": {
+        "doc_count": 0,
+        "incremental_key": "",
+        "incremental_value": "",
+        "index": "",
+        "index_available": false,
+        "storage_size": 0,
+        "update_time": 1785312158047
+      },
+      "tags": ["MVP", "电商"],
+      "update_time": 1785312158047,
+      "updater": {
+        "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+        "name": "Administrator",
+        "type": "user"
+      }
+    }
+  ],
+  "total_count": 20
+}

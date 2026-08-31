@@ -1,0 +1,18 @@
+{
+  "path": "/api/ontology-query/v1/knowledge-networks/ecommerce_ops_bkn_public/object-types/order",
+  "request": {
+    "condition": {
+      "field": "order_status",
+      "operation": "==",
+      "value": "no_such_status",
+      "value_from": "const"
+    },
+    "limit": 2,
+    "response_format": "json"
+  },
+  "response": {
+    "datas": [],
+    "overall_ms": 266,
+    "search_from_index": false
+  }
+}

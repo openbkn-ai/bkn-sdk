@@ -16,5 +16,5 @@
 ## Non-goals
 
 - No web UI (backend-only platform).
-- No Python SDK (dropped in this rewrite).
+- No hand-written general-purpose Python client (the legacy one stayed dropped). `python/` ships the OSDK instead: generated, network-specific, read-only classes over one knowledge network. It ports none of this SDK's eleven resource namespaces — those are HTTP wrapping with no Python-specific value — and offers `bkn_osdk.call()` for the rest.
 - Not a 1:1 reimplementation of the legacy tools — unused surface is intentionally left behind.

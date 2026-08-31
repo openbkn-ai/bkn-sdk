@@ -1,0 +1,32 @@
+{
+  "path": "/api/ontology-query/v1/knowledge-networks/ecommerce_ops_bkn_public/object-types/order",
+  "request": {
+    "limit": 2,
+    "properties": ["order_id", "order_no"],
+    "response_format": "json"
+  },
+  "response": {
+    "datas": [
+      {
+        "_display": "2026070720DC7170D9C74799",
+        "_instance_id": "order-10357",
+        "_instance_identity": {
+          "order_id": 10357
+        },
+        "order_id": 10357,
+        "order_no": "2026070720DC7170D9C74799"
+      },
+      {
+        "_display": "20260707A86D4368FB07436A",
+        "_instance_id": "order-10358",
+        "_instance_identity": {
+          "order_id": 10358
+        },
+        "order_id": 10358,
+        "order_no": "20260707A86D4368FB07436A"
+      }
+    ],
+    "overall_ms": 263,
+    "search_from_index": false
+  }
+}

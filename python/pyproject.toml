@@ -1,0 +1,58 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bkn-osdk"
+version = "0.1.0"
+description = "Generated, read-only ontology SDK for BKN knowledge networks"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "OpenBKN" }]
+keywords = ["bkn", "ontology", "osdk", "knowledge-network"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+# The runtime's only hard dependency. Generated packages import `bkn_osdk` and
+# nothing else, so a consumer's dependency tree stays this short.
+dependencies = ["httpx>=0.27"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "mypy>=1.11", "ruff>=0.6"]
+
+[project.scripts]
+bkn-osdk = "bkn_osdk.codegen.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["bkn_osdk"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+# Golden files are generator output compared byte-for-byte; a formatter touching
+# them would silently rewrite the thing under test. The emitter is responsible
+# for emitting lint-clean code, and `test_emit.py` checks that separately.
+extend-exclude = ["tests/fixtures/golden"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unreachable = true
+files = ["bkn_osdk", "tests", "scripts"]
+# Goldens reference runtime base classes that land with the query layer; they are
+# type-checked as generated output once those exist.
+exclude = ["tests/fixtures/golden/"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The live suite skips itself unless BKN_E2E=1, so a plain run stays offline.
+markers = ["e2e: runs against a live platform"]

@@ -12,6 +12,15 @@ build/
 .tmp-example/
 *.tsbuildinfo
 
+# Python (python/ — the OSDK runtime + generator)
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
 # Test / coverage
 coverage/
 .nyc_output/

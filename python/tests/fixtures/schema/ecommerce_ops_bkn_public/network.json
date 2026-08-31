@@ -1,0 +1,32 @@
+{
+  "branch": "main",
+  "business_domain": "bd_public",
+  "color": "#1677ff",
+  "comment": "可见修复版：已同步对象、关系、指标与逻辑属性。",
+  "create_time": 1785312157960,
+  "creator": {
+    "id": "266c6a42-6131-4d62-8f39-853e7093701c",
+    "name": "Administrator",
+    "type": "user"
+  },
+  "icon": "icon-dip-graph",
+  "id": "ecommerce_ops_bkn_public",
+  "module_type": "knowledge_network",
+  "name": "电商经营决策知识网络",
+  "operations": [
+    "view_detail",
+    "create",
+    "modify",
+    "delete",
+    "data_query",
+    "authorize",
+    "task_manage"
+  ],
+  "tags": ["MVP", "电商", "经营决策"],
+  "update_time": 1785469068073,
+  "updater": {
+    "id": "e0c6b39458af04014df9e80dfda23f29",
+    "name": "liberly",
+    "type": "user"
+  }
+}
