@@ -1,6 +1,6 @@
 # Examples
 
-Six scripts, each runnable against a live platform. One is about getting
+Seven scripts, each runnable against a live platform. One is about getting
 connected at all; the rest are split by the layer they work at:
 
 - [`credentials.py`](credentials.py) — which platform, as whom, and where that
@@ -50,6 +50,7 @@ python examples/ontology/explore.py "最近的大额订单"
 BKN_OBJECT_TYPE=order python examples/ontology/query.py
 BKN_OBJECT_TYPE=order python examples/ontology/traced.py
 python examples/platform/tools.py
+BKN_OBJECT_TYPE=order python examples/platform/capabilities.py
 BKN_OBJECT_TYPE=order python examples/platform/sandbox.py
 ```
 
@@ -66,6 +67,7 @@ BKN_OBJECT_TYPE=order python examples/platform/sandbox.py
 | | |
 | --- | --- |
 | [`tools.py`](platform/tools.py) | The deploy's tool catalog read as the contract it is, REST by path, tools by name with a turn attached, and `run_sql` for the aggregation no typed form covers. |
+| [`capabilities.py`](platform/capabilities.py) | The same surface through `bkn_osdk.kn` — generated functions, so the arguments, the query/body split and the turn all come from the contract. Chained the way real work chains: most routes need an id an earlier call produced. |
 | [`sandbox.py`](platform/sandbox.py) | Running code in the platform's sandbox through `/function/execute`, passing the caller's turn in so the SDK inside inherits it. Platform-layer on this side; the code it sends uses the ontology layer over there. |
 
 [`bootstrap.py`](bootstrap.py) is shared: it generates the package for
