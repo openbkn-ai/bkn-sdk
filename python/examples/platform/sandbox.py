@@ -97,8 +97,19 @@ def handler(event):
 """
 
 
-def run(scoped: bkn_osdk.Context, turn: object, code: str, event: dict) -> dict:
-    """One sandbox execution, carrying this process's turn into it."""
+def run(scoped: bkn_osdk.Context, turn: object, code: str, event: dict, label: str = "") -> dict:
+    """One sandbox execution, carrying this process's turn into it.
+
+    The code is printed before it goes, because that is the thing worth seeing:
+    everything above this line runs here, everything inside that block runs on
+    the platform, and the only join between them is `event` and the two ids.
+    """
+    print(f"\n--- {label or 'sending'} ------------------------------------")
+    for line in code.strip().splitlines():
+        print(f"  | {line}")
+    print(f"  event: {event}")
+    print("  " + "-" * 46)
+
     answer = request(
         scoped,
         EXECUTE,
@@ -127,7 +138,7 @@ def main() -> None:
         # Two calls, not one: installing and working in the same execution runs
         # long enough to hit the gateway's timeout. The install lands in
         # `/workspace/.local/...` and a later execution (a fresh process) sees it.
-        installed = run(scoped, turn, INSTALL, {"spec": SPEC.format(sha=sha)})
+        installed = run(scoped, turn, INSTALL, {"spec": SPEC.format(sha=sha)}, "install")
         # A repeat execution in a pooled session sometimes answers `exit_code: 0`
         # with `result: null` — the handler's return value is dropped on the way
         # back. Saying so beats guessing "already installed", which is what this
@@ -143,6 +154,7 @@ def main() -> None:
                     "kn_id": kn_id(),
                     "object_type": os.environ.get("BKN_OBJECT_TYPE", ""),
                 },
+                "generate and read, inside",
             )
         )
 
