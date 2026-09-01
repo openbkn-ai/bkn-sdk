@@ -24,7 +24,9 @@ classifiers = [
 dependencies = ["httpx>=0.27"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "mypy>=1.11", "ruff>=0.6"]
+# `pyyaml` is a generation-time dependency only: `scripts/capture_kn_contract.py`
+# reads foundry's OpenAPI and freezes it as JSON, so the runtime keeps httpx alone.
+dev = ["pytest>=8", "mypy>=1.11", "ruff>=0.6", "pyyaml>=6", "types-PyYAML>=6"]
 
 [project.scripts]
 bkn-osdk = "bkn_osdk.codegen.cli:main"

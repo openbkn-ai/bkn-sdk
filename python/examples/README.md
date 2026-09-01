@@ -24,8 +24,11 @@ nothing below names a platform or a token. `-k` is for the self-signed
 certificate an IP deploy serves, and it is remembered per platform.
 
 ```bash
-openbkn auth login --base-url https://14.103.77.23 -u admin -p '…' -k
+openbkn -k auth login https://14.103.77.23 -u admin -p '…'
 ```
+
+The URL is `login`'s own positional argument, and `-k` belongs to `openbkn`
+itself, so it comes before the subcommand.
 
 `openbkn` is the TypeScript CLI (`npm i -g @openbkn/bkn-sdk`). Without it, set
 `BKN_BASE_URL` and `BKN_TOKEN` instead — the difference is that a stored login

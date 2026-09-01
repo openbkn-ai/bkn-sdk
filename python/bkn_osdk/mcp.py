@@ -85,6 +85,10 @@ def tool_catalog(ctx: Context) -> Any:
 #: rather hear that than sit through a backoff.
 RETRY_ATTEMPTS = 2
 RETRY_BACKOFF_SECONDS = (0.25, 1.0)
+#: The platform's own `retry_after_ms` is honoured only up to here. A deploy
+#: answering `retry_after_ms: 30000` would otherwise block a read for a minute
+#: across two attempts — silently, and against the bound this section promises.
+RETRY_MAX_WAIT_SECONDS = 2.0
 
 
 def call_tool(ctx: Context, kn_id: str, name: str, arguments: dict[str, Any]) -> ToolResult:
@@ -101,7 +105,7 @@ def call_tool(ctx: Context, kn_id: str, name: str, arguments: dict[str, Any]) ->
         except ToolError as error:
             if not error.retryable or attempt == RETRY_ATTEMPTS:
                 raise
-            named = (error.retry_after_ms or 0) / 1000
+            named = min((error.retry_after_ms or 0) / 1000, RETRY_MAX_WAIT_SECONDS)
             time.sleep(named or RETRY_BACKOFF_SECONDS[attempt])
     raise AssertionError("unreachable")  # pragma: no cover
 

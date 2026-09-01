@@ -231,7 +231,14 @@ def ensure_interaction(ctx: Context, kn_id: str) -> Iterator[Interaction]:
     interaction = _start(ctx, kn_id)
     try:
         yield interaction
-    finally:
+    except BaseException:
+        # A turn closed as `completed` after the call it exists for raised is a
+        # false entry in the evidence chain — and every capability route now
+        # opens one of these, so the falsehood would be the common case rather
+        # than the rare one. `session(traced=True)` already distinguishes them.
+        finish(ctx, interaction, "failed", None)
+        raise
+    else:
         finish(ctx, interaction, "completed", None)
 
 

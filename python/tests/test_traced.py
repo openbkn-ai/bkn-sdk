@@ -789,3 +789,42 @@ def test_a_refusal_that_is_not_retryable_is_raised_at_once(
         mcp_module.call_tool(Context(base_url=PLATFORM, token="t-1"), KN, "search_schema", {})
 
     assert seen[0] == 1
+
+
+def test_a_turn_opened_for_a_call_that_raised_is_closed_as_failed(deploy: Deploy) -> None:
+    """Every capability route opens one of these, so a turn recorded as
+    `completed` after its call raised would be the common entry in the evidence
+    chain rather than the rare one."""
+    from bkn_osdk.lifecycle import ensure_interaction
+
+    with (
+        pytest.raises(RuntimeError),
+        ensure_interaction(Context(base_url=PLATFORM, token="t-1"), KN),
+    ):
+        raise RuntimeError("the call this turn exists for")
+
+    finished = [args for name, args in deploy.calls if name == "bkn_finish_interaction"]
+    assert finished[-1]["outcome"] == "failed"
+
+
+def test_a_turn_that_completed_is_closed_as_completed(deploy: Deploy) -> None:
+    from bkn_osdk.lifecycle import ensure_interaction
+
+    with ensure_interaction(Context(base_url=PLATFORM, token="t-1"), KN):
+        pass
+
+    finished = [args for name, args in deploy.calls if name == "bkn_finish_interaction"]
+    assert finished[-1]["outcome"] == "completed"
+
+
+def test_a_delay_the_platform_names_is_capped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`retry_after_ms: 30000` would block a read for a minute across two
+    attempts — silently, and against the bound this promises."""
+    failing(monkeypatch, {**TRANSIENT, "retry_after_ms": 30_000}, until=99)
+    slept: list[float] = []
+    monkeypatch.setattr("time.sleep", slept.append)  # after `failing`, which stubs it too
+
+    with pytest.raises(ToolError):
+        mcp_module.call_tool(Context(base_url=PLATFORM, token="t-1"), KN, "search_schema", {})
+
+    assert slept and max(slept) <= mcp_module.RETRY_MAX_WAIT_SECONDS
