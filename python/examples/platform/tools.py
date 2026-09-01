@@ -30,7 +30,16 @@ from bkn_osdk.mcp import call_tool, tool_catalog
 
 
 def brief(value: Any, width: int = 88) -> str:
-    return json.dumps(value, ensure_ascii=False)[:width]
+    """A payload in one line, cut at a comma rather than mid-token.
+
+    Truncating JSON at a fixed width leaves `"paging": {"n` on the screen, which
+    reads as output that stopped rather than output that was shortened.
+    """
+    text = json.dumps(value, ensure_ascii=False)
+    if len(text) <= width:
+        return text
+    cut = text.rfind(", ", 0, width)
+    return f"{text[: cut if cut > 0 else width]} …}}"
 
 
 def payload(value: Any) -> Any:
@@ -84,7 +93,12 @@ def main() -> None:
             {"kn_id": network, "detail_level": "summary", "bkn_context": turn.bkn_context},
         )
         described = payload(detail.value)
-        print(f"get_kn_detail: {brief({key: '…' for key in described})}")
+        counts = {
+            key: len(value) if isinstance(value, list) else value
+            for key, value in described.items()
+            if key in ("id", "name", "object_types", "relation_types", "action_types")
+        }
+        print(f"get_kn_detail: {counts}")
         print(f"  receipt {(detail.receipt or {}).get('operation_id')}")
 
         # Aggregation has no typed form — `query_object_instance` cannot group —
@@ -118,7 +132,8 @@ def main() -> None:
                         "bkn_context": turn.bkn_context,
                     },
                 ).value
-                print(f"  run_sql: {brief(payload(counted))}")
+                answered = payload(counted)
+                print(f"  run_sql: {answered.get('entries')} columns {answered.get('columns')}")
 
     # ---- one turn across both layers ---------------------------------------
     with bkn_osdk.session(traced=True) as scoped:
