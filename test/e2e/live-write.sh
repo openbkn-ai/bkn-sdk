@@ -93,6 +93,37 @@ chk_has "context call-method tools/list" '"(tools|name)"' context call-method "$
 chk "context tool-call search_schema" context tool-call "$BKN_KN_ID" search_schema --arg query=team
 chk_has "context conversation is remembered" '"(conversationId|source)"' context conversation
 
+# The explicit Receipt output must be valid JSON, and the same identity must be
+# able to read the durable record it names. This proves the CLI only emits the
+# validated envelope after a real managed call; it deliberately does not claim
+# cross-identity denial or exactly-once under a dropped response, both of which
+# need an approved two-identity fault-injection target.
+receipt_out="$(run context tool-call "$BKN_KN_ID" search_schema --arg query=team --receipt)"
+receipt_id="$(node -e '
+  let s = "";
+  process.stdin.on("data", (d) => { s += d; });
+  process.stdin.on("end", () => {
+    try {
+      const j = JSON.parse(s);
+      const r = j?.bkn_receipt;
+      const valid = r && typeof r.receipt_id === "string" && r.receipt_id &&
+        typeof r.conversation_id === "string" && r.conversation_id &&
+        typeof r.interaction_id === "string" && r.interaction_id &&
+        ["pending", "completed", "failed"].includes(r.receipt_status);
+      process.stdout.write(valid ? r.receipt_id : "");
+    } catch {
+      process.stdout.write("");
+    }
+  });
+' <<< "$receipt_out")"
+if errored "$receipt_out" || [ -z "$receipt_id" ]; then
+  echo "FAIL  context tool-call --receipt emits a validated envelope :: $(head -c 140 <<< "$receipt_out" | tr '\n' ' ')"
+  fail=$((fail + 1)); failed+=("context receipt envelope")
+else
+  echo "PASS  context tool-call --receipt emits a validated envelope"; pass=$((pass + 1))
+  chk "trace receipt current-identity readback" trace receipts get "$receipt_id"
+fi
+
 # The remembered conversation has to survive a second command, which is the
 # whole point of remembering it.
 # Compare the id itself, not the whole payload: two empty outputs are equal,

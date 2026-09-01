@@ -12,6 +12,7 @@ import {
   getRelationTypes,
 } from "../../src/api/context-loader.js";
 import type { RequestContext } from "../../src/types.js";
+import { formatError } from "../../src/utils/errors.js";
 
 const ctx: RequestContext = {
   baseUrl: "https://demo.example.com",
@@ -162,6 +163,383 @@ describe("drill-down (get_object_types / get_relation_types)", () => {
 });
 
 describe("managed MCP tool calls", () => {
+  it("uses the automatic lifecycle path before retaining a receipt", async () => {
+    const receipt = {
+      receipt_id: "receipt-auto",
+      conversation_id: "conv-auto",
+      interaction_id: "int-auto",
+      operation_id: "op-auto",
+      receipt_status: "completed",
+    };
+    const calls: Array<{ name: string; arguments: Record<string, unknown> }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/mcp/info")) {
+          return new Response(JSON.stringify({ tools: [{ name: "bkn_start_interaction" }] }));
+        }
+        const rpc = JSON.parse(init?.body as string) as {
+          method?: string;
+          params?: { name: string; arguments: Record<string, unknown> };
+        };
+        const headers = { "mcp-session-id": "auto-session" };
+        if (rpc.method !== "tools/call" || !rpc.params) {
+          return new Response(JSON.stringify({ jsonrpc: "2.0", result: {} }), { headers });
+        }
+        calls.push(rpc.params);
+        if (rpc.params.name === "bkn_start_interaction") {
+          return new Response(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              result: {
+                content: [{ type: "text", text: "started" }],
+                structuredContent: {
+                  conversation_id: "conv-auto",
+                  interaction_id: "int-auto",
+                },
+              },
+            }),
+            { headers },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            result: {
+              content: [{ type: "text", text: JSON.stringify({ concepts: ["forecast"] }) }],
+              structuredContent: { bkn_receipt: receipt },
+            },
+          }),
+          { headers },
+        );
+      }),
+    );
+
+    await expect(
+      callManagedTool(
+        { baseUrl: "https://managed-auto.example.com", token: "receipt-token", insecure: false },
+        "kn-auto-receipt",
+        "search_schema",
+        { query: "forecast" },
+      ),
+    ).resolves.toEqual({ value: { concepts: ["forecast"] }, receipt });
+    expect(calls.map((call) => call.name)).toEqual(["bkn_start_interaction", "search_schema"]);
+    expect(calls[1]?.arguments.bkn_context).toEqual({
+      conversation_id: "conv-auto",
+      interaction_id: "int-auto",
+    });
+  });
+
+  it("accepts a replay receipt without a business value as null", async () => {
+    const receipt = {
+      receipt_id: "receipt-replay",
+      conversation_id: "conversation_supply_chain",
+      interaction_id: "interaction_june_forecast",
+      operation_id: "operation-replay",
+      receipt_status: "completed",
+    };
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: { structuredContent: { receipt } },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () => new Response(body, { status: 200, headers: { "mcp-session-id": "replay-s1" } }),
+      ),
+    );
+
+    await expect(
+      callManagedTool(ctx, "kn-replay", "search_schema", {
+        query: "forecast",
+        bkn_context: {
+          conversation_id: "conversation_supply_chain",
+          interaction_id: "interaction_june_forecast",
+        },
+      }),
+    ).resolves.toEqual({ value: null, receipt });
+  });
+
+  it("keeps structured business content when it arrives beside a completed receipt", async () => {
+    const receipt = {
+      receipt_id: "receipt-structured-value",
+      conversation_id: "conversation_supply_chain",
+      interaction_id: "interaction_june_forecast",
+      operation_id: "operation-structured-value",
+      receipt_status: "completed",
+    };
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        structuredContent: {
+          concepts: ["forecast"],
+          page: { total: 1 },
+          bkn_receipt: receipt,
+        },
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(body, { status: 200, headers: { "mcp-session-id": "structured-value-s1" } }),
+      ),
+    );
+
+    await expect(
+      callManagedTool(ctx, "kn-structured-value", "search_schema", {
+        query: "forecast",
+        bkn_context: {
+          conversation_id: "conversation_supply_chain",
+          interaction_id: "interaction_june_forecast",
+        },
+      }),
+    ).resolves.toEqual({ value: { concepts: ["forecast"], page: { total: 1 } }, receipt });
+  });
+
+  it("returns null for a pending receipt even when the server includes stale content", async () => {
+    const receipt = {
+      receipt_id: "receipt-pending",
+      conversation_id: "conversation_supply_chain",
+      interaction_id: "interaction_june_forecast",
+      operation_id: "operation-pending",
+      receipt_status: "pending",
+    };
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        content: [{ type: "text", text: JSON.stringify({ stale: true }) }],
+        structuredContent: { bkn_receipt: receipt },
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(body, { status: 200, headers: { "mcp-session-id": "pending-s1" } }),
+      ),
+    );
+
+    await expect(
+      callManagedTool(ctx, "kn-pending", "search_schema", {
+        query: "forecast",
+        bkn_context: {
+          conversation_id: "conversation_supply_chain",
+          interaction_id: "interaction_june_forecast",
+        },
+      }),
+    ).resolves.toEqual({ value: null, receipt });
+  });
+
+  it("fails a receipt whose operation is terminally failed", async () => {
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        content: [{ type: "text", text: JSON.stringify({ stale: true }) }],
+        structuredContent: {
+          bkn_receipt: {
+            receipt_id: "receipt-failed",
+            conversation_id: "conversation_supply_chain",
+            interaction_id: "interaction_june_forecast",
+            operation_id: "operation-failed",
+            receipt_status: "failed",
+          },
+        },
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () => new Response(body, { status: 200, headers: { "mcp-session-id": "failed-s1" } }),
+      ),
+    );
+
+    await expect(
+      callManagedTool(ctx, "kn-failed", "search_schema", {
+        query: "forecast",
+        bkn_context: {
+          conversation_id: "conversation_supply_chain",
+          interaction_id: "interaction_june_forecast",
+        },
+      }),
+    ).rejects.toMatchObject({ code: "receipt_failed" });
+  });
+
+  it("rejects a receipt whose business context differs from the call", async () => {
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        content: [{ type: "text", text: JSON.stringify({ concepts: ["forecast"] }) }],
+        structuredContent: {
+          bkn_receipt: {
+            receipt_id: "receipt-mismatch",
+            conversation_id: "other-conversation",
+            interaction_id: "other-interaction",
+            operation_id: "operation-mismatch",
+            receipt_status: "completed",
+          },
+        },
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(body, { status: 200, headers: { "mcp-session-id": "mismatch-s1" } }),
+      ),
+    );
+
+    await expect(
+      callManagedTool(ctx, "kn-mismatch", "search_schema", {
+        query: "forecast",
+        bkn_context: {
+          conversation_id: "conversation_supply_chain",
+          interaction_id: "interaction_june_forecast",
+        },
+      }),
+    ).rejects.toThrow("Context-loader receipt does not match the managed context.");
+  });
+
+  it("does not reuse an MCP transport session across bearer identities", async () => {
+    let initialized = 0;
+    const businessSessions: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: string | URL, init?: RequestInit) => {
+        const rpc = JSON.parse(init?.body as string) as { method?: string };
+        if (rpc.method === "initialize") {
+          initialized += 1;
+          return new Response(JSON.stringify({ jsonrpc: "2.0", result: {} }), {
+            headers: { "mcp-session-id": `identity-session-${initialized}` },
+          });
+        }
+        if (rpc.method === "tools/call") {
+          businessSessions.push(new Headers(init?.headers).get("mcp-session-id") ?? "");
+        }
+        return new Response(JSON.stringify({ jsonrpc: "2.0", result: { content: [] } }), {
+          headers: { "mcp-session-id": `identity-session-${initialized}` },
+        });
+      }),
+    );
+    const base = { baseUrl: "https://identity-cache.example.com", insecure: false };
+    await callTool({ ...base, token: "alice" }, "kn-identity-cache", "bkn_get_operation", {});
+    await callTool({ ...base, token: "bob" }, "kn-identity-cache", "bkn_get_operation", {});
+
+    expect(initialized).toBe(2);
+    expect(businessSessions).toEqual(["identity-session-1", "identity-session-2"]);
+  });
+
+  it("rejects caller context that conflicts with trace business ids", async () => {
+    const f = mockMcp();
+    await expect(
+      callTool(ctx, "kn-context-conflict", "search_schema", {
+        query: "forecast",
+        bkn_context: {
+          conversation_id: "other-conversation",
+          interaction_id: "other-interaction",
+        },
+      }),
+    ).rejects.toThrow("Caller bkn_context conflicts with BKN Trace context.");
+    expect(rpcCalls(f)).toHaveLength(0);
+  });
+
+  it("allows caller context to supply the interaction when Trace names only its conversation", async () => {
+    const f = mockMcp();
+    await expect(
+      callTool(
+        {
+          ...ctx,
+          trace: {
+            requestId: "request-conversation-only",
+            traceparent: "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
+            conversationId: "conversation_supply_chain",
+          },
+        },
+        "kn-caller-interaction",
+        "search_schema",
+        {
+          query: "forecast",
+          bkn_context: {
+            conversation_id: "conversation_supply_chain",
+            interaction_id: "interaction-caller-owned",
+          },
+        },
+      ),
+    ).resolves.toEqual({ ok: true });
+    expect(toolCallBody(f).arguments.bkn_context).toEqual({
+      conversation_id: "conversation_supply_chain",
+      interaction_id: "interaction-caller-owned",
+    });
+  });
+
+  it("rejects incomplete caller context before making an MCP request", async () => {
+    const f = mockMcp();
+    await expect(
+      callTool(ctx, "kn-partial-context", "search_schema", {
+        query: "forecast",
+        bkn_context: { conversation_id: "conversation_supply_chain" },
+      }),
+    ).rejects.toThrow("BKN context requires both a conversation id and an interaction id.");
+    expect(rpcCalls(f)).toHaveLength(0);
+  });
+
+  it("rejects an interaction-only Trace context before a caller context can bypass it", async () => {
+    const f = mockMcp();
+    await expect(
+      callTool(
+        {
+          ...ctx,
+          trace: {
+            requestId: "request-interaction-only",
+            traceparent: "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
+            interactionId: "interaction-only",
+          },
+        },
+        "kn-interaction-only-caller",
+        "search_schema",
+        {
+          query: "forecast",
+          bkn_context: {
+            conversation_id: "conversation_supply_chain",
+            interaction_id: "interaction-only",
+          },
+        },
+      ),
+    ).rejects.toThrow("BKN interaction id requires a conversation id.");
+    expect(rpcCalls(f)).toHaveLength(0);
+  });
+
+  it("omits business trace headers when caller context is the only business source", async () => {
+    const f = mockMcp();
+    await callTool(
+      {
+        ...ctx,
+        trace: {
+          requestId: ctx.trace?.requestId ?? "",
+          traceparent: ctx.trace?.traceparent ?? "",
+        },
+      },
+      "kn-caller-context",
+      "search_schema",
+      {
+        query: "forecast",
+        bkn_context: {
+          conversation_id: "conversation-caller",
+          interaction_id: "interaction-caller",
+        },
+      },
+    );
+    const headers = toolCallHeaders(f);
+    expect(headers.get("bkn-conversation-id")).toBeNull();
+    expect(headers.get("bkn-interaction-id")).toBeNull();
+  });
+
   it("preserves unsafe integers in tool arguments and text results", async () => {
     const body =
       '{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"{\\"id_card\\":110101199001152345}"}]}}';
@@ -270,6 +648,63 @@ describe("managed MCP tool calls", () => {
     ).rejects.toThrow(
       "Context-loader error: conversation_required: call bkn_start_interaction first",
     );
+  });
+
+  it("recognizes and redacts a known lifecycle error when MCP omits structured content", async () => {
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: "conversation_required: query=bkn_context%3Dsecret&token=secret",
+          },
+        ],
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(body, { status: 200, headers: { "mcp-session-id": "error-raw-s1" } }),
+      ),
+    );
+
+    const error = await callManagedTool(ctx, "kn-error-raw", "search_schema", {
+      query: "forecast",
+    }).catch((reason) => reason);
+    expect(error).toMatchObject({ code: "conversation_required" });
+    expect(formatError(error)).toMatch(/^Context-loader error: conversation_required:/);
+    expect(formatError(error)).not.toContain("secret");
+  });
+
+  it("does not apply business receipt state rules to lifecycle receipt reads", async () => {
+    const receipt = {
+      receipt_id: "receipt-lifecycle-read",
+      conversation_id: "conversation_supply_chain",
+      interaction_id: "interaction_june_forecast",
+      operation_id: "operation-lifecycle-read",
+      receipt_status: "pending",
+    };
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: { structuredContent: { receipt } },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () => new Response(body, { status: 200, headers: { "mcp-session-id": "read-s1" } }),
+      ),
+    );
+
+    await expect(
+      callTool(ctx, "kn-receipt-read", "bkn_get_receipt", { receipt_id: receipt.receipt_id }),
+    ).resolves.toEqual({
+      receipt,
+    });
   });
 
   it("raises a JSON-RPC error from callMethod as a refusal too", async () => {

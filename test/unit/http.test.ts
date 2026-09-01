@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { request } from "../../src/api/http.js";
 import type { RequestContext } from "../../src/types.js";
-import { HttpError, NonJsonResponseError, formatError } from "../../src/utils/errors.js";
+import { HttpError, NonJsonResponseError, ToolError, formatError } from "../../src/utils/errors.js";
 
 const ctx: RequestContext = {
   baseUrl: "https://demo.example.com",
@@ -101,5 +101,26 @@ describe("gateway error pages", () => {
     });
     const err = await request(ctx, "/api/x/v1/thing").catch((e) => e);
     expect(formatError(err)).toMatch(/not deployed or not routed/i);
+  });
+});
+
+describe("managed-context errors", () => {
+  it("redacts raw tool details for a known lifecycle error", () => {
+    const message = formatError(
+      new ToolError(
+        "Context-loader error: interaction terminal; query=bkn_context%3Dsecret&token=secret",
+        "interaction_terminal",
+      ),
+    );
+
+    expect(message).toContain("interaction_terminal");
+    expect(message).not.toContain("bkn_context");
+    expect(message).not.toContain("secret");
+  });
+
+  it("keeps unknown tool errors unchanged for compatibility", () => {
+    expect(formatError(new ToolError("tool rejected argument x", "custom_error"))).toBe(
+      "tool rejected argument x",
+    );
   });
 });

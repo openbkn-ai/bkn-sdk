@@ -65,4 +65,12 @@ describe("command tree", () => {
       expect(sections[section]?.length ?? 0).toBeGreaterThan(10);
     }
   });
+
+  it("makes the opt-in ContextLoader receipt contract discoverable", () => {
+    const context = buildProgram().commands.find((command) => command.name() === "context");
+    const toolCall = context?.commands.find((command) => command.name() === "tool-call");
+    const help = toolCall?.helpInformation() ?? "";
+    expect(help).toContain("--receipt");
+    expect(help).toContain("requires --json");
+  });
 });

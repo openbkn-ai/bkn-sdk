@@ -189,6 +189,35 @@ afterEach(() => {
 });
 
 describe("managed lifecycle on semantic search", () => {
+  it("probes lifecycle capabilities separately for each identity", async () => {
+    const recorded = mockDeploy({ catalog: V2_CATALOG });
+    const base = freshCtx();
+    await searchInstance({ ...base, token: "alice" }, "kn-identity-catalog", "物料");
+    await searchInstance({ ...base, token: "bob" }, "kn-identity-catalog", "物料");
+
+    expect(recorded.infoCount).toBe(2);
+  });
+
+  it("rejects an interaction id that has no conversation before sending MCP", async () => {
+    const recorded = mockDeploy({ catalog: V2_CATALOG });
+    await expect(
+      searchInstance(
+        freshCtx({
+          trace: {
+            requestId: "req-interaction-only",
+            traceparent: "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
+            interactionId: "int-orphan",
+          },
+        }),
+        "kn-interaction-only",
+        "物料",
+      ),
+    ).rejects.toThrow("BKN interaction id requires a conversation id.");
+    expect(recorded.infoCount).toBe(0);
+    expect(recorded.toolCalls).toHaveLength(0);
+    expect(recorded.retrievalBodies).toHaveLength(0);
+  });
+
   it("omits bkn_context on a deploy without the lifecycle tools", async () => {
     const recorded = mockDeploy({ catalog: LEGACY_CATALOG });
     await searchInstance(freshCtx(), "kn-legacy", "物料");

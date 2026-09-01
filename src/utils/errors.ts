@@ -131,6 +131,10 @@ export function formatError(err: unknown): string {
     const next = err.hint ? ` ${err.hint}` : "";
     return `Request failed (HTTP ${err.status} ${err.statusText})${detail}${next}`;
   }
+  if (err instanceof ToolError && err.code) {
+    const lifecycleMessage = lifecycleErrorMessage(err.code);
+    if (lifecycleMessage) return `Context-loader error: ${err.code}: ${lifecycleMessage}`;
+  }
   if (err instanceof Error) {
     // `fetch` throws a terse "fetch failed"; the real reason is on `.cause`.
     const cause = (err as { cause?: unknown }).cause as
@@ -145,6 +149,30 @@ export function formatError(err: unknown): string {
     return err.message;
   }
   return String(err);
+}
+
+/**
+ * Lifecycle services can include the original MCP query in their diagnostic
+ * message. Keep the recovery path, but never echo that raw diagnostic: it can
+ * contain caller-provided arguments and a serialized business context.
+ */
+function lifecycleErrorMessage(code: string): string | undefined {
+  switch (code) {
+    case "interaction_terminal":
+      return "The interaction is no longer active. Start a new interaction and retry with its current ID.";
+    case "interaction_required":
+      return "Start an interaction before calling this managed tool.";
+    case "conversation_required":
+      return "Provide the conversation that owns this interaction and retry.";
+    case "conversation_context_conflict":
+      return "Use matching conversation and interaction IDs from the same managed context.";
+    case "invalid_business_context":
+      return "The deploy rejected the managed context. Refresh it from the current identity and retry.";
+    case "receipt_failed":
+      return "The managed operation failed. Read the receipt under the current identity for its authorized diagnostic.";
+    default:
+      return undefined;
+  }
 }
 
 /** Pull a human message out of a server JSON error body, if any. */

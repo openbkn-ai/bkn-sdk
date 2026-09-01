@@ -160,6 +160,19 @@ openbkn context tool-call <kn> <tool-name> --arg k=v --arg n=10 --arg list='["a"
 #   --arg repeats; each value is parsed as JSON (number/bool/array), else a string
 ```
 
+需要把业务结果与本次操作的证据一起交给自动化程序时，显式请求 Receipt：
+
+```bash
+openbkn --json context tool-call <kn> <tool-name> --args '{"k":"v"}' --receipt
+# → { "value": ..., "bkn_receipt": { "receipt_id": ..., "receipt_status": ... } }
+```
+
+`--receipt` 必须配合 `--json`（可再配合 `--compact`），不能与 `--schema` 一起使用。
+默认 `tool-call` 输出不变，只返回业务值。SDK 对 Receipt 的必要字段和状态作本地校验，
+但这只说明它与当前调用匹配（validated）；若需确认当前身份仍有权限读取该证据，应使用
+`openbkn trace receipts get <receipt-id>` 回读（authorized）。Receipt 不是凭据，勿写入日志、
+指标标签或后续工具参数。
+
 `call-method <kn> <method>` does the same for raw MCP protocol methods
 (`tools/list`, `resources/read`, `prompts/get`, …) that have no dedicated
 command.

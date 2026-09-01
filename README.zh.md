@@ -41,6 +41,9 @@ openbkn admin role list
 # 任意端点的原始透传
 openbkn call /api/bkn-backend/v1/knowledge-networks
 
+# 返回 MCP 工具结果及其已校验的 BKN Trace Receipt
+openbkn --json context tool-call <kn-id> <tool-name> --args '{"k":"v"}' --receipt
+
 # 全局参数：--base-url --token --user --json/--compact -k/--insecure
 #           --conversation-id/--interaction-id（BKN Trace 关联，等价 env：BKN_CONVERSATION_ID/BKN_INTERACTION_ID）
 #           --new-conversation（这条命令不沿用记住的 conversation）
@@ -51,6 +54,13 @@ openbkn --help        # 分组命令树
 `openbkn context conversation` 显示当前生效的是哪个、来自哪一层；`--forget` 丢掉它。
 显式 `--token` / `BKN_TOKEN` 不参与（那里的身份是 token 本身，不是存下来的用户）——
 这类脚本用 `BKN_CONVERSATION_ID` 把多条命令串起来。
+`--interaction-id` / `BKN_INTERACTION_ID` 必须始终与所属 Conversation ID 一起提供；CLI 会在
+发送 MCP 请求前拒绝只有 interaction 的业务调用。
+
+`context tool-call --receipt` 必须带 `--json`，输出 `{ value, bkn_receipt }`（带
+`--compact` 时为单行）。这是显式选择；默认命令输出和 SDK 的 `context.toolCall()` 仍只返回
+业务值。Receipt 仅证明其已通过本次调用的字段校验，不是 bearer credential；需要授权证据时，
+应在当前身份下运行 `openbkn trace receipts get <receipt-id>` 回读确认。
 
 Token 按平台/用户存于 `~/.bkn/`（可用 `BKN_CONFIG_DIR` 覆盖）。
 
