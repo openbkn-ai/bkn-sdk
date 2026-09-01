@@ -16,8 +16,18 @@ rows: which networks are on this deploy, whether a property exists yet, what a
 metric is defined as. When the answer is about rows, generate the package and
 let the classes do it.
 
-Everything here is `bkn_osdk.call(path)` — no wrapper exists for this surface,
-and none is needed to read it.
+The platform layer answers this two ways, and the difference is worth seeing
+side by side:
+
+* `bkn_osdk.kn.*` — named functions, generated from the context-loader contract.
+  Typed arguments, and a managed turn attached for you, so the read lands in the
+  evidence chain. This is the agent-facing shape.
+* `bkn_osdk.call(path)` — any REST route by path. `bkn-backend` owns definitions
+  that context-loader does not expose at all — metrics, action types, concept
+  groups — and needs no turn to read them.
+
+Same ontology, two doors. Use the named function where one exists; `call` is
+what covers the rest of the platform.
 """
 
 from __future__ import annotations
@@ -31,6 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # so `bootstrap
 from bootstrap import kn_id
 
 import bkn_osdk
+from bkn_osdk import kn
 
 BASE = "/api/bkn-backend/v1/knowledge-networks"
 
@@ -39,21 +50,48 @@ def entries(payload: Any) -> list[dict[str, Any]]:
     return (payload or {}).get("entries") or []
 
 
+def flat(payload: Any) -> dict[str, Any]:
+    """A payload's own fields, whichever envelope this build wraps them in."""
+    if isinstance(payload, dict) and isinstance(payload.get("result"), dict):
+        return payload["result"]
+    return payload if isinstance(payload, dict) else {}
+
+
 def main() -> None:
     network = kn_id()
 
     # 1. What is on this deploy at all. The generated package pins one network;
     #    this is how you find the others.
-    listed = bkn_osdk.call(BASE, query={"limit": 5})
+    #
+    #    `kn.list_knowledge_networks` answers the same question through
+    #    context-loader — note that it takes a network anyway, because the turn
+    #    it runs on belongs to one. The REST route needs no turn, which is why
+    #    it is the one to reach for when you do not have a network yet.
+    listed = bkn_osdk.call(BASE, query={"limit": 100})
     print(f"部署上有 {listed.get('total_count')} 个知识网络, 前几个:")
-    for entry in entries(listed):
+    for entry in entries(listed)[:5]:
         print(f"    {entry['id']:32} {entry.get('name')}")
 
-    # 2. One network's own record.
-    detail = bkn_osdk.call(f"{BASE}/{network}")
-    print(f"\n{network}: {detail.get('name')} | 标签 {detail.get('tags')}")
+    #    The two doors do not always agree, and that is the point of asking both.
+    #    On one deploy `bkn-backend` lists 28 and context-loader 20: the extras
+    #    are archived or `module-test-*` networks, so the agent-facing surface
+    #    appears to filter to what an agent should be offered. Which door you
+    #    pick changes the answer, so pick the one that matches the question.
+    through_kn = flat(kn.list_knowledge_networks(network))
+    by_rest = {entry["id"] for entry in entries(listed)}
+    by_loader = {e.get("id") or e.get("kn_id") for e in entries(through_kn)}
+    print(f"    走 kn.list_knowledge_networks: {through_kn.get('total_count')} 个")
+    hidden = sorted(by_rest - by_loader)
+    if hidden:
+        print(f"    只有 REST 看得到: {hidden[:4]}")
+
+    # 2. One network's own record, through the named function.
+    detail = flat(kn.get_kn_detail(network, detail_level="summary"))
+    print(f"\n{network}: {detail.get('name')} | 对象类 {len(detail.get('object_types') or [])} 个")
 
     # 3. Object types, with the properties the generator turns into descriptors.
+    #    `kn.get_object_types` gives the agent-facing view of named types; the
+    #    REST listing pages through all of them, which is what the generator does.
     types = bkn_osdk.call(f"{BASE}/{network}/object-types", query={"limit": 3})
     print(f"\n对象类 {types.get('total_count')} 个:")
     for entry in entries(types):
@@ -82,6 +120,9 @@ def main() -> None:
     # metric the network defines, while the ontology layer generates a class only
     # for those mounted on an object type as a `metric` logic property. A metric
     # here with no class there is defined but not mounted.
+    # No `kn.*` for these three: context-loader does not expose the metric,
+    # action-type or concept-group definitions at all. This is the half of the
+    # platform layer that only `call` reaches.
     metrics = bkn_osdk.call(f"{BASE}/{network}/metrics", query={"limit": 3})
     print(f"\n指标 {metrics.get('total_count')} 个, 定义口径:")
     for entry in entries(metrics):
@@ -103,8 +144,6 @@ def main() -> None:
     #    them. `search_schema` maps a question onto the types; `search_instance`
     #    goes straight to rows across whichever types are indexed. Both are
     #    capability routes, so both ride a managed turn — attached for you.
-    from bkn_osdk import kn
-
     asked = "订单和它的买家"
     hit = kn.search_schema(network, asked, max_concepts=3)
     hit = hit.get("result") or hit
