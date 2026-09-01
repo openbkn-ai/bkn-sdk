@@ -40,13 +40,13 @@ def main() -> None:
     bkn = package()
     start = readable_object_type(bkn, with_relations=True)
     hops = relations_of(start)
-    print(f"{start.__name__}: {len(hops)} 条关系 {[name for name, _ in hops][:5]}")
+    print(f"{start.__name__}: {len(hops)} relations {[name for name, _ in hops][:5]}")
     if not hops:
-        raise SystemExit(f"{start.__bkn_id__} 没有关系可走。")
+        raise SystemExit(f"{start.__bkn_id__} has no relation to walk.")
 
     rows = start.take(1)
     if not rows:
-        raise SystemExit(f"{start.__bkn_id__} 没有数据可作为起点。")
+        raise SystemExit(f"{start.__bkn_id__} has no row to start from.")
     row = rows[0]
 
     # ---- one hop -------------------------------------------------------------
@@ -57,17 +57,17 @@ def main() -> None:
     try:
         hop = getattr(row, name)
     except Exception as error:
-        raise SystemExit(f"{name} 走不了: {error}") from None
+        raise SystemExit(f"{name} cannot be walked: {error}") from None
 
     print(f"\n{name} -> {hop.object_type.__name__}")
-    print(f"  条件: {hop.filter}")
+    print(f"  filter: {hop.filter}")
     landed = hop.take(3)
-    print(f"  {len(landed)} 行")
+    print(f"  {len(landed)} rows")
 
     # It is an ordinary set, so everything else already works on it.
     target = hop.object_type
     ordered = getattr(target, target.__primary_key__[0])
-    print(f"  排序取一条: {len(hop.order_by(ordered.desc()).take(1))} 行")
+    print(f"  ordered, one row: {len(hop.order_by(ordered.desc()).take(1))}")
 
     # ---- several hops --------------------------------------------------------
     #
@@ -75,25 +75,25 @@ def main() -> None:
     # rows returned, not the paths walked.
     second = relations_of(target)
     if not second:
-        print(f"\n{target.__name__} 没有下一跳, 单跳到此为止")
+        print(f"\n{target.__name__} has no next hop; one hop is the end of it")
         return
 
     next_name, next_relation = second[0]
-    print(f"\n多跳: {start.__name__}.{name}.then({target.__name__}.{next_name})")
+    print(f"\nmulti-hop: {start.__name__}.{name}.then({target.__name__}.{next_name})")
     try:
         walked = relation.then(next_relation).of(row, step_limit=5)
-        print(f"  {len(walked)} 行 {[r.__instance_id__ for r in walked][:3]}")
+        print(f"  {len(walked)} rows {[r.__instance_id__ for r in walked][:3]}")
     except (HttpError, InputError) as error:
         # The subgraph endpoint depends on the data resources behind every type
         # on the path; one missing anywhere fails the walk.
-        print(f"  走不了: {str(error)[:140]}")
+        print(f"  cannot be walked: {str(error)[:140]}")
 
     # A filter belongs to the end it was written against, so extending past one
     # is refused rather than dropped — the rows would look filtered and not be.
     try:
         relation.where(getattr(target, target.__primary_key__[0]) == "x").then(next_relation)
     except InputError as error:
-        print(f"\n在中间跳上加过滤会被拒绝: {str(error)[:90]}")
+        print(f"\nfiltering an intermediate hop is refused: {str(error)[:90]}")
     except AttributeError:
         pass  # `where` lives on the path, not on a bare relation
 

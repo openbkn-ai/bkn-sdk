@@ -44,7 +44,7 @@ def attempt(label: str, call):
     try:
         return call()
     except HttpError as error:
-        print(f"{label}: 平台返回 HTTP {error.status} — {str(error.body)[:80]}")
+        print(f"{label}: platform answered HTTP {error.status} — {str(error.body)[:80]}")
         return None
 
 
@@ -68,9 +68,9 @@ def main() -> None:
     #    types, one of which the rest of this script reads.
     detail = flat(kn.get_kn_detail(network, detail_level="full"))
     types = [t.get("id") or t.get("concept_id") for t in (detail.get("object_types") or [])]
-    print(f"{detail.get('name')}: {len(types)} 个对象类")
+    print(f"{detail.get('name')}: {len(types)} object types")
     ot = chosen_object_type([t for t in types if t])
-    print(f"读取对象类: {ot}")
+    print(f"reading through: {ot}")
 
     # 2. Which data resource backs this object type — `run_sql` names tables by
     #    resource id, never by physical table name.
@@ -79,7 +79,7 @@ def main() -> None:
     )
     types = found.get("object_types") or []
     resource = ((types[0].get("data_source") or {}).get("id")) if types else None
-    print(f"{ot} 的数据资源: {resource}")
+    print(f"{ot} is backed by resource: {resource}")
 
     if resource:
         described = flat(
@@ -87,7 +87,7 @@ def main() -> None:
         )
         if described:
             columns = [c.get("name") for c in (described.get("columns") or [])][:5]
-            print(f"  连接器 {described.get('connector_type')}, 列 {columns}")
+            print(f"  connector {described.get('connector_type')}, columns {columns}")
 
         # 3. Aggregation lives here: the typed read cannot group, so SUM /
         #    COUNT / GROUP BY is what this route is for.
@@ -109,7 +109,7 @@ def main() -> None:
         )
     )
     if rows:
-        print(f"query_object_instance: {len(rows.get('datas') or [])} 行")
+        print(f"query_object_instance: {len(rows.get('datas') or [])} rows")
 
     # 5. Metrics, if this network declares any: their ids come from the object
     #    types they are mounted on.
@@ -125,21 +125,21 @@ def main() -> None:
         skill = skills[0].get("id") or skills[0].get("skill_id")
         content = flat(kn.get_skill_content(network, skill))
         files = [f.get("rel_path") for f in (content.get("files") or [])]
-        print(f"技能 {skill}: {len(files)} 个文件 {files[:3]}")
+        print(f"skill {skill}: {len(files)} files {files[:3]}")
         if files and files[0]:
             read = flat(kn.read_skill_file(network, skill, files[0]))
-            print(f"  {files[0]}: {read.get('mime_type')}, {len(read.get('content') or '')} 字符")
+            print(f"  {files[0]}: {read.get('mime_type')}, {len(read.get('content') or '')} chars")
 
     # 7. Actions, where the network has them.
     actions = [a.get("id") or a.get("concept_id") for a in (detail.get("action_types") or [])]
     if actions and actions[0]:
         info = flat(attempt("get_action_info", lambda: kn.get_action_info(network, actions[0])))
         if info:
-            print(f"行动 {actions[0]}: {list(info)[:3]}")
+            print(f"action {actions[0]}: {list(info)[:3]}")
     history = flat(
         attempt("list_action_executions", lambda: kn.list_action_executions(network, limit=1))
     )
-    print(f"行动执行历史: {len(history.get('entries') or [])} 条")
+    print(f"action executions: {len(history.get('entries') or [])}")
 
     # 8. Discovery over the graph: no path given, the engine spreads from a
     #    starting type. `query_instance_subgraph` is the other one — a path you
@@ -148,7 +148,7 @@ def main() -> None:
         attempt("explore_subgraph", lambda: kn.explore_subgraph(network, ot, "forward", 1, limit=1))
     )
     if walked:
-        print(f"explore_subgraph: {len(walked.get('relation_paths') or [])} 条路径")
+        print(f"explore_subgraph: {len(walked.get('relation_paths') or [])} paths")
 
     # Everything above ran on one turn per call. To put them all on *one* turn —
     # so the evidence chain reads as a single piece of work — wrap the lot:
@@ -159,7 +159,7 @@ def main() -> None:
     with bkn_osdk.session(traced=True):
         kn.list_resources(network)
         kn.list_skills(network)
-    print("一个 traced 作用域里两次调用: 共用同一个 turn")
+    print("two calls in one traced scope: the same turn carried both")
 
 
 if __name__ == "__main__":

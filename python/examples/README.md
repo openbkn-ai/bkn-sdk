@@ -48,7 +48,7 @@ does not matter:
 
 ```bash
 python examples/credentials.py                        # which platform, as whom
-python examples/ontology/explore.py "最近的大额订单"
+python examples/ontology/explore.py "recent large orders"
 python examples/ontology/query.py
 python examples/ontology/traverse.py
 python examples/ontology/metrics.py
@@ -93,11 +93,11 @@ python examples/credentials.py
 ```
 
 ```text
-默认             https://14.103.77.23     token=ory_at__bb…            来自 store, 可刷新
-环境变量           https://14.103.77.23     token=token-from-env         来自 显式给的, 不可刷新
-configure      https://14.103.77.23     token=token-from-configure   来自 显式给的, 不可刷新
-session 内      https://14.103.77.23     token=token-from-session     来自 显式给的, 不可刷新
-session 退出后    https://14.103.77.23     token=token-from-configure   来自 显式给的, 不可刷新
+nothing named    https://14.103.77.23     token=ory_at__bb…      from store, refreshable
+environment      https://14.103.77.23     token=token-from-env   from given explicitly, no refresh
+configure        https://14.103.77.23     token=token-from-configure  …
+inside session   https://14.103.77.23     token=token-from-session    …
+after session    https://14.103.77.23     token=token-from-configure  …
 ```
 
 ## The ontology layer

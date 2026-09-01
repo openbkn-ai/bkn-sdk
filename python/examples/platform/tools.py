@@ -55,18 +55,18 @@ def main() -> None:
     # tool call is shaped against.
     catalog = tool_catalog(bkn_osdk.resolve_context())
     names = sorted(tool["name"] for tool in catalog["tools"])
-    print(f"{len(names)} 个工具: {names[:6]} …")
+    print(f"{len(names)} tools: {names[:6]} …")
 
     start = next(t for t in catalog["tools"] if t["name"] == "search_schema")
     declared = list((start.get("input_schema") or {}).get("properties", {}))
-    print(f"search_schema 的参数: {declared[:6]}")
+    print(f"search_schema takes: {declared[:6]}")
 
     # ---- REST by path -------------------------------------------------------
     #
     # `call` is the same choke point the generated classes read through: same
     # credentials, same 401-refresh, same TLS opt-out.
     networks = bkn_osdk.call("/api/bkn-backend/v1/knowledge-networks", query={"limit": 3})
-    print(f"网络列表: {[e['id'] for e in networks.get('entries', [])]}")
+    print(f"networks: {[e['id'] for e in networks.get('entries', [])]}")
 
     # ---- MCP tools by name --------------------------------------------------
     #
@@ -85,7 +85,7 @@ def main() -> None:
         )
         described = payload(detail.value)
         print(f"get_kn_detail: {brief({key: '…' for key in described})}")
-        print(f"  回执 {(detail.receipt or {}).get('operation_id')}")
+        print(f"  receipt {(detail.receipt or {}).get('operation_id')}")
 
         # Aggregation has no typed form — `query_object_instance` cannot group —
         # so SUM/COUNT/GROUP BY is what `run_sql` is for. The table name is a
@@ -97,7 +97,7 @@ def main() -> None:
             "search_schema",
             {
                 "kn_id": network,
-                "query": "订单",
+                "query": "orders",
                 "response_format": "json",
                 "include_columns": True,
                 "bkn_context": turn.bkn_context,
@@ -106,7 +106,7 @@ def main() -> None:
         types = payload(found).get("object_types") or []
         if types:
             resource = (types[0].get("data_source") or {}).get("id")
-            print(f"{types[0].get('concept_id')} 的数据资源: {resource}")
+            print(f"{types[0].get('concept_id')} is backed by resource: {resource}")
             if resource:
                 counted = call_tool(
                     ctx,
@@ -132,8 +132,8 @@ def main() -> None:
             # decides what its own evidence is worth keeping.
             if result.receipt is not None:
                 turn.receipts.append(result.receipt)
-        print(f"一个 turn 里两次工具调用, 回执 {len(turn.receipts)} 条")
-        print(f"  操作 {[r['operation_id'][:14] for r in turn.receipts]}")
+        print(f"two tool calls on one turn, {len(turn.receipts)} receipts")
+        print(f"  operations {[r['operation_id'][:14] for r in turn.receipts]}")
 
 
 if __name__ == "__main__":

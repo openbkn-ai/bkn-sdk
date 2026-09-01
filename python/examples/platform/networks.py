@@ -68,7 +68,7 @@ def main() -> None:
     #    it runs on belongs to one. The REST route needs no turn, which is why
     #    it is the one to reach for when you do not have a network yet.
     listed = bkn_osdk.call(BASE, query={"limit": 100})
-    print(f"部署上有 {listed.get('total_count')} 个知识网络, 前几个:")
+    print(f"{listed.get('total_count')} knowledge networks on this deploy, first few:")
     for entry in entries(listed)[:5]:
         print(f"    {entry['id']:32} {entry.get('name')}")
 
@@ -80,29 +80,31 @@ def main() -> None:
     through_kn = flat(kn.list_knowledge_networks(network))
     by_rest = {entry["id"] for entry in entries(listed)}
     by_loader = {e.get("id") or e.get("kn_id") for e in entries(through_kn)}
-    print(f"    走 kn.list_knowledge_networks: {through_kn.get('total_count')} 个")
+    print(f"    through kn.list_knowledge_networks: {through_kn.get('total_count')}")
     hidden = sorted(by_rest - by_loader)
     if hidden:
-        print(f"    只有 REST 看得到: {hidden[:4]}")
+        print(f"    only REST sees: {hidden[:4]}")
 
     # 2. One network's own record, through the named function.
     detail = flat(kn.get_kn_detail(network, detail_level="summary"))
-    print(f"\n{network}: {detail.get('name')} | 对象类 {len(detail.get('object_types') or [])} 个")
+    print(
+        f"\n{network}: {detail.get('name')} | {len(detail.get('object_types') or [])} object types"
+    )
 
     # 3. Object types, with the properties the generator turns into descriptors.
     #    `kn.get_object_types` gives the agent-facing view of named types; the
     #    REST listing pages through all of them, which is what the generator does.
     types = bkn_osdk.call(f"{BASE}/{network}/object-types", query={"limit": 3})
-    print(f"\n对象类 {types.get('total_count')} 个:")
+    print(f"\n{types.get('total_count')} object types:")
     for entry in entries(types):
         properties = [p.get("name") for p in (entry.get("data_properties") or [])]
-        print(f"    {entry['id']:22} 主键 {entry.get('primary_keys')} 属性 {len(properties)} 个")
+        print(f"    {entry['id']:22} key {entry.get('primary_keys')} {len(properties)} properties")
         print(f"      {properties[:6]}")
 
     # 4. Relation types carry the join columns a hop is built from — the
     #    `mapping_rules` are what `order.buyer` compiles into a filter.
     relations = bkn_osdk.call(f"{BASE}/{network}/relation-types", query={"limit": 3})
-    print(f"\n关系类 {relations.get('total_count')} 个:")
+    print(f"\n{relations.get('total_count')} relation types:")
     for entry in entries(relations):
         joins = [
             (rule["source_property"]["name"], rule["target_property"]["name"])
@@ -124,27 +126,26 @@ def main() -> None:
     # action-type or concept-group definitions at all. This is the half of the
     # platform layer that only `call` reaches.
     metrics = bkn_osdk.call(f"{BASE}/{network}/metrics", query={"limit": 3})
-    print(f"\n指标 {metrics.get('total_count')} 个, 定义口径:")
+    print(f"\n{metrics.get('total_count')} metrics, as defined:")
     for entry in entries(metrics):
-        print(
-            f"    {entry.get('id'):22} {entry.get('name')}  维度 {entry.get('analysis_dimensions')}"
-        )
+        dimensions = entry.get("analysis_dimensions")
+        print(f"    {entry.get('id'):22} {entry.get('name')}  dimensions {dimensions}")
 
     # 6. Action types are the write surface — the ontology layer is read-only, so
     #    they appear here and nowhere in a generated package.
     actions = bkn_osdk.call(f"{BASE}/{network}/action-types", query={"limit": 3})
-    print(f"\n行动类 {actions.get('total_count')} 个: {[e.get('id') for e in entries(actions)]}")
+    print(f"\n{actions.get('total_count')} action types: {[e.get('id') for e in entries(actions)]}")
 
     # 7. Concept groups: how the network organises its own types, which is what
     #    `search_scope` narrows against.
     groups = bkn_osdk.call(f"{BASE}/{network}/concept-groups", query={"limit": 3})
-    print(f"概念组 {groups.get('total_count')} 个: {[e.get('name') for e in entries(groups)]}")
+    print(f"{groups.get('total_count')} concept groups: {[e.get('name') for e in entries(groups)]}")
 
     # 8. Searching the same definitions by natural language, rather than paging
     #    them. `search_schema` maps a question onto the types; `search_instance`
     #    goes straight to rows across whichever types are indexed. Both are
     #    capability routes, so both ride a managed turn — attached for you.
-    asked = "订单和它的买家"
+    asked = "orders and their buyers"
     hit = kn.search_schema(network, asked, max_concepts=3)
     hit = hit.get("result") or hit
 
@@ -152,18 +153,18 @@ def main() -> None:
         return [t.get("concept_id") or t.get("id") for t in (hit.get(key) or [])]
 
     print(f"\nsearch_schema({asked!r}):")
-    print(f"    对象类 {ids('object_types')}")
-    print(f"    关系类 {ids('relation_types')[:4]}")
+    print(f"    object types {ids('object_types')}")
+    print(f"    relation types {ids('relation_types')[:4]}")
 
     recalled = kn.search_instance(network, asked, max_instances_per_type=1)
     recalled = recalled.get("result") or recalled
     nodes = recalled.get("nodes") or []
     if nodes:
-        print(f"search_instance: 命中 {sorted({n['object_type_id'] for n in nodes})}")
+        print(f"search_instance: hit {sorted({n['object_type_id'] for n in nodes})}")
     else:
         # Only properties whose `condition_operations` include `match` or `knn`
         # take part, so a network with nothing indexed recalls nothing.
-        print(f"search_instance: {recalled.get('message', '没有召回到实例')}")
+        print(f"search_instance: {recalled.get('message', 'nothing recalled')}")
 
     # The same two reads the generator makes, and the fingerprint it derives —
     # `bkn-osdk check` compares exactly this against a package's `_meta.py`.
@@ -171,8 +172,9 @@ def main() -> None:
 
     schema = fetch_schema(bkn_osdk.resolve_context(), network)
     print(
-        f"\n生成器看到的: {len(schema.object_types)} 类 / {len(schema.relation_types)} 关系"
-        f" / {len(schema.metrics)} 指标 (挂在对象类上的), 指纹 {fingerprint(schema)[:12]}…"
+        f"\nwhat the generator sees: {len(schema.object_types)} object types / "
+        f"{len(schema.relation_types)} relations / {len(schema.metrics)} mounted metrics, "
+        f"fingerprint {fingerprint(schema)[:12]}…"
     )
 
 

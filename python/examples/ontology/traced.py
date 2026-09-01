@@ -37,22 +37,22 @@ def main() -> None:
 
         page = Order.objects().with_context(scoped).page(limit=2)
         receipt = page.receipt or {}
-        print(f"读回执 {receipt.get('operation_id')}")
-        print(f"  引用 {[ref['ref_id'] for ref in receipt.get('business_refs', [])][:3]}")
+        print(f"read receipt {receipt.get('operation_id')}")
+        print(f"  refs {[ref['ref_id'] for ref in receipt.get('business_refs', [])][:3]}")
 
         # The receipt rides on each row too, so citing one instance does not mean
         # threading the page around.
         if page.rows:
-            print(f"  行上也有: {bool(page.rows[0].__receipt__)}")
+            print(f"  on each row too: {bool(page.rows[0].__receipt__)}")
 
         # A search inside the same scope joins the same turn rather than opening
         # a second one, so the question and the rows it led to stay together.
         bkn.search("orders")
-        print(f"这一轮累计 {len(turn.receipts)} 条回执")
+        print(f"{len(turn.receipts)} receipts on this turn")
 
         # `count()` and `order_by` need keys the MCP tool ignores, so they take
         # the REST path — still carrying this turn, so they are still recorded.
-        print(f"count() 在 traced 里也是真数: {Order.count()}")
+        print(f"count() answers truthfully inside a traced scope: {Order.count()}")
 
 
 if __name__ == "__main__":

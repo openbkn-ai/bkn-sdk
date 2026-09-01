@@ -65,10 +65,10 @@ def handler(event):
         (c for c in bkn.OBJECT_TYPES if c.__bkn_id__ == wanted), bkn.OBJECT_TYPES[0]
     )
     return {
-        "对象类": "%d 个" % len(schema.object_types),
-        "对象类读的是": cls.__bkn_id__,
+        "object types": len(schema.object_types),
+        "read through": cls.__bkn_id__,
         "count()": cls.count(),
-        "继承到的 turn": ctx.interaction_id,
+        "turn inherited": ctx.interaction_id,
     }
 """
 
@@ -99,7 +99,7 @@ def run(scoped: bkn_osdk.Context, turn: object, code: str, event: dict) -> dict:
         timeout=280,
     )
     if answer.get("exit_code"):
-        raise SystemExit(f"沙箱执行失败: {str(answer.get('stderr'))[:300]}")
+        raise SystemExit(f"sandbox execution failed: {str(answer.get('stderr'))[:300]}")
     return answer.get("result") or {}
 
 
@@ -107,13 +107,13 @@ def main() -> None:
     sha = os.environ.get("BKN_OSDK_SHA", "f044c2e")
     with bkn_osdk.session(traced=True) as scoped:
         turn = current_interaction(scoped, kn_id())
-        print(f"宿主 turn {turn.interaction_id}")
+        print(f"host turn {turn.interaction_id}")
 
         # Two calls, not one: installing and working in the same execution runs
         # long enough to hit the gateway's timeout. The install lands in
         # `/workspace/.local/...` and a later execution (a fresh process) sees it.
         installed = run(scoped, turn, INSTALL, {"spec": SPEC.format(sha=sha)})
-        print(f"装包: {installed or '(这个沙箱会话里已经装过)'}")
+        print(f"install: {installed or '(already present in this sandbox session)'}")
         print(
             run(
                 scoped,

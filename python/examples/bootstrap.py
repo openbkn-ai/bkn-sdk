@@ -70,12 +70,12 @@ def chosen_object_type(available: list[str]) -> str:
         return named
     if named:
         print(
-            f"{kn_id()} 没有对象类 {named!r}, 改用 {available[0]!r}. "
-            f"可选: {', '.join(available[:8])}",
+            f"{kn_id()} has no object type {named!r}; using {available[0]!r}. "
+            f"Available: {', '.join(available[:8])}",
             file=sys.stderr,
         )
     if not available:
-        raise SystemExit(f"{kn_id()} 没有任何对象类可读。")
+        raise SystemExit(f"{kn_id()} declares no object types.")
     return available[0]
 
 
@@ -103,7 +103,7 @@ def readable_object_type(module: ModuleType, *, with_relations: bool = False) ->
         chosen = [c for c in classes if c.__bkn_id__ == named]
         if chosen:
             return chosen[0]  # type: ignore[no-any-return]
-        print(f"{kn_id()} 没有对象类 {named!r}, 自动挑一个", file=sys.stderr)
+        print(f"{kn_id()} has no object type {named!r}; picking one", file=sys.stderr)
 
     skipped: list[str] = []
     reason = ""
@@ -111,15 +111,15 @@ def readable_object_type(module: ModuleType, *, with_relations: bool = False) ->
         try:
             candidate.count()
             if skipped:
-                print(f"跳过读不了的: {', '.join(skipped)}", file=sys.stderr)
+                print(f"skipped unreadable: {', '.join(skipped)}", file=sys.stderr)
             return candidate  # type: ignore[no-any-return]
         except HttpError as error:
             skipped.append(candidate.__bkn_id__)
             reason = _reason(error) or reason
     raise SystemExit(
-        f"{kn_id()} 的 {len(classes)} 个对象类都读不了: {reason}\n"
-        "这个网络只有 schema, 没有可读的数据。换一个网络, 或者跑 "
-        "examples/platform/networks.py 看有哪些。"
+        f"None of {kn_id()}'s {len(classes)} object types can be read: {reason}\n"
+        "This network has a schema and no data behind it. Try another network, "
+        "or run examples/platform/networks.py to see what the deploy has."
     )
 
 
