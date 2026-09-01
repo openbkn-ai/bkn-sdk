@@ -10,6 +10,17 @@
 
 **Design / Issues:** Design PR #87; `Closes #68, Closes #88` only in the implementation PR after every acceptance criterion below passes.
 
+## Execution status (2026-09-01)
+
+| Task | Status | Evidence |
+| --- | --- | --- |
+| 1. Regression coverage | Complete | `5fe809d`, plus state/context/privacy cases in `604f093` |
+| 2. Lifecycle-safe result path | Complete | `ce368e8`, `604f093` |
+| 3. One context and identity-isolated caches | Complete | `4e8297a`, `d9bf4f4`, `cedb2c7`, `604f093` |
+| 4. CLI and safe diagnostics | Complete | `a9d19db`, `2467a5b`, `116b751`, `604f093` |
+| 5. User contract and observations | Complete | `b3358ad` |
+| 6. Deployed evidence | Partial | `b2bc119` adds write-gated validated-envelope + same-identity readback. Two-identity authorization, response-drop fault injection, and server-side execution count require an approved target and remain release/Issue-close gates. |
+
 ---
 
 ### Task 1: Establish lifecycle and Receipt regression coverage
