@@ -260,16 +260,17 @@ function callerContextMatchesTrace(ctx: RequestContext, args: Record<string, unk
   const business = args.bkn_context as
     | { conversation_id?: unknown; interaction_id?: unknown }
     | undefined;
-  if (!business || typeof business.conversation_id !== "string" || typeof business.interaction_id !== "string") {
+  if (
+    !business ||
+    typeof business.conversation_id !== "string" ||
+    typeof business.interaction_id !== "string"
+  ) {
     return;
   }
   const conversation = ctx.trace?.conversationId;
   const interaction = ctx.trace?.interactionId;
   if (!conversation && !interaction) return;
-  if (
-    conversation !== business.conversation_id ||
-    interaction !== business.interaction_id
-  ) {
+  if (conversation !== business.conversation_id || interaction !== business.interaction_id) {
     throw new InputError("Caller bkn_context conflicts with BKN Trace context.");
   }
 }

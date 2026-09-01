@@ -47,6 +47,9 @@ openbkn admin role list
 # Raw passthrough to any endpoint
 openbkn call /api/bkn-backend/v1/knowledge-networks
 
+# Return an MCP tool result with its validated BKN Trace receipt
+openbkn --json context tool-call <kn-id> <tool-name> --args '{"k":"v"}' --receipt
+
 # Global flags: --base-url, --token, --user, --json/--compact, -k/--insecure,
 #               --conversation-id/--interaction-id (BKN Trace correlation; also BKN_CONVERSATION_ID/BKN_INTERACTION_ID)
 #               --new-conversation (ignore the remembered conversation for this command)
@@ -58,6 +61,12 @@ opened, so work spanning several commands lands in one thread. `openbkn context 
 is in force and where it came from; `--forget` drops it. An explicit `--token` /
 `BKN_TOKEN` opts out (identity there is the token, not the stored user) — use
 `BKN_CONVERSATION_ID` to thread such a script's commands together.
+
+`context tool-call --receipt` requires `--json` and emits `{ value, bkn_receipt }`
+(use `--compact` for one line). It is opt-in; the default command output and SDK
+`context.toolCall()` remain business-value-only. The receipt is validated for this
+call, not a bearer credential; confirm access under the current identity with
+`openbkn trace receipts get <receipt-id>` when authorization evidence is required.
 
 Tokens are stored per platform/user under `~/.bkn/` (override: `BKN_CONFIG_DIR`).
 

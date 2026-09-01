@@ -19,7 +19,11 @@ vi.mock("../../src/commands/_shared.js", async (importOriginal) => {
 import { contextCommand } from "../../src/commands/context.js";
 
 function program(json = false): Command {
-  return new Command("openbkn").exitOverride().option("--json").option("--compact").addCommand(contextCommand());
+  return new Command("openbkn")
+    .exitOverride()
+    .option("--json")
+    .option("--compact")
+    .addCommand(contextCommand());
 }
 
 afterEach(() => vi.restoreAllMocks());
@@ -63,7 +67,7 @@ describe("openbkn context tool-call receipt output", () => {
         conversation_id: "conv-1",
         interaction_id: "int-1",
         operation_id: "op-1",
-        status: "completed",
+        receipt_status: "completed",
       },
     });
     const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
@@ -83,16 +87,20 @@ describe("openbkn context tool-call receipt output", () => {
 
     expect(managedToolCall).toHaveBeenCalledWith("kn-a", "search_schema", { query: "supplier" });
     expect(write).toHaveBeenCalledWith(
-      `${JSON.stringify({
-        value: { rows: [{ id: "row-1" }] },
-        bkn_receipt: {
-          receipt_id: "rec-1",
-          conversation_id: "conv-1",
-          interaction_id: "int-1",
-          operation_id: "op-1",
-          status: "completed",
+      `${JSON.stringify(
+        {
+          value: { rows: [{ id: "row-1" }] },
+          bkn_receipt: {
+            receipt_id: "rec-1",
+            conversation_id: "conv-1",
+            interaction_id: "int-1",
+            operation_id: "op-1",
+            receipt_status: "completed",
+          },
         },
-      }, null, 2)}\n`,
+        null,
+        2,
+      )}\n`,
     );
   });
 
@@ -104,7 +112,7 @@ describe("openbkn context tool-call receipt output", () => {
         conversation_id: "conv-2",
         interaction_id: "int-2",
         operation_id: "op-2",
-        status: "pending",
+        receipt_status: "pending",
       },
     });
     const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
@@ -129,7 +137,7 @@ describe("openbkn context tool-call receipt output", () => {
           conversation_id: "conv-2",
           interaction_id: "int-2",
           operation_id: "op-2",
-          status: "pending",
+          receipt_status: "pending",
         },
       })}\n`,
     );

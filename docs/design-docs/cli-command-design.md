@@ -29,7 +29,7 @@ openbkn
   vega      health | stats | inspect | catalog | resource | dataset | query | sql | connector-type
   context   (context-loader)  search-schema | query-object-instance | query-instance-subgraph
             | get-logic-properties | get-action-info | find-skills | tools | resources | resource
-            | templates | prompts | prompt | tool-call
+            | templates | prompts | prompt | tool-call [--receipt --json]
 
   # models, skills, trace
   model     llm <...> | small <...>      # management (mf-model-manager) + runtime (mf-model-api)
@@ -114,6 +114,9 @@ naming the binary `openbkn` — distinct from its `bkn` subcommand — avoids an
 - `--limit` overrides defaults: list = 30, query/preview = 50.
 - Consistent verbs: `list` (many), `get` (one), `create`/`update`/`delete`, plus domain verbs (`push`, `run`, `chat`, `execute`).
 - Output: human-aligned columns by default; clean JSON under `--json`; errors to stderr with non-zero exit.
+- `context tool-call --receipt` is an explicit evidence view. It requires `--json` (and may
+  be combined with `--compact`) and returns `{ value, bkn_receipt }`; without it, `tool-call`
+  retains its historical business-value-only output.
 
 ## Open questions
 

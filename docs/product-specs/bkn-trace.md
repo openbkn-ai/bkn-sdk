@@ -62,6 +62,12 @@ Community 制品不分发 2.x Evidence 写入 Session、Artifact 正文读写、
 
 `trace get <conversation-id>` 与 `trace spans <conversation-id>` 均读取会话 Span；`trace detail <trace-id>` 读取单条类型化技术 Trace，避免改变既有 `trace get` 的参数语义。
 
+Context Loader 的通用调用可通过 `openbkn --json context tool-call <kn> <tool> --receipt`
+返回 `{ value, bkn_receipt }`。这里的 receipt 是 SDK 已校验字段形状且与本次受管调用
+一致的 **validated** 证据，不等同于当前身份已获授权的 **authorized** 证据；后者必须经
+`openbkn trace receipts get <receipt-id>`（或等价 API）在当前身份下回读确认。Receipt JSON
+不是 bearer credential，不应作为认证材料、日志标签或指标维度传播。
+
 Interaction 终止 manifest 和 Operation retry fencing 字段通过受保护的 `--body-file` 提交。lease token 不进入命令行参数，避免出现在 shell history 或进程列表。
 
 动态 JSON 证据值中的不安全十进制整数会保留为原生 `bigint`；Trace Session 的 JSON clone 与 CLI JSON 输出不会把它们转为 `number` 或导致序列化失败。
