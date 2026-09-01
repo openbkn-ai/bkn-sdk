@@ -16,13 +16,12 @@ joined instead, and never finished here, because it is not ours to finish.
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # so `bootstrap` imports
 
-from bootstrap import kn_id, object_type, package
+from bootstrap import kn_id, package, readable_object_type
 
 import bkn_osdk
 from bkn_osdk.lifecycle import current_interaction
@@ -30,7 +29,7 @@ from bkn_osdk.lifecycle import current_interaction
 
 def main() -> None:
     bkn = package()
-    Order = object_type(bkn, os.environ.get("BKN_OBJECT_TYPE", "order"))
+    Order = readable_object_type(bkn)
 
     with bkn_osdk.session(traced=True) as scoped:
         turn = current_interaction(scoped, kn_id())

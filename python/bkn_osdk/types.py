@@ -61,10 +61,26 @@ class PropertyRef(Generic[T]):
     # is what makes `People.age == 30` an expression instead of a comparison.
     # Identity hashing is kept so a reference can still live in a set or a dict.
     def __eq__(self, other: T) -> Comparison:  # type: ignore[override]
-        return Comparison("==", self.bkn_id, other)
+        return Comparison("==", self.bkn_id, self._comparable(other, "=="))
 
     def __ne__(self, other: T) -> Comparison:  # type: ignore[override]
-        return Comparison("!=", self.bkn_id, other)
+        return Comparison("!=", self.bkn_id, self._comparable(other, "!="))
+
+    def _comparable(self, value: Any, operation: str) -> Any:
+        """Refuse a comparison against null, which the platform will not take.
+
+        `where(Order.paid_at == None)` reads as "unpaid" and answers HTTP 400
+        `无效的参数` — a round trip spent to learn a rule that is knowable here.
+        The platform spells this absence, not equality: `exists()` and
+        `not_exists()`, which take no value at all.
+        """
+        if value is None:
+            opposite = "not_exists()" if operation == "==" else "exists()"
+            raise InputError(
+                f"'{self.bkn_id} {operation} None' is not a filter this platform accepts. "
+                f"Absence is its own operator here — use `{self.bkn_id}.{opposite}`."
+            )
+        return value
 
     __hash__ = object.__hash__
 

@@ -60,9 +60,13 @@ def handler(event):
     sys.path.insert(0, "/workspace/pkg")
     import bkn
 
-    cls = next(c for c in bkn.OBJECT_TYPES if c.__bkn_id__ == event["object_type"])
+    wanted = event["object_type"]
+    cls = next(
+        (c for c in bkn.OBJECT_TYPES if c.__bkn_id__ == wanted), bkn.OBJECT_TYPES[0]
+    )
     return {
         "对象类": "%d 个" % len(schema.object_types),
+        "对象类读的是": cls.__bkn_id__,
         "count()": cls.count(),
         "继承到的 turn": ctx.interaction_id,
     }
@@ -118,7 +122,7 @@ def main() -> None:
                 {
                     "base_url": scoped.base_url,
                     "kn_id": kn_id(),
-                    "object_type": os.environ.get("BKN_OBJECT_TYPE", "order"),
+                    "object_type": os.environ.get("BKN_OBJECT_TYPE", ""),
                 },
             )
         )

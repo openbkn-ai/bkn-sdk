@@ -1,6 +1,6 @@
 # Examples
 
-Eight scripts, each runnable against a live platform. One is about getting
+Ten scripts, each runnable against a live platform. One is about getting
 connected at all; the rest are split by the layer they work at:
 
 - [`credentials.py`](credentials.py) — which platform, as whom, and where that
@@ -50,6 +50,8 @@ does not matter:
 python examples/credentials.py                        # which platform, as whom
 python examples/ontology/explore.py "最近的大额订单"
 python examples/ontology/query.py
+python examples/ontology/traverse.py
+python examples/ontology/metrics.py
 python examples/ontology/traced.py
 python examples/platform/networks.py
 python examples/platform/tools.py
@@ -104,6 +106,8 @@ session 退出后    https://14.103.77.23     token=token-from-configure   来�
 | --- | --- |
 | [`explore.py`](ontology/explore.py) | A question, when you do not know the network's names yet: `search` for the types it touches, `search_instances` for the rows, then the generated class for the exact query. |
 | [`query.py`](ontology/query.py) | One object type: filters and `~`, ordering, a property subset, paging with a total, `iterate`, `get` by key, and a relation hop. |
+| [`traverse.py`](ontology/traverse.py) | One hop as a filter built from the schema's join columns, then several hops server-side through the subgraph endpoint — and why a filter cannot be attached to an intermediate hop. |
+| [`metrics.py`](ontology/metrics.py) | Aggregation, which is a metric rather than a `group_by`: a point in time, a series and its `step` rule, splitting by a declared dimension, and an undeclared one refused before the round trip. |
 | [`traced.py`](ontology/traced.py) | One managed turn: every read inside the scope joins it, each comes back with a receipt, and `count()` still answers truthfully. |
 
 ## The platform layer

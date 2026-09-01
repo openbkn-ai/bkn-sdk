@@ -266,9 +266,17 @@ def test_properties_colliding_after_suffixing_are_refused() -> None:
         generate(schema, OPTIONS)
 
 
+def test_a_separator_that_is_legal_in_an_id_becomes_an_underscore() -> None:
+    """`unit-price` has to be reachable as something, and `unit_price` is the
+    only spelling a reader would guess. The wire keeps the id either way."""
+    assert property_name("unit-price", "order") == "unit_price"
+    assert property_name("total amount", "order") == "total_amount"
+
+
 def test_a_property_that_cannot_be_an_attribute_is_refused() -> None:
+    """Separators convert; a leading digit has no spelling to convert to."""
     with pytest.raises(NamingError, match="not a usable Python attribute"):
-        property_name("total amount", "order")
+        property_name("2nd-amount", "order")
 
 
 def test_a_dunder_property_is_refused() -> None:

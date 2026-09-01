@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # so `bootstrap
 
 from bootstrap import object_type, package
 
-from bkn_osdk import ToolError
+from bkn_osdk import HttpError, ToolError
 
 
 def main(question: str) -> None:
@@ -73,9 +73,15 @@ def main(question: str) -> None:
         types = [fallback] if fallback else [bkn.OBJECT_TYPES[0].__bkn_id__]
         print(f"没有搜索结果, 改用 {types[0]}")
 
-    # 3. Now the names are known, ask exactly.
+    # 3. Now the names are known, ask exactly — where that type can be read.
+    #    A type search returned may have no data source bound, which is the
+    #    network's state and not a failure of the question.
     cls = object_type(bkn, str(types[0]))
-    print(f"\n{cls.__name__}: {cls.count()} 行")
+    try:
+        print(f"\n{cls.__name__}: {cls.count()} 行")
+    except HttpError as error:
+        print(f"\n{cls.__name__} 读不了: {error.body[:120]}")
+        return
     for row in cls.take(3):
         print(f"  {row.__instance_id__:24} {row.__display__}")
 
