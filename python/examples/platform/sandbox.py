@@ -35,9 +35,28 @@ from bkn_osdk.http import request
 from bkn_osdk.lifecycle import current_interaction
 
 EXECUTE = "/api/agent-operator-integration/v1/function/execute"
+INFER = "/api/agent-operator-integration/v1/function/infer-schema"
 #: Pin a commit. A branch name is a moving target, and pip's wheel cache is
 #: keyed by URL, so a rebuild can silently reinstall the build it already had.
 SPEC = "bkn-osdk @ https://github.com/openbkn-ai/bkn-sdk/archive/{sha}.zip#subdirectory=python"
+
+#: The same work as a *tool* rather than a script. `@tool` comes from
+#: `sandbox_sdk`, already on the sandbox's path, and it makes the signature the
+#: single source of truth: `/function/infer-schema` runs the code and reads back
+#: the contract, so nobody retypes the parameters into a form. A function
+#: published into a toolbox is this, with a name.
+TOOL = '''
+from sandbox_sdk import tool
+
+
+@tool
+def rows_of(kn_id: str, object_type: str, limit: int = 10) -> dict:
+    """Count rows of one object type in a knowledge network."""
+    from bkn_osdk import kn
+
+    answer = kn.query_object_instance(kn_id, object_type, limit=limit, response_format="json")
+    return {"rows": len(answer.get("datas") or [])}
+'''
 
 INSIDE = """
 import os
@@ -157,6 +176,23 @@ def main() -> None:
                 "generate and read, inside",
             )
         )
+
+        # The same code as a tool contract. This *executes* it — the signature is
+        # read back from what the decorator registered rather than parsed — so it
+        # needs the same rights as running anything else here. Code without
+        # `@tool` is not an error: the answer is 200 with `supported: false`, and
+        # the caller fills the contract in by hand instead.
+        print("\n--- infer-schema ------------------------------------")
+        for line in TOOL.strip().splitlines():
+            print(f"  | {line}")
+        print("  " + "-" * 46)
+        contract = request(scoped, INFER, body={"code": TOOL}, timeout=280)
+        print(f"supported: {contract.get('supported')} | name: {contract.get('name')}")
+        print(f"  description: {contract.get('description')}")
+        for argument in contract.get("inputs") or []:
+            print(f"  in  {argument}")
+        for result in contract.get("outputs") or []:
+            print(f"  out {result}")
 
 
 if __name__ == "__main__":

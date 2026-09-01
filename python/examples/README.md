@@ -117,7 +117,7 @@ after session    https://14.103.77.23     token=token-from-configure  …
 | [`tools.py`](platform/tools.py) | The deploy's tool catalog read as the contract it is, REST by path, tools by name with a turn attached, and `run_sql` for the aggregation no typed form covers. |
 | [`networks.py`](platform/networks.py) | The ontology as `bkn-backend` stores it — which networks exist, and one network's object types, join columns, metric definitions, action types and concept groups — then the same question asked by natural language through `search_schema` / `search_instance`. This is what the generator reads; the last line prints its fingerprint. |
 | [`capabilities.py`](platform/capabilities.py) | The same surface through `bkn_osdk.kn` — generated functions, so the arguments, the query/body split and the turn all come from the contract. Chained the way real work chains: most routes need an id an earlier call produced. |
-| [`sandbox.py`](platform/sandbox.py) | Running code in the platform's sandbox through `/function/execute`, passing the caller's turn in so the SDK inside inherits it. Platform-layer on this side; the code it sends uses the ontology layer over there. |
+| [`sandbox.py`](platform/sandbox.py) | Running code in the platform's sandbox through `/function/execute`, passing the caller's turn in so the SDK inside inherits it — and the same work written as a `@tool`, whose contract `/function/infer-schema` reads back from the signature. Platform-layer on this side; the code it sends uses the ontology layer over there. |
 
 [`bootstrap.py`](bootstrap.py) is shared: it generates the package for
 `BKN_KN_ID` into `~/.cache/bkn-osdk` on first use and imports it from there. A
