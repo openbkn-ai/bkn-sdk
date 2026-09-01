@@ -133,7 +133,7 @@ export function formatError(err: unknown): string {
   }
   if (err instanceof ToolError && err.code) {
     const lifecycleMessage = lifecycleErrorMessage(err.code);
-    if (lifecycleMessage) return `${err.code}: ${lifecycleMessage}`;
+    if (lifecycleMessage) return `Context-loader error: ${err.code}: ${lifecycleMessage}`;
   }
   if (err instanceof Error) {
     // `fetch` throws a terse "fetch failed"; the real reason is on `.cause`.

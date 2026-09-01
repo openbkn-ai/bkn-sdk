@@ -61,6 +61,8 @@ opened, so work spanning several commands lands in one thread. `openbkn context 
 is in force and where it came from; `--forget` drops it. An explicit `--token` /
 `BKN_TOKEN` opts out (identity there is the token, not the stored user) — use
 `BKN_CONVERSATION_ID` to thread such a script's commands together.
+`--interaction-id` / `BKN_INTERACTION_ID` must always be paired with its owning
+Conversation ID; the CLI rejects an interaction-only business call before sending MCP traffic.
 
 `context tool-call --receipt` requires `--json` and emits `{ value, bkn_receipt }`
 (use `--compact` for one line). It is opt-in; the default command output and SDK

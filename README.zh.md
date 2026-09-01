@@ -54,6 +54,8 @@ openbkn --help        # 分组命令树
 `openbkn context conversation` 显示当前生效的是哪个、来自哪一层；`--forget` 丢掉它。
 显式 `--token` / `BKN_TOKEN` 不参与（那里的身份是 token 本身，不是存下来的用户）——
 这类脚本用 `BKN_CONVERSATION_ID` 把多条命令串起来。
+`--interaction-id` / `BKN_INTERACTION_ID` 必须始终与所属 Conversation ID 一起提供；CLI 会在
+发送 MCP 请求前拒绝只有 interaction 的业务调用。
 
 `context tool-call --receipt` 必须带 `--json`，输出 `{ value, bkn_receipt }`（带
 `--compact` 时为单行）。这是显式选择；默认命令输出和 SDK 的 `context.toolCall()` 仍只返回

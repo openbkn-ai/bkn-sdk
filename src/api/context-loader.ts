@@ -207,7 +207,23 @@ function lifecycleCodeInText(value: unknown): string | undefined {
 }
 
 /** Unwrap a JSON-RPC result without discarding its trusted lifecycle receipt. */
-function unwrapToolResult(parsed: unknown): UnwrappedToolResult {
+function structuredBusinessValue(structuredContent: unknown): unknown {
+  if (
+    !structuredContent ||
+    typeof structuredContent !== "object" ||
+    Array.isArray(structuredContent)
+  ) {
+    return undefined;
+  }
+  const {
+    bkn_receipt: _bknReceipt,
+    receipt: _receipt,
+    ...value
+  } = structuredContent as Record<string, unknown>;
+  return Object.keys(value).length > 0 ? value : undefined;
+}
+
+function unwrapToolResult(parsed: unknown, extractBusinessReceipt = true): UnwrappedToolResult {
   const rpc = parsed as { result?: unknown; error?: { message: string; code?: unknown } };
   // A JSON-RPC top-level error is the server refusing this call — the same kind
   // of answer as an `isError` result, just delivered a layer lower by a gateway
@@ -223,7 +239,7 @@ function unwrapToolResult(parsed: unknown): UnwrappedToolResult {
   const result = rpc.result as Record<string, unknown> | undefined;
   if (result === undefined) return { value: parsed };
   const structuredContent = result.structuredContent;
-  const receipt = receiptFrom(structuredContent);
+  const receipt = extractBusinessReceipt ? receiptFrom(structuredContent) : undefined;
   if (receipt?.receipt_status === "failed") {
     throw new ToolError("Context-loader operation receipt is failed.", "receipt_failed");
   }
@@ -250,12 +266,16 @@ function unwrapToolResult(parsed: unknown): UnwrappedToolResult {
       return { value: parseBigIntJSON(content[0].text), receipt };
     } catch {
       if (structuredContent !== undefined) {
-        return { value: structuredContent, receipt };
+        return {
+          value: receipt ? (structuredBusinessValue(structuredContent) ?? null) : structuredContent,
+          receipt,
+        };
       }
       return { value: { raw: content[0].text }, receipt };
     }
   }
-  return { value: receipt ? null : result, receipt };
+  if (receipt) return { value: structuredBusinessValue(structuredContent) ?? null, receipt };
+  return { value: structuredContent ?? result };
 }
 
 function toolCallParams(
@@ -303,8 +323,10 @@ function callerContextMatchesTrace(
   }
   const conversation = ctx.trace?.conversationId;
   const interaction = ctx.trace?.interactionId;
-  if (!conversation && !interaction) return business as BusinessContextIds;
-  if (conversation !== business.conversation_id || interaction !== business.interaction_id) {
+  if (
+    (conversation && conversation !== business.conversation_id) ||
+    (interaction && interaction !== business.interaction_id)
+  ) {
     throw new InputError("Caller bkn_context conflicts with BKN Trace context.");
   }
   return business as BusinessContextIds;
@@ -359,7 +381,7 @@ async function callToolRawResult(
     },
     timeoutMs,
   );
-  return unwrapToolResult(parseBody(text));
+  return unwrapToolResult(parseBody(text), !LIFECYCLE_TOOLS.has(name));
 }
 
 export async function callToolRaw(
