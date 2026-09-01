@@ -33,7 +33,7 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import type { RequestContext } from "../types.js";
-import { HttpError, ToolError } from "../utils/errors.js";
+import { HttpError, InputError, ToolError } from "../utils/errors.js";
 import { callToolRaw, mcpInfo } from "./context-loader.js";
 
 /** The body field the lifecycle middleware reads. Snake_case: it goes on the wire. */
@@ -155,7 +155,7 @@ export function lifecycleFor(ctx: RequestContext): Promise<Lifecycle> {
     if (Date.now() - failedAt < PROBE_FAILURE_TTL_MS) return Promise.resolve(NO_LIFECYCLE);
     probeFailures.delete(failureKey);
   }
-  let pending = contracts.get(ctx.baseUrl);
+  let pending = contracts.get(failureKey);
   if (!pending) {
     pending = mcpInfo(ctx).then((info): Lifecycle => {
       const names = toolNames(info);
@@ -167,14 +167,14 @@ export function lifecycleFor(ctx: RequestContext): Promise<Lifecycle> {
         ? { contract: "managed-v2", startWantsConversationMode }
         : NO_LIFECYCLE;
     });
-    contracts.set(ctx.baseUrl, pending);
+    contracts.set(failureKey, pending);
     // Same rule the session cache follows: a probe that failed is not a lasting
     // answer about the deploy, only about that moment. Keeping it would let one
     // blip — a 502, a token mid-refresh — decide that every later call in this
     // process goes out without a `bkn_context`, and the reopen path cannot
     // recover from that, since it sees no context to reopen.
     pending.catch((err: unknown) => {
-      contracts.delete(ctx.baseUrl);
+      contracts.delete(failureKey);
       // An authorization failure is not worth a window at all: a refresh can
       // fix it on the very next call, and holding it would spend 30s answering
       // from a credential that has already been replaced.
@@ -504,6 +504,9 @@ export async function bknContextFor(
   knId: string,
   question: string,
 ): Promise<BknContext | undefined> {
+  if (ctx.trace?.interactionId && !ctx.trace.conversationId) {
+    throw new InputError("BKN interaction id requires a conversation id.");
+  }
   const lifecycle = await lifecycleFor(ctx);
   const { contract } = lifecycle;
   if (contract === "none") return undefined;
