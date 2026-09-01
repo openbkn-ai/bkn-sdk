@@ -162,6 +162,105 @@ describe("drill-down (get_object_types / get_relation_types)", () => {
 });
 
 describe("managed MCP tool calls", () => {
+  it("uses the automatic lifecycle path before retaining a receipt", async () => {
+    const receipt = {
+      receipt_id: "receipt-auto",
+      conversation_id: "conv-auto",
+      interaction_id: "int-auto",
+      operation_id: "op-auto",
+      receipt_status: "completed",
+    };
+    const calls: Array<{ name: string; arguments: Record<string, unknown> }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/mcp/info")) {
+          return new Response(JSON.stringify({ tools: [{ name: "bkn_start_interaction" }] }));
+        }
+        const rpc = JSON.parse(init?.body as string) as {
+          method?: string;
+          params?: { name: string; arguments: Record<string, unknown> };
+        };
+        const headers = { "mcp-session-id": "auto-session" };
+        if (rpc.method !== "tools/call" || !rpc.params) {
+          return new Response(JSON.stringify({ jsonrpc: "2.0", result: {} }), { headers });
+        }
+        calls.push(rpc.params);
+        if (rpc.params.name === "bkn_start_interaction") {
+          return new Response(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              result: {
+                content: [{ type: "text", text: "started" }],
+                structuredContent: {
+                  conversation_id: "conv-auto",
+                  interaction_id: "int-auto",
+                },
+              },
+            }),
+            { headers },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            result: {
+              content: [{ type: "text", text: JSON.stringify({ concepts: ["forecast"] }) }],
+              structuredContent: { bkn_receipt: receipt },
+            },
+          }),
+          { headers },
+        );
+      }),
+    );
+
+    await expect(
+      callManagedTool(
+        { baseUrl: "https://managed-auto.example.com", token: "receipt-token", insecure: false },
+        "kn-auto-receipt",
+        "search_schema",
+        { query: "forecast" },
+      ),
+    ).resolves.toEqual({ value: { concepts: ["forecast"] }, receipt });
+    expect(calls.map((call) => call.name)).toEqual(["bkn_start_interaction", "search_schema"]);
+    expect(calls[1]?.arguments.bkn_context).toEqual({
+      conversation_id: "conv-auto",
+      interaction_id: "int-auto",
+    });
+  });
+
+  it("accepts a replay receipt without a business value as null", async () => {
+    const receipt = {
+      receipt_id: "receipt-replay",
+      conversation_id: "conversation_supply_chain",
+      interaction_id: "interaction_june_forecast",
+      operation_id: "operation-replay",
+      receipt_status: "completed",
+    };
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: { structuredContent: { receipt } },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () => new Response(body, { status: 200, headers: { "mcp-session-id": "replay-s1" } }),
+      ),
+    );
+
+    await expect(
+      callManagedTool(ctx, "kn-replay", "search_schema", {
+        query: "forecast",
+        bkn_context: {
+          conversation_id: "conversation_supply_chain",
+          interaction_id: "interaction_june_forecast",
+        },
+      }),
+    ).resolves.toEqual({ value: null, receipt });
+  });
+
   it("preserves unsafe integers in tool arguments and text results", async () => {
     const body =
       '{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"{\\"id_card\\":110101199001152345}"}]}}';
