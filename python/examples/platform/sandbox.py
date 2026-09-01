@@ -72,7 +72,7 @@ def handler(event):
     }
 """
 
-INSTALL = """
+INSTALL = r"""
 import subprocess, sys
 
 def handler(event):
@@ -80,7 +80,20 @@ def handler(event):
         [sys.executable, "-m", "pip", "install", "-q", "--no-deps", event["spec"]],
         capture_output=True, text=True,
     )
-    return {"rc": done.returncode, "err": done.stderr[-200:]}
+    # pip retries a flaky network on its own, so a non-empty stderr with a zero
+    # return code means "it worked, eventually" — worth distinguishing from a
+    # failure, and from the upgrade notice pip prints even on a clean install.
+    noise = ("notice", "A new release of pip")
+    lines = [
+        line
+        for line in done.stderr.splitlines()
+        if line.strip() and not any(word in line for word in noise)
+    ]
+    return {
+        "ok": done.returncode == 0,
+        **({"retried": lines[-1][-120:]} if done.returncode == 0 and lines else {}),
+        **({"error": "\n".join(lines[-4:])} if done.returncode else {}),
+    }
 """
 
 
@@ -104,7 +117,9 @@ def run(scoped: bkn_osdk.Context, turn: object, code: str, event: dict) -> dict:
 
 
 def main() -> None:
-    sha = os.environ.get("BKN_OSDK_SHA", "f044c2e")
+    # A commit that exists on GitHub: the sandbox installs from the archive URL,
+    # so an unpushed local sha would 404 there. Override with `BKN_OSDK_SHA`.
+    sha = os.environ.get("BKN_OSDK_SHA", "7a23935")
     with bkn_osdk.session(traced=True) as scoped:
         turn = current_interaction(scoped, kn_id())
         print(f"host turn {turn.interaction_id}")
@@ -113,7 +128,11 @@ def main() -> None:
         # long enough to hit the gateway's timeout. The install lands in
         # `/workspace/.local/...` and a later execution (a fresh process) sees it.
         installed = run(scoped, turn, INSTALL, {"spec": SPEC.format(sha=sha)})
-        print(f"install: {installed or '(already present in this sandbox session)'}")
+        # A repeat execution in a pooled session sometimes answers `exit_code: 0`
+        # with `result: null` — the handler's return value is dropped on the way
+        # back. Saying so beats guessing "already installed", which is what this
+        # printed before and was not what happened.
+        print(f"install: {installed or '(exit 0, but the sandbox returned no result)'}")
         print(
             run(
                 scoped,
