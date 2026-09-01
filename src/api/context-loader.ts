@@ -11,7 +11,7 @@ import { createHash } from "node:crypto";
 import { createOperationTraceContext } from "../trace-context.js";
 import type { RequestContext } from "../types.js";
 import { withoutPreview } from "../utils/dry-run.js";
-import { HttpError, ToolError, readableServerError } from "../utils/errors.js";
+import { HttpError, InputError, ToolError, readableServerError } from "../utils/errors.js";
 import { parseBigIntJSON, stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
@@ -256,6 +256,24 @@ function toolCallParams(
   };
 }
 
+function callerContextMatchesTrace(ctx: RequestContext, args: Record<string, unknown>): void {
+  const business = args.bkn_context as
+    | { conversation_id?: unknown; interaction_id?: unknown }
+    | undefined;
+  if (!business || typeof business.conversation_id !== "string" || typeof business.interaction_id !== "string") {
+    return;
+  }
+  const conversation = ctx.trace?.conversationId;
+  const interaction = ctx.trace?.interactionId;
+  if (!conversation && !interaction) return;
+  if (
+    conversation !== business.conversation_id ||
+    interaction !== business.interaction_id
+  ) {
+    throw new InputError("Caller bkn_context conflicts with BKN Trace context.");
+  }
+}
+
 /**
  * Call an MCP tool exactly as given, with no lifecycle context attached.
  *
@@ -332,6 +350,7 @@ async function callToolResult(
   args: Record<string, unknown>,
   options?: ToolCallOptions,
 ): Promise<UnwrappedToolResult> {
+  callerContextMatchesTrace(ctx, args);
   if (LIFECYCLE_TOOLS.has(name)) return callToolRawResult(ctx, knId, name, args, options);
   // A caller that built its own `bkn_context` gets it through untouched, and no
   // session is opened on its behalf. `ManagedTrace.runOperation` pre-registers

@@ -290,6 +290,45 @@ describe("managed MCP tool calls", () => {
     expect(businessSessions).toEqual(["identity-session-1", "identity-session-2"]);
   });
 
+  it("rejects caller context that conflicts with trace business ids", async () => {
+    const f = mockMcp();
+    await expect(
+      callTool(ctx, "kn-context-conflict", "search_schema", {
+        query: "forecast",
+        bkn_context: {
+          conversation_id: "other-conversation",
+          interaction_id: "other-interaction",
+        },
+      }),
+    ).rejects.toThrow("Caller bkn_context conflicts with BKN Trace context.");
+    expect(rpcCalls(f)).toHaveLength(0);
+  });
+
+  it("omits business trace headers when caller context is the only business source", async () => {
+    const f = mockMcp();
+    await callTool(
+      {
+        ...ctx,
+        trace: {
+          requestId: ctx.trace?.requestId ?? "",
+          traceparent: ctx.trace?.traceparent ?? "",
+        },
+      },
+      "kn-caller-context",
+      "search_schema",
+      {
+        query: "forecast",
+        bkn_context: {
+          conversation_id: "conversation-caller",
+          interaction_id: "interaction-caller",
+        },
+      },
+    );
+    const headers = toolCallHeaders(f);
+    expect(headers.get("bkn-conversation-id")).toBeNull();
+    expect(headers.get("bkn-interaction-id")).toBeNull();
+  });
+
   it("preserves unsafe integers in tool arguments and text results", async () => {
     const body =
       '{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"{\\"id_card\\":110101199001152345}"}]}}';
