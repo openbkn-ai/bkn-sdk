@@ -17,6 +17,10 @@ joined instead, and never finished here, because it is not ours to finish.
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # so `bootstrap` imports
 
 from bootstrap import kn_id, object_type, package
 

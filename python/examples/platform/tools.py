@@ -16,7 +16,11 @@ a call and go back up, and the evidence still lands on one chain.
 from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # so `bootstrap` imports
 
 from bootstrap import kn_id
 

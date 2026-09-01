@@ -13,6 +13,10 @@ result set.
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # so `bootstrap` imports
 
 from bootstrap import object_type, package
 

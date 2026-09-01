@@ -42,6 +42,7 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -78,8 +79,35 @@ def tool_catalog(ctx: Context) -> Any:
     return request(ctx, f"{MCP_PATH}/info")
 
 
+#: How many times a tool that says `retryable` is tried again, and how long the
+#: waits are when the platform names no delay of its own. Small and bounded: a
+#: dependency that is down stays down, and a caller waiting on a read would
+#: rather hear that than sit through a backoff.
+RETRY_ATTEMPTS = 2
+RETRY_BACKOFF_SECONDS = (0.25, 1.0)
+
+
 def call_tool(ctx: Context, kn_id: str, name: str, arguments: dict[str, Any]) -> ToolResult:
-    """Call one MCP tool, opening the transport session if this process has none."""
+    """Call one MCP tool, retrying where the platform says the failure is transient.
+
+    A refusal carries `retryable` and sometimes `retry_after_ms`. Honouring them
+    costs one or two short waits and covers the case they exist for: a dependency
+    restarting under a call that would otherwise surface as a hard failure to
+    whoever asked. A refusal that is not retryable is raised on the first try.
+    """
+    for attempt in range(RETRY_ATTEMPTS + 1):
+        try:
+            return _attempt(ctx, kn_id, name, arguments)
+        except ToolError as error:
+            if not error.retryable or attempt == RETRY_ATTEMPTS:
+                raise
+            named = (error.retry_after_ms or 0) / 1000
+            time.sleep(named or RETRY_BACKOFF_SECONDS[attempt])
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
+def _attempt(ctx: Context, kn_id: str, name: str, arguments: dict[str, Any]) -> ToolResult:
+    """One call, opening the transport session if this process has none."""
     try:
         # Inside the try: the handshake's own `initialized` notification carries
         # the new session id, so it can be refused the same way a call can.
