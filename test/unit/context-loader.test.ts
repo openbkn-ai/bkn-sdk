@@ -261,6 +261,35 @@ describe("managed MCP tool calls", () => {
     ).resolves.toEqual({ value: null, receipt });
   });
 
+  it("does not reuse an MCP transport session across bearer identities", async () => {
+    let initialized = 0;
+    const businessSessions: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: string | URL, init?: RequestInit) => {
+        const rpc = JSON.parse(init?.body as string) as { method?: string };
+        if (rpc.method === "initialize") {
+          initialized += 1;
+          return new Response(JSON.stringify({ jsonrpc: "2.0", result: {} }), {
+            headers: { "mcp-session-id": `identity-session-${initialized}` },
+          });
+        }
+        if (rpc.method === "tools/call") {
+          businessSessions.push(new Headers(init?.headers).get("mcp-session-id") ?? "");
+        }
+        return new Response(JSON.stringify({ jsonrpc: "2.0", result: { content: [] } }), {
+          headers: { "mcp-session-id": `identity-session-${initialized}` },
+        });
+      }),
+    );
+    const base = { baseUrl: "https://identity-cache.example.com", insecure: false };
+    await callTool({ ...base, token: "alice" }, "kn-identity-cache", "bkn_get_operation", {});
+    await callTool({ ...base, token: "bob" }, "kn-identity-cache", "bkn_get_operation", {});
+
+    expect(initialized).toBe(2);
+    expect(businessSessions).toEqual(["identity-session-1", "identity-session-2"]);
+  });
+
   it("preserves unsafe integers in tool arguments and text results", async () => {
     const body =
       '{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"{\\"id_card\\":110101199001152345}"}]}}';

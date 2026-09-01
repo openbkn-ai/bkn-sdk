@@ -7,6 +7,7 @@
  * notifications/initialized, then tools/call. Handles plain-JSON and
  * SSE (`data:`) response bodies. Per-process session cache (5 min TTL).
  */
+import { createHash } from "node:crypto";
 import { createOperationTraceContext } from "../trace-context.js";
 import type { RequestContext } from "../types.js";
 import { withoutPreview } from "../utils/dry-run.js";
@@ -32,6 +33,14 @@ function nextId(): number {
 
 function mcpUrl(ctx: RequestContext): string {
   return `${ctx.baseUrl}${MCP_PATH}`;
+}
+
+function transportSessionKey(ctx: RequestContext, knId: string): string {
+  const identity = createHash("sha256")
+    .update(`bkn-context-transport:v1\0${ctx.token}`)
+    .digest("hex")
+    .slice(0, 16);
+  return `${mcpUrl(ctx)}\0${knId}\0${identity}`;
 }
 
 function operationContext(ctx: RequestContext): RequestContext {
@@ -111,7 +120,7 @@ async function post(
 }
 
 async function ensureSession(ctx: RequestContext, knId: string): Promise<string> {
-  const key = `${mcpUrl(ctx)}:${knId}`;
+  const key = transportSessionKey(ctx, knId);
   const cached = sessions.get(key);
   if (cached && Date.now() - cached.at < SESSION_TTL_MS) return cached.id;
   sessions.delete(key);
