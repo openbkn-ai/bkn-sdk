@@ -274,7 +274,10 @@ def _unwrap(parsed: Any) -> ToolResult:
         error = _error_of(structured) or _error_of(_loads(text)) or {}
         raise ToolError(
             str(error.get("code") or "tool_error"),
-            str(text or "tool call failed"),
+            # The structured `message` where the deploy sent one: `text` is the
+            # whole payload, and quoting a JSON blob at a caller who asked for a
+            # search tells them less than the sentence inside it.
+            str(error.get("message") or text or "tool call failed"),
             required_action=_str_or_none(error.get("required_action")),
             retryable=bool(error.get("retryable")),
             retry_after_ms=error.get("retry_after_ms")

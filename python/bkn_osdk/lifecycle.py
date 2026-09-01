@@ -153,10 +153,9 @@ def _start(ctx: Context, kn_id: str, question: str = DEFAULT_QUESTION) -> Intera
             "does not implement yet. Read without `traced=True`."
         )
 
-    result = call_tool(
+    result = _opened(
         ctx,
         kn_id,
-        START_TOOL,
         {
             "question": question,
             #: Display-only, but the only thing separating a turn this SDK
@@ -180,6 +179,32 @@ def _start(ctx: Context, kn_id: str, question: str = DEFAULT_QUESTION) -> Intera
     if not isinstance(conversation_id, str) or not isinstance(interaction_id, str):
         raise BknError(f"{START_TOOL} returned no conversation/interaction id: {value}")
     return Interaction(kn_id, conversation_id, interaction_id)
+
+
+def _opened(ctx: Context, kn_id: str, arguments: dict[str, Any]) -> Any:
+    """Open the turn, and say what a failure to open one actually costs.
+
+    The tool's own message is true and unhelpful on its own — a caller who asked
+    for a search reads `trace_core_unavailable` and cannot tell whether the SDK,
+    the network, or the platform is at fault, nor what still works. Most of the
+    read surface does not need a turn at all, and that is the useful half of the
+    answer.
+    """
+    from .mcp import call_tool
+
+    try:
+        return call_tool(ctx, kn_id, START_TOOL, arguments)
+    except ToolError as error:
+        raise ToolError(
+            error.code,
+            f"This deploy could not open a managed turn — {error.message} "
+            "Calls that require one — search, the capability routes, `traced=True` — "
+            "cannot run until it can. Typed reads of object types, subgraphs and metrics "
+            "need no turn and are unaffected.",
+            required_action=error.required_action,
+            retryable=error.retryable,
+            retry_after_ms=error.retry_after_ms,
+        ) from error
 
 
 @contextmanager
