@@ -168,6 +168,8 @@ function lifecycleErrorMessage(code: string): string | undefined {
       return "Use matching conversation and interaction IDs from the same managed context.";
     case "invalid_business_context":
       return "The deploy rejected the managed context. Refresh it from the current identity and retry.";
+    case "receipt_failed":
+      return "The managed operation failed. Read the receipt under the current identity for its authorized diagnostic.";
     default:
       return undefined;
   }

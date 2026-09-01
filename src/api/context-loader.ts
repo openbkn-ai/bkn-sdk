@@ -188,7 +188,22 @@ function receiptFrom(structuredContent: unknown): OperationReceipt | undefined {
 
 function toolErrorCode(structuredContent: unknown): string | undefined {
   const code = (structuredContent as { error?: { code?: unknown } } | undefined)?.error?.code;
-  return typeof code === "string" ? code : undefined;
+  return typeof code === "string" ? code : lifecycleCodeInText(structuredContent);
+}
+
+const LIFECYCLE_ERROR_CODES = new Set([
+  "interaction_terminal",
+  "interaction_required",
+  "conversation_required",
+  "conversation_context_conflict",
+  "invalid_business_context",
+]);
+
+/** A legacy MCP error can omit structuredContent but retain a stable code prefix. */
+function lifecycleCodeInText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const match = /^([a-z_]+):/.exec(value.trim());
+  return match && LIFECYCLE_ERROR_CODES.has(match[1] ?? "") ? match[1] : undefined;
 }
 
 /** Unwrap a JSON-RPC result without discarding its trusted lifecycle receipt. */
@@ -209,6 +224,10 @@ function unwrapToolResult(parsed: unknown): UnwrappedToolResult {
   if (result === undefined) return { value: parsed };
   const structuredContent = result.structuredContent;
   const receipt = receiptFrom(structuredContent);
+  if (receipt?.receipt_status === "failed") {
+    throw new ToolError("Context-loader operation receipt is failed.", "receipt_failed");
+  }
+  if (receipt?.receipt_status === "pending") return { value: null, receipt };
   const content = result.content;
   if (result.isError === true) {
     const raw =
@@ -221,7 +240,10 @@ function unwrapToolResult(parsed: unknown): UnwrappedToolResult {
     // The structured error code, not the prose, is what tells a caller whether
     // the failure is retryable — a dead lifecycle session is reopenable, a bad
     // argument is not.
-    throw new ToolError(`Context-loader error: ${message}`, toolErrorCode(structuredContent));
+    throw new ToolError(
+      `Context-loader error: ${message}`,
+      toolErrorCode(structuredContent) ?? lifecycleCodeInText(message),
+    );
   }
   if (Array.isArray(content) && content[0] && typeof content[0].text === "string") {
     try {
@@ -256,23 +278,57 @@ function toolCallParams(
   };
 }
 
-function callerContextMatchesTrace(ctx: RequestContext, args: Record<string, unknown>): void {
-  const business = args.bkn_context as
-    | { conversation_id?: unknown; interaction_id?: unknown }
-    | undefined;
+interface BusinessContextIds {
+  conversation_id: string;
+  interaction_id: string;
+}
+
+function callerContextMatchesTrace(
+  ctx: RequestContext,
+  args: Record<string, unknown>,
+): BusinessContextIds | undefined {
+  if (args.bkn_context === undefined) return undefined;
+  const business = args.bkn_context as {
+    conversation_id?: unknown;
+    interaction_id?: unknown;
+  } | null;
   if (
     !business ||
     typeof business.conversation_id !== "string" ||
-    typeof business.interaction_id !== "string"
+    !business.conversation_id ||
+    typeof business.interaction_id !== "string" ||
+    !business.interaction_id
   ) {
-    return;
+    throw new InputError("BKN context requires both a conversation id and an interaction id.");
   }
   const conversation = ctx.trace?.conversationId;
   const interaction = ctx.trace?.interactionId;
-  if (!conversation && !interaction) return;
+  if (!conversation && !interaction) return business as BusinessContextIds;
   if (conversation !== business.conversation_id || interaction !== business.interaction_id) {
     throw new InputError("Caller bkn_context conflicts with BKN Trace context.");
   }
+  return business as BusinessContextIds;
+}
+
+function assertTraceBusinessContext(ctx: RequestContext): void {
+  if (ctx.trace?.interactionId && !ctx.trace.conversationId) {
+    throw new InputError("BKN interaction id requires a conversation id.");
+  }
+}
+
+function receiptMatchesBusinessContext(
+  result: UnwrappedToolResult,
+  businessContext: BusinessContextIds | undefined,
+): UnwrappedToolResult {
+  if (
+    result.receipt &&
+    businessContext &&
+    (result.receipt.conversation_id !== businessContext.conversation_id ||
+      result.receipt.interaction_id !== businessContext.interaction_id)
+  ) {
+    throw new Error("Context-loader receipt does not match the managed context.");
+  }
+  return result;
 }
 
 /**
@@ -351,14 +407,20 @@ async function callToolResult(
   args: Record<string, unknown>,
   options?: ToolCallOptions,
 ): Promise<UnwrappedToolResult> {
-  callerContextMatchesTrace(ctx, args);
   if (LIFECYCLE_TOOLS.has(name)) return callToolRawResult(ctx, knId, name, args, options);
+  assertTraceBusinessContext(ctx);
+  const callerContext = callerContextMatchesTrace(ctx, args);
   // A caller that built its own `bkn_context` gets it through untouched, and no
   // session is opened on its behalf. `ManagedTrace.runOperation` pre-registers
   // an Operation under a specific `operation_key` before handing the context to
   // the tool call; replacing that key would orphan the registration, and
   // `parent_operation_id` / `causation_event_ids` would be dropped with it.
-  if (args.bkn_context !== undefined) return callToolRawResult(ctx, knId, name, args, options);
+  if (callerContext) {
+    return receiptMatchesBusinessContext(
+      await callToolRawResult(ctx, knId, name, args, options),
+      callerContext,
+    );
+  }
   return withManagedLifecycle(ctx, knId, questionFor(name, args), (bknContext) =>
     callToolRawResult(
       ctx,
@@ -366,7 +428,7 @@ async function callToolResult(
       name,
       bknContext ? { ...args, bkn_context: bknContext } : args,
       options,
-    ),
+    ).then((result) => receiptMatchesBusinessContext(result, bknContext)),
   );
 }
 
