@@ -150,6 +150,33 @@ interface UnwrappedToolResult {
   receipt?: OperationReceipt;
 }
 
+function isOperationReceipt(value: unknown): value is OperationReceipt {
+  const receipt = value as Record<string, unknown> | undefined;
+  return (
+    typeof receipt?.receipt_id === "string" &&
+    receipt.receipt_id.length > 0 &&
+    typeof receipt.conversation_id === "string" &&
+    receipt.conversation_id.length > 0 &&
+    typeof receipt.interaction_id === "string" &&
+    receipt.interaction_id.length > 0 &&
+    typeof receipt.operation_id === "string" &&
+    receipt.operation_id.length > 0 &&
+    (receipt.receipt_status === "pending" ||
+      receipt.receipt_status === "completed" ||
+      receipt.receipt_status === "failed")
+  );
+}
+
+function receiptFrom(structuredContent: unknown): OperationReceipt | undefined {
+  const content = structuredContent as { bkn_receipt?: unknown; receipt?: unknown } | undefined;
+  const candidate = content?.bkn_receipt ?? content?.receipt;
+  if (candidate === undefined) return undefined;
+  if (!isOperationReceipt(candidate)) {
+    throw new Error("Context-loader returned an invalid operation receipt.");
+  }
+  return candidate;
+}
+
 function toolErrorCode(structuredContent: unknown): string | undefined {
   const code = (structuredContent as { error?: { code?: unknown } } | undefined)?.error?.code;
   return typeof code === "string" ? code : undefined;
@@ -172,8 +199,7 @@ function unwrapToolResult(parsed: unknown): UnwrappedToolResult {
   const result = rpc.result as Record<string, unknown> | undefined;
   if (result === undefined) return { value: parsed };
   const structuredContent = result.structuredContent;
-  const receipt = (structuredContent as { bkn_receipt?: OperationReceipt } | undefined)
-    ?.bkn_receipt;
+  const receipt = receiptFrom(structuredContent);
   const content = result.content;
   if (result.isError === true) {
     const raw =
@@ -198,7 +224,7 @@ function unwrapToolResult(parsed: unknown): UnwrappedToolResult {
       return { value: { raw: content[0].text }, receipt };
     }
   }
-  return { value: result, receipt };
+  return { value: receipt ? null : result, receipt };
 }
 
 function toolCallParams(
@@ -227,14 +253,14 @@ function toolCallParams(
  * This is what the lifecycle module itself calls: the tools that open a session
  * cannot be wrapped in one without recurring.
  */
-export async function callToolRaw(
+async function callToolRawResult(
   ctx: RequestContext,
   knId: string,
   name: string,
   args: Record<string, unknown>,
   options?: ToolCallOptions,
   timeoutMs?: number,
-): Promise<unknown> {
+): Promise<UnwrappedToolResult> {
   const operationCtx = operationContext(ctx);
   const sessionId = await ensureSession(operationCtx, knId);
   const { text } = await post(
@@ -249,7 +275,18 @@ export async function callToolRaw(
     },
     timeoutMs,
   );
-  return unwrapToolResult(parseBody(text)).value;
+  return unwrapToolResult(parseBody(text));
+}
+
+export async function callToolRaw(
+  ctx: RequestContext,
+  knId: string,
+  name: string,
+  args: Record<string, unknown>,
+  options?: ToolCallOptions,
+  timeoutMs?: number,
+): Promise<unknown> {
+  return (await callToolRawResult(ctx, knId, name, args, options, timeoutMs)).value;
 }
 
 /**
@@ -279,23 +316,39 @@ const LIFECYCLE_TOOLS = new Set([
  * deploys merged a conversation per MCP connection and need nothing; the
  * capability probe decides which is which.
  */
-export function callTool(
+async function callToolResult(
+  ctx: RequestContext,
+  knId: string,
+  name: string,
+  args: Record<string, unknown>,
+  options?: ToolCallOptions,
+): Promise<UnwrappedToolResult> {
+  if (LIFECYCLE_TOOLS.has(name)) return callToolRawResult(ctx, knId, name, args, options);
+  // A caller that built its own `bkn_context` gets it through untouched, and no
+  // session is opened on its behalf. `ManagedTrace.runOperation` pre-registers
+  // an Operation under a specific `operation_key` before handing the context to
+  // the tool call; replacing that key would orphan the registration, and
+  // `parent_operation_id` / `causation_event_ids` would be dropped with it.
+  if (args.bkn_context !== undefined) return callToolRawResult(ctx, knId, name, args, options);
+  return withManagedLifecycle(ctx, knId, questionFor(name, args), (bknContext) =>
+    callToolRawResult(
+      ctx,
+      knId,
+      name,
+      bknContext ? { ...args, bkn_context: bknContext } : args,
+      options,
+    ),
+  );
+}
+
+export async function callTool(
   ctx: RequestContext,
   knId: string,
   name: string,
   args: Record<string, unknown>,
   options?: ToolCallOptions,
 ): Promise<unknown> {
-  if (LIFECYCLE_TOOLS.has(name)) return callToolRaw(ctx, knId, name, args, options);
-  // A caller that built its own `bkn_context` gets it through untouched, and no
-  // session is opened on its behalf. `ManagedTrace.runOperation` pre-registers
-  // an Operation under a specific `operation_key` before handing the context to
-  // the tool call; replacing that key would orphan the registration, and
-  // `parent_operation_id` / `causation_event_ids` would be dropped with it.
-  if (args.bkn_context !== undefined) return callToolRaw(ctx, knId, name, args, options);
-  return withManagedLifecycle(ctx, knId, questionFor(name, args), (bknContext) =>
-    callToolRaw(ctx, knId, name, bknContext ? { ...args, bkn_context: bknContext } : args, options),
-  );
+  return (await callToolResult(ctx, knId, name, args, options)).value;
 }
 
 /** The interaction's recorded question: the user's own words when the tool has them. */
@@ -311,15 +364,7 @@ export async function callManagedTool<T = unknown>(
   args: Record<string, unknown>,
   options?: ToolCallOptions,
 ): Promise<ManagedToolResult<T>> {
-  const operationCtx = operationContext(ctx);
-  const sessionId = await ensureSession(operationCtx, knId);
-  const { text } = await post(operationCtx, knId, sessionId, {
-    jsonrpc: "2.0",
-    method: "tools/call",
-    params: toolCallParams(name, args, options),
-    id: nextId(),
-  });
-  const result = unwrapToolResult(parseBody(text));
+  const result = await callToolResult(ctx, knId, name, args, options);
   if (!result.receipt) {
     throw new Error("Context-loader managed tool response did not include bkn_receipt");
   }
