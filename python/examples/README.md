@@ -80,7 +80,7 @@ neither appears on these command lines.
 One command, and then nothing in the code:
 
 ```bash
-openbkn auth login --base-url https://14.103.77.23 -u admin -p '…' -k
+openbkn -k auth login https://14.103.77.23 -u admin -p '…'
 ```
 
 `-k` is for the self-signed certificate an IP deploy serves, and it is

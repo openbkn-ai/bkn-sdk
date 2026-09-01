@@ -12,7 +12,7 @@ repeating the platform.
 
 The usual setup is one command, and then nothing in the code at all:
 
-    openbkn auth login --base-url https://14.103.77.23 -u admin -p '…' -k
+    openbkn -k auth login https://14.103.77.23 -u admin -p '…'
 
 `-k` is for the self-signed certificate an IP deploy serves; it is remembered
 per platform, so it need not be repeated. That login is also the only source
