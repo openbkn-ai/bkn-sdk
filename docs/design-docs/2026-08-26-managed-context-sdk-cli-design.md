@@ -2,7 +2,7 @@
 
 > 状态：Proposed — 仅设计评审，未授权实现。
 > 基线：`origin/main@9233b17`（2026-08-31）。
-> 关联：[SDK #68](https://github.com/openbkn-ai/bkn-sdk/issues/68)；Foundry #1161 是独立的 Toolbox Trace 问题，不阻塞本设计。
+> 关联：[SDK #68](https://github.com/openbkn-ai/bkn-sdk/issues/68)；[SDK #88](https://github.com/openbkn-ai/bkn-sdk/issues/88) 跟踪本次 Trace 评审发现的身份隔离缓存缺陷；Foundry #1161 是独立的 Toolbox Trace 问题，不阻塞本设计。
 
 ## 1. 决策摘要
 
@@ -20,15 +20,33 @@ ContextLoader 的业务工具调用必须在**同一条调用链**上完成两�
 
 ## 2. 问题与业务影响
 
-ContextLoader 是 Agent、CLI 和应用访问知识网络的 MCP 入口。供应链 BOM/库存/预测查询、
-`run_sql`、多工具 Agent 编排、benchmark 以及审计，都需要证明一份结果属于某个业务对话、
-当前用户问题、调用身份与具体 Operation。
+ContextLoader 是 Agent、CLI 和应用访问知识网络的 MCP 入口。它服务的并不只是“把一条查询
+跑出结果”：供应链 Agent 依据库存与预测决定补货，业务分析 Agent 用 `run_sql` 生成异常清单，
+自动化评测将一次查询结果作为后续函数调用或交付结论的依据。这些结果一旦进入下游，就必须能
+回答四个问题：**谁**在什么业务 Conversation 中提出了**哪一轮**问题、这次工具调用对应哪个
+Operation、以及当前身份能否回读服务端认可的执行事实。
+
+没有 Receipt 时，CLI 或 SDK 仍可把 `value` 打印给用户；但脚本只持有一段脱离上下文的 JSON：
+它无法可靠地区分“同一个对话的上一轮结果”“另一个身份的结果”或“失败后被重放的旧结果”。
+下游只能猜测 request id、MCP connection 或时间邻近关系，而这些都不是业务归属契约。Receipt
+把该猜测替换为可回读的服务端引用，因此是审计、评测、可追溯交付和多工具编排的最小闭环。
 
 ```text
-用户问题
-  → Agent / CLI 调用 ContextLoader 业务工具
-  → 服务端返回 value + Receipt
-  → 当前身份以 receipt_id 回读 Trace / Operation，验证归属与状态
+供应链 Agent："本周哪些供应商有断供风险？"
+  → ContextLoader 查询库存、订单和预测
+  → value：风险供应商列表
+  → Receipt：此列表属于 conv_123 / int_456 / op_789，且由当前身份可回读
+  → 后续补货工具、Trace 审计或 benchmark 以 receipt_id 验证，而不信任脚本内存中的 JSON
+```
+
+这项工作不改变数据查询本身、也不把 Receipt 变成授权令牌；它补齐的是**结果从产生到被采用**
+之间的可信归属。一次性、人工阅读的查询通常不受阻；需要跨进程、跨工具或事后审计的业务则会
+失去可验证性。
+
+```text
+用户问题 → Agent / CLI 调用 ContextLoader 业务工具 → 服务端返回 value + Receipt
+                                                     → 当前身份以 receipt_id 回读 Trace / Operation
+                                                       验证归属与状态
 ```
 
 Receipt 是服务端签发的证据引用，不是 bearer credential。跨不可信边界不得信任或转发其 JSON
@@ -41,7 +59,7 @@ Receipt 是服务端签发的证据引用，不是 bearer credential。跨不可
 - `managedToolCall()` 直接发 MCP 请求，绕过 `withManagedLifecycle()`，在强制 lifecycle 的部署中会因缺少 `bkn_context` 被拒绝；
 - terminal replay / receipt pending 可能在 `structuredContent.receipt` 返回，当前解析不覆盖；
 - 单独传入 `BKN_INTERACTION_ID` 会落入自动 handshake，而不是明确拒绝，可能使证据归属漂移；
-- MCP transport session 和 catalog 能力缓存没有完整按身份分区，长期 SDK 进程切换身份时存在错误复用风险。
+- MCP transport session 和 catalog 能力缓存没有完整按身份分区，长期 SDK 进程切换身份时存在错误复用风险（独立跟踪于 [#88](https://github.com/openbkn-ai/bkn-sdk/issues/88)）。
 
 因此这是 P1 的证据链正确性问题：通常不阻断一次性查询结果，但会阻断可审计、可验证、可编排的业务闭环。它不是已证实的数据面越权；跨身份服务端拒绝仍须真实 E2E 验证。
 
