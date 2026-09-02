@@ -36,6 +36,17 @@ ContextLoader 的业务工具调用必须在**同一条调用链**上完成两�
 因此这不是 breaking API change。调用方若要取得 CLI Receipt，必须显式加入 `--receipt --json`；
 调用方若继续使用原命令或普通 `toolCall()`，不会突然收到 envelope 或 Receipt 字段。
 
+`--receipt` 的组合契约固定如下，所有输入错误均在发出 MCP 请求前以 `InputError`（exit code 2）
+失败：
+
+| 参数组合 | 行为 |
+| --- | --- |
+| 不含 `--receipt` | 保持现有命令与输出行为 |
+| `--receipt --json` | 输出稳定 envelope `{ value, bkn_receipt }` |
+| `--receipt --json --compact` | 与上行同一 JSON schema，仅采用单行序列化 |
+| `--receipt` 且没有 `--json` | `InputError`：Receipt 只能以机器可读 envelope 输出 |
+| `--receipt --schema` | `InputError`：schema 探索不执行工具，二者互斥 |
+
 ## 2. 问题与业务影响
 
 ContextLoader 是 Agent、CLI 和应用访问知识网络的 MCP 入口。它服务的并不只是“把一条查询
@@ -148,24 +159,49 @@ profile、共享 `.env` 或长期 CI；下一用户问题必须 start 新 Intera
 静默创建别的 Conversation 或 Interaction。仅 SDK 自己创建的 session 可基于明确 stale code
 重开一次。
 
+一次 MCP 请求只能携带一套业务 Conversation / Interaction。调用方已经提供
+`args.bkn_context` 时，SDK 对 `ClientOptions.trace` / CLI 解析出的业务 IDs 采取以下规则：
+
+- Trace 中没有业务 IDs：保留 request ID、traceparent 等技术追踪 headers，但不发送业务
+  Conversation / Interaction headers；
+- Trace 中的 Conversation / Interaction 与 `bkn_context` 完全相同：可发送相同业务 headers；
+- Trace 中任一已提供业务 ID 与 `bkn_context` 不同，或只有其中一个 ID：本地 `InputError`，不发出
+  MCP 请求。
+
+这样 `arguments.bkn_context`、MCP span 和 Trace 回读不会为同一次业务调用写入两条不同的业务链。
+
 ### 4.3 Receipt 验证与状态
 
 TypeScript 的 `OperationReceipt` interface 不是运行时验证。Receipt 成功路径至少验证：
 
 - `receipt_id`、`conversation_id`、`interaction_id`、`operation_id` 为非空字符串；
-- `receipt_status` 为服务端定义的允许状态；
+- `receipt_status` 为当前 SDK `OperationReceipt` union 中的 `pending`、`completed` 或 `failed`；
+  未知状态安全失败，不能按 pending 或 completed 猜测；
 - 如果 SDK 注入了 `bkn_context`，Receipt 的 Conversation / Interaction 必须与注入值一致；
 - caller 自带 `bkn_context` 时，Receipt 的 Conversation / Interaction 也必须与该 context 一致。
 
-不满足上述条件是 integrity failure，不能打印或返回为可信 Receipt。解析必须只接受：
+不满足上述条件是 integrity failure，不能打印或返回为可信 Receipt。这里区分两个强度：
+
+- **validated receipt**：本次 MCP 响应的结构、允许状态以及与实际 context 的关联一致；CLI
+  `--receipt --json` 只输出这一层。
+- **authorized receipt evidence**：当前身份随后以 `receipt_id` 调用权威 `getReceipt` / MCP
+  `bkn_get_receipt` 成功，且回读的 `receipt_id`、Conversation、Interaction、Operation 和
+  `payload_hash`（服务端提供时）与初始 Receipt 一致。跨进程、审计、交付或下游采用必须以这一层
+  为准；不得用 token 哈希推断 owner，也不得信任别的进程传来的 Receipt JSON。
+
+解析必须只接受以下状态机：
 
 | 响应情形 | 稳定载体 | 行为 |
 | --- | --- | --- |
 | 正常业务完成 | `structuredContent.bkn_receipt` | 返回业务 value 与 Receipt |
-| terminal replay | `structuredContent.receipt` | 返回服务端给出的稳定结果 / Receipt，不重执行业务工具 |
+| terminal replay，响应含可解析 content value | `structuredContent.receipt` | 返回该 value 与 Receipt，不重执行业务工具 |
+| terminal replay，响应未含 value | `structuredContent.receipt` | 返回 `value: null` 与 Receipt；本期不声称可由 Receipt 恢复业务结果 |
 | receipt pending | `structuredContent.receipt` | 返回 `value: null` 与 Receipt；调用方按 `receipt_id` 回读，禁止重试业务工具 |
+| failed | MCP error 载体及可选 Receipt | 抛固定错误；不得返回或伪造业务 value。若服务端给出可验证 Receipt，只供当前身份的受控诊断/回读使用 |
 
-不得把任意 `structuredContent.receipt` 或普通 structured content 强转为 Receipt。
+若产品未来需要“按 Receipt 回读业务结果”，必须先定义并部署权威结果读取 API；本期不从
+`OperationReceipt` 推断或重建 value。不得把任意 `structuredContent.receipt` 或普通 structured
+content 强转为 Receipt。
 
 ### 4.4 CLI 输出与诊断
 
@@ -201,6 +237,24 @@ TypeScript 的 `OperationReceipt` interface 不是运行时验证。Receipt 成�
 不同身份不得复用 MCP session、能力探测结论、Conversation、Interaction 或 Receipt。服务端仍是
 最终授权方；客户端分区是防御性保证，避免错误归属和会话绑定主体混淆。
 
+身份 key 使用带命名空间的单向哈希，例如 `sha256("bkn-context-cache:v1\\0" + token)` 的短前缀；
+仅可作为进程内 Map key，绝不进入日志、诊断文本或 metric label。凭据刷新后必须按新 token
+重新计算 key，不能复用旧 credential 的 transport session 或 catalog 结论。
+
+### 4.6 最小可观测性与隐私边界
+
+本期不新增 SDK 对外 telemetry / metrics API，也不把客户端数据发送到新的观测服务。发布与 E2E
+必须从现有受控测试 harness 与服务端 Trace 采集下列**计数**，以定位生命周期回归：
+
+- `context_receipt_result_total{disposition=completed|replay|pending|failed|missing|invalid}`；
+- `context_lifecycle_retry_total{reason=stale_session}`；
+- `context_identity_cache_partition_total{cache=session|catalog}`；
+- `context_receipt_authorized_readback_total{outcome=success|denied|mismatch}`。
+
+标签只允许固定枚举、部署版本和工具类别；不得包含 token、完整 Receipt / Conversation /
+Interaction / Operation ID、query、参数、业务 value 或服务端 raw error。需要受控关联时使用有
+明确保留期的单向短哈希，且该哈希不出现在 CLI stdout/stderr。
+
 ## 5. 验收矩阵
 
 ### 单元与 CLI 集成测试
@@ -212,6 +266,7 @@ TypeScript 的 `OperationReceipt` interface 不是运行时验证。Receipt 成�
 - `managedToolCall()` 无手工 context 时仍自动注入并返回 Receipt；Receipt 缺失或畸形时失败；`toolCall()` 返回值保持兼容；
 - normal `bkn_receipt`、terminal replay `receipt`、pending `receipt` 都覆盖；pending 的业务调用次数恰为一；
 - `--receipt --json` envelope 固定；默认 `tool-call` 输出兼容；已知错误的 raw 文本含 query 时输出仍不泄露 query；
+- `--receipt` 的所有参数组合按本设计真值表处理，且 schema / 输入错误路径 MCP 调用数为零；
 - 同 host / KN、不同 token 得到不同 MCP transport session 和 catalog probe；token 不出现在缓存键或日志。
 
 ### 真实 E2E
@@ -223,12 +278,40 @@ TypeScript 的 `OperationReceipt` interface 不是运行时验证。Receipt 成�
 3. 旧 `int_1` 被稳定拒绝且不会自动另开会话；replay / pending 验证下游业务工具恰执行一次。
 4. 身份 B 无法续接 A 的 Conversation、读取 A 的 Receipt 或使用 A 的 `bkn_context` 执行业务工具；
    每项断言无 value、owner、Receipt 泄露且下游执行次数为零。身份 A 仍可回读其 Receipt。
+5. 服务端故障注入：业务工具已执行并记录 Operation / side-effect count 后，故意在首个响应前断开。
+   客户端恢复时只能回读 Receipt，不能发送第二个 `tools/call`；断言 server-side execution count 为 1、
+   Operation ID / attempt / Receipt ID 稳定。普通 mock 不能替代该证明。
+6. 构造 caller `bkn_context` 与 Trace headers 冲突的请求；断言本地拒绝且没有双重业务 context。
+   对成功路径，Receipt、MCP span 和 `trace get` 的 Conversation / Interaction / Operation 必须可 join。
+7. 触发每种 disposition、stale retry、identity partition 与授权回读结果，核验受控计数增长，并扫描
+   stdout、stderr、日志和 metric label 不包含敏感值。
 
-## 6. 风险、回滚与发布门槛
+## 6. 实施前门禁与跟踪
+
+本设计 PR 只提供审核材料，不能视为实现授权。开始任何代码工作前，Owner 必须：
+
+1. 审核并批准 #68 与 #88 的可测试 AC，应用 `ac-approved`；
+2. 确定 #88 是并入 #68 的同一实现 PR，还是独立修复；再将可实施、所有权明确的 Issue 标记
+   `agent-ready`；
+3. 在 `docs/exec-plans/active/` 创建实施计划，逐条映射 #68/#88 AC 到文件、测试、真实 E2E
+   和发布 / 回滚证据；
+4. 明确未来实现 PR 的关闭关系：若同一 PR 覆盖两项，使用 `Closes #68, Closes #88`；否则分别
+   指向对应 Issue。
+
+实施计划还必须决定并记录：`cli-command-design.md`、CLI help contract、README / README.zh、
+`skills/openbkn/references/context.md`、`docs/product-specs/bkn-trace.md` 是否需要同步更新；任何
+“不需要更新”的结论也必须写明理由。PR #87 不使用 `Closes`，因为它没有实现 #68 或 #88。
+
+## 7. 风险、回滚与发布门槛
 
 风险集中在服务端 lifecycle v1/v2 的真实 catalog 与跨身份授权语义，不能由 mocked unit test
 替代。实施不得硬编码一种 schema；运行时 catalog 与真实 MCP 响应优先。该改动只在 `--receipt`
 或既有 `managedToolCall()` 需要 Receipt 的调用中暴露新失败；普通 SDK / CLI 调用保持兼容。
 
-回滚方式是回退本 PR；它不涉及数据迁移、服务端配置或 Receipt schema 变更。发布门槛为 lint、
-unit test、两轮跨进程 E2E、跨身份负向 E2E 全部通过，并记录可回读 Receipt 证据。
+实现不涉及数据迁移、服务端配置或 Receipt schema 变更。若真实 E2E、灰度或发布后发现不兼容，
+停止发布或回退 npm 版本 / release 到前一版本；不得依赖服务端开关或手工清缓存作为回滚方案。
+`--receipt` 可随版本回退移除，普通 `toolCall()` 的既有输出不受影响；对
+`managedToolCall()` 的 bug-fix 回退必须明确记录会重新暴露强制 lifecycle 部署上的失败风险。
+
+发布门槛为 lint、unit test、两轮跨进程 E2E、跨身份负向 E2E、响应丢失故障注入 E2E 全部通过，
+并记录 authorized receipt evidence 与脱敏观测计数。
