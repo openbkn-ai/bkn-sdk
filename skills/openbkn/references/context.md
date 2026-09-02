@@ -28,7 +28,16 @@ HTTP retrieval path, where `client.kn.search(kn, q, { bknContext })` takes the
 same object. The same holds for
 `--conversation-id` / `--interaction-id` (and `BKN_CONVERSATION_ID` /
 `BKN_INTERACTION_ID`) on the CLI. Given only a conversation, the SDK opens its
-interaction inside that conversation rather than starting a new one.
+interaction inside that conversation rather than starting a new one. Given only
+an interaction, it uses the automatic lifecycle handshake; after a context is
+opened it does not forward the orphan interaction
+as a business header, and it never guesses a Conversation ID locally. Treat the returned
+Receipt, not the supplied interaction alone, as the authoritative context.
+
+A complete caller-owned `bkn_context` does not require a lifecycle catalog
+probe: the caller has already asserted the business pair. A receipt-requested
+call still requires the server to return and validate its Receipt; catalog
+unavailability is not an authorization bypass.
 
 The CLI remembers a conversation it opened **on a `managed-v2` deploy**, per
 platform and active identity, so
@@ -167,11 +176,16 @@ openbkn --json context tool-call <kn> <tool-name> --args '{"k":"v"}' --receipt
 # → { "value": ..., "bkn_receipt": { "receipt_id": ..., "receipt_status": ... } }
 ```
 
-`--receipt` 必须配合 `--json`（可再配合 `--compact`），不能与 `--schema` 一起使用。
+`--receipt` 必须配合 `--json` 或 `--compact`，不能与 `--schema` 一起使用。
 默认 `tool-call` 输出不变，只返回业务值。SDK 对 Receipt 的必要字段和状态作本地校验，
 但这只说明它与当前调用匹配（validated）；若需确认当前身份仍有权限读取该证据，应使用
 `openbkn trace receipts get <receipt-id>` 回读（authorized）。Receipt 不是凭据，勿写入日志、
 指标标签或后续工具参数。
+
+`value: null` 本身不是状态：`pending` Receipt 的 value 不可消费，必须依据
+`bkn_receipt.receipt_status` 判断，并使用 `receipt_id` 回读；不得通过重试业务工具取得结果。
+在 catalog 明确不支持 lifecycle 的部署上，`--receipt` 仍会执行一次业务调用，但若服务端不返回
+Receipt，命令以 `receipt_missing` 失败，业务副作用不会被回滚。
 
 `call-method <kn> <method>` does the same for raw MCP protocol methods
 (`tools/list`, `resources/read`, `prompts/get`, …) that have no dedicated

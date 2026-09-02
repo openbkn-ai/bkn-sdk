@@ -471,8 +471,8 @@ export function searchInstance(
       body: { ...searchBody(knId, query, opts), bkn_context: opts.bknContext },
     });
   }
-  return withManagedLifecycle(ctx, knId, query, (bknContext) =>
-    request(ctx, `${RETRIEVAL_BASE}/search_instance`, {
+  return withManagedLifecycle(ctx, knId, query, (bknContext, requestContext) =>
+    request(requestContext, `${RETRIEVAL_BASE}/search_instance`, {
       method: "POST",
       body: {
         ...searchBody(knId, query, opts),

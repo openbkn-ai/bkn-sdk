@@ -16,7 +16,7 @@ import { parseBigIntJSON, stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
-import { withManagedLifecycle } from "./lifecycle.js";
+import { requireKnownLifecycleCapability, withManagedLifecycle } from "./lifecycle.js";
 import { tlsFetch } from "./tls.js";
 import type { OperationReceipt } from "./trace-lifecycle.js";
 
@@ -181,7 +181,7 @@ function receiptFrom(structuredContent: unknown): OperationReceipt | undefined {
   const candidate = content?.bkn_receipt ?? content?.receipt;
   if (candidate === undefined) return undefined;
   if (!isOperationReceipt(candidate)) {
-    throw new Error("Context-loader returned an invalid operation receipt.");
+    throw new ToolError("Context-loader returned an invalid operation receipt.", "receipt_invalid");
   }
   return candidate;
 }
@@ -332,12 +332,6 @@ function callerContextMatchesTrace(
   return business as BusinessContextIds;
 }
 
-function assertTraceBusinessContext(ctx: RequestContext): void {
-  if (ctx.trace?.interactionId && !ctx.trace.conversationId) {
-    throw new InputError("BKN interaction id requires a conversation id.");
-  }
-}
-
 function receiptMatchesBusinessContext(
   result: UnwrappedToolResult,
   businessContext: BusinessContextIds | undefined,
@@ -428,9 +422,9 @@ async function callToolResult(
   name: string,
   args: Record<string, unknown>,
   options?: ToolCallOptions,
+  requireReceipt = false,
 ): Promise<UnwrappedToolResult> {
   if (LIFECYCLE_TOOLS.has(name)) return callToolRawResult(ctx, knId, name, args, options);
-  assertTraceBusinessContext(ctx);
   const callerContext = callerContextMatchesTrace(ctx, args);
   // A caller that built its own `bkn_context` gets it through untouched, and no
   // session is opened on its behalf. `ManagedTrace.runOperation` pre-registers
@@ -443,14 +437,20 @@ async function callToolResult(
       callerContext,
     );
   }
-  return withManagedLifecycle(ctx, knId, questionFor(name, args), (bknContext) =>
-    callToolRawResult(
-      ctx,
-      knId,
-      name,
-      bknContext ? { ...args, bkn_context: bknContext } : args,
-      options,
-    ).then((result) => receiptMatchesBusinessContext(result, bknContext)),
+  if (requireReceipt) await requireKnownLifecycleCapability(ctx);
+  return withManagedLifecycle(
+    ctx,
+    knId,
+    questionFor(name, args),
+    (bknContext, requestContext) =>
+      callToolRawResult(
+        requestContext,
+        knId,
+        name,
+        bknContext ? { ...args, bkn_context: bknContext } : args,
+        options,
+      ).then((result) => receiptMatchesBusinessContext(result, bknContext)),
+    requireReceipt,
   );
 }
 
@@ -477,9 +477,12 @@ export async function callManagedTool<T = unknown>(
   args: Record<string, unknown>,
   options?: ToolCallOptions,
 ): Promise<ManagedToolResult<T>> {
-  const result = await callToolResult(ctx, knId, name, args, options);
+  const result = await callToolResult(ctx, knId, name, args, options, true);
   if (!result.receipt) {
-    throw new Error("Context-loader managed tool response did not include bkn_receipt");
+    throw new ToolError(
+      "Context-loader managed tool response did not include bkn_receipt",
+      "receipt_missing",
+    );
   }
   return { value: result.value as T, receipt: result.receipt };
 }

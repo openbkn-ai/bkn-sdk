@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { callTool, searchSchema } from "../../src/api/context-loader.js";
+import { callManagedTool, callTool, searchSchema } from "../../src/api/context-loader.js";
 import { searchInstance } from "../../src/api/knowledge-networks.js";
 import { releaseLifecycleSessions, resetLifecycleCaches } from "../../src/api/lifecycle.js";
 import type { RequestContext } from "../../src/types.js";
@@ -46,6 +46,7 @@ function freshCtx(extra: Partial<RequestContext> = {}): RequestContext {
 
 interface MockOptions {
   catalog?: unknown;
+  infoStatus?: number;
   /** Server replies for the retrieval POST, in order; a string body means an error. */
   retrieval?: Array<{ status: number; body: unknown }>;
   /** Tool name → error code the deploy answers with on its first call only. */
@@ -77,7 +78,7 @@ function mockDeploy(opts: MockOptions = {}): Recorded {
 
       if (url.endsWith("/mcp/info")) {
         recorded.infoCount += 1;
-        return new Response(JSON.stringify(catalog), { status: 200 });
+        return new Response(JSON.stringify(catalog), { status: opts.infoStatus ?? 200 });
       }
 
       if (url.endsWith("/v1/mcp")) {
@@ -198,24 +199,50 @@ describe("managed lifecycle on semantic search", () => {
     expect(recorded.infoCount).toBe(2);
   });
 
-  it("rejects an interaction id that has no conversation before sending MCP", async () => {
+  it("keeps an interaction-only trace on the automatic handshake path", async () => {
     const recorded = mockDeploy({ catalog: V2_CATALOG });
+    await searchInstance(
+      freshCtx({
+        trace: {
+          requestId: "req-interaction-only",
+          traceparent: "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
+          interactionId: "int-orphan",
+        },
+      }),
+      "kn-interaction-only",
+      "物料",
+    );
+
+    expect(recorded.toolCalls.map((call) => call.name)).toEqual(["bkn_start_interaction"]);
+    expect(recorded.retrievalBodies).toHaveLength(1);
+    const headers = new Headers(
+      (fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls.find(
+        ([url, init]) => String(url).includes("/kn/search_instance") && init.method === "POST",
+      )?.[1]?.headers,
+    );
+    expect(headers.get("bkn-interaction-id")).toBeNull();
+    expect(recorded.retrievalBodies[0]?.bkn_context).toEqual({
+      conversation_id: "conv_1",
+      interaction_id: "int_1",
+    });
+  });
+
+  it("rejects receipt-required calls before a business request when catalog capability is unknown", async () => {
+    const recorded = mockDeploy({ catalog: { unexpected: "shape" } });
+
     await expect(
-      searchInstance(
-        freshCtx({
-          trace: {
-            requestId: "req-interaction-only",
-            traceparent: "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
-            interactionId: "int-orphan",
-          },
-        }),
-        "kn-interaction-only",
-        "物料",
-      ),
-    ).rejects.toThrow("BKN interaction id requires a conversation id.");
-    expect(recorded.infoCount).toBe(0);
+      callManagedTool(freshCtx(), "kn-unknown-capability", "search_schema", { query: "物料" }),
+    ).rejects.toMatchObject({ code: "lifecycle_capability_unknown" });
     expect(recorded.toolCalls).toHaveLength(0);
-    expect(recorded.retrievalBodies).toHaveLength(0);
+  });
+
+  it("rejects receipt-required calls before a business request when catalog lookup fails", async () => {
+    const recorded = mockDeploy({ infoStatus: 503 });
+
+    await expect(
+      callManagedTool(freshCtx(), "kn-unavailable-capability", "search_schema", { query: "物料" }),
+    ).rejects.toMatchObject({ code: "lifecycle_capability_unknown" });
+    expect(recorded.toolCalls).toHaveLength(0);
   });
 
   it("omits bkn_context on a deploy without the lifecycle tools", async () => {
@@ -225,6 +252,15 @@ describe("managed lifecycle on semantic search", () => {
     expect(recorded.toolCalls).toHaveLength(0);
     expect(recorded.retrievalBodies[0]).not.toHaveProperty("bkn_context");
     expect(recorded.retrievalBodies[0]?.query).toBe("物料");
+  });
+
+  it("lets an unsupported deploy run a receipt-requested business tool once", async () => {
+    const recorded = mockDeploy({ catalog: LEGACY_CATALOG });
+
+    await expect(
+      callManagedTool(freshCtx(), "kn-legacy-receipt", "search_schema", { query: "物料" }),
+    ).rejects.toMatchObject({ code: "receipt_missing" });
+    expect(recorded.toolCalls.map((call) => call.name)).toEqual(["search_schema"]);
   });
 
   it("omits bkn_context when the catalog probe fails", async () => {
