@@ -150,13 +150,14 @@ export function kn(ctx: RequestContext) {
       const targets = collectIndexTargets(dir);
       const buildTasks: Array<{ objectType: string; resourceId: string; taskId: string }> = [];
       for (const t of targets) {
-        if (!t.buildKey) {
+        if (!t.primaryKeyFields.length || !t.incrementalFields.length) {
           throw new Error(
-            `Object type '${t.objectType}' declares a vector index but no build key; batch Vega builds require resource index_config.build_key_fields.`,
+            `Object type '${t.objectType}' declares a vector index but lacks primary or incremental key fields; batch Vega builds require both resource index_config.primary_key_fields and incremental_fields.`,
           );
         }
         await configureResourceIndex(ctx, t.resourceId, {
-          buildKeyFields: [t.buildKey],
+          primaryKeyFields: t.primaryKeyFields,
+          incrementalFields: t.incrementalFields,
           embeddingFields: t.embeddingFields,
           ...((t.embeddingModel ?? opts.embeddingModel)
             ? { embeddingModel: t.embeddingModel ?? opts.embeddingModel }

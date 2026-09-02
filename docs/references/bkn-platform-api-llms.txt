@@ -24,10 +24,10 @@ Index build — BuildTask (current/target model)
 - Vega base path = /api/vega-backend/v1 (confirmed). Build tasks ≈ /api/vega-backend/v1/build-tasks (verify on VM).
 - Create: POST /build-tasks   body = CreateBuildTaskRequest
     resource_id      (required)  which resource
-    mode             (required)  "streaming" | "batch"
-    execute_type     (optional)  batch only: "incremental" | "full"; rejected for streaming
+    mode             (required)  "batch" (streaming is temporarily unsupported)
+    execute_type     (optional)  "incremental" | "full"
 - Index configuration: PUT /resources/{id} updates two Resource fields:
-  index_config (build_key_fields; default_embedding_model;
+  index_config (primary_key_fields; incremental_fields; default_embedding_model;
   default_fulltext_analyzer) and schema_definition (per-property vector feature
   config.embedding_model as a small-model ID; fulltext feature config.analyzer).
   The BuildTask snapshots this Resource configuration when created.

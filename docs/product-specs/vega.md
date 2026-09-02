@@ -39,7 +39,7 @@ snapshots that configuration.
 
 CLI:
 
-- `openbkn vega dataset build <resource-id> --mode batch [--embedding-fields …] [--build-key-fields …] [--embedding-model <model-id>] [--fulltext-fields …] [--execute-type incremental|full] [--wait] [--timeout <s>]` — optional index flags update the Resource, then create a BuildTask. `--embedding-model` takes a small-model name or ID. It is written twice, in different forms: the name into `index_config.default_embedding_model`, the ID into each vector feature's `config.embedding_model` — the resource rejects either form in the other's place.
+- `openbkn vega dataset build <resource-id> --mode batch [--embedding-fields …] [--primary-key-fields …] [--incremental-fields …] [--embedding-model <model-id>] [--fulltext-fields …] [--execute-type incremental|full] [--wait] [--timeout <s>]` — optional index flags update the Resource, then create a BuildTask. Batch builds require both key groups: primary fields generate document IDs, while incremental fields drive cursor checkpoints. `--embedding-model` takes a small-model name or ID. It is written twice, in different forms: the name into `index_config.default_embedding_model`, the ID into each vector feature's `config.embedding_model` — the resource rejects either form in the other's place.
 - `openbkn vega dataset build-status <task-id>` — progress: `status` + `synced_count`; a document is counted only after all required index processing, including vectorization, succeeds.
 - `openbkn vega dataset build-list --status pending,running` — filter by one or
   more statuses; the SDK sends repeated `status` query parameters. Use
