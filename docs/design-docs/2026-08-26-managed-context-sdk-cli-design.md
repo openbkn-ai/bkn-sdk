@@ -20,21 +20,25 @@ ContextLoader 的业务工具调用必须在**同一条调用链**上完成两�
 
 ### 对外接口影响
 
-本设计的兼容性目标是**不改变既有调用方的成功返回值或 MCP wire contract**；唯一新增的用户
-可见能力是显式选择的 CLI flag。具体如下：
+本设计的兼容性目标是**不改变既有 `toolCall()` 调用的成功返回值、既有上下文输入的可用性或 MCP
+wire contract**；唯一新增的用户可见能力是显式选择的 CLI flag。`managedToolCall()` 对 replay /
+pending 的返回语义有一项受控、可观察的修正，须按下表和迁移说明处理。具体如下：
 
 | 表面 | 变化 | 兼容性承诺 |
 | --- | --- | --- |
 | ContextLoader MCP wire schema / 服务端 API | 无 | 不新增字段、不改 `bkn_context` guard、不从 header 或 transport session 推断业务上下文 |
-| `client.context.toolCall()` | 无签名或返回类型变化 | 继续返回仅含业务 value 的 `Promise<unknown>`；Receipt 不进入此公开返回值 |
-| `client.context.managedToolCall()` | 无签名或返回类型变化；修复其内部调用链 | 继续返回 `{ value, receipt }`；原先因绕过 lifecycle 被拒绝的合法调用将转为成功，这是 bug fix 的预期语义修正 |
+| `client.context.toolCall()` | 无签名或返回类型变化 | 继续返回仅含业务 value 的 `Promise<unknown>`；Receipt 不进入此公开返回值。仅提供 `BKN_INTERACTION_ID` / `--interaction-id` 的既有调用继续进入自动 lifecycle handshake，不能新增本地拒绝 |
+| `client.context.managedToolCall()` | 无签名或返回类型变化；修复其内部调用链 | 继续返回 `{ value, receipt }`；原先因绕过 lifecycle 被拒绝的合法调用将转为成功。对 terminal replay / pending，原先会因缺少 `bkn_receipt` 抛错的调用改为返回 `{ value: null, receipt }`，是有意的运行时语义变化 |
 | `openbkn context tool-call`（无新 flag） | 无 | 默认文本 / JSON 输出保持当前行为 |
-| `openbkn context tool-call --receipt --json` | 新增 opt-in CLI 形式 | 输出稳定 `{ value, bkn_receipt }`；不影响未传 `--receipt` 的脚本 |
+| `openbkn context tool-call --receipt --json` / `--receipt --compact` | 新增 opt-in CLI 形式 | 输出稳定 `{ value, bkn_receipt }`；`--compact` 是单行 JSON 形式；不影响未传 `--receipt` 的脚本 |
 | 生命周期错误呈现 | 已知错误改为脱敏操作提示 | 服务端 error code 与退出码不变；仅已知错误的人类可读文本更安全、可行动 |
 | 包内 `callToolResult()` | 新内部实现 | 不从 `src/index.ts` 或 resource surface 导出，不能形成新的 npm SDK 契约 |
 
-因此这不是 breaking API change。调用方若要取得 CLI Receipt，必须显式加入 `--receipt --json`；
-调用方若继续使用原命令或普通 `toolCall()`，不会突然收到 envelope 或 Receipt 字段。
+因此这不是签名、wire schema 或普通 `toolCall()` 的 breaking API change。调用方若要取得 CLI
+Receipt，必须显式加入 `--receipt --json` 或 `--receipt --compact`；调用方若继续使用原命令或普通
+`toolCall()`，不会突然收到 envelope 或 Receipt 字段。依赖 `managedToolCall()` 将 replay / pending
+当作异常的调用方则必须采用下面的迁移规则：读取 `receipt.receipt_status`，在 `pending` 时按
+`receipt_id` 回读而不是重试业务工具，在 replay 无 value 时接受 `value === null`。
 
 `--receipt` 的组合契约固定如下，所有输入错误均在发出 MCP 请求前以 `InputError`（exit code 2）
 失败：
@@ -44,7 +48,8 @@ ContextLoader 的业务工具调用必须在**同一条调用链**上完成两�
 | 不含 `--receipt` | 保持现有命令与输出行为 |
 | `--receipt --json` | 输出稳定 envelope `{ value, bkn_receipt }` |
 | `--receipt --json --compact` | 与上行同一 JSON schema，仅采用单行序列化 |
-| `--receipt` 且没有 `--json` | `InputError`：Receipt 只能以机器可读 envelope 输出 |
+| `--receipt --compact` | 与 `--receipt --json --compact` 相同；`--compact` 本身即表示机器可读 JSON |
+| `--receipt` 且既没有 `--json` 也没有 `--compact` | `InputError`：Receipt 只能以机器可读 envelope 输出 |
 | `--receipt --schema` | `InputError`：schema 探索不执行工具，二者互斥 |
 
 ## 2. 问题与业务影响
@@ -87,7 +92,9 @@ Receipt 是服务端签发的证据引用，不是 bearer credential。跨不可
 - CLI 的 `context tool-call` 没有 Receipt 输出通道；
 - `managedToolCall()` 直接发 MCP 请求，绕过 `withManagedLifecycle()`，在强制 lifecycle 的部署中会因缺少 `bkn_context` 被拒绝；
 - terminal replay / receipt pending 可能在 `structuredContent.receipt` 返回，当前解析不覆盖；
-- 单独传入 `BKN_INTERACTION_ID` 会落入自动 handshake，而不是明确拒绝，可能使证据归属漂移；
+- 单独传入 `BKN_INTERACTION_ID` 在主线会落入自动 handshake；它是已存在的兼容行为，不能在本期
+  被改为本地拒绝。其缺少显式 Conversation 的证据归属风险应由自动 lifecycle 握手的服务端事实和
+  Receipt 回读解决，而不是由客户端猜测或丢弃该调用；
 - MCP transport session 和 catalog 能力缓存没有完整按身份分区，长期 SDK 进程切换身份时存在错误复用风险（独立跟踪于 [#88](https://github.com/openbkn-ai/bkn-sdk/issues/88)）。
 
 因此这是 P1 的证据链正确性问题：通常不阻断一次性查询结果，但会阻断可审计、可验证、可编排的业务闭环。它不是已证实的数据面越权；跨身份服务端拒绝仍须真实 E2E 验证。
@@ -150,10 +157,12 @@ args.bkn_context（完整 caller-owned，对 trace 冲突时仍原样优先）
   > 服务端 catalog 驱动的自动 handshake
 ```
 
-`BKN_INTERACTION_ID` / `--interaction-id` 不得单独存在：必须同时解析到同源 Conversation，
-否则在任何 MCP 请求前抛出 `InputError`。Interaction 在 finish 后立即失效，不能写入 shell
-profile、共享 `.env` 或长期 CI；下一用户问题必须 start 新 Interaction。Conversation 可以跨该
-业务对话的多轮延续。
+`BKN_INTERACTION_ID` / `--interaction-id` 可以单独存在，且必须保持主线的兼容路径：SDK 将其交给
+生命周期 manager，由后者进行既有的自动 handshake；不得在 ContextLoader 层因为缺少 Conversation
+改为 `InputError`，也不得客户端自行捏造或覆盖 Conversation。若服务端拒绝该 Interaction，保留其
+稳定 error code；若自动 handshake 产生了新的业务 context，Receipt 是唯一可采信的归属结果。
+Interaction 在 finish 后立即失效，不能写入 shell profile、共享 `.env` 或长期 CI；下一用户问题必须
+start 新 Interaction。Conversation 可以跨该业务对话的多轮延续。
 
 对 caller-owned 完整 context 或完整 Trace ID，terminal / required 错误必须原样失败，绝不能
 静默创建别的 Conversation 或 Interaction。仅 SDK 自己创建的 session 可基于明确 stale code
@@ -169,6 +178,8 @@ profile、共享 `.env` 或长期 CI；下一用户问题必须 start 新 Intera
   MCP 请求。
 
 这样 `arguments.bkn_context`、MCP span 和 Trace 回读不会为同一次业务调用写入两条不同的业务链。
+interaction-only 的兼容路径不适用此“完整 caller-owned context”规则：它没有可供客户端校验的
+完整二元组，必须由 lifecycle manager 和 Receipt 回读给出权威结果。
 
 ### 4.3 Receipt 验证与状态
 
@@ -205,7 +216,8 @@ content 强转为 Receipt。
 
 ### 4.4 CLI 输出与诊断
 
-仅当用户传入 `--receipt --json` 时，`openbkn context tool-call` 输出稳定 envelope：
+仅当用户传入 `--receipt --json` 或 `--receipt --compact` 时，`openbkn context tool-call` 输出稳定
+envelope：
 
 ```json
 {
@@ -218,6 +230,17 @@ content 强转为 Receipt。
 失败，不能退化为仅打印 value。对 catalog 已确认不支持 lifecycle 的部署，仍以实际响应是否包含
 可信 Receipt 为准；catalog unknown 时，`--receipt` 必须在发送业务请求前失败，普通 `toolCall()`
 维持既有兼容性降级。
+
+catalog / probe 的内部结果不是二元 `none`，而是由 lifecycle 模块产出的三态能力判断：
+
+| 状态 | 产生条件 | 普通 `toolCall()` | `managedToolCall()` / `--receipt` |
+| --- | --- | --- | --- |
+| `managed` | catalog 经 schema 校验明确声明受支持的 lifecycle contract | 执行 lifecycle handshake | 执行 lifecycle handshake，并要求可信 Receipt |
+| `unsupported` | catalog 成功返回且权威地表明不支持 lifecycle | 保留主线直通 MCP 调用 | 可以执行一次实际调用；只有响应含可信 Receipt 才成功，否则报 Receipt 缺失 |
+| `unknown` | 获取 catalog 失败、超时、响应畸形或 schema 无法识别 | 保留主线兼容的降级调用 | 在业务 MCP 请求前失败；不能把不确定性误当作不支持 |
+
+`lifecycleFor()`（或其替代的单一 capability resolver）负责返回该三态及其依据；ContextLoader 不得把
+probe 异常折叠为 `none`，也不得自行重复探测。缓存继续按第 4.5 节的身份维度分区。
 
 `interaction_terminal`、`interaction_required`、`conversation_required`、
 `conversation_context_conflict` 和 lifecycle schema mismatch 使用固定、脱敏的 code-to-hint
@@ -261,11 +284,15 @@ Interaction / Operation ID、query、参数、业务 value 或服务端 raw erro
 
 - caller 自带 `bkn_context` 原样发送，并保留经过验证的 Receipt；与 Trace IDs 冲突时不覆盖；
 - 完整 Conversation + Interaction 投影到 `bkn_context`，Receipt 与其一致；仅 Conversation 时在该 Conversation start 新 Interaction；无上下文时按 catalog handshake；
-- interaction-only（SDK trace、CLI flag 或 env）零 MCP 请求并得到 `InputError`；
+- interaction-only（SDK trace、CLI flag 或 env）继续走主线的自动 lifecycle handshake；不因缺少
+  Conversation 在 ContextLoader 层失败。若服务端拒绝，断言其稳定 code 被保留、没有客户端伪造的
+  Conversation / Interaction；
 - lifecycle 工具不递归注入；SDK-owned stale session 只重开一次；caller-owned terminal 不重开；
 - `managedToolCall()` 无手工 context 时仍自动注入并返回 Receipt；Receipt 缺失或畸形时失败；`toolCall()` 返回值保持兼容；
 - normal `bkn_receipt`、terminal replay `receipt`、pending `receipt` 都覆盖；pending 的业务调用次数恰为一；
-- `--receipt --json` envelope 固定；默认 `tool-call` 输出兼容；已知错误的 raw 文本含 query 时输出仍不泄露 query；
+- `--receipt --json` 和 `--receipt --compact` 都输出固定 envelope；默认 `tool-call` 输出兼容；已知错误的 raw 文本含 query 时输出仍不泄露 query；
+- terminal replay / pending 的 `managedToolCall()` 返回 `{ value: null, receipt }`；迁移样例覆盖
+  `receipt_status` 分支和按 `receipt_id` 回读，避免旧调用方将该结果视作可直接消费的业务 value；
 - `--receipt` 的所有参数组合按本设计真值表处理，且 schema / 输入错误路径 MCP 调用数为零；
 - 同 host / KN、不同 token 得到不同 MCP transport session 和 catalog probe；token 不出现在缓存键或日志。
 
@@ -285,6 +312,9 @@ Interaction / Operation ID、query、参数、业务 value 或服务端 raw erro
    对成功路径，Receipt、MCP span 和 `trace get` 的 Conversation / Interaction / Operation 必须可 join。
 7. 触发每种 disposition、stale retry、identity partition 与授权回读结果，核验受控计数增长，并扫描
    stdout、stderr、日志和 metric label 不包含敏感值。
+8. 新 CLI 进程仅带 `BKN_INTERACTION_ID`，验证其仍进入自动 lifecycle handshake；记录服务端签发的
+   Receipt，并断言客户端未因缺少 Conversation 提前失败。若该部署拒绝该输入，断言错误来自服务端且
+   不包含业务数据。
 
 ## 6. 实施前门禁与跟踪
 
@@ -302,11 +332,27 @@ Interaction / Operation ID、query、参数、业务 value 或服务端 raw erro
 `skills/openbkn/references/context.md`、`docs/product-specs/bkn-trace.md` 是否需要同步更新；任何
 “不需要更新”的结论也必须写明理由。PR #87 不使用 `Closes`，因为它没有实现 #68 或 #88。
 
+### 已合并实现的对齐门禁
+
+本设计的兼容性修订晚于 #89 合并。#89 当前在 ContextLoader 层拒绝 interaction-only，并且
+`--receipt` 参数校验只接受显式 `--json`，两处均与本设计不一致；在以下补丁合并并通过新增验收前，
+不得将 #89 标记为完全符合本设计：
+
+1. 取消 interaction-only 的本地 `InputError`，恢复交由 lifecycle manager 的既有自动 handshake；
+2. 将 `--compact` 视为 JSON 输出模式，允许 `--receipt --compact`；
+3. 将 lifecycle resolver 从 `managed | none` 演进为第 4.4 节的 `managed | unsupported | unknown`，
+   并添加三态与缓存分区测试；
+4. 在 release note / README 记录 `managedToolCall()` replay / pending 的 `value: null` 迁移规则。
+
+该补丁应关联本设计 PR 与 #68；若需要单独跟踪，创建后续 issue，而不是以文档措辞掩盖已合并代码的
+兼容性偏差。
+
 ## 7. 风险、回滚与发布门槛
 
 风险集中在服务端 lifecycle v1/v2 的真实 catalog 与跨身份授权语义，不能由 mocked unit test
 替代。实施不得硬编码一种 schema；运行时 catalog 与真实 MCP 响应优先。该改动只在 `--receipt`
-或既有 `managedToolCall()` 需要 Receipt 的调用中暴露新失败；普通 SDK / CLI 调用保持兼容。
+或既有 `managedToolCall()` 需要 Receipt 的调用中暴露新失败或新的 replay / pending 结果；普通 SDK /
+CLI 调用（包括 interaction-only 自动 handshake）保持兼容。
 
 实现不涉及数据迁移、服务端配置或 Receipt schema 变更。若真实 E2E、灰度或发布后发现不兼容，
 停止发布或回退 npm 版本 / release 到前一版本；不得依赖服务端开关或手工清缓存作为回滚方案。
