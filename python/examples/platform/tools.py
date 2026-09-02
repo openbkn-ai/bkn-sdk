@@ -16,17 +16,30 @@ a call and go back up, and the evidence still lands on one chain.
 from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # so `bootstrap` imports
 
 from bootstrap import kn_id
 
 import bkn_osdk
-from bkn_osdk.lifecycle import borrowed_interaction, current_interaction
+from bkn_osdk.lifecycle import current_interaction, ensure_interaction
 from bkn_osdk.mcp import call_tool, tool_catalog
 
 
 def brief(value: Any, width: int = 88) -> str:
-    return json.dumps(value, ensure_ascii=False)[:width]
+    """A payload in one line, cut at a comma rather than mid-token.
+
+    Truncating JSON at a fixed width leaves `"paging": {"n` on the screen, which
+    reads as output that stopped rather than output that was shortened.
+    """
+    text = json.dumps(value, ensure_ascii=False)
+    if len(text) <= width:
+        return text
+    cut = text.rfind(", ", 0, width)
+    return f"{text[: cut if cut > 0 else width]} …}}"
 
 
 def payload(value: Any) -> Any:
@@ -51,28 +64,28 @@ def main() -> None:
     # tool call is shaped against.
     catalog = tool_catalog(bkn_osdk.resolve_context())
     names = sorted(tool["name"] for tool in catalog["tools"])
-    print(f"{len(names)} 个工具: {names[:6]} …")
+    print(f"{len(names)} tools: {names[:6]} …")
 
     start = next(t for t in catalog["tools"] if t["name"] == "search_schema")
     declared = list((start.get("input_schema") or {}).get("properties", {}))
-    print(f"search_schema 的参数: {declared[:6]}")
+    print(f"search_schema takes: {declared[:6]}")
 
     # ---- REST by path -------------------------------------------------------
     #
     # `call` is the same choke point the generated classes read through: same
     # credentials, same 401-refresh, same TLS opt-out.
     networks = bkn_osdk.call("/api/bkn-backend/v1/knowledge-networks", query={"limit": 3})
-    print(f"网络列表: {[e['id'] for e in networks.get('entries', [])]}")
+    print(f"networks: {[e['id'] for e in networks.get('entries', [])]}")
 
     # ---- MCP tools by name --------------------------------------------------
     #
     # The capability surface requires a `bkn_context`: every tool in the catalog
     # but the two lifecycle ones declares it required, and both deploys refuse a
-    # call without one. `borrowed_interaction` joins the turn already in scope,
+    # call without one. `ensure_interaction` joins the turn already in scope,
     # or opens a short-lived one and finishes it — so a script does not have to
     # know which situation it is in.
     ctx = bkn_osdk.resolve_context()
-    with borrowed_interaction(ctx, network) as turn:
+    with ensure_interaction(ctx, network) as turn:
         detail = call_tool(
             ctx,
             network,
@@ -80,8 +93,13 @@ def main() -> None:
             {"kn_id": network, "detail_level": "summary", "bkn_context": turn.bkn_context},
         )
         described = payload(detail.value)
-        print(f"get_kn_detail: {brief({key: '…' for key in described})}")
-        print(f"  回执 {(detail.receipt or {}).get('operation_id')}")
+        counts = {
+            key: len(value) if isinstance(value, list) else value
+            for key, value in described.items()
+            if key in ("id", "name", "object_types", "relation_types", "action_types")
+        }
+        print(f"get_kn_detail: {counts}")
+        print(f"  receipt {(detail.receipt or {}).get('operation_id')}")
 
         # Aggregation has no typed form — `query_object_instance` cannot group —
         # so SUM/COUNT/GROUP BY is what `run_sql` is for. The table name is a
@@ -93,7 +111,7 @@ def main() -> None:
             "search_schema",
             {
                 "kn_id": network,
-                "query": "订单",
+                "query": "orders",
                 "response_format": "json",
                 "include_columns": True,
                 "bkn_context": turn.bkn_context,
@@ -102,7 +120,7 @@ def main() -> None:
         types = payload(found).get("object_types") or []
         if types:
             resource = (types[0].get("data_source") or {}).get("id")
-            print(f"{types[0].get('concept_id')} 的数据资源: {resource}")
+            print(f"{types[0].get('concept_id')} is backed by resource: {resource}")
             if resource:
                 counted = call_tool(
                     ctx,
@@ -114,7 +132,8 @@ def main() -> None:
                         "bkn_context": turn.bkn_context,
                     },
                 ).value
-                print(f"  run_sql: {brief(payload(counted))}")
+                answered = payload(counted)
+                print(f"  run_sql: {answered.get('entries')} columns {answered.get('columns')}")
 
     # ---- one turn across both layers ---------------------------------------
     with bkn_osdk.session(traced=True) as scoped:
@@ -128,8 +147,8 @@ def main() -> None:
             # decides what its own evidence is worth keeping.
             if result.receipt is not None:
                 turn.receipts.append(result.receipt)
-        print(f"一个 turn 里两次工具调用, 回执 {len(turn.receipts)} 条")
-        print(f"  操作 {[r['operation_id'][:14] for r in turn.receipts]}")
+        print(f"two tool calls on one turn, {len(turn.receipts)} receipts")
+        print(f"  operations {[r['operation_id'][:14] for r in turn.receipts]}")
 
 
 if __name__ == "__main__":

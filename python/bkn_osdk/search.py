@@ -112,10 +112,10 @@ def _call(ctx: Context, kn_id: str, tool: str, arguments: dict[str, Any]) -> Any
     serve a bare read, which is why they keep the send-and-adapt path and this
     does not. Probing here would buy a refusal already written in the schema.
     """
-    from .lifecycle import borrowed_interaction
+    from .lifecycle import ensure_interaction
     from .mcp import call_tool
 
-    with borrowed_interaction(ctx, kn_id) as interaction:
+    with ensure_interaction(ctx, kn_id) as interaction:
         result = call_tool(ctx, kn_id, tool, {**arguments, "bkn_context": interaction.bkn_context})
         if result.receipt is not None:
             interaction.receipts.append(result.receipt)

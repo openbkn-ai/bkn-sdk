@@ -7,11 +7,11 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
-from bkn_osdk import SchemaDriftError
+from bkn_osdk import InputError, SchemaDriftError
 from bkn_osdk.query import Comparison, Composite
 from bkn_osdk.types import ObjectType, Property, PropertyRef, Relation, decode
 
@@ -226,3 +226,18 @@ def test_relations_record_their_endpoint_and_join() -> None:
     assert relation.bkn_id == "order_to_buyer"
     assert relation.target == "people"
     assert relation.join == (("user_id", "person_id"),)
+
+
+def test_comparing_a_property_to_none_names_the_operator_that_means_absence() -> None:
+    """`paid_at == None` reads as "unpaid" and answers HTTP 400 `无效的参数`.
+
+    A typed caller never gets that far — mypy already refuses `PropertyRef[date]
+    == None`, which is the descriptor earning its keep. This is the untyped path:
+    a value that turns out to be `None` at runtime, which is how the example that
+    found this built its filter.
+    """
+    with pytest.raises(InputError, match=r"paid_on.not_exists\(\)"):
+        Order.paid_on.__eq__(cast(Any, None))
+
+    with pytest.raises(InputError, match=r"paid_on.exists\(\)"):
+        Order.paid_on.__ne__(cast(Any, None))

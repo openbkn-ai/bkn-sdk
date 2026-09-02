@@ -701,3 +701,130 @@ def test_two_credentials_against_one_deploy_do_not_share_a_session(
         mcp_module.call_tool(Context(base_url=PLATFORM, token=token), KN, "search_schema", {})
 
     assert handshakes == ["Bearer token-a", "Bearer token-b"]  # third call reuses the first
+
+
+# ---- a refusal the platform itself calls transient ---------------------------
+
+
+def failing(monkeypatch: pytest.MonkeyPatch, error: dict[str, Any], until: int) -> list[int]:
+    """A deploy that fails the first `until` tool calls, then succeeds."""
+    seen = [0]
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.read())
+        if body.get("method") != "tools/call":
+            return httpx.Response(200, json={"result": {}}, headers={"mcp-session-id": "s"})
+        seen[0] += 1
+        if seen[0] <= until:
+            return httpx.Response(
+                200,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": {
+                        "isError": True,
+                        "content": [{"type": "text", "text": json.dumps({"error": error})}],
+                        "structuredContent": {"error": error},
+                    },
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {"content": [{"type": "text", "text": json.dumps({"ok": True})}]},
+            },
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+    monkeypatch.setattr(http_module, "_client", lambda _ctx: client)
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    return seen
+
+
+TRANSIENT = {
+    "code": "trace_core_unavailable",
+    "message": "BKN Trace Core is temporarily unavailable",
+    "retryable": True,
+    "required_action": "retry_later",
+    "retry_after_ms": 0,
+}
+
+
+def test_a_retryable_refusal_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The platform says `retryable: true` for a dependency restarting under the
+    call. Surfacing that to whoever asked for a read, when one short wait would
+    have covered it, is a failure this SDK chose rather than met."""
+    seen = failing(monkeypatch, TRANSIENT, until=1)
+
+    result = mcp_module.call_tool(Context(base_url=PLATFORM, token="t-1"), KN, "search_schema", {})
+
+    assert result.value == {"ok": True}
+    assert seen[0] == 2
+
+
+def test_retrying_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A dependency that is down stays down; a caller would rather hear so."""
+    seen = failing(monkeypatch, TRANSIENT, until=99)
+
+    with pytest.raises(ToolError, match="trace_core_unavailable"):
+        mcp_module.call_tool(Context(base_url=PLATFORM, token="t-1"), KN, "search_schema", {})
+
+    assert seen[0] == mcp_module.RETRY_ATTEMPTS + 1
+
+
+def test_a_refusal_that_is_not_retryable_is_raised_at_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`conversation_required` is `retryable: false` — repeating it would only
+    delay the turn the caller has to open."""
+    seen = failing(
+        monkeypatch,
+        {"code": "conversation_required", "retryable": False, "required_action": "start"},
+        until=99,
+    )
+
+    with pytest.raises(ToolError, match="conversation_required"):
+        mcp_module.call_tool(Context(base_url=PLATFORM, token="t-1"), KN, "search_schema", {})
+
+    assert seen[0] == 1
+
+
+def test_a_turn_opened_for_a_call_that_raised_is_closed_as_failed(deploy: Deploy) -> None:
+    """Every capability route opens one of these, so a turn recorded as
+    `completed` after its call raised would be the common entry in the evidence
+    chain rather than the rare one."""
+    from bkn_osdk.lifecycle import ensure_interaction
+
+    with (
+        pytest.raises(RuntimeError),
+        ensure_interaction(Context(base_url=PLATFORM, token="t-1"), KN),
+    ):
+        raise RuntimeError("the call this turn exists for")
+
+    finished = [args for name, args in deploy.calls if name == "bkn_finish_interaction"]
+    assert finished[-1]["outcome"] == "failed"
+
+
+def test_a_turn_that_completed_is_closed_as_completed(deploy: Deploy) -> None:
+    from bkn_osdk.lifecycle import ensure_interaction
+
+    with ensure_interaction(Context(base_url=PLATFORM, token="t-1"), KN):
+        pass
+
+    finished = [args for name, args in deploy.calls if name == "bkn_finish_interaction"]
+    assert finished[-1]["outcome"] == "completed"
+
+
+def test_a_delay_the_platform_names_is_capped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`retry_after_ms: 30000` would block a read for a minute across two
+    attempts — silently, and against the bound this promises."""
+    failing(monkeypatch, {**TRANSIENT, "retry_after_ms": 30_000}, until=99)
+    slept: list[float] = []
+    monkeypatch.setattr("time.sleep", slept.append)  # after `failing`, which stubs it too
+
+    with pytest.raises(ToolError):
+        mcp_module.call_tool(Context(base_url=PLATFORM, token="t-1"), KN, "search_schema", {})
+
+    assert slept and max(slept) <= mcp_module.RETRY_MAX_WAIT_SECONDS

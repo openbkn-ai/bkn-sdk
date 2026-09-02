@@ -33,8 +33,8 @@ from .mcp import call_tool, tool_catalog
 
 __all__ = [
     "Interaction",
-    "borrowed_interaction",
     "current_interaction",
+    "ensure_interaction",
     "interaction_scope",
     "with_context_retry",
 ]
@@ -153,10 +153,9 @@ def _start(ctx: Context, kn_id: str, question: str = DEFAULT_QUESTION) -> Intera
             "does not implement yet. Read without `traced=True`."
         )
 
-    result = call_tool(
+    result = _opened(
         ctx,
         kn_id,
-        START_TOOL,
         {
             "question": question,
             #: Display-only, but the only thing separating a turn this SDK
@@ -182,15 +181,47 @@ def _start(ctx: Context, kn_id: str, question: str = DEFAULT_QUESTION) -> Intera
     return Interaction(kn_id, conversation_id, interaction_id)
 
 
-@contextmanager
-def borrowed_interaction(ctx: Context, kn_id: str) -> Iterator[Interaction]:
-    """An interaction to attach a call to, whoever owns it.
+def _opened(ctx: Context, kn_id: str, arguments: dict[str, Any]) -> Any:
+    """Open the turn, and say what a failure to open one actually costs.
 
-    Inside a `session(traced=True)` scope this is the scope's own turn, so the
-    evidence stays together. Outside one, a short-lived turn is opened and
-    finished around the call — some tools require a `bkn_context` unconditionally,
-    and refusing to run outside a traced scope would make them unusable for no
-    gain.
+    The tool's own message is true and unhelpful on its own — a caller who asked
+    for a search reads `trace_core_unavailable` and cannot tell whether the SDK,
+    the network, or the platform is at fault, nor what still works. Most of the
+    read surface does not need a turn at all, and that is the useful half of the
+    answer.
+    """
+    from .mcp import call_tool
+
+    try:
+        return call_tool(ctx, kn_id, START_TOOL, arguments)
+    except ToolError as error:
+        raise ToolError(
+            error.code,
+            f"This deploy could not open a managed turn — {error.message} "
+            "Calls that require one — search, the capability routes, `traced=True` — "
+            "cannot run until it can. Typed reads of object types, subgraphs and metrics "
+            "need no turn and are unaffected.",
+            required_action=error.required_action,
+            retryable=error.retryable,
+            retry_after_ms=error.retry_after_ms,
+        ) from error
+
+
+@contextmanager
+def ensure_interaction(ctx: Context, kn_id: str) -> Iterator[Interaction]:
+    """A turn to attach a call to: the one in scope, or a new one.
+
+    Three cases, and the difference that matters is who closes it:
+
+    * inside a `session(traced=True)` scope — the scope's own turn, left open
+      for the scope to finish, so the evidence stays together;
+    * where the caller named one, as the sandbox does through the environment —
+      joined and never finished, because ending someone else's business turn
+      early is not this SDK's call to make;
+    * otherwise — opened here and finished on exit, which costs a round trip.
+
+    `current_interaction` is the same thing without the last case: it raises
+    where there is no scope, rather than opening one.
     """
     scope = _current.get()
     if scope is not None:
@@ -200,7 +231,14 @@ def borrowed_interaction(ctx: Context, kn_id: str) -> Iterator[Interaction]:
     interaction = _start(ctx, kn_id)
     try:
         yield interaction
-    finally:
+    except BaseException:
+        # A turn closed as `completed` after the call it exists for raised is a
+        # false entry in the evidence chain — and every capability route now
+        # opens one of these, so the falsehood would be the common case rather
+        # than the rare one. `session(traced=True)` already distinguishes them.
+        finish(ctx, interaction, "failed", None)
+        raise
+    else:
         finish(ctx, interaction, "completed", None)
 
 
@@ -223,7 +261,7 @@ def with_context_retry(ctx: Context, kn_id: str, send: Callable[[dict[str, str] 
     refuses it is a short-lived turn opened for the retry.
     """
     if _has_turn(ctx):
-        with borrowed_interaction(ctx, kn_id) as interaction:
+        with ensure_interaction(ctx, kn_id) as interaction:
             return send(interaction.bkn_context)
 
     try:
@@ -232,7 +270,7 @@ def with_context_retry(ctx: Context, kn_id: str, send: Callable[[dict[str, str] 
         if not _needs_context(error):
             raise
 
-    with borrowed_interaction(ctx, kn_id) as interaction:
+    with ensure_interaction(ctx, kn_id) as interaction:
         return send(interaction.bkn_context)
 
 

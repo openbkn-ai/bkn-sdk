@@ -17,6 +17,7 @@ or a token: they resolve through the usual chain — a `session(...)` scope, the
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -53,6 +54,83 @@ def package(name: str = "bkn") -> ModuleType:
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
     return __import__(name)
+
+
+def chosen_object_type(available: list[str]) -> str:
+    """The object type to read, named or picked.
+
+    `BKN_OBJECT_TYPE` when it is set — and checked against what this network
+    really has, because a name from another network fails at the platform with
+    "对象不存在", which reads as a broken example rather than a wrong argument.
+    Otherwise the network's own first type, so a script runs against a network
+    nobody tuned it for.
+    """
+    named = os.environ.get("BKN_OBJECT_TYPE")
+    if named and named in available:
+        return named
+    if named:
+        print(
+            f"{kn_id()} has no object type {named!r}; using {available[0]!r}. "
+            f"Available: {', '.join(available[:8])}",
+            file=sys.stderr,
+        )
+    if not available:
+        raise SystemExit(f"{kn_id()} declares no object types.")
+    return available[0]
+
+
+def readable_object_type(module: ModuleType, *, with_relations: bool = False) -> type:
+    """A class this network can actually be read through.
+
+    `BKN_OBJECT_TYPE` wins where it is set and readable. Otherwise the first
+    type that answers a count: an object type with no data source bound is a
+    real thing to find in a network — `对象类 activity 未绑定数据源` — and an
+    example that stops there is reporting the network's state as its own
+    failure.
+    """
+    from bkn_osdk import HttpError
+    from bkn_osdk.types import Relation
+
+    classes = list(module.OBJECT_TYPES)
+    if with_relations:
+        # A traversal example needs somewhere to go; a type with no relations is
+        # readable and useless for it.
+        classes = [
+            c for c in classes if any(isinstance(getattr(c, n, None), Relation) for n in dir(c))
+        ] or classes
+    named = os.environ.get("BKN_OBJECT_TYPE")
+    if named:
+        chosen = [c for c in classes if c.__bkn_id__ == named]
+        if chosen:
+            return chosen[0]  # type: ignore[no-any-return]
+        print(f"{kn_id()} has no object type {named!r}; picking one", file=sys.stderr)
+
+    skipped: list[str] = []
+    reason = ""
+    for candidate in classes:
+        try:
+            candidate.count()
+            if skipped:
+                print(f"skipped unreadable: {', '.join(skipped)}", file=sys.stderr)
+            return candidate  # type: ignore[no-any-return]
+        except HttpError as error:
+            skipped.append(candidate.__bkn_id__)
+            reason = _reason(error) or reason
+    raise SystemExit(
+        f"None of {kn_id()}'s {len(classes)} object types can be read: {reason}\n"
+        "This network has a schema and no data behind it. Try another network, "
+        "or run examples/platform/networks.py to see what the deploy has."
+    )
+
+
+def _reason(error: Exception) -> str:
+    """The platform's own sentence out of an error body, if there is one."""
+    body = getattr(error, "body", "") or ""
+    try:
+        payload = json.loads(body)
+    except ValueError:
+        return ""
+    return str(payload.get("error_details") or payload.get("description") or "")
 
 
 def object_type(module: ModuleType, bkn_id: str) -> type:

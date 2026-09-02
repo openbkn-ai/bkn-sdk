@@ -147,13 +147,24 @@ def generate(schema: KnSchema, options: GenOptions) -> dict[str, str]:
 # ---- naming -----------------------------------------------------------------
 
 
+#: Word separators in an object-type id. A hyphen is one as plainly as an
+#: underscore — `crm-management-rules` is three words — and treating it as
+#: anything else refuses a network the caller does not own and cannot rename.
+#: Splitting on both is the same transformation, not a guess: the collision
+#: guard still refuses two ids that would land on one name.
+_SEPARATORS = ("_", "-", ".", " ")
+
+
 def class_name(bkn_id: str) -> str:
     """`monitoring_task` -> `MonitoringTask`, keeping the id itself untouched.
 
     The id survives as `__bkn_id__` and is what the runtime transmits; nothing
     ever reverses a class name back into an id.
     """
-    name = "".join(part[:1].upper() + part[1:] for part in bkn_id.split("_") if part)
+    words = bkn_id
+    for separator in _SEPARATORS[1:]:
+        words = words.replace(separator, "_")
+    name = "".join(part[:1].upper() + part[1:] for part in words.split("_") if part)
     if not name:
         raise NamingError(f"Object type id '{bkn_id}' yields no Python class name.")
     # Capitalising already escapes almost every keyword — `class` becomes the
@@ -169,8 +180,15 @@ def class_name(bkn_id: str) -> str:
 
 
 def property_name(bkn_id: str, owner: str) -> str:
-    """The attribute a property is reachable under, suffixed only where it must be."""
+    """The attribute a property is reachable under, suffixed only where it must be.
+
+    A separator that is legal in an id and not in an identifier becomes `_`:
+    `unit-price` has to be reachable as something, and `unit_price` is the only
+    spelling a reader would guess. The wire keeps the id.
+    """
     name = bkn_id
+    for separator in _SEPARATORS[1:]:
+        name = name.replace(separator, "_")
     if keyword.iskeyword(name) or name in RESERVED_ATTRIBUTES:
         name = f"{name}_"
     if not name.isidentifier() or name.startswith("__"):
@@ -272,9 +290,13 @@ def relation_attribute(bkn_id: str, taken: set[str]) -> str:
     A clash with a property, a query method, or another relation keeps the full
     id rather than inventing a name.
     """
-    name = bkn_id[4:] if bkn_id.startswith("rel_") and len(bkn_id) > 4 else bkn_id
+    # Separators first, so a `rel-` prefix is recognised the same as `rel_`.
+    name = bkn_id
+    for separator in _SEPARATORS[1:]:
+        name = name.replace(separator, "_")
+    name = name[4:] if name.startswith("rel_") and len(name) > 4 else name
     if not name.isidentifier() or keyword.iskeyword(name) or name in RESERVED_ATTRIBUTES:
-        name = bkn_id
+        name = bkn_id.replace("-", "_").replace(".", "_").replace(" ", "_")
     if name in taken or keyword.iskeyword(name) or name in RESERVED_ATTRIBUTES:
         name = f"{name}_"
     if not name.isidentifier() or name in taken:

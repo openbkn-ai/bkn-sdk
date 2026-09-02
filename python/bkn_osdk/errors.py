@@ -79,6 +79,9 @@ class ToolError(BknError):
     ) -> None:
         super().__init__(f"{code}: {message}")
         self.code = code
+        #: The platform's own words, without the code prefix — so a caller that
+        #: re-raises with more context can quote them rather than the whole line.
+        self.message = message
         self.required_action = required_action
         self.retryable = retryable
         self.retry_after_ms = retry_after_ms
