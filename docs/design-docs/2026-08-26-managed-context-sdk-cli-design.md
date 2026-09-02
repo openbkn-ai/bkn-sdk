@@ -18,6 +18,24 @@ ContextLoader 的业务工具调用必须在**同一条调用链**上完成两�
 所有 MCP transport session、lifecycle catalog / probe 缓存都必须按认证身份隔离。`MCP-Session-Id`
 仅是传输状态，绝不是 Conversation、Interaction 或身份的替代品。
 
+### 对外接口影响
+
+本设计的兼容性目标是**不改变既有调用方的成功返回值或 MCP wire contract**；唯一新增的用户
+可见能力是显式选择的 CLI flag。具体如下：
+
+| 表面 | 变化 | 兼容性承诺 |
+| --- | --- | --- |
+| ContextLoader MCP wire schema / 服务端 API | 无 | 不新增字段、不改 `bkn_context` guard、不从 header 或 transport session 推断业务上下文 |
+| `client.context.toolCall()` | 无签名或返回类型变化 | 继续返回仅含业务 value 的 `Promise<unknown>`；Receipt 不进入此公开返回值 |
+| `client.context.managedToolCall()` | 无签名或返回类型变化；修复其内部调用链 | 继续返回 `{ value, receipt }`；原先因绕过 lifecycle 被拒绝的合法调用将转为成功，这是 bug fix 的预期语义修正 |
+| `openbkn context tool-call`（无新 flag） | 无 | 默认文本 / JSON 输出保持当前行为 |
+| `openbkn context tool-call --receipt --json` | 新增 opt-in CLI 形式 | 输出稳定 `{ value, bkn_receipt }`；不影响未传 `--receipt` 的脚本 |
+| 生命周期错误呈现 | 已知错误改为脱敏操作提示 | 服务端 error code 与退出码不变；仅已知错误的人类可读文本更安全、可行动 |
+| 包内 `callToolResult()` | 新内部实现 | 不从 `src/index.ts` 或 resource surface 导出，不能形成新的 npm SDK 契约 |
+
+因此这不是 breaking API change。调用方若要取得 CLI Receipt，必须显式加入 `--receipt --json`；
+调用方若继续使用原命令或普通 `toolCall()`，不会突然收到 envelope 或 Receipt 字段。
+
 ## 2. 问题与业务影响
 
 ContextLoader 是 Agent、CLI 和应用访问知识网络的 MCP 入口。它服务的并不只是“把一条查询
