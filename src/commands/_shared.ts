@@ -92,6 +92,7 @@ export function clientFrom(cmd: Command): BknClient {
     token: o.token,
     user: o.user,
     insecure: o.insecure,
+    versionCheckMode: "cli",
     ...(trace ? { trace } : {}),
     ...(remembered.source === "stored" && remembered.id
       ? { rememberedConversationId: remembered.id }

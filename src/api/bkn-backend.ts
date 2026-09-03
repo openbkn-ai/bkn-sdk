@@ -12,6 +12,7 @@ import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
 import { tlsFetch } from "./tls.js";
+import { ensureCompatible } from "./version-check.js";
 
 const BASE = "/api/bkn-backend/v1/knowledge-networks";
 const BKNS = "/api/bkn-backend/v1/bkns";
@@ -32,6 +33,7 @@ export async function uploadBkn(
 ): Promise<unknown> {
   const url = new URL(`${ctx.baseUrl}${BKNS}`);
   url.searchParams.set("branch", opts.branch ?? "main");
+  await ensureCompatible(ctx, url);
   const form = new FormData();
   form.append(
     "file",
@@ -58,6 +60,7 @@ export async function downloadBkn(
 ): Promise<Buffer> {
   const url = new URL(`${ctx.baseUrl}${BKNS}/${encodeURIComponent(knId)}`);
   url.searchParams.set("branch", opts.branch ?? "main");
+  await ensureCompatible(ctx, url);
   const res = await authFetch(ctx, () =>
     tlsFetch(ctx.insecure, url, { method: "GET", headers: buildHeaders(ctx) }),
   );

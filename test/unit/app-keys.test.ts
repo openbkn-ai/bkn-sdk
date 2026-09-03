@@ -10,12 +10,13 @@ import {
 import { request } from "../../src/api/http.js";
 import type { RequestContext } from "../../src/types.js";
 import { HttpError, formatError } from "../../src/utils/errors.js";
+import { verifiedContext } from "../setup/verified-context.js";
 
-const ctx: RequestContext = {
+const ctx = verifiedContext<RequestContext>({
   baseUrl: "https://demo.example.com",
   token: "t",
   insecure: false,
-};
+});
 
 type CallArgs = [string, RequestInit];
 function mockFetch(): typeof fetch {
@@ -109,7 +110,7 @@ describe("appkey 401 → re-issue guidance (OPE-22)", () => {
 
   it("a bak_ AppKey 401 carries re-issue guidance, not auth-login", async () => {
     mock401();
-    const appKeyCtx: RequestContext = { ...ctx, token: "bak_keyid_secret" };
+    const appKeyCtx = verifiedContext({ ...ctx, token: "bak_keyid_secret" });
     const err = await request(appKeyCtx, "/api/agent-retrieval/v1/mcp/info").catch((e) => e);
     expect(err).toBeInstanceOf(HttpError);
     expect((err as HttpError).hint).toMatch(/re-issue/i);
@@ -120,7 +121,7 @@ describe("appkey 401 → re-issue guidance (OPE-22)", () => {
 
   it("a non-AppKey (OAuth) 401 keeps the default auth-login guidance", async () => {
     mock401();
-    const oauthCtx: RequestContext = { ...ctx, token: "ory_at_xyz" };
+    const oauthCtx = verifiedContext({ ...ctx, token: "ory_at_xyz" });
     const err = await request(oauthCtx, "/api/agent-retrieval/v1/mcp/info").catch((e) => e);
     expect((err as HttpError).hint).toBeUndefined();
     expect(formatError(err)).toContain("auth login");

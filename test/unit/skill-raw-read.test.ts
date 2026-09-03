@@ -2,12 +2,13 @@ import JSZip from "jszip";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { skills } from "../../src/resources/skills.js";
 import type { RequestContext } from "../../src/types.js";
+import { verifiedContext } from "../setup/verified-context.js";
 
-const ctx: RequestContext = {
+const ctx = verifiedContext<RequestContext>({
   baseUrl: "https://demo.example.com",
   token: "t",
   insecure: false,
-};
+});
 
 async function archive(files: Record<string, string | Uint8Array>): Promise<Uint8Array> {
   const zip = new JSZip();
@@ -81,8 +82,8 @@ describe("raw file reads", () => {
     const { calls } = mockDeploy({ archiveBytes: await archive({ "a.md": "A" }) });
     // The cache lives on the client, so a second identity re-fetches under its
     // own credential instead of reading bytes the first one was granted.
-    await skills({ ...ctx, token: "alice" }).readFileRaw("shared-1", "a.md");
-    await skills({ ...ctx, token: "bob" }).readFileRaw("shared-1", "a.md");
+    await skills(verifiedContext({ ...ctx, token: "alice" })).readFileRaw("shared-1", "a.md");
+    await skills(verifiedContext({ ...ctx, token: "bob" })).readFileRaw("shared-1", "a.md");
     expect(calls.filter((p) => p.endsWith("/download"))).toHaveLength(2);
   });
 

@@ -642,6 +642,7 @@ export function adminCommand(): Command {
           token: g.token,
           user: g.user,
           insecure: g.insecure,
+          versionCheckMode: "cli",
         }),
         url,
         { method: opts.request, header: opts.header, data: opts.data },

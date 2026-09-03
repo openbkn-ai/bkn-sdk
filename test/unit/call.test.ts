@@ -1,14 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseFormField, parseHeader, rawCall } from "../../src/api/call.js";
 import type { RequestContext } from "../../src/types.js";
+import { verifiedContext } from "../setup/verified-context.js";
 
 function ctx(over: Partial<RequestContext> = {}): RequestContext {
-  return {
+  return verifiedContext({
     baseUrl: "https://demo.example.com",
     token: "OLD",
     insecure: false,
     ...over,
-  };
+  });
 }
 
 describe("parseHeader", () => {
@@ -43,6 +44,9 @@ describe("rawCall refresh-on-401", () => {
     const auths: (string | null)[] = [];
     let persisted: string | undefined;
     const f = vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith("/api/bkn-backend/v1/health")) {
+        return new Response(JSON.stringify({ ServerVersion: "0.1.5" }), { status: 200 });
+      }
       if (String(url).endsWith("/oauth2/token")) {
         return new Response(JSON.stringify({ access_token: "NEW" }), { status: 200 });
       }
@@ -73,10 +77,14 @@ describe("rawCall refresh-on-401", () => {
   });
 
   it("does not retry a 401 without stored refresh credentials", async () => {
-    const f = vi.fn(async () => new Response("denied", { status: 401 }));
+    const f = vi.fn(async (url: string) =>
+      String(url).endsWith("/api/bkn-backend/v1/health")
+        ? new Response(JSON.stringify({ ServerVersion: "0.1.5" }), { status: 200 })
+        : new Response("denied", { status: 401 }),
+    );
     vi.stubGlobal("fetch", f);
     const res = await rawCall(ctx(), "/api/x"); // no ctx.refresh
     expect(res.status).toBe(401);
-    expect(f).toHaveBeenCalledTimes(1); // single shot, surfaces the 401
+    expect(f).toHaveBeenCalledTimes(1); // single business shot
   });
 });

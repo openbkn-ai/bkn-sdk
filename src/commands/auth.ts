@@ -300,6 +300,7 @@ export function registerAuthLeaves(cmd: Command): void {
         token: g.token,
         user: g.user,
         insecure: g.insecure,
+        versionCheckMode: "cli",
       });
       const account = opts.account ?? (await promptLine("Account: "));
       const oldPassword = opts.oldPassword ?? (await promptLine("Current password: ", true));

@@ -14,8 +14,9 @@ import {
 import { resetLifecycleCaches } from "../../src/api/lifecycle.js";
 import type { RequestContext } from "../../src/types.js";
 import { formatError } from "../../src/utils/errors.js";
+import { verifiedContext } from "../setup/verified-context.js";
 
-const ctx: RequestContext = {
+const ctx = verifiedContext<RequestContext>({
   baseUrl: "https://demo.example.com",
   token: "t",
   insecure: false,
@@ -28,7 +29,7 @@ const ctx: RequestContext = {
     attempt: 1,
     observedAt: "2026-07-27T09:00:00.000Z",
   },
-};
+});
 
 /** Mock the MCP endpoint: every POST returns a session id + a JSON-RPC result. */
 function mockMcp(): typeof fetch {
@@ -107,7 +108,7 @@ describe("progressive KN detail (get_kn_detail)", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-27T09:00:00.000Z"));
     const f = mockMcp();
-    const longLivedCtx = {
+    const longLivedCtx = verifiedContext({
       ...ctx,
       trace: {
         requestId: ctx.trace?.requestId ?? "",
@@ -115,7 +116,7 @@ describe("progressive KN detail (get_kn_detail)", () => {
         conversationId: ctx.trace?.conversationId,
         interactionId: ctx.trace?.interactionId,
       },
-    };
+    });
 
     await getKnDetail(longLivedCtx, "kn-long-lived-a");
     vi.setSystemTime(new Date("2026-07-27T09:01:00.000Z"));
@@ -220,7 +221,11 @@ describe("managed MCP tool calls", () => {
 
     await expect(
       callManagedTool(
-        { baseUrl: "https://managed-auto.example.com", token: "receipt-token", insecure: false },
+        verifiedContext({
+          baseUrl: "https://managed-auto.example.com",
+          token: "receipt-token",
+          insecure: false,
+        }),
         "kn-auto-receipt",
         "search_schema",
         { query: "forecast" },
@@ -429,9 +434,22 @@ describe("managed MCP tool calls", () => {
         });
       }),
     );
-    const base = { baseUrl: "https://identity-cache.example.com", insecure: false };
-    await callTool({ ...base, token: "alice" }, "kn-identity-cache", "bkn_get_operation", {});
-    await callTool({ ...base, token: "bob" }, "kn-identity-cache", "bkn_get_operation", {});
+    const base = {
+      baseUrl: "https://identity-cache.example.com",
+      insecure: false,
+    };
+    await callTool(
+      verifiedContext({ ...base, token: "alice" }),
+      "kn-identity-cache",
+      "bkn_get_operation",
+      {},
+    );
+    await callTool(
+      verifiedContext({ ...base, token: "bob" }),
+      "kn-identity-cache",
+      "bkn_get_operation",
+      {},
+    );
 
     expect(initialized).toBe(2);
     expect(businessSessions).toEqual(["identity-session-1", "identity-session-2"]);
@@ -455,14 +473,14 @@ describe("managed MCP tool calls", () => {
     const f = mockMcp();
     await expect(
       callTool(
-        {
+        verifiedContext({
           ...ctx,
           trace: {
             requestId: "request-conversation-only",
             traceparent: "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
             conversationId: "conversation_supply_chain",
           },
-        },
+        }),
         "kn-caller-interaction",
         "search_schema",
         {
@@ -495,14 +513,14 @@ describe("managed MCP tool calls", () => {
     const f = mockMcp();
     await expect(
       callTool(
-        {
+        verifiedContext({
           ...ctx,
           trace: {
             requestId: "request-interaction-only",
             traceparent: "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
             interactionId: "interaction-only",
           },
-        },
+        }),
         "kn-interaction-only-caller",
         "search_schema",
         {
@@ -524,13 +542,13 @@ describe("managed MCP tool calls", () => {
   it("omits business trace headers when caller context is the only business source", async () => {
     const f = mockMcp();
     await callTool(
-      {
+      verifiedContext({
         ...ctx,
         trace: {
           requestId: ctx.trace?.requestId ?? "",
           traceparent: ctx.trace?.traceparent ?? "",
         },
-      },
+      }),
       "kn-caller-context",
       "search_schema",
       {

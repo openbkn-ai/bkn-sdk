@@ -12,6 +12,7 @@ import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
 import { tlsFetch } from "./tls.js";
+import { ensureCompatible } from "./version-check.js";
 
 const MANAGER = "/api/mf-model-manager/v1";
 const API = "/api/mf-model-api/v1";
@@ -181,6 +182,7 @@ export async function chatCompletionsStream(
   messages: ChatMessage[],
   onDelta: (text: string) => void,
 ): Promise<string> {
+  await ensureCompatible(ctx, new URL(`${ctx.baseUrl}${API}/chat/completions`));
   const res = await authFetch(ctx, () =>
     tlsFetch(ctx.insecure, `${ctx.baseUrl}${API}/chat/completions`, {
       method: "POST",

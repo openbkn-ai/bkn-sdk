@@ -15,6 +15,7 @@ import { type FunctionDefinition, functionInputBody } from "./functions.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
 import { tlsFetch } from "./tls.js";
+import { ensureCompatible } from "./version-check.js";
 
 const PATH = "/api/agent-operator-integration/v1/tool-box";
 
@@ -27,6 +28,10 @@ export async function exportConfig(
   id: string,
   type: ImpexType = "toolbox",
 ): Promise<Uint8Array> {
+  await ensureCompatible(
+    ctx,
+    new URL(`${ctx.baseUrl}${IMPEX}/export/${encodeURIComponent(type)}/${encodeURIComponent(id)}`),
+  );
   const res = await authFetch(ctx, () =>
     tlsFetch(
       ctx.insecure,
@@ -48,6 +53,7 @@ export async function importConfig(
   type: ImpexType = "toolbox",
 ): Promise<unknown> {
   const buf = await readFile(filePath);
+  await ensureCompatible(ctx, new URL(`${ctx.baseUrl}${IMPEX}/import/${encodeURIComponent(type)}`));
   const form = new FormData();
   form.append("data", new Blob([new Uint8Array(buf)]), basename(filePath));
   const res = await authFetch(ctx, () =>
@@ -77,6 +83,7 @@ export async function uploadTool(
   metadataType = "openapi",
 ): Promise<unknown> {
   const buf = await readFile(filePath);
+  await ensureCompatible(ctx, new URL(`${ctx.baseUrl}${PATH}/${encodeURIComponent(boxId)}/tool`));
   const form = new FormData();
   form.append("metadata_type", metadataType);
   form.append("data", new Blob([new Uint8Array(buf)]), basename(filePath));
