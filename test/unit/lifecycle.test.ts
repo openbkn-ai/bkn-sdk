@@ -245,6 +245,35 @@ describe("managed lifecycle on semantic search", () => {
     expect(recorded.toolCalls).toHaveLength(0);
   });
 
+  it("preserves catalog authentication failures for receipt-required calls", async () => {
+    const recorded = mockDeploy({ infoStatus: 401 });
+
+    await expect(
+      callManagedTool(freshCtx(), "kn-auth-required", "search_schema", { query: "物料" }),
+    ).rejects.toMatchObject({ status: 401 });
+    expect(recorded.toolCalls).toHaveLength(0);
+  });
+
+  it("retries a malformed catalog probe after the failure window", async () => {
+    const recorded = mockDeploy({ catalog: { unexpected: "shape" } });
+    const ctx = freshCtx();
+
+    await expect(
+      callManagedTool(ctx, "kn-malformed-catalog", "search_schema", { query: "物料" }),
+    ).rejects.toMatchObject({ code: "lifecycle_capability_unknown" });
+    await expect(
+      callManagedTool(ctx, "kn-malformed-catalog", "search_schema", { query: "物料" }),
+    ).rejects.toMatchObject({ code: "lifecycle_capability_unknown" });
+    expect(recorded.infoCount).toBe(1);
+
+    vi.useFakeTimers();
+    vi.advanceTimersByTime(30_001);
+    await expect(
+      callManagedTool(ctx, "kn-malformed-catalog", "search_schema", { query: "物料" }),
+    ).rejects.toMatchObject({ code: "lifecycle_capability_unknown" });
+    expect(recorded.infoCount).toBe(2);
+  });
+
   it("omits bkn_context on a deploy without the lifecycle tools", async () => {
     const recorded = mockDeploy({ catalog: LEGACY_CATALOG });
     await searchInstance(freshCtx(), "kn-legacy", "物料");

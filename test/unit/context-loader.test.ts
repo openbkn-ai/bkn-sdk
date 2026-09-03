@@ -491,7 +491,7 @@ describe("managed MCP tool calls", () => {
     expect(rpcCalls(f)).toHaveLength(0);
   });
 
-  it("allows a caller-owned context to complete an interaction-only Trace context", async () => {
+  it("does not forward an orphan interaction header beside a caller-owned context", async () => {
     const f = mockMcp();
     await expect(
       callTool(
@@ -518,7 +518,7 @@ describe("managed MCP tool calls", () => {
       conversation_id: "conversation_supply_chain",
       interaction_id: "interaction-only",
     });
-    expect(toolCallHeaders(f).get("bkn-interaction-id")).toBe("interaction-only");
+    expect(toolCallHeaders(f).get("bkn-interaction-id")).toBeNull();
   });
 
   it("omits business trace headers when caller context is the only business source", async () => {

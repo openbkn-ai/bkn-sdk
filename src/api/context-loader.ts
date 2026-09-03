@@ -332,6 +332,17 @@ function callerContextMatchesTrace(
   return business as BusinessContextIds;
 }
 
+/**
+ * A complete caller-owned `bkn_context` is authoritative for the business
+ * operation. Do not also send an interaction-only header: it is an incomplete
+ * second context channel and the body already names the same interaction.
+ */
+function requestContextForCallerContext(ctx: RequestContext): RequestContext {
+  if (!ctx.trace?.interactionId || ctx.trace.conversationId) return ctx;
+  const { interactionId: _interactionId, ...trace } = ctx.trace;
+  return { ...ctx, trace };
+}
+
 function receiptMatchesBusinessContext(
   result: UnwrappedToolResult,
   businessContext: BusinessContextIds | undefined,
@@ -433,7 +444,7 @@ async function callToolResult(
   // `parent_operation_id` / `causation_event_ids` would be dropped with it.
   if (callerContext) {
     return receiptMatchesBusinessContext(
-      await callToolRawResult(ctx, knId, name, args, options),
+      await callToolRawResult(requestContextForCallerContext(ctx), knId, name, args, options),
       callerContext,
     );
   }

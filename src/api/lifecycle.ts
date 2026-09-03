@@ -160,7 +160,12 @@ const UNKNOWN_LIFECYCLE: Lifecycle = {
   startWantsConversationMode: false,
 };
 
-export function lifecycleFor(ctx: RequestContext): Promise<Lifecycle> {
+/**
+ * The raw catalog probe. Receipt callers need an authentication failure to stay
+ * actionable, while ordinary calls preserve their longstanding best-effort
+ * fallback through {@link lifecycleFor} below.
+ */
+function lifecycleProbeFor(ctx: RequestContext): Promise<Lifecycle> {
   const failureKey = `${ctx.baseUrl}\0${identityOf(ctx)}`;
   const failedAt = probeFailures.get(failureKey);
   if (failedAt !== undefined) {
@@ -171,7 +176,14 @@ export function lifecycleFor(ctx: RequestContext): Promise<Lifecycle> {
   if (!pending) {
     pending = mcpInfo(ctx).then((info): Lifecycle => {
       const names = toolNames(info);
-      if (!names) return UNKNOWN_LIFECYCLE;
+      if (!names) {
+        // A malformed 200 response is as inconclusive as a rejected probe. Do
+        // not let it decide a long-lived process permanently, but avoid a new
+        // doomed round trip for every business call in this short window.
+        contracts.delete(failureKey);
+        probeFailures.set(failureKey, Date.now());
+        return UNKNOWN_LIFECYCLE;
+      }
       const startWantsConversationMode = requiresArgument(info, V2_MARKER, "conversation_mode");
       if (names.includes(V1_MARKER)) {
         return { contract: "managed-v1", capability: "managed", startWantsConversationMode };
@@ -194,7 +206,11 @@ export function lifecycleFor(ctx: RequestContext): Promise<Lifecycle> {
       if (!isAuthFailure(err)) probeFailures.set(failureKey, Date.now());
     });
   }
-  return pending.catch((): Lifecycle => UNKNOWN_LIFECYCLE);
+  return pending;
+}
+
+export function lifecycleFor(ctx: RequestContext): Promise<Lifecycle> {
+  return lifecycleProbeFor(ctx).catch((): Lifecycle => UNKNOWN_LIFECYCLE);
 }
 
 /** Kept for callers that only care which contract a deploy speaks. */
@@ -229,12 +245,17 @@ function toolNames(info: unknown): string[] | undefined {
 }
 
 export async function requireKnownLifecycleCapability(ctx: RequestContext): Promise<void> {
-  if ((await lifecycleFor(ctx)).capability === "unknown") {
-    throw new ToolError(
-      "Context-loader lifecycle capability is unavailable; retry when the catalog can be read.",
-      "lifecycle_capability_unknown",
-    );
+  try {
+    if ((await lifecycleProbeFor(ctx)).capability !== "unknown") return;
+  } catch (err) {
+    // Do not turn a credential failure into a generic retry hint. HttpError
+    // carries the CLI's established authentication diagnosis and exit status.
+    if (isAuthFailure(err)) throw err;
   }
+  throw new ToolError(
+    "Context-loader lifecycle capability is unavailable; retry when the catalog can be read.",
+    "lifecycle_capability_unknown",
+  );
 }
 
 /**
