@@ -232,14 +232,15 @@ describe("createBuildTask", () => {
     expect(body).toEqual({ resource_id: "r-1", mode: "batch", execute_type: "full" });
   });
 
-  it("rejects execute_type for streaming tasks before making a request", () => {
-    expect(
-      CreateBuildTaskRequest.safeParse({
+  it("rejects streaming tasks before making a request", async () => {
+    const f = mockFetch({ id: "t-1" });
+    await expect(
+      createBuildTask(ctx, {
         resource_id: "r-1",
         mode: "streaming",
-        execute_type: "full",
-      }).success,
-    ).toBe(false);
+      } as never),
+    ).rejects.toThrow();
+    expect(f).not.toHaveBeenCalled();
   });
 
   it("lists build tasks with server-side filters", async () => {

@@ -38,7 +38,8 @@ export interface ResourceProperty {
 }
 
 export interface ResourceIndexConfig {
-  build_key_fields?: string[];
+  primary_key_fields?: string[];
+  incremental_fields?: string[];
   default_fulltext_analyzer?: string;
   default_embedding_model?: string;
 }
@@ -160,7 +161,8 @@ export const Resource = z
     schema_definition: z.array(ResourcePropertySchema).optional(),
     index_config: z
       .object({
-        build_key_fields: z.array(z.string()).optional(),
+        primary_key_fields: z.array(z.string()).optional(),
+        incremental_fields: z.array(z.string()).optional(),
         default_fulltext_analyzer: z.string().optional(),
         default_embedding_model: z.string().optional(),
       })
@@ -338,7 +340,8 @@ export async function updateResource(
 }
 
 export interface ConfigureResourceIndexOptions {
-  buildKeyFields?: string[];
+  primaryKeyFields?: string[];
+  incrementalFields?: string[];
   embeddingFields?: string[];
   embeddingModel?: string;
   fulltextFields?: string[];
@@ -371,7 +374,8 @@ export async function configureResourceIndex(
   const schema = (current.schema_definition ?? []).map((prop) => ({ ...prop }));
   const indexConfig: ResourceIndexConfig = {
     ...(current.index_config ?? {}),
-    ...(opts.buildKeyFields?.length ? { build_key_fields: opts.buildKeyFields } : {}),
+    ...(opts.primaryKeyFields?.length ? { primary_key_fields: opts.primaryKeyFields } : {}),
+    ...(opts.incrementalFields?.length ? { incremental_fields: opts.incrementalFields } : {}),
     ...(model ? { default_embedding_model: model.name } : {}),
     ...(opts.fulltextAnalyzer ? { default_fulltext_analyzer: opts.fulltextAnalyzer } : {}),
   };

@@ -97,7 +97,7 @@ describe("listResources", () => {
       entries: [
         resourceFixture({
           future_field: "preserved",
-          index_config: { build_key_fields: ["id"] },
+          index_config: { primary_key_fields: ["id"], incremental_fields: ["updated_at"] },
           source_metadata: { properties: { row_count: 1 } },
         }),
       ],
@@ -108,7 +108,7 @@ describe("listResources", () => {
       entries: [
         {
           future_field: "preserved",
-          index_config: { build_key_fields: ["id"] },
+          index_config: { primary_key_fields: ["id"], incremental_fields: ["updated_at"] },
           source_metadata: { properties: { row_count: 1 } },
         },
       ],
@@ -200,7 +200,9 @@ describe("updateResource/configureResourceIndex", () => {
         }),
       ],
     });
-    await updateResource(ctx, "r-1", { indexConfig: { build_key_fields: ["id"] } });
+    await updateResource(ctx, "r-1", {
+      indexConfig: { primary_key_fields: ["id"], incremental_fields: ["updated_at"] },
+    });
     const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
     expect(new URL(calls[1]?.[0] ?? "").pathname).toBe("/api/vega-backend/v1/resources/r-1");
     const body = JSON.parse(calls[1]?.[1].body as string);
@@ -210,7 +212,10 @@ describe("updateResource/configureResourceIndex", () => {
     expect(body).not.toHaveProperty("schema");
     expect(body).not.toHaveProperty("source_identifier");
     expect(body).not.toHaveProperty("source_metadata");
-    expect(body.index_config).toEqual({ build_key_fields: ["id"] });
+    expect(body.index_config).toEqual({
+      primary_key_fields: ["id"],
+      incremental_fields: ["updated_at"],
+    });
     expect(body.expected_update_time).toBe(1720000000123);
   });
 
@@ -240,7 +245,8 @@ describe("updateResource/configureResourceIndex", () => {
       ],
     });
     await configureResourceIndex(ctx, "r-1", {
-      buildKeyFields: ["id"],
+      primaryKeyFields: ["id"],
+      incrementalFields: ["updated_at"],
       embeddingFields: ["title"],
       embeddingModel: "small-model-1",
       fulltextFields: ["body"],
@@ -249,7 +255,8 @@ describe("updateResource/configureResourceIndex", () => {
     const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
     const body = JSON.parse(calls.at(-1)?.[1].body as string);
     expect(body.index_config).toEqual({
-      build_key_fields: ["id"],
+      primary_key_fields: ["id"],
+      incremental_fields: ["updated_at"],
       default_embedding_model: "small-model-1",
       default_fulltext_analyzer: "ik_max_word",
     });

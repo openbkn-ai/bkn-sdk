@@ -75,12 +75,13 @@ name: Pods
 `;
 
 describe("parseObjectTypeIndex", () => {
-  it("extracts resource, mapped embedding field, incremental build key", () => {
+  it("extracts resource, mapped embedding field, and separate key groups", () => {
     const t = parseObjectTypeIndex(EN);
     expect(t).not.toBeNull();
     expect(t?.resourceId).toBe("res_players");
     expect(t?.embeddingFields).toEqual(["player_name"]); // mapped field, not property name
-    expect(t?.buildKey).toBe("updated_at"); // incremental key preferred
+    expect(t?.primaryKeyFields).toEqual(["player_id"]);
+    expect(t?.incrementalFields).toEqual(["updated_at"]);
     expect(t?.objectType).toBe("players");
   });
 
@@ -88,14 +89,38 @@ describe("parseObjectTypeIndex", () => {
     const t = parseObjectTypeIndex(ZH);
     expect(t?.resourceId).toBe("res_pods");
     expect(t?.embeddingFields).toEqual(["pod_status"]);
-    expect(t?.buildKey).toBe("id"); // falls back to 主键
+    expect(t?.primaryKeyFields).toEqual(["id"]);
+    expect(t?.incrementalFields).toEqual([]);
     expect(t?.embeddingModel).toBe("bge-m3");
   });
 
-  it("falls back to the primary key when the incremental key is blank", () => {
+  it("does not fall back to the primary key when the incremental key is blank", () => {
     const blankIncr = EN.replace("Incremental Key: updated_at", "Incremental Key:");
     const t = parseObjectTypeIndex(blankIncr);
-    expect(t?.buildKey).toBe("player_id"); // not the next heading
+    expect(t?.primaryKeyFields).toEqual(["player_id"]);
+    expect(t?.incrementalFields).toEqual([]);
+  });
+
+  it("preserves composite key ordering", () => {
+    const t = parseObjectTypeIndex(
+      EN.replace("Primary Keys: player_id", "Primary Keys: tenant_id, player_id").replace(
+        "Incremental Key: updated_at",
+        "Incremental Key: updated_at, player_id",
+      ),
+    );
+    expect(t?.primaryKeyFields).toEqual(["tenant_id", "player_id"]);
+    expect(t?.incrementalFields).toEqual(["updated_at", "player_id"]);
+  });
+
+  it("maps declared keys to their resource fields", () => {
+    const t = parseObjectTypeIndex(
+      EN.replace("Primary Keys: player_id", "Primary Keys: full_name").replace(
+        "Incremental Key: updated_at",
+        "Incremental Key: full_name",
+      ),
+    );
+    expect(t?.primaryKeyFields).toEqual(["player_name"]);
+    expect(t?.incrementalFields).toEqual(["player_name"]);
   });
 
   it("returns null when no field is marked for a vector index", () => {

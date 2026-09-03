@@ -950,12 +950,10 @@ export function vegaCommand(): Command {
   dataset
     .command("build <resource-id>")
     .description("Build a resource's index (creates a BuildTask)")
-    .requiredOption("--mode <mode>", "build mode: batch | streaming")
+    .requiredOption("--mode <mode>", "build mode: batch")
     .option("--embedding-fields <list>", "comma-separated fields to vectorize")
-    .option(
-      "--build-key-fields <list>",
-      "comma-separated key fields (batch: time; streaming: row id)",
-    )
+    .option("--primary-key-fields <list>", "comma-separated fields used to generate document IDs")
+    .option("--incremental-fields <list>", "comma-separated fields used for batch cursors")
     .option(
       "--embedding-model <name-or-id>",
       "default small-model name (a numeric ID is resolved to its name)",
@@ -967,19 +965,25 @@ export function vegaCommand(): Command {
     .option("--timeout <s>", "wait timeout in seconds", (v) => Number.parseInt(v, 10), 300)
     .action(async (resourceId: string, _opts, cmd: Command) => {
       const o = cmd.optsWithGlobals();
+      if (o.mode !== "batch") {
+        throw new InputError("only batch build mode is currently supported");
+      }
       const embeddingFields = csv(o.embeddingFields);
-      const buildKeyFields = csv(o.buildKeyFields);
+      const primaryKeyFields = csv(o.primaryKeyFields);
+      const incrementalFields = csv(o.incrementalFields);
       const fulltextFields = csv(o.fulltextFields);
       if (
         embeddingFields ||
-        buildKeyFields ||
+        primaryKeyFields ||
+        incrementalFields ||
         o.embeddingModel ||
         fulltextFields ||
         o.fulltextAnalyzer
       ) {
         await clientFrom(cmd).resource.configureIndex(resourceId, {
           embeddingFields,
-          buildKeyFields,
+          primaryKeyFields,
+          incrementalFields,
           embeddingModel: o.embeddingModel,
           fulltextFields,
           fulltextAnalyzer: o.fulltextAnalyzer,

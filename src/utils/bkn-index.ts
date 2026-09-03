@@ -26,8 +26,10 @@ export interface IndexTarget {
   resourceId: string;
   /** Resource columns to vectorize (mapped fields of vector-marked properties). */
   embeddingFields: string[];
-  /** Incremental key (preferred) or primary key — the batch build key. */
-  buildKey?: string;
+  /** Ordered fields used to generate document IDs. */
+  primaryKeyFields: string[];
+  /** Ordered fields used for batch cursors. */
+  incrementalFields: string[];
   /** Embedding model id if the declaration pins one (`vector(<model>)`). */
   embeddingModel?: string;
 }
@@ -153,17 +155,27 @@ function vectorProps(text: string): { names: string[]; model?: string } {
   return { names: [...names], ...(model ? { model } : {}) };
 }
 
-/** Batch build key: Incremental Key if set, else the first Primary Key. */
-function buildKey(text: string): string | undefined {
-  const clean = (v: string) => v.replace(/`/g, "").split(/[,，]/)[0]?.trim() || undefined;
+/** Ordered fields declared for an object-type key. */
+function keyFields(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .replace(/`/g, "")
+    .split(/[,，]/)
+    .map((field) => field.trim())
+    .filter(Boolean);
+}
+
+/** Primary and incremental fields are independent index-build inputs. */
+function indexKeyFields(text: string): { primaryKeyFields: string[]; incrementalFields: string[] } {
   // `[ \t]*` (not `\s*`) so the value can't swallow the next line's heading.
   const incr = text.match(/Incremental[ \t]*Key[ \t]*[:：][ \t]*([^\n]+)/i);
-  if (incr?.[1]?.trim()) return clean(incr[1]);
   const pk =
     text.match(/Primary[ \t]*Keys?[ \t]*[:：][ \t]*([^\n]+)/i) ||
     text.match(/\*\*[ \t]*主键[ \t]*\*\*[ \t]*[:：][ \t]*([^|\n]+)/);
-  if (pk?.[1]?.trim()) return clean(pk[1]);
-  return undefined;
+  return {
+    primaryKeyFields: keyFields(pk?.[1]),
+    incrementalFields: keyFields(incr?.[1]),
+  };
 }
 
 /** Object-type id from frontmatter (`id: x`), else undefined. */
@@ -183,11 +195,13 @@ export function parseObjectTypeIndex(text: string, fallbackName = ""): IndexTarg
   if (names.length === 0) return null;
   const mapped = mappedFields(text);
   const embeddingFields = names.map((n) => mapped.get(n) ?? n);
+  const { primaryKeyFields, incrementalFields } = indexKeyFields(text);
   return {
     objectType: frontmatterId(text) ?? fallbackName,
     resourceId,
     embeddingFields,
-    ...(buildKey(text) ? { buildKey: buildKey(text) } : {}),
+    primaryKeyFields: primaryKeyFields.map((field) => mapped.get(field) ?? field),
+    incrementalFields: incrementalFields.map((field) => mapped.get(field) ?? field),
     ...(model ? { embeddingModel: model } : {}),
   };
 }

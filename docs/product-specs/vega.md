@@ -34,12 +34,12 @@ snapshots that configuration.
 | Field | Required | CLI flag | Meaning |
 | ----- | -------- | -------- | ------- |
 | `resource_id` | ✅ | `<resource-id>` (positional) | Which resource to build |
-| `mode` | ✅ | `--mode batch\|streaming` | Build mode |
+| `mode` | ✅ | `--mode batch` | Build mode; streaming is not currently supported |
 | `execute_type` | — | `--execute-type incremental\|full` | Batch execution type; defaults to `full` |
 
 CLI:
 
-- `openbkn vega dataset build <resource-id> --mode batch [--embedding-fields …] [--build-key-fields …] [--embedding-model <model-id>] [--fulltext-fields …] [--execute-type incremental|full] [--wait] [--timeout <s>]` — optional index flags update the Resource, then create a BuildTask. `--embedding-model` takes a small-model name or ID. It is written twice, in different forms: the name into `index_config.default_embedding_model`, the ID into each vector feature's `config.embedding_model` — the resource rejects either form in the other's place.
+- `openbkn vega dataset build <resource-id> --mode batch [--embedding-fields …] [--primary-key-fields …] [--incremental-fields …] [--embedding-model <model-id>] [--fulltext-fields …] [--execute-type incremental|full] [--wait] [--timeout <s>]` — optional index flags update the Resource, then create a BuildTask. Batch builds require both key groups: primary fields generate document IDs, while incremental fields drive cursor checkpoints. `--embedding-model` takes a small-model name or ID. It is written twice, in different forms: the name into `index_config.default_embedding_model`, the ID into each vector feature's `config.embedding_model` — the resource rejects either form in the other's place.
 - `openbkn vega dataset build-status <task-id>` — progress: `status` + `synced_count`; a document is counted only after all required index processing, including vectorization, succeeds.
 - `openbkn vega dataset build-list --status pending,running` — filter by one or
   more statuses; the SDK sends repeated `status` query parameters. Use
@@ -87,7 +87,7 @@ determines what is indexed; the BuildTask uses its snapshot.
 - BuildTask statuses are `pending`, `running`, `stopping`, `stopped`,
   `completed`, `failed`, and `cancelled`. Start accepts only `stopped` or
   `failed`; stop accepts only `pending` or `running`.
-- `execute_type` is batch-only. Streaming tasks must not send it. A failed batch task resumes by default; use `--reset` only when a full task must rebuild from the beginning.
+- Streaming BuildTasks are not currently supported. A failed batch task resumes by default; use `--reset` only when a full task must rebuild from the beginning.
 - A deletion preflight is advisory. A later real deletion can still return a
   conflict if task or resource state changes between the two requests.
 - `openbkn --json` emits native BIGINT values as unquoted JSON number literals.

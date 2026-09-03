@@ -255,11 +255,12 @@ describe("createFromCatalog table identifiers", () => {
     const put = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.find(
       ([, init]) => init.method === "PUT",
     );
-    const schema = (
-      JSON.parse(String(put?.[1]?.body)) as {
-        schema_definition: Array<{ name: string; features?: Array<{ feature_type: string }> }>;
-      }
-    ).schema_definition;
+    const body = JSON.parse(String(put?.[1]?.body)) as {
+      index_config: { primary_key_fields: string[]; incremental_fields: string[] };
+      schema_definition: Array<{ name: string; features?: Array<{ feature_type: string }> }>;
+    };
+    expect(body.index_config).toEqual({ primary_key_fields: ["id"], incremental_fields: ["id"] });
+    const schema = body.schema_definition;
     expect(schema.find((p) => p.name === "body")?.features?.[0]?.feature_type).toBe("vector");
   });
 

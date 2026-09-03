@@ -15,7 +15,7 @@
 | `sql --query "<sql>"` / `sql -d <json>` | Run SQL or OpenSearch DSL directly against a data source. SQL uses a `{{<resource-id>}}` table placeholder; DSL identifies its resource with top-level `resource_id`. See [§ vega sql](#vega-sql--run-sql--dsl-against-a-data-source). |
 | `resource …` | Vega-backend resources (mirror of top-level `resource`). |
 | `vega resource document-create\|document-get\|document-upsert\|document-delete\|document-delete-filter` | Manage documents for a dataset resource. Delete-by-filter requires a non-empty filter. |
-| `dataset build <resource-id> --mode batch\|streaming [--embedding-fields a,b] [--build-key-fields k] [--embedding-model <name-or-id>] [--fulltext-fields a,b] [--fulltext-analyzer <n>] [--execute-type incremental\|full] [--wait] [--timeout <s>]` | Create an index BuildTask. **Index build lives on the resource (one resource = one table); there is no KN-level build.** `batch` requires `--build-key-fields` (else `400 build_key_fields is required for batch mode`). `--embedding-model` takes the model name or a numeric id. Both are resolved: the index config stores the **name** (an id there fails the build), while each vector feature's `config.embedding_model` stores the **id** (a name there is refused by the PUT with `embedding model ID "…" for field "…" not found`). |
+| `dataset build <resource-id> --mode batch [--embedding-fields a,b] [--primary-key-fields k] [--incremental-fields k] [--embedding-model <name-or-id>] [--fulltext-fields a,b] [--fulltext-analyzer <n>] [--execute-type incremental\|full] [--wait] [--timeout <s>]` | Create an index BuildTask. **Index build lives on the resource (one resource = one table); there is no KN-level build.** `batch` requires both key groups: `--primary-key-fields` generates document IDs and `--incremental-fields` drives batch cursors. `--embedding-model` takes the model name or a numeric id. Both are resolved: the index config stores the **name** (an id there fails the build), while each vector feature's `config.embedding_model` stores the **id** (a name there is refused by the PUT with `embedding model ID "…" for field "…" not found`). |
 | `dataset build-status <task-id>` | BuildTask status + progress. |
 | `dataset build-list [--status pending,running]` | List BuildTasks. Multiple statuses are OR filters; valid states include `cancelled`. |
 
@@ -97,7 +97,7 @@ Build a `name` field on a MySQL table:
 ```bash
 openbkn resource find --name <table> --exact          # → resource_id
 openbkn vega dataset build <resource-id> --mode batch \
-  --embedding-fields name --build-key-fields <pk-or-time-col> [--embedding-model <name-or-id>] --wait
+  --embedding-fields name --primary-key-fields <pk> --incremental-fields <time-or-id> [--embedding-model <name-or-id>] --wait
 ```
 
 ## index is NOT auto-built on `bkn push`

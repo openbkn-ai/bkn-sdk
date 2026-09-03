@@ -538,8 +538,10 @@ export async function createFromCatalog(
       log("Submitting build tasks...");
       for (const t of targets) {
         const embedding = embeddingFields[t.name];
+        const primaryKey = tablePk.get(t.resourceId ?? t.name) as string;
         await configureResourceIndex(ctx, t.resourceId as string, {
-          buildKeyFields: [tablePk.get(t.resourceId ?? t.name) as string],
+          primaryKeyFields: [primaryKey],
+          incrementalFields: [primaryKey],
           ...(embedding && embedding.length > 0 ? { embeddingFields: embedding } : {}),
           ...(embeddingModel ? { embeddingModel } : {}),
         });

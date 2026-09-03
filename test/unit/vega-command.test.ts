@@ -555,6 +555,36 @@ describe("vega sql", () => {
   });
 });
 
+describe("vega dataset build", () => {
+  it("rejects streaming before updating the resource or creating a task", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      cli().parseAsync(
+        [
+          "--base-url",
+          "https://demo.example.com",
+          "--token",
+          "t",
+          "vega",
+          "dataset",
+          "build",
+          "r-1",
+          "--mode",
+          "streaming",
+          "--primary-key-fields",
+          "id",
+          "--incremental-fields",
+          "updated_at",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow("only batch build mode is currently supported");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("vega dataset build-list", () => {
   it("expands comma-separated statuses into repeated query parameters", async () => {
     const fetchMock = mockFetch({ entries: [], total_count: 0 });
