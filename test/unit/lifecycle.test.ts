@@ -7,6 +7,7 @@ import { searchInstance } from "../../src/api/knowledge-networks.js";
 import { releaseLifecycleSessions, resetLifecycleCaches } from "../../src/api/lifecycle.js";
 import type { RequestContext } from "../../src/types.js";
 import { HttpError, ToolError } from "../../src/utils/errors.js";
+import { verifiedContext } from "../setup/verified-context.js";
 
 const V1_CATALOG = {
   tools: [{ name: "bkn_create_conversation" }, { name: "bkn_start_interaction" }],
@@ -36,12 +37,12 @@ const V2_CATALOG_WITH_MODE = {
 let hostSeq = 0;
 function freshCtx(extra: Partial<RequestContext> = {}): RequestContext {
   hostSeq += 1;
-  return {
+  return verifiedContext({
     baseUrl: `https://deploy-${hostSeq}.example.com`,
     token: "t",
     insecure: false,
     ...extra,
-  };
+  });
 }
 
 interface MockOptions {
@@ -193,8 +194,12 @@ describe("managed lifecycle on semantic search", () => {
   it("probes lifecycle capabilities separately for each identity", async () => {
     const recorded = mockDeploy({ catalog: V2_CATALOG });
     const base = freshCtx();
-    await searchInstance({ ...base, token: "alice" }, "kn-identity-catalog", "物料");
-    await searchInstance({ ...base, token: "bob" }, "kn-identity-catalog", "物料");
+    await searchInstance(
+      verifiedContext({ ...base, token: "alice" }),
+      "kn-identity-catalog",
+      "物料",
+    );
+    await searchInstance(verifiedContext({ ...base, token: "bob" }), "kn-identity-catalog", "物料");
 
     expect(recorded.infoCount).toBe(2);
   });
@@ -490,8 +495,16 @@ describe("managed lifecycle on semantic search", () => {
     const recorded = mockDeploy({ catalog: V2_CATALOG });
     // Same deploy, same identity, same KN — only the wanted conversation differs.
     const base = freshCtx();
-    await searchInstance({ ...base, rememberedConversationId: "conv_a" }, "kn-managed", "物料");
-    await searchInstance({ ...base, rememberedConversationId: "conv_b" }, "kn-managed", "物料");
+    await searchInstance(
+      verifiedContext({ ...base, rememberedConversationId: "conv_a" }),
+      "kn-managed",
+      "物料",
+    );
+    await searchInstance(
+      verifiedContext({ ...base, rememberedConversationId: "conv_b" }),
+      "kn-managed",
+      "物料",
+    );
 
     // A caller that asked for B must not be handed the session opened on A —
     // the guarantee `sessionKey` already documents for a named conversation.
@@ -625,16 +638,16 @@ describe("managed lifecycle on semantic search", () => {
       requestId: "req_1",
       traceparent: "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
     };
-    const a: RequestContext = {
+    const a = verifiedContext<RequestContext>({
       ...freshCtx(),
       baseUrl: host,
       trace: { ...trace, conversationId: "conv_A" },
-    };
-    const b: RequestContext = {
+    });
+    const b = verifiedContext<RequestContext>({
       ...freshCtx(),
       baseUrl: host,
       trace: { ...trace, conversationId: "conv_B" },
-    };
+    });
     await searchInstance(a, "kn-1", "物料");
     await searchInstance(b, "kn-1", "供应商");
 
@@ -705,8 +718,8 @@ describe("managed lifecycle on semantic search", () => {
   it("keeps one session per caller rather than sharing across tokens", async () => {
     const recorded = mockDeploy();
     const host = `https://shared-${Date.now()}.example.com`;
-    const alice: RequestContext = { ...freshCtx(), baseUrl: host, token: "alice" };
-    const bob: RequestContext = { ...freshCtx(), baseUrl: host, token: "bob" };
+    const alice = verifiedContext({ ...freshCtx(), baseUrl: host, token: "alice" });
+    const bob = verifiedContext({ ...freshCtx(), baseUrl: host, token: "bob" });
     await searchInstance(alice, "kn-managed", "物料");
     await searchInstance(bob, "kn-managed", "物料");
 
@@ -757,8 +770,8 @@ describe("managed lifecycle on semantic search", () => {
     );
 
     const host = `https://tenants-${hostSeq}.example.com`;
-    const alice: RequestContext = { ...freshCtx(), baseUrl: host, token: "stale" };
-    const bob: RequestContext = { ...freshCtx(), baseUrl: host, token: "good" };
+    const alice = verifiedContext({ ...freshCtx(), baseUrl: host, token: "stale" });
+    const bob = verifiedContext({ ...freshCtx(), baseUrl: host, token: "good" });
     await searchInstance(alice, "kn-1", "物料");
     const bobBody = await searchInstance(bob, "kn-1", "物料").then(() =>
       lastRetrievalBody(fetch as unknown as typeof fetch),

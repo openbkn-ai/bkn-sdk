@@ -23,6 +23,7 @@ import {
 } from "./lifecycle.js";
 import { tlsFetch } from "./tls.js";
 import type { OperationReceipt } from "./trace-lifecycle.js";
+import { ensureCompatible, inheritVersionCheck } from "./version-check.js";
 
 const MCP_PATH = "/api/agent-retrieval/v1/mcp";
 const PROTOCOL = "2024-11-05";
@@ -48,7 +49,9 @@ function transportSessionKey(ctx: RequestContext, knId: string): string {
 }
 
 function operationContext(ctx: RequestContext): RequestContext {
-  return ctx.trace ? { ...ctx, trace: createOperationTraceContext(ctx.trace) } : ctx;
+  return ctx.trace
+    ? inheritVersionCheck(ctx, { ...ctx, trace: createOperationTraceContext(ctx.trace) })
+    : ctx;
 }
 
 /**
@@ -93,6 +96,7 @@ async function post(
   body: unknown,
   timeoutMs?: number,
 ) {
+  await ensureCompatible(ctx, new URL(mcpUrl(ctx)));
   // Unbounded by default: a tool call can legitimately run long, and this
   // transport has never imposed a deadline. Callers that run somewhere a hang
   // would strand the process — a release on the way out — pass one in.

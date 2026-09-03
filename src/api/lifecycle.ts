@@ -35,6 +35,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { RequestContext } from "../types.js";
 import { HttpError, ToolError } from "../utils/errors.js";
 import { callToolRaw, mcpInfo } from "./context-loader.js";
+import { inheritVersionCheck } from "./version-check.js";
 
 /** The body field the lifecycle middleware reads. Snake_case: it goes on the wire. */
 export interface BknContext {
@@ -483,7 +484,7 @@ function ensureSession(
     ? openSession(ctx, knId, lifecycle, question).catch((err: unknown) => {
         if (!refusesThisConversation(err)) throw err;
         const { rememberedConversationId: _dropped, ...fresh } = ctx;
-        return openSession(fresh, knId, lifecycle, question);
+        return openSession(inheritVersionCheck(ctx, fresh), knId, lifecycle, question);
       })
     : openSession(ctx, knId, lifecycle, question);
   // Report only a conversation this call minted. One the caller named is
@@ -550,7 +551,7 @@ export function requestContextForBusinessContext(
 ): RequestContext {
   if (!bknContext || !ctx.trace?.interactionId || ctx.trace.conversationId) return ctx;
   const { interactionId: _interactionId, ...trace } = ctx.trace;
-  return { ...ctx, trace };
+  return inheritVersionCheck(ctx, { ...ctx, trace });
 }
 
 /** Resolve a `bkn_context` for one call, or `undefined` when no managed contract exists. */

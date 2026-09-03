@@ -11,6 +11,7 @@ import type { RequestContext } from "../types.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { tlsFetch } from "./tls.js";
+import { ensureCompatible } from "./version-check.js";
 
 export interface RawCallOptions {
   method?: string;
@@ -57,6 +58,7 @@ export async function rawCall(
   opts: RawCallOptions = {},
 ): Promise<RawCallResult> {
   const url = resolveUrl(ctx, path);
+  await ensureCompatible(ctx, new URL(url));
   const extra: Record<string, string> = {};
   for (const h of opts.header ?? []) {
     const parsed = parseHeader(h);

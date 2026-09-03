@@ -1,6 +1,7 @@
 import { Command } from "commander";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { skillCommand } from "../../src/commands/skill.js";
+import { writeVersionCheckCache } from "../../src/config/store.js";
 
 /** Root with the global flags the skill commands read through `optsWithGlobals`. */
 function cli(): Command {
@@ -40,6 +41,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   process.exitCode = undefined;
+});
+
+// These command tests isolate command rendering and body construction. The
+// version preflight has dedicated coverage in version-check.test.ts.
+beforeEach(() => {
+  writeVersionCheckCache("https://demo.example.com", {
+    serverVersion: "0.1.5",
+    checkedAt: new Date().toISOString(),
+  });
 });
 
 describe("skill execute", () => {

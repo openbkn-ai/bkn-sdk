@@ -19,12 +19,13 @@ import {
 import { resetLifecycleCaches } from "../../src/api/lifecycle.js";
 import { readBody } from "../../src/commands/_shared.js";
 import type { RequestContext } from "../../src/types.js";
+import { verifiedContext } from "../setup/verified-context.js";
 
-const ctx: RequestContext = {
+const ctx = verifiedContext<RequestContext>({
   baseUrl: "https://demo.example.com",
   token: "t",
   insecure: false,
-};
+});
 
 type CallArgs = [string, RequestInit];
 

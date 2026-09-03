@@ -11,6 +11,7 @@ import { HttpError, NonJsonResponseError } from "../utils/errors.js";
 import { stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { buildHeaders } from "./headers.js";
 import { tlsFetch } from "./tls.js";
+import { ensureCompatible } from "./version-check.js";
 
 export interface RequestInitEx {
   method?: string;
@@ -49,6 +50,8 @@ export async function request<T = unknown>(
       url.searchParams.set(k, String(v));
     }
   }
+
+  await ensureCompatible(ctx, url);
 
   const hasBody = init.body !== undefined;
   const controller = new AbortController();

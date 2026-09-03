@@ -2,12 +2,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { request } from "../../src/api/http.js";
 import type { RequestContext } from "../../src/types.js";
 import { HttpError, NonJsonResponseError, ToolError, formatError } from "../../src/utils/errors.js";
+import { verifiedContext } from "../setup/verified-context.js";
 
-const ctx: RequestContext = {
+const ctx = verifiedContext<RequestContext>({
   baseUrl: "https://demo.example.com",
   token: "t",
   insecure: false,
-};
+});
 
 function respond(body: string, init: ResponseInit): void {
   vi.stubGlobal(
@@ -40,9 +41,10 @@ describe("non-JSON responses", () => {
       status: 401,
       headers: { "content-type": "text/html" },
     });
-    const err = await request({ ...ctx, token: "bak_123" }, "/api/vega-backend/v1/resources").catch(
-      (e) => e,
-    );
+    const err = await request(
+      verifiedContext({ ...ctx, token: "bak_123" }),
+      "/api/vega-backend/v1/resources",
+    ).catch((e) => e);
     // Both diagnoses apply: the gateway ate the request AND the key is the thing
     // to re-issue. Neither may hide the other.
     expect((err as HttpError).hint).toMatch(/did not reach the service/);

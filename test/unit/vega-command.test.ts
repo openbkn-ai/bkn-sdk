@@ -1,7 +1,8 @@
 import { Command } from "commander";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { vegaCommand } from "../../src/commands/vega.js";
+import { writeVersionCheckCache } from "../../src/config/store.js";
 
 function cli(): Command {
   const root = new Command("openbkn")
@@ -15,6 +16,15 @@ function cli(): Command {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+// These command tests isolate argument mapping. Version preflight behavior is
+// covered independently, so their business-endpoint mocks use a fresh CLI cache.
+beforeEach(() => {
+  writeVersionCheckCache("https://demo.example.com", {
+    serverVersion: "0.1.5",
+    checkedAt: new Date().toISOString(),
+  });
 });
 
 function mockFetch(body: unknown = {}): ReturnType<typeof vi.fn> {

@@ -1,6 +1,7 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
+import { configureVersionCheck } from "../api/version-check.js";
 import { createTraceContext } from "../trace-context.js";
 import type { ClientOptions, RequestContext } from "../types.js";
 import { trimTrailingSlashes } from "../utils/base-url.js";
@@ -72,7 +73,7 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
         }
       : undefined;
 
-  return {
+  const ctx: RequestContext = {
     baseUrl: normalized,
     token,
     insecure,
@@ -92,4 +93,6 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
       : {}),
     ...(opts.onConversationOpened ? { onConversationOpened: opts.onConversationOpened } : {}),
   };
+  configureVersionCheck(ctx, opts.versionCheckMode ?? "memory");
+  return ctx;
 }

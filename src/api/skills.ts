@@ -13,6 +13,7 @@ import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
 import { sandboxBudgetMs } from "./sandbox-budget.js";
 import { tlsFetch } from "./tls.js";
+import { ensureCompatible } from "./version-check.js";
 
 const BASE = "/api/agent-operator-integration/v1";
 
@@ -22,6 +23,7 @@ export async function registerSkillZip(
   bytes: Uint8Array,
   opts: { filename?: string; source?: string; extendInfo?: unknown } = {},
 ): Promise<unknown> {
+  await ensureCompatible(ctx, new URL(`${ctx.baseUrl}${BASE}/skills`));
   const form = new FormData();
   form.set("file_type", "zip");
   form.set("file", new Blob([bytes]), opts.filename ?? "skill.zip");
@@ -46,6 +48,10 @@ export async function updateSkillPackageZip(
   bytes: Uint8Array,
   filename = "skill.zip",
 ): Promise<unknown> {
+  await ensureCompatible(
+    ctx,
+    new URL(`${ctx.baseUrl}${BASE}/skills/${encodeURIComponent(skillId)}/package`),
+  );
   const form = new FormData();
   form.set("file_type", "zip");
   form.set("file", new Blob([bytes]), filename);
@@ -82,6 +88,7 @@ export async function downloadSkill(
   skillId: string,
   view: SkillView = "published",
 ): Promise<Uint8Array> {
+  await ensureCompatible(ctx, new URL(`${ctx.baseUrl}${skillPath(skillId, view, "download")}`));
   const res = await authFetch(ctx, () =>
     tlsFetch(ctx.insecure, `${ctx.baseUrl}${skillPath(skillId, view, "download")}`, {
       headers: buildHeaders(ctx),

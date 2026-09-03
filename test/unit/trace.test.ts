@@ -19,12 +19,13 @@ import type { RawSpan } from "../../src/api/trace.js";
 import { assembleTraceTree } from "../../src/bkn-trace/diagnose.js";
 import { trace } from "../../src/resources/trace.js";
 import type { RequestContext } from "../../src/types.js";
+import { verifiedContext } from "../setup/verified-context.js";
 
-const ctx: RequestContext = {
+const ctx = verifiedContext<RequestContext>({
   baseUrl: "https://demo.example.com",
   token: "t",
   insecure: false,
-};
+});
 
 type CallArgs = [string, RequestInit];
 function mockFetchSeq(bodies: unknown[]): typeof fetch {
@@ -178,10 +179,10 @@ describe("emitEvidenceEvents", () => {
 
 describe("BKN Trace 2.2 business runs and artifacts", () => {
   it("sends the dedicated ingest token only to evidence write endpoints", async () => {
-    const ingestCtx = {
+    const ingestCtx = verifiedContext({
       ...ctx,
       evidenceIngestToken: "producer-ingest-token",
-    } as RequestContext;
+    });
     const artifact = {
       artifact_id: "art_auth_001",
       artifact_type: "question" as const,

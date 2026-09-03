@@ -8,6 +8,7 @@
  * legacy layout — reimplemented slim, no legacy-migration paths:
  *
  *   <root>/state.json                      (or profiles/<BKN_PROFILE>/state.json)
+ *   <root>/platforms/<base64url(baseUrl)>/version-check.json
  *   <root>/platforms/<base64url(baseUrl)>/users/<userId>/token.json
  *   <root>/platforms/<base64url(baseUrl)>/users/<userId>/config.json
  *
@@ -62,6 +63,12 @@ export interface PlatformConfig {
   conversationId?: string;
   /** When it was opened, so `openbkn context conversation` can report its age. */
   conversationOpenedAt?: string;
+}
+
+/** Non-sensitive, platform-scoped CLI version-check cache. */
+export interface VersionCheckCache {
+  serverVersion: string;
+  checkedAt: string;
 }
 
 interface StoreState {
@@ -209,6 +216,23 @@ export function readPlatformConfig(
       ? { conversationOpenedAt: stored.conversationOpenedAt }
       : {}),
   };
+}
+
+function isVersionCheck(value: unknown): value is VersionCheckCache {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.serverVersion === "string" && typeof candidate.checkedAt === "string";
+}
+
+/** Read the shared (not identity-scoped) CLI platform-version cache. */
+export function readVersionCheckCache(baseUrl: string): VersionCheckCache | undefined {
+  const cached = readJson<unknown>(join(platformDir(baseUrl), "version-check.json"));
+  return isVersionCheck(cached) ? cached : undefined;
+}
+
+/** Persist a successful CLI platform-version check without storing credentials. */
+export function writeVersionCheckCache(baseUrl: string, cache: VersionCheckCache): void {
+  writeJson(join(platformDir(baseUrl), "version-check.json"), cache);
 }
 
 export function writePlatformConfig(baseUrl: string, config: PlatformConfig): void {

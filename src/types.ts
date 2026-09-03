@@ -50,6 +50,8 @@ export interface ClientOptions {
    * nothing written to disk.
    */
   onConversationOpened?: (conversationId: string) => void;
+  /** @internal CLI clients persist successful version checks for a short TTL. */
+  versionCheckMode?: "memory" | "cli";
 }
 
 /** Fully resolved request context — every field is known. */
