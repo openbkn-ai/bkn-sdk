@@ -11,6 +11,7 @@ import {
   getObjectTypes,
   getRelationTypes,
 } from "../../src/api/context-loader.js";
+import { resetLifecycleCaches } from "../../src/api/lifecycle.js";
 import type { RequestContext } from "../../src/types.js";
 import { formatError } from "../../src/utils/errors.js";
 
@@ -79,6 +80,7 @@ function toolCallHeaders(f: typeof fetch): Headers {
 
 // A fresh kn per test avoids the module-level session cache masking the initialize POST.
 afterEach(() => {
+  resetLifecycleCaches();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -489,7 +491,7 @@ describe("managed MCP tool calls", () => {
     expect(rpcCalls(f)).toHaveLength(0);
   });
 
-  it("rejects an interaction-only Trace context before a caller context can bypass it", async () => {
+  it("does not forward an orphan interaction header beside a caller-owned context", async () => {
     const f = mockMcp();
     await expect(
       callTool(
@@ -511,8 +513,12 @@ describe("managed MCP tool calls", () => {
           },
         },
       ),
-    ).rejects.toThrow("BKN interaction id requires a conversation id.");
-    expect(rpcCalls(f)).toHaveLength(0);
+    ).resolves.toEqual({ ok: true });
+    expect(toolCallBody(f).arguments.bkn_context).toEqual({
+      conversation_id: "conversation_supply_chain",
+      interaction_id: "interaction-only",
+    });
+    expect(toolCallHeaders(f).get("bkn-interaction-id")).toBeNull();
   });
 
   it("omits business trace headers when caller context is the only business source", async () => {
@@ -636,8 +642,10 @@ describe("managed MCP tool calls", () => {
     });
     vi.stubGlobal(
       "fetch",
-      vi.fn(
-        async () => new Response(body, { status: 200, headers: { "mcp-session-id": "error-s1" } }),
+      vi.fn(async (input: string | URL) =>
+        String(input).endsWith("/mcp/info")
+          ? new Response(JSON.stringify({ tools: [] }))
+          : new Response(body, { status: 200, headers: { "mcp-session-id": "error-s1" } }),
       ),
     );
 
@@ -666,9 +674,10 @@ describe("managed MCP tool calls", () => {
     });
     vi.stubGlobal(
       "fetch",
-      vi.fn(
-        async () =>
-          new Response(body, { status: 200, headers: { "mcp-session-id": "error-raw-s1" } }),
+      vi.fn(async (input: string | URL) =>
+        String(input).endsWith("/mcp/info")
+          ? new Response(JSON.stringify({ tools: [] }))
+          : new Response(body, { status: 200, headers: { "mcp-session-id": "error-raw-s1" } }),
       ),
     );
 
@@ -733,8 +742,10 @@ describe("managed MCP tool calls", () => {
     });
     vi.stubGlobal(
       "fetch",
-      vi.fn(
-        async () => new Response(body, { status: 200, headers: { "mcp-session-id": "error-s2" } }),
+      vi.fn(async (input: string | URL) =>
+        String(input).endsWith("/mcp/info")
+          ? new Response(JSON.stringify({ tools: [] }))
+          : new Response(body, { status: 200, headers: { "mcp-session-id": "error-s2" } }),
       ),
     );
 
@@ -759,17 +770,45 @@ describe("managed MCP tool calls", () => {
     });
     vi.stubGlobal(
       "fetch",
-      vi.fn(
-        async () =>
-          new Response(body, { status: 200, headers: { "mcp-session-id": "missing-receipt-s1" } }),
+      vi.fn(async (input: string | URL) =>
+        String(input).endsWith("/mcp/info")
+          ? new Response(JSON.stringify({ tools: [] }))
+          : new Response(body, {
+              status: 200,
+              headers: { "mcp-session-id": "missing-receipt-s1" },
+            }),
       ),
     );
 
-    await expect(
-      callManagedTool(ctx, "kn-managed", "search_schema", {
-        query: "6月份需求预测",
-      }),
-    ).rejects.toThrow("Context-loader managed tool response did not include bkn_receipt");
+    const error = await callManagedTool(ctx, "kn-managed", "search_schema", {
+      query: "6月份需求预测",
+    }).catch((reason) => reason);
+    expect(error).toMatchObject({ code: "receipt_missing" });
+    expect(formatError(error)).toContain("did not include bkn_receipt");
+  });
+
+  it("reports malformed receipts with a stable code", async () => {
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: { structuredContent: { bkn_receipt: { receipt_id: "missing-required-fields" } } },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(body, { status: 200, headers: { "mcp-session-id": "invalid-receipt-s1" } }),
+      ),
+    );
+
+    const error = await callManagedTool(ctx, "kn-invalid-receipt", "search_schema", {
+      query: "forecast",
+      bkn_context: {
+        conversation_id: "conversation_supply_chain",
+        interaction_id: "interaction_june_forecast",
+      },
+    }).catch((reason) => reason);
+    expect(error).toMatchObject({ code: "receipt_invalid" });
   });
 
   it("returns the business value together with the trusted operation receipt", async () => {

@@ -61,14 +61,20 @@ opened, so work spanning several commands lands in one thread. `openbkn context 
 is in force and where it came from; `--forget` drops it. An explicit `--token` /
 `BKN_TOKEN` opts out (identity there is the token, not the stored user) — use
 `BKN_CONVERSATION_ID` to thread such a script's commands together.
-`--interaction-id` / `BKN_INTERACTION_ID` must always be paired with its owning
-Conversation ID; the CLI rejects an interaction-only business call before sending MCP traffic.
+`--interaction-id` / `BKN_INTERACTION_ID` can be supplied on its own for
+existing scripts. The SDK follows the automatic lifecycle handshake, but does
+not forward that orphan ID as a business header once it has opened an
+authoritative context; it never invents a matching Conversation ID locally. Use
+the returned receipt to establish the authoritative business context.
 
-`context tool-call --receipt` requires `--json` and emits `{ value, bkn_receipt }`
-(use `--compact` for one line). It is opt-in; the default command output and SDK
+`context tool-call --receipt` requires `--json` or `--compact` and emits
+`{ value, bkn_receipt }` (`--compact` is the one-line form). It is opt-in; the default command output and SDK
 `context.toolCall()` remain business-value-only. The receipt is validated for this
 call, not a bearer credential; confirm access under the current identity with
 `openbkn trace receipts get <receipt-id>` when authorization evidence is required.
+Check `bkn_receipt.receipt_status`, not whether `value` is `null`: a `pending`
+receipt has no consumable value and must be read back by `receipt_id` rather
+than retried.
 
 Tokens are stored per platform/user under `~/.bkn/` (override: `BKN_CONFIG_DIR`).
 

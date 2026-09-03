@@ -54,13 +54,16 @@ openbkn --help        # 分组命令树
 `openbkn context conversation` 显示当前生效的是哪个、来自哪一层；`--forget` 丢掉它。
 显式 `--token` / `BKN_TOKEN` 不参与（那里的身份是 token 本身，不是存下来的用户）——
 这类脚本用 `BKN_CONVERSATION_ID` 把多条命令串起来。
-`--interaction-id` / `BKN_INTERACTION_ID` 必须始终与所属 Conversation ID 一起提供；CLI 会在
-发送 MCP 请求前拒绝只有 interaction 的业务调用。
+既有脚本可以单独提供 `--interaction-id` / `BKN_INTERACTION_ID`。SDK 会走自动 lifecycle handshake；
+一旦建立权威上下文，孤立 ID 不会再作为业务 header 透传，也不会在本地伪造对应的 Conversation ID；以返回的
+Receipt 确认权威业务上下文。
 
-`context tool-call --receipt` 必须带 `--json`，输出 `{ value, bkn_receipt }`（带
-`--compact` 时为单行）。这是显式选择；默认命令输出和 SDK 的 `context.toolCall()` 仍只返回
+`context tool-call --receipt` 必须带 `--json` 或 `--compact`，输出 `{ value, bkn_receipt }`（
+`--compact` 即单行形式）。这是显式选择；默认命令输出和 SDK 的 `context.toolCall()` 仍只返回
 业务值。Receipt 仅证明其已通过本次调用的字段校验，不是 bearer credential；需要授权证据时，
 应在当前身份下运行 `openbkn trace receipts get <receipt-id>` 回读确认。
+不要用 `value` 是否为 `null` 判断结果是否可用；应检查 `bkn_receipt.receipt_status`。`pending` 表示
+业务值不可消费，应使用 `receipt_id` 回读，而不是重试业务工具。
 
 Token 按平台/用户存于 `~/.bkn/`（可用 `BKN_CONFIG_DIR` 覆盖）。
 

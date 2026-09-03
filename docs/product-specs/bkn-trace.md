@@ -62,11 +62,16 @@ Community 制品不分发 2.x Evidence 写入 Session、Artifact 正文读写、
 
 `trace get <conversation-id>` 与 `trace spans <conversation-id>` 均读取会话 Span；`trace detail <trace-id>` 读取单条类型化技术 Trace，避免改变既有 `trace get` 的参数语义。
 
-Context Loader 的通用调用可通过 `openbkn --json context tool-call <kn> <tool> --receipt`
+Context Loader 的通用调用可在 JSON 输出模式下通过
+`openbkn --json context tool-call <kn> <tool> --receipt`（或将 `--json` 换为 `--compact`）
 返回 `{ value, bkn_receipt }`。这里的 receipt 是 SDK 已校验字段形状且与本次受管调用
 一致的 **validated** 证据，不等同于当前身份已获授权的 **authorized** 证据；后者必须经
 `openbkn trace receipts get <receipt-id>`（或等价 API）在当前身份下回读确认。Receipt JSON
 不是 bearer credential，不应作为认证材料、日志标签或指标维度传播。
+
+Receipt 的消费以 `receipt_status` 为准，而不是 `value === null`：`pending` 只能通过 `receipt_id`
+回读，不能重试业务工具。若 catalog 明确不支持 lifecycle，Receipt 请求仍可执行一次业务调用；没有
+Receipt 时返回稳定的 `receipt_missing` 错误，不能据此假定业务操作未发生。
 
 Interaction 终止 manifest 和 Operation retry fencing 字段通过受保护的 `--body-file` 提交。lease token 不进入命令行参数，避免出现在 shell history 或进程列表。
 

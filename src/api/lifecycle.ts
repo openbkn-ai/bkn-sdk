@@ -33,7 +33,7 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import type { RequestContext } from "../types.js";
-import { HttpError, InputError, ToolError } from "../utils/errors.js";
+import { HttpError, ToolError } from "../utils/errors.js";
 import { callToolRaw, mcpInfo } from "./context-loader.js";
 
 /** The body field the lifecycle middleware reads. Snake_case: it goes on the wire. */
@@ -46,6 +46,7 @@ export interface BknContext {
 
 /** Which lifecycle contract a deploy speaks, decided from its tool catalog. */
 type Contract = "none" | "managed-v1" | "managed-v2";
+type LifecycleCapability = "managed" | "unsupported" | "unknown";
 
 /**
  * What the catalog says about opening an interaction, beyond which tools exist.
@@ -64,6 +65,7 @@ type Contract = "none" | "managed-v1" | "managed-v2";
  */
 interface Lifecycle {
   contract: Contract;
+  capability: LifecycleCapability;
   startWantsConversationMode: boolean;
 }
 
@@ -142,29 +144,52 @@ export function resetLifecycleCaches(): void {
 
 /**
  * Which contract does this deploy speak? Answered from the global tool catalog,
- * which is a plain GET — no MCP session, no KN, one call per process. A probe
- * that fails answers "none": an unreachable catalog must not turn into a hard
- * error on a request that might have succeeded without any context.
+ * which is a plain GET — no MCP session, no KN, one call per process. An
+ * unreachable or malformed catalog is distinct from a catalog that explicitly
+ * lacks lifecycle tools: ordinary calls preserve the old best-effort fallback,
+ * while receipt-required calls must not mistake uncertainty for legacy support.
  */
-const NO_LIFECYCLE: Lifecycle = { contract: "none", startWantsConversationMode: false };
+const NO_LIFECYCLE: Lifecycle = {
+  contract: "none",
+  capability: "unsupported",
+  startWantsConversationMode: false,
+};
+const UNKNOWN_LIFECYCLE: Lifecycle = {
+  contract: "none",
+  capability: "unknown",
+  startWantsConversationMode: false,
+};
 
-export function lifecycleFor(ctx: RequestContext): Promise<Lifecycle> {
+/**
+ * The raw catalog probe. Receipt callers need an authentication failure to stay
+ * actionable, while ordinary calls preserve their longstanding best-effort
+ * fallback through {@link lifecycleFor} below.
+ */
+function lifecycleProbeFor(ctx: RequestContext): Promise<Lifecycle> {
   const failureKey = `${ctx.baseUrl}\0${identityOf(ctx)}`;
   const failedAt = probeFailures.get(failureKey);
   if (failedAt !== undefined) {
-    if (Date.now() - failedAt < PROBE_FAILURE_TTL_MS) return Promise.resolve(NO_LIFECYCLE);
+    if (Date.now() - failedAt < PROBE_FAILURE_TTL_MS) return Promise.resolve(UNKNOWN_LIFECYCLE);
     probeFailures.delete(failureKey);
   }
   let pending = contracts.get(failureKey);
   if (!pending) {
     pending = mcpInfo(ctx).then((info): Lifecycle => {
       const names = toolNames(info);
+      if (!names) {
+        // A malformed 200 response is as inconclusive as a rejected probe. Do
+        // not let it decide a long-lived process permanently, but avoid a new
+        // doomed round trip for every business call in this short window.
+        contracts.delete(failureKey);
+        probeFailures.set(failureKey, Date.now());
+        return UNKNOWN_LIFECYCLE;
+      }
       const startWantsConversationMode = requiresArgument(info, V2_MARKER, "conversation_mode");
       if (names.includes(V1_MARKER)) {
-        return { contract: "managed-v1", startWantsConversationMode };
+        return { contract: "managed-v1", capability: "managed", startWantsConversationMode };
       }
       return names.includes(V2_MARKER)
-        ? { contract: "managed-v2", startWantsConversationMode }
+        ? { contract: "managed-v2", capability: "managed", startWantsConversationMode }
         : NO_LIFECYCLE;
     });
     contracts.set(failureKey, pending);
@@ -181,9 +206,11 @@ export function lifecycleFor(ctx: RequestContext): Promise<Lifecycle> {
       if (!isAuthFailure(err)) probeFailures.set(failureKey, Date.now());
     });
   }
-  // Degrade for this call regardless: an unreachable catalog must not turn into
-  // a hard error on a request that might have succeeded without any context.
-  return pending.catch((): Lifecycle => NO_LIFECYCLE);
+  return pending;
+}
+
+export function lifecycleFor(ctx: RequestContext): Promise<Lifecycle> {
+  return lifecycleProbeFor(ctx).catch((): Lifecycle => UNKNOWN_LIFECYCLE);
 }
 
 /** Kept for callers that only care which contract a deploy speaks. */
@@ -211,10 +238,24 @@ function isAuthFailure(err: unknown): boolean {
   return err instanceof HttpError && (err.status === 401 || err.status === 403);
 }
 
-function toolNames(info: unknown): string[] {
+function toolNames(info: unknown): string[] | undefined {
   const tools = (info as { tools?: Array<{ name?: unknown }> } | undefined)?.tools;
-  if (!Array.isArray(tools)) return [];
+  if (!Array.isArray(tools)) return undefined;
   return tools.flatMap((tool) => (typeof tool?.name === "string" ? [tool.name] : []));
+}
+
+export async function requireKnownLifecycleCapability(ctx: RequestContext): Promise<void> {
+  try {
+    if ((await lifecycleProbeFor(ctx)).capability !== "unknown") return;
+  } catch (err) {
+    // Do not turn a credential failure into a generic retry hint. HttpError
+    // carries the CLI's established authentication diagnosis and exit status.
+    if (isAuthFailure(err)) throw err;
+  }
+  throw new ToolError(
+    "Context-loader lifecycle capability is unavailable; retry when the catalog can be read.",
+    "lifecycle_capability_unknown",
+  );
 }
 
 /**
@@ -498,16 +539,32 @@ function contextFor(
   };
 }
 
+/**
+ * A complete business context is authoritative for its operation. An
+ * interaction-only trace header is a second, incomplete context channel, so
+ * omit it for every path that supplies a full `bkn_context`.
+ */
+export function requestContextForBusinessContext(
+  ctx: RequestContext,
+  bknContext: BknContext | undefined,
+): RequestContext {
+  if (!bknContext || !ctx.trace?.interactionId || ctx.trace.conversationId) return ctx;
+  const { interactionId: _interactionId, ...trace } = ctx.trace;
+  return { ...ctx, trace };
+}
+
 /** Resolve a `bkn_context` for one call, or `undefined` when no managed contract exists. */
 export async function bknContextFor(
   ctx: RequestContext,
   knId: string,
   question: string,
+  requireKnownCapability = false,
 ): Promise<BknContext | undefined> {
-  if (ctx.trace?.interactionId && !ctx.trace.conversationId) {
-    throw new InputError("BKN interaction id requires a conversation id.");
-  }
   const lifecycle = await lifecycleFor(ctx);
+  if (lifecycle.capability === "unknown") {
+    if (requireKnownCapability) await requireKnownLifecycleCapability(ctx);
+    return undefined;
+  }
   const { contract } = lifecycle;
   if (contract === "none") return undefined;
 
@@ -550,11 +607,12 @@ export async function withManagedLifecycle<T>(
   ctx: RequestContext,
   knId: string,
   question: string,
-  send: (bknContext: BknContext | undefined) => Promise<T>,
+  send: (bknContext: BknContext | undefined, requestContext: RequestContext) => Promise<T>,
+  requireKnownCapability = false,
 ): Promise<T> {
-  const first = await bknContextFor(ctx, knId, question);
+  const first = await bknContextFor(ctx, knId, question, requireKnownCapability);
   try {
-    return await send(first);
+    return await send(first, requestContextForBusinessContext(ctx, first));
   } catch (err) {
     const code = serverErrorCode(err);
     // Only a session we opened is ours to reopen. A caller-supplied
@@ -562,9 +620,9 @@ export async function withManagedLifecycle<T>(
     // detach the evidence from the business conversation it was meant for.
     if (!first || callerOwnedSession(ctx) || !code || !STALE_SESSION_CODES.has(code)) throw err;
     sessions.delete(sessionKey(ctx, knId));
-    const reopened = await bknContextFor(ctx, knId, question);
+    const reopened = await bknContextFor(ctx, knId, question, requireKnownCapability);
     if (!reopened) throw err;
-    return await send(reopened);
+    return await send(reopened, requestContextForBusinessContext(ctx, reopened));
   }
 }
 

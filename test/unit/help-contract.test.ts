@@ -71,6 +71,6 @@ describe("command tree", () => {
     const toolCall = context?.commands.find((command) => command.name() === "tool-call");
     const help = toolCall?.helpInformation() ?? "";
     expect(help).toContain("--receipt");
-    expect(help).toContain("requires --json");
+    expect(help).toContain("requires --json or --compact");
   });
 });

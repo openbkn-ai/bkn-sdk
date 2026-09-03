@@ -29,7 +29,7 @@ function program(json = false): Command {
 afterEach(() => vi.restoreAllMocks());
 
 describe("openbkn context tool-call receipt output", () => {
-  it("rejects --receipt without --json before calling the deploy", async () => {
+  it("rejects --receipt without machine-readable output before calling the deploy", async () => {
     await expect(
       program().parseAsync([
         "node",
@@ -40,7 +40,7 @@ describe("openbkn context tool-call receipt output", () => {
         "search_schema",
         "--receipt",
       ]),
-    ).rejects.toThrow("--receipt requires --json");
+    ).rejects.toThrow("--receipt requires --json or --compact");
   });
 
   it("rejects --receipt with --schema", async () => {
@@ -117,10 +117,9 @@ describe("openbkn context tool-call receipt output", () => {
     });
     const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
-    await program(true).parseAsync([
+    await program().parseAsync([
       "node",
       "openbkn",
-      "--json",
       "--compact",
       "context",
       "tool-call",

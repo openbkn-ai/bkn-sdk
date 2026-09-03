@@ -346,13 +346,13 @@ rewriting it with \`run-sql\` produces a number the platform will not agree with
       "--schema",
       "print the named tool's argument schema from the deploy instead of calling it",
     )
-    .option("--receipt", "return the validated operation receipt (requires --json)")
+    .option("--receipt", "return the validated operation receipt (requires --json or --compact)")
     .action(async (knId: string, name: string, opts, cmd: Command) => {
       if (opts.receipt && opts.schema) {
         throw new InputError("--receipt cannot be combined with --schema");
       }
-      if (opts.receipt && !cmd.optsWithGlobals().json) {
-        throw new InputError("--receipt requires --json");
+      if (opts.receipt && !cmd.optsWithGlobals().json && !cmd.optsWithGlobals().compact) {
+        throw new InputError("--receipt requires --json or --compact");
       }
       if (opts.schema) return printToolSchema(cmd, knId, name);
       if (opts.receipt) {
