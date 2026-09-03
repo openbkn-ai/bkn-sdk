@@ -11,7 +11,11 @@
 import type { RequestContext } from "../types.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { request } from "./http.js";
-import { type BknContext, withManagedLifecycle } from "./lifecycle.js";
+import {
+  type BknContext,
+  requestContextForBusinessContext,
+  withManagedLifecycle,
+} from "./lifecycle.js";
 
 const ONTOLOGY_BASE = "/api/bkn-backend/v1/knowledge-networks";
 const ONTOLOGY_QUERY_BASE = "/api/ontology-query/v1/knowledge-networks";
@@ -466,10 +470,14 @@ export function searchInstance(
   opts: SearchInstanceOptions = {},
 ): Promise<unknown> {
   if (opts.bknContext) {
-    return request(ctx, `${RETRIEVAL_BASE}/search_instance`, {
-      method: "POST",
-      body: { ...searchBody(knId, query, opts), bkn_context: opts.bknContext },
-    });
+    return request(
+      requestContextForBusinessContext(ctx, opts.bknContext),
+      `${RETRIEVAL_BASE}/search_instance`,
+      {
+        method: "POST",
+        body: { ...searchBody(knId, query, opts), bkn_context: opts.bknContext },
+      },
+    );
   }
   return withManagedLifecycle(ctx, knId, query, (bknContext, requestContext) =>
     request(requestContext, `${RETRIEVAL_BASE}/search_instance`, {

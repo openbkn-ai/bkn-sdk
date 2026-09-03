@@ -785,6 +785,34 @@ describe("managed lifecycle on semantic search", () => {
     expect(recorded.retrievalBodies[0]?.bkn_context).toEqual(owned);
   });
 
+  it("does not forward an orphan interaction header beside a caller-built REST context", async () => {
+    const recorded = mockDeploy({ catalog: V2_CATALOG });
+    const owned = {
+      conversation_id: "conv_owned",
+      interaction_id: "int_owned",
+      operation_key: "op:pre-registered",
+    };
+    await searchInstance(
+      freshCtx({
+        trace: {
+          requestId: "req-interaction-only",
+          traceparent: "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
+          interactionId: "int_owned",
+        },
+      }),
+      "kn-managed",
+      "物料",
+      { bknContext: owned },
+    );
+
+    const calls = (fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock
+      .calls;
+    const retrieval = calls.find(([url]) => String(url).includes("/kn/search_instance"));
+    expect(new Headers(retrieval?.[1].headers).get("bkn-interaction-id")).toBeNull();
+    expect(recorded.retrievalBodies[0]?.bkn_context).toEqual(owned);
+    expect(recorded.toolCalls).toHaveLength(0);
+  });
+
   it("reopens the session once when the interaction has died, then retries", async () => {
     const recorded = mockDeploy({
       retrieval: [

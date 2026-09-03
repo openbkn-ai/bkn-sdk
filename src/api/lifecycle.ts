@@ -539,7 +539,12 @@ function contextFor(
   };
 }
 
-function requestContextForManagedLifecycle(
+/**
+ * A complete business context is authoritative for its operation. An
+ * interaction-only trace header is a second, incomplete context channel, so
+ * omit it for every path that supplies a full `bkn_context`.
+ */
+export function requestContextForBusinessContext(
   ctx: RequestContext,
   bknContext: BknContext | undefined,
 ): RequestContext {
@@ -607,7 +612,7 @@ export async function withManagedLifecycle<T>(
 ): Promise<T> {
   const first = await bknContextFor(ctx, knId, question, requireKnownCapability);
   try {
-    return await send(first, requestContextForManagedLifecycle(ctx, first));
+    return await send(first, requestContextForBusinessContext(ctx, first));
   } catch (err) {
     const code = serverErrorCode(err);
     // Only a session we opened is ours to reopen. A caller-supplied
@@ -617,7 +622,7 @@ export async function withManagedLifecycle<T>(
     sessions.delete(sessionKey(ctx, knId));
     const reopened = await bknContextFor(ctx, knId, question, requireKnownCapability);
     if (!reopened) throw err;
-    return await send(reopened, requestContextForManagedLifecycle(ctx, reopened));
+    return await send(reopened, requestContextForBusinessContext(ctx, reopened));
   }
 }
 
