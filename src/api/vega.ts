@@ -203,20 +203,12 @@ export type DeleteCatalogResult<T extends DeleteCatalogOptions | undefined> = T 
       ? undefined
       : CatalogDeletionImpact | undefined;
 
-/** POST /build-tasks body. */
-export const CreateBuildTaskRequest = z.discriminatedUnion("mode", [
-  z.object({
-    resource_id: z.string().min(1),
-    mode: z.literal("batch"),
-    execute_type: BuildTaskExecuteType.optional(),
-  }),
-  z.object({
-    resource_id: z.string().min(1),
-    mode: z.literal("streaming"),
-    // Streaming tasks do not have an execution type.
-    execute_type: z.never().optional(),
-  }),
-]);
+/** POST /build-tasks body. Streaming builds are not currently supported. */
+export const CreateBuildTaskRequest = z.object({
+  resource_id: z.string().min(1),
+  mode: z.literal("batch"),
+  execute_type: BuildTaskExecuteType.optional(),
+});
 export type CreateBuildTaskRequest = z.infer<typeof CreateBuildTaskRequest>;
 
 // Lenient: create vs list vs status responses carry different subsets — `status`

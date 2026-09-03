@@ -34,7 +34,7 @@ snapshots that configuration.
 | Field | Required | CLI flag | Meaning |
 | ----- | -------- | -------- | ------- |
 | `resource_id` | ✅ | `<resource-id>` (positional) | Which resource to build |
-| `mode` | ✅ | `--mode batch\|streaming` | Build mode |
+| `mode` | ✅ | `--mode batch` | Build mode; streaming is not currently supported |
 | `execute_type` | — | `--execute-type incremental\|full` | Batch execution type; defaults to `full` |
 
 CLI:
@@ -87,7 +87,7 @@ determines what is indexed; the BuildTask uses its snapshot.
 - BuildTask statuses are `pending`, `running`, `stopping`, `stopped`,
   `completed`, `failed`, and `cancelled`. Start accepts only `stopped` or
   `failed`; stop accepts only `pending` or `running`.
-- `execute_type` is batch-only. Streaming tasks must not send it. A failed batch task resumes by default; use `--reset` only when a full task must rebuild from the beginning.
+- Streaming BuildTasks are not currently supported. A failed batch task resumes by default; use `--reset` only when a full task must rebuild from the beginning.
 - A deletion preflight is advisory. A later real deletion can still return a
   conflict if task or resource state changes between the two requests.
 - `openbkn --json` emits native BIGINT values as unquoted JSON number literals.
