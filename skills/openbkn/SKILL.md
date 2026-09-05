@@ -122,6 +122,7 @@ BuildTask 产出；`trace` 的 business-provenance 摘要（requests/interaction
 | Skill 注册 / 生命周期 | [skill.md](references/skill.md) |
 | Toolbox / Tool | [toolbox.md](references/toolbox.md) |
 | 沙箱函数（代码→工具） | [function.md](references/function.md) |
+| Python 里读知识网络（bkn-osdk） | [osdk.md](references/osdk.md) |
 | BKN Trace（diagnose / eval-set） | [trace.md](references/trace.md) |
 | 运营（org/user/role/audit） | [admin.md](references/admin.md) |
 | 通用 API 透传 | [call.md](references/call.md) |
@@ -131,6 +132,7 @@ BuildTask 产出；`trace` 的 business-provenance 摘要（requests/interaction
 | 场景 | 参考 |
 |------|------|
 | 从 Catalog / CSV 端到端建知识网络 | [build-kn.md](references/build-kn.md) |
+| 一次问答里反复取数 / 沙箱代码要读知识网络 | [osdk.md](references/osdk.md) —— 换 Python |
 | 排障速查（401 / 空列表 / 403 / EACP / trace 索引） | [troubleshooting.md](references/troubleshooting.md) |
 
 ## 调用示例
