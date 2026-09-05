@@ -289,3 +289,9 @@ BKN_E2E=1 BKN_E2E_KN=ecommerce_ops_bkn_public BKN_BASE_URL=https://your-platform
 ```
 
 `BKN_E2E_OBJECT_TYPE` 指定被测的类；不给就自动挑一个有数据、且有关系可走的类。凭据的解析和任何调用方一样，所以 `openbkn auth login` 就够了。**建议对多个部署各跑一遍**：这个 SDK 依托开发的两台在路由名、指标、以及各自数据资源能服务哪些读上都出现过分歧。
+
+### 函数内部调用的 Trace 父操作
+
+沙箱同时注入会话、交互 ID 和 `BKN_PARENT_OPERATION_ID` 时，内部读取会将父 ID
+作为 `bkn_context.parent_operation_id` 传递。每次读取仍保留自己的操作与回执。
+显式切换到其他交互时不继承原父 ID；业务函数不需要增加参数。

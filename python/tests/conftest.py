@@ -13,7 +13,16 @@ import pytest
 
 import bkn_osdk
 
-_ENV_VARS = ("BKN_TOKEN", "BKN_BASE_URL", "BKN_USER", "BKN_PROFILE", "BKN_CONFIG_DIR")
+_ENV_VARS = (
+    "BKN_TOKEN",
+    "BKN_BASE_URL",
+    "BKN_USER",
+    "BKN_PROFILE",
+    "BKN_CONFIG_DIR",
+    "BKN_CONVERSATION_ID",
+    "BKN_INTERACTION_ID",
+    "BKN_PARENT_OPERATION_ID",
+)
 
 
 @pytest.fixture(autouse=True)
