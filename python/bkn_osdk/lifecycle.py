@@ -14,8 +14,8 @@ is the opposite of the point.
 
 The deploy this was built against speaks the contract where
 `bkn_start_interaction` alone mints both ids — there is no separate
-`bkn_create_conversation` in its catalog — and `bkn_context` accepts only those
-two ids.
+`bkn_create_conversation` in its catalog. Ordinary reads carry those two ids;
+Function reads also carry the parent operation supplied by the host.
 """
 
 from __future__ import annotations
@@ -83,13 +83,19 @@ class Interaction:
     receipts: list[dict[str, Any]] = field(default_factory=list)
     #: True when the caller handed us this turn. Never finish someone else's.
     caller_owned: bool = False
+    parent_operation_id: str | None = None
 
     @property
     def bkn_context(self) -> dict[str, str]:
-        """Exactly the two ids. This contract rejects anything else outright."""
+        """Join the turn, optionally linking a Function read to its parent operation."""
         return {
             "conversation_id": self.conversation_id,
             "interaction_id": self.interaction_id,
+            **(
+                {"parent_operation_id": self.parent_operation_id}
+                if self.parent_operation_id
+                else {}
+            ),
         }
 
 
@@ -136,7 +142,13 @@ def _start(ctx: Context, kn_id: str, question: str = DEFAULT_QUESTION) -> Intera
     asked for.
     """
     if ctx.conversation_id and ctx.interaction_id:
-        return Interaction(kn_id, ctx.conversation_id, ctx.interaction_id, caller_owned=True)
+        return Interaction(
+            kn_id,
+            ctx.conversation_id,
+            ctx.interaction_id,
+            caller_owned=True,
+            parent_operation_id=ctx.parent_operation_id,
+        )
 
     catalog = _catalog(ctx)
     tools = catalog.tools

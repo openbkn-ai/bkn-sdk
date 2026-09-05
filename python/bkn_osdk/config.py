@@ -87,6 +87,8 @@ class Context:
     interaction_id: str | None = None
     #: Route reads through MCP inside a managed interaction, keeping the receipt.
     traced: bool = False
+    #: Persisted Function operation whose reads join the caller-owned turn.
+    parent_operation_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -291,6 +293,19 @@ def resolve_context() -> Context:
 
     timeout = pick("timeout")
 
+    conversation_id = pick("conversation_id") or os.environ.get("BKN_CONVERSATION_ID") or None
+    interaction_id = pick("interaction_id") or os.environ.get("BKN_INTERACTION_ID") or None
+    # An environment parent belongs only to the execution's own turn. Explicit
+    # session overrides must never attach a different turn to that parent.
+    parent_operation_id = None
+    if (
+        conversation_id
+        and interaction_id
+        and conversation_id == os.environ.get("BKN_CONVERSATION_ID")
+        and interaction_id == os.environ.get("BKN_INTERACTION_ID")
+    ):
+        parent_operation_id = os.environ.get("BKN_PARENT_OPERATION_ID", "").strip() or None
+
     return Context(
         base_url=base_url,
         token=token,
@@ -302,8 +317,9 @@ def resolve_context() -> Context:
         # A host that already owns a business turn passes it in the environment —
         # the sandbox injects both per execution. Joining it is what keeps the
         # evidence on the caller's turn instead of an anonymous one of our own.
-        conversation_id=pick("conversation_id") or os.environ.get("BKN_CONVERSATION_ID") or None,
-        interaction_id=pick("interaction_id") or os.environ.get("BKN_INTERACTION_ID") or None,
+        conversation_id=conversation_id,
+        interaction_id=interaction_id,
+        parent_operation_id=parent_operation_id,
     )
 
 

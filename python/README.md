@@ -420,3 +420,10 @@ populated type that has relations to walk. Credentials resolve as they do for
 any caller, so `openbkn auth login` is enough. Run it against more than one
 deploy: the two this SDK was built against have disagreed about route names,
 metrics, and which reads their data resources can serve.
+
+### Function Trace parent
+
+When the sandbox supplies `BKN_PARENT_OPERATION_ID` together with its conversation
+and interaction IDs, internal reads send it as `bkn_context.parent_operation_id`.
+Each read keeps its own operation and receipt. An explicit override to a different
+turn does not inherit the sandbox's parent. Business functions need no new argument.

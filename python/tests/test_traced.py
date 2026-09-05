@@ -828,3 +828,43 @@ def test_a_delay_the_platform_names_is_capped(monkeypatch: pytest.MonkeyPatch) -
         mcp_module.call_tool(Context(base_url=PLATFORM, token="t-1"), KN, "search_schema", {})
 
     assert slept and max(slept) <= mcp_module.RETRY_MAX_WAIT_SECONDS
+
+
+def test_function_queries_inherit_parent_per_execution(
+    deploy: Deploy, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from bkn_osdk import kn
+
+    monkeypatch.setenv("BKN_CONVERSATION_ID", "host-conv")
+    monkeypatch.setenv("BKN_INTERACTION_ID", "host-int")
+    for parent in ("op_function_a", "op_function_b", ""):
+        monkeypatch.setenv("BKN_PARENT_OPERATION_ID", parent)
+        with session(traced=True):
+            # Typed MCP and the Function's kn facade must agree on ancestry.
+            Tournaments.objects().page(limit=1)
+            Tournaments.objects().page(limit=1)
+            kn.query_object_instance(KN, "tournaments", limit=1)
+        contexts = [
+            call["bkn_context"] for call in tool_calls(deploy, "query_object_instance")[-2:]
+        ] + [deploy.rest_bodies[-1]["bkn_context"]]
+        for context in contexts:
+            assert context.get("parent_operation_id", "") == parent
+            assert context["interaction_id"] == "host-int"
+            assert "operation_id" not in context
+            assert "operation_key" not in context
+    assert tool_calls(deploy, "bkn_start_interaction") == []
+    assert tool_calls(deploy, "bkn_finish_interaction") == []
+
+
+def test_function_parent_does_not_cross_explicit_turn_override(
+    deploy: Deploy, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BKN_CONVERSATION_ID", "host-conv")
+    monkeypatch.setenv("BKN_INTERACTION_ID", "host-int")
+    monkeypatch.setenv("BKN_PARENT_OPERATION_ID", "op_function")
+    with session(traced=True, conversation_id="other-conv", interaction_id="other-int"):
+        Tournaments.objects().page(limit=1)
+    assert tool_calls(deploy, "query_object_instance")[0]["bkn_context"] == {
+        "conversation_id": "other-conv",
+        "interaction_id": "other-int",
+    }
