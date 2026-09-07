@@ -64,6 +64,8 @@ import { configureResourceIndex } from "../api/resources.js";
 import { createBuildTask } from "../api/vega.js";
 import type { RequestContext } from "../types.js";
 import { collectIndexTargets } from "../utils/bkn-index.js";
+import { validateBknDirectory } from "../utils/bkn-validate.js";
+import { InputError } from "../utils/errors.js";
 import { extractTarToDirectory, packDirectoryToTar } from "../utils/tar.js";
 import { type CreateFromCatalogOptions, createFromCatalog } from "./bkn-create.js";
 
@@ -145,6 +147,10 @@ export function kn(ctx: RequestContext) {
       dir: string,
       opts?: { branch?: string; build?: boolean; embeddingModel?: string },
     ) => {
+      const validation = validateBknDirectory(dir);
+      if (!validation.valid) {
+        throw new InputError(`BKN validation failed:\n${validation.errors.join("\n")}`);
+      }
       const upload = await uploadBkn(ctx, packDirectoryToTar(dir), { branch: opts?.branch });
       if (!opts?.build) return upload;
       const targets = collectIndexTargets(dir);
