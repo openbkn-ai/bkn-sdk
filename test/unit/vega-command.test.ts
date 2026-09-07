@@ -76,7 +76,7 @@ describe("vega catalog delete", () => {
 
 describe("vega resource document input", () => {
   it("preserves unsafe integers in document-create data", async () => {
-    const fetchMock = mockFetch({ ids: [] });
+    const fetchMock = mockFetch({ id: "doc-1" });
     suppressOutput();
 
     await cli().parseAsync(
@@ -90,7 +90,7 @@ describe("vega resource document input", () => {
         "document-create",
         "r-1",
         "--data",
-        '[{"id":"doc-1","id_card":110101199001152345}]',
+        '{"id_card":110101199001152345}',
       ],
       { from: "user" },
     );
@@ -517,7 +517,7 @@ describe("vega lifecycle and document commands", () => {
   });
 
   it("creates dataset documents with the POST override", async () => {
-    const fetchMock = mockFetch({ ids: ["d-1"] });
+    const fetchMock = mockFetch({ id: "d-1" });
     suppressOutput();
 
     await cli().parseAsync(
@@ -531,7 +531,7 @@ describe("vega lifecycle and document commands", () => {
         "document-create",
         "r-1",
         "--data",
-        '[{"title":"hello"}]',
+        '{"title":"hello"}',
       ],
       { from: "user" },
     );
@@ -539,6 +539,58 @@ describe("vega lifecycle and document commands", () => {
     expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("X-HTTP-Method-Override")).toBe(
       "POST",
     );
+  });
+
+  it("passes document ignore-missing options to Vega", async () => {
+    const fetchMock = mockFetch({ entries: [] });
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "resource",
+        "document-get",
+        "r-1",
+        "d-1",
+        "missing",
+        "--ignore-missing",
+      ],
+      { from: "user" },
+    );
+
+    expect(new URL(fetchMock.mock.calls[0]?.[0] as string).searchParams.get("ignore_missing")).toBe(
+      "true",
+    );
+  });
+
+  it("passes document-delete ignore-missing to Vega", async () => {
+    const fetchMock = mockFetch({});
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "resource",
+        "document-delete",
+        "r-1",
+        "d-1",
+        "missing",
+        "--ignore-missing",
+      ],
+      { from: "user" },
+    );
+
+    const url = new URL(fetchMock.mock.calls[0]?.[0] as string);
+    expect(url.pathname).toContain("/data/d-1,missing");
+    expect(url.searchParams.get("ignore_missing")).toBe("true");
   });
 });
 

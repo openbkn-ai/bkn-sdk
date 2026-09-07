@@ -14,6 +14,28 @@ import { resolveSmallModel } from "./models.js";
 
 const BASE = "/api/vega-backend/v1/resources";
 
+function normalizeDocumentIDs(documentIds: string | string[]): string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const rawID of Array.isArray(documentIds) ? documentIds : [documentIds]) {
+    for (const id of rawID.split(",").map((value) => value.trim())) {
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        ids.push(id);
+      }
+    }
+  }
+  if (ids.length === 0) throw new InputError("at least one document id is required");
+  return ids;
+}
+
+function normalizeSingleDocumentID(documentId: string): string {
+  const ids = normalizeDocumentIDs(documentId);
+  const [id] = ids;
+  if (ids.length !== 1 || !id) throw new InputError("exactly one document id is required");
+  return id;
+}
+
 export interface PropertyFeature {
   name?: string;
   display_name?: string;
@@ -603,48 +625,37 @@ export function queryResource(
   });
 }
 
-export async function createResourceDocuments(
+export async function createResourceDocument(
   ctx: RequestContext,
   resourceId: string,
-  documents: ResourceDocument[],
-): Promise<{ ids: string[] }> {
+  document: ResourceDocument,
+): Promise<{ id: string }> {
   const result = await request<unknown>(ctx, `${BASE}/${encodeURIComponent(resourceId)}/data`, {
     method: "POST",
     headers: { "X-HTTP-Method-Override": "POST" },
-    body: documents,
+    body: document,
   });
-  return z
-    .object({ ids: z.array(z.string()) })
-    .passthrough()
-    .parse(result);
+  return z.object({ id: z.string() }).passthrough().parse(result);
 }
 
-export async function upsertResourceDocuments(
+export async function getResourceDocuments(
   ctx: RequestContext,
   resourceId: string,
-  documents: Array<ResourceDocument & { id: string }>,
-): Promise<{ ids: string[] }> {
-  const result = await request<unknown>(ctx, `${BASE}/${encodeURIComponent(resourceId)}/data`, {
-    method: "PUT",
-    body: documents,
-  });
-  return z
-    .object({ ids: z.array(z.string()) })
-    .passthrough()
-    .parse(result);
-}
-
-export async function getResourceDocument(
-  ctx: RequestContext,
-  resourceId: string,
-  documentId: string,
-): Promise<ResourceDocument> {
+  documentIds: string | string[],
+  opts?: { ignoreMissing?: boolean },
+): Promise<ResourceDocument[]> {
+  const ids = normalizeDocumentIDs(documentIds);
+  const query = new URLSearchParams();
+  if (opts?.ignoreMissing !== undefined) query.set("ignore_missing", String(opts.ignoreMissing));
   const result = await request<unknown>(
     ctx,
-    `${BASE}/${encodeURIComponent(resourceId)}/data/${encodeURIComponent(documentId)}`,
+    `${BASE}/${encodeURIComponent(resourceId)}/data/${ids.map(encodeURIComponent).join(",")}${query.size ? `?${query}` : ""}`,
     { responseParser: parseBigIntJSON },
   );
-  return z.record(z.unknown()).parse(result);
+  return z
+    .object({ entries: z.array(z.record(z.unknown())) })
+    .passthrough()
+    .parse(result).entries;
 }
 
 export async function upsertResourceDocument(
@@ -653,23 +664,27 @@ export async function upsertResourceDocument(
   documentId: string,
   document: ResourceDocument,
 ): Promise<{ id: string }> {
+  const id = normalizeSingleDocumentID(documentId);
   const result = await request<unknown>(
     ctx,
-    `${BASE}/${encodeURIComponent(resourceId)}/data/${encodeURIComponent(documentId)}`,
+    `${BASE}/${encodeURIComponent(resourceId)}/data/${encodeURIComponent(id)}`,
     { method: "PUT", body: document },
   );
   return z.object({ id: z.string() }).passthrough().parse(result);
 }
 
-export function deleteResourceDocuments(
+export async function deleteResourceDocuments(
   ctx: RequestContext,
   resourceId: string,
   documentIds: string | string[],
+  opts?: { ignoreMissing?: boolean },
 ): Promise<unknown> {
-  const ids = Array.isArray(documentIds) ? documentIds : [documentIds];
+  const ids = normalizeDocumentIDs(documentIds);
+  const query = new URLSearchParams();
+  if (opts?.ignoreMissing !== undefined) query.set("ignore_missing", String(opts.ignoreMissing));
   return request(
     ctx,
-    `${BASE}/${encodeURIComponent(resourceId)}/data/${ids.map(encodeURIComponent).join(",")}`,
+    `${BASE}/${encodeURIComponent(resourceId)}/data/${ids.map(encodeURIComponent).join(",")}${query.size ? `?${query}` : ""}`,
     { method: "DELETE" },
   );
 }
