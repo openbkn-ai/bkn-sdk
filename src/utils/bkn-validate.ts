@@ -192,7 +192,7 @@ function validateDataPropertyMaskRules(text: string, rel: string): string[] {
     const rawRule = row["Mask Rule"]?.trim();
     if (!rawRule) continue;
     const propertyName = row.Name?.trim() || "<unnamed>";
-    const propertyType = row.Type?.trim() || "";
+    const propertyType = row.Type?.trim().toLowerCase() || "";
     let parsed: DataPropertyMaskRule;
     try {
       parsed = JSON.parse(rawRule) as DataPropertyMaskRule;

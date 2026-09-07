@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { markVersionCompatibleForTest } from "../../src/api/version-check.js";
 import { kn } from "../../src/resources/knowledge-networks.js";
 import type { RequestContext } from "../../src/types.js";
 import { validateBknDirectory } from "../../src/utils/bkn-validate.js";
@@ -33,6 +34,15 @@ const otWithMaskRules = (rows: Array<[string, string, string]>) => `${ot("a", "A
 | Name | Display Name | Type | Description | Mapped Field | Mask Rule |
 |------|--------------|------|-------------|--------------|-----------|
 ${rows.map(([name, type, rule]) => `| ${name} | ${name} | ${type} | | ${name} | ${rule} |`).join("\n")}
+`;
+const legacyOtWithoutMaskRule = `${ot("a", "Alpha")}
+## ObjectType: Alpha
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| secret | Secret | String | | secret |
 `;
 
 describe("bkn validate", () => {
@@ -85,7 +95,7 @@ describe("bkn validate", () => {
     const dir = bkn({
       "network.bkn": network,
       "object_types/a.bkn": otWithMaskRules([
-        ["secret", "string", `{"kind":"fixed","replacement":"保密🔒"}`],
+        ["secret", "String", `{"kind":"fixed","replacement":"保密"}`],
         [
           "account",
           "keyword",
@@ -97,7 +107,7 @@ describe("bkn validate", () => {
           `{"kind":"email","local_keep_start":64,"preserve_domain":false,"replacement":"●"}`,
         ],
         ["amount", "decimal", `{"kind":"round","step":0.000001}`],
-        ["created_at", "timestamp", `{"kind":"date_granularity","granularity":"day"}`],
+        ["created_at", "DATETIME", `{"kind":"date_granularity","granularity":"day"}`],
       ]),
     });
 
@@ -142,5 +152,29 @@ describe("bkn validate", () => {
 
     await expect(kn(ctx).push(dir)).rejects.toBeInstanceOf(InputError);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("allows a legacy package without a Mask Rule column to reach upload", async () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": legacyOtWithoutMaskRule,
+    });
+    const fetchMock = vi.fn(
+      async (_url: string | URL, _init?: RequestInit) =>
+        new Response('{"id":"kn1"}', { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const ctx: RequestContext = {
+      baseUrl: "https://demo.example.com",
+      token: "token",
+      insecure: false,
+    };
+    markVersionCompatibleForTest(ctx);
+
+    await expect(kn(ctx).push(dir)).resolves.toEqual({ id: "kn1" });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const uploadUrl = fetchMock.mock.calls[0]?.[0];
+    expect(uploadUrl).toBeDefined();
+    expect(new URL(uploadUrl as string | URL).pathname).toBe("/api/bkn-backend/v1/bkns");
   });
 });
