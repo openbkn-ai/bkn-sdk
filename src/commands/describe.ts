@@ -57,8 +57,7 @@ const ID_SOURCES: Record<string, string> = {
   "conversation-ids": "openbkn trace conversations list",
   "model-ids": "openbkn model llm list",
   "tool-ids": "openbkn tool list --toolbox <box-id>",
-  "document-id": "openbkn vega resource document-get <resource-id> <document-id>",
-  "document-ids": "openbkn vega resource document-get <resource-id> <document-id>",
+  "document-ids": "openbkn vega resource document-get <resource-id> <document-ids...>",
   // Named entities, wherever they appear; the overrides below cover the cases
   // where the same word means something else.
   role: "openbkn admin role list",

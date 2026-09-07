@@ -29,6 +29,13 @@ function normalizeDocumentIDs(documentIds: string | string[]): string[] {
   return ids;
 }
 
+function normalizeSingleDocumentID(documentId: string): string {
+  const ids = normalizeDocumentIDs(documentId);
+  const [id] = ids;
+  if (ids.length !== 1 || !id) throw new InputError("exactly one document id is required");
+  return id;
+}
+
 export interface PropertyFeature {
   name?: string;
   display_name?: string;
@@ -657,9 +664,10 @@ export async function upsertResourceDocument(
   documentId: string,
   document: ResourceDocument,
 ): Promise<{ id: string }> {
+  const id = normalizeSingleDocumentID(documentId);
   const result = await request<unknown>(
     ctx,
-    `${BASE}/${encodeURIComponent(resourceId)}/data/${encodeURIComponent(documentId)}`,
+    `${BASE}/${encodeURIComponent(resourceId)}/data/${encodeURIComponent(id)}`,
     { method: "PUT", body: document },
   );
   return z.object({ id: z.string() }).passthrough().parse(result);

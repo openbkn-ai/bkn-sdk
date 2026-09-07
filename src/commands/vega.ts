@@ -883,12 +883,12 @@ export function vegaCommand(): Command {
       );
     });
   resource
-    .command("document-get <resource-id> <docids...>")
+    .command("document-get <resource-id> <document-ids...>")
     .description("Get dataset documents by id")
     .option("--ignore-missing", "Skip missing documents")
-    .action(async (resourceId: string, docids: string[], opts, cmd: Command) => {
+    .action(async (resourceId: string, documentIds: string[], opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).resource.getDocuments(resourceId, docids, {
+        await clientFrom(cmd).resource.getDocuments(resourceId, documentIds, {
           ignoreMissing: opts.ignoreMissing,
         }),
         outputOptions(cmd),

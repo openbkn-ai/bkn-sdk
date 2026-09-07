@@ -427,6 +427,8 @@ describe("typed Resource and document APIs", () => {
     expect(firstCall(upsertFetch)[1].method).toBe("PUT");
     expect(new URL(firstCall(upsertFetch)[0]).pathname).toContain("/data/d-1");
     expect(JSON.parse(firstCall(upsertFetch)[1].body as string)).toEqual({ title: "updated" });
+
+    await expect(upsertResourceDocument(ctx, "r-1", "d-1,d-2", {})).rejects.toThrow(InputError);
   });
 
   it("gets documents without rounding bigint values", async () => {
