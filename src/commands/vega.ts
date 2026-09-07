@@ -883,53 +883,59 @@ export function vegaCommand(): Command {
       );
     });
   resource
-    .command("document-get <resource-id> <document-id>")
-    .description("Get one dataset document")
-    .action(async (resourceId: string, documentId: string, _opts, cmd: Command) => {
+    .command("document-get <resource-id> <docids...>")
+    .description("Get dataset documents by id")
+    .option("--ignore-missing", "Skip missing documents")
+    .action(async (resourceId: string, docids: string[], opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).resource.getDocument(resourceId, documentId),
+        await clientFrom(cmd).resource.getDocuments(resourceId, docids, {
+          ignoreMissing: opts.ignoreMissing,
+        }),
         outputOptions(cmd),
       );
     });
   resource
     .command("document-create <resource-id>")
-    .description("Create dataset documents")
+    .description("Create one dataset document")
     .requiredOption(
       "--data <json>",
-      "JSON array of documents — docs: https://openbkn-ai.github.io/bkn-foundry/ (vega-backend)",
+      "Document JSON object — docs: https://openbkn-ai.github.io/bkn-foundry/ (vega-backend)",
     )
     .action(async (resourceId: string, opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).resource.createDocuments(
+        await clientFrom(cmd).resource.createDocument(
           resourceId,
-          parseJsonArray(opts.data, "--data"),
+          parseJsonObject(opts.data, "--data"),
         ),
         outputOptions(cmd),
       );
     });
   resource
-    .command("document-upsert <resource-id>")
-    .description("Upsert dataset documents; every document must have an id")
+    .command("document-upsert <resource-id> <docid>")
+    .description("Upsert one dataset document")
     .requiredOption(
       "--data <json>",
-      "JSON array of documents — docs: https://openbkn-ai.github.io/bkn-foundry/ (vega-backend)",
+      "Document JSON object — docs: https://openbkn-ai.github.io/bkn-foundry/ (vega-backend)",
     )
-    .action(async (resourceId: string, opts, cmd: Command) => {
-      const documents = parseJsonArray(opts.data, "--data");
-      if (documents.some((document) => typeof document.id !== "string")) {
-        throw new InputError("every document in --data must have a string id");
-      }
+    .action(async (resourceId: string, docid: string, opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).resource.upsertDocuments(resourceId, documents as never),
+        await clientFrom(cmd).resource.upsertDocument(
+          resourceId,
+          docid,
+          parseJsonObject(opts.data, "--data"),
+        ),
         outputOptions(cmd),
       );
     });
   resource
     .command("document-delete <resource-id> <document-ids...>")
     .description("Delete dataset documents by id")
-    .action(async (resourceId: string, documentIds: string[], _opts, cmd: Command) => {
+    .option("--ignore-missing", "Skip missing documents")
+    .action(async (resourceId: string, documentIds: string[], opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).resource.deleteDocuments(resourceId, documentIds),
+        await clientFrom(cmd).resource.deleteDocuments(resourceId, documentIds, {
+          ignoreMissing: opts.ignoreMissing,
+        }),
         outputOptions(cmd),
       );
     });

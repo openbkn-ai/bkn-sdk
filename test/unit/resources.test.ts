@@ -3,7 +3,7 @@ import {
   type ResourceSummary,
   configureResourceIndex,
   createResource,
-  createResourceDocuments,
+  createResourceDocument,
   deleteResource,
   deleteResourceDocuments,
   deleteResourceDocumentsByFilter,
@@ -12,12 +12,11 @@ import {
   findResource,
   firstResource,
   getResource,
-  getResourceDocument,
+  getResourceDocuments,
   listResources,
   queryResource,
   updateResource,
   upsertResourceDocument,
-  upsertResourceDocuments,
 } from "../../src/api/resources.js";
 import type { ResourceLocalStatus } from "../../src/index.js";
 import type { RequestContext } from "../../src/types.js";
@@ -413,47 +412,42 @@ describe("typed Resource and document APIs", () => {
     });
   });
 
-  it("supports batch create and upsert", async () => {
-    const createFetch = mockFetch({ ids: ["d-1"] });
-    await expect(createResourceDocuments(ctx, "r/1", [{ title: "created" }])).resolves.toEqual({
-      ids: ["d-1"],
+  it("creates and upserts a single document", async () => {
+    const createFetch = mockFetch({ id: "d-1" });
+    await expect(createResourceDocument(ctx, "r/1", { title: "created" })).resolves.toEqual({
+      id: "d-1",
     });
     expect(new Headers(firstCall(createFetch)[1].headers).get("X-HTTP-Method-Override")).toBe(
       "POST",
     );
     expect(new URL(firstCall(createFetch)[0]).pathname).toContain("/resources/r%2F1/data");
 
-    const upsertFetch = mockFetch({ ids: ["d-1"] });
-    await upsertResourceDocuments(ctx, "r-1", [{ id: "d-1", title: "updated" }]);
+    const upsertFetch = mockFetch({ id: "d-1" });
+    await upsertResourceDocument(ctx, "r-1", "d-1", { title: "updated" });
     expect(firstCall(upsertFetch)[1].method).toBe("PUT");
-    expect(JSON.parse(firstCall(upsertFetch)[1].body as string)).toEqual([
-      { id: "d-1", title: "updated" },
-    ]);
+    expect(new URL(firstCall(upsertFetch)[0]).pathname).toContain("/data/d-1");
+    expect(JSON.parse(firstCall(upsertFetch)[1].body as string)).toEqual({ title: "updated" });
   });
 
-  it("supports single get/upsert without rounding document bigint values", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () => new Response('{"id":"d-1","account_id":110101199001152345}', { status: 200 }),
-      ),
+  it("gets documents without rounding bigint values", async () => {
+    const getFetch = vi.fn(
+      async (_input: string) =>
+        new Response('{"entries":[{"id":"d-1","account_id":110101199001152345}]}', { status: 200 }),
     );
-    await expect(getResourceDocument(ctx, "r-1", "d-1")).resolves.toEqual({
-      id: "d-1",
-      account_id: 110101199001152345n,
-    });
-
-    const f = mockFetch({ id: "d-1" });
-    await expect(upsertResourceDocument(ctx, "r-1", "d-1", { title: "updated" })).resolves.toEqual({
-      id: "d-1",
-    });
-    expect(firstCall(f)[1].method).toBe("PUT");
+    vi.stubGlobal("fetch", getFetch);
+    await expect(
+      getResourceDocuments(ctx, "r-1", ["d-1", "d-2"], { ignoreMissing: true }),
+    ).resolves.toEqual([{ id: "d-1", account_id: 110101199001152345n }]);
+    const url = new URL(String(getFetch.mock.calls[0]?.[0]));
+    expect(url.pathname).toContain("/data/d-1,d-2");
+    expect(url.searchParams.get("ignore_missing")).toBe("true");
   });
 
   it("deletes documents by encoded ids or a filter override", async () => {
     const idsFetch = mockFetch();
-    await deleteResourceDocuments(ctx, "r-1", ["d/1", "d 2"]);
+    await deleteResourceDocuments(ctx, "r-1", ["d/1", "d 2"], { ignoreMissing: true });
     expect(new URL(firstCall(idsFetch)[0]).pathname).toContain("/data/d%2F1,d%202");
+    expect(new URL(firstCall(idsFetch)[0]).searchParams.get("ignore_missing")).toBe("true");
 
     const filterFetch = mockFetch();
     await deleteResourceDocumentsByFilter(ctx, "r-1", { status: { eq: "stale" } });

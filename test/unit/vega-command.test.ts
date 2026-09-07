@@ -76,7 +76,7 @@ describe("vega catalog delete", () => {
 
 describe("vega resource document input", () => {
   it("preserves unsafe integers in document-create data", async () => {
-    const fetchMock = mockFetch({ ids: [] });
+    const fetchMock = mockFetch({ id: "doc-1" });
     suppressOutput();
 
     await cli().parseAsync(
@@ -90,7 +90,7 @@ describe("vega resource document input", () => {
         "document-create",
         "r-1",
         "--data",
-        '[{"id":"doc-1","id_card":110101199001152345}]',
+        '{"id_card":110101199001152345}',
       ],
       { from: "user" },
     );
@@ -517,7 +517,7 @@ describe("vega lifecycle and document commands", () => {
   });
 
   it("creates dataset documents with the POST override", async () => {
-    const fetchMock = mockFetch({ ids: ["d-1"] });
+    const fetchMock = mockFetch({ id: "d-1" });
     suppressOutput();
 
     await cli().parseAsync(
@@ -531,7 +531,7 @@ describe("vega lifecycle and document commands", () => {
         "document-create",
         "r-1",
         "--data",
-        '[{"title":"hello"}]',
+        '{"title":"hello"}',
       ],
       { from: "user" },
     );

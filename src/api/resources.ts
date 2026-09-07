@@ -603,48 +603,37 @@ export function queryResource(
   });
 }
 
-export async function createResourceDocuments(
+export async function createResourceDocument(
   ctx: RequestContext,
   resourceId: string,
-  documents: ResourceDocument[],
-): Promise<{ ids: string[] }> {
+  document: ResourceDocument,
+): Promise<{ id: string }> {
   const result = await request<unknown>(ctx, `${BASE}/${encodeURIComponent(resourceId)}/data`, {
     method: "POST",
     headers: { "X-HTTP-Method-Override": "POST" },
-    body: documents,
+    body: document,
   });
-  return z
-    .object({ ids: z.array(z.string()) })
-    .passthrough()
-    .parse(result);
+  return z.object({ id: z.string() }).passthrough().parse(result);
 }
 
-export async function upsertResourceDocuments(
+export async function getResourceDocuments(
   ctx: RequestContext,
   resourceId: string,
-  documents: Array<ResourceDocument & { id: string }>,
-): Promise<{ ids: string[] }> {
-  const result = await request<unknown>(ctx, `${BASE}/${encodeURIComponent(resourceId)}/data`, {
-    method: "PUT",
-    body: documents,
-  });
-  return z
-    .object({ ids: z.array(z.string()) })
-    .passthrough()
-    .parse(result);
-}
-
-export async function getResourceDocument(
-  ctx: RequestContext,
-  resourceId: string,
-  documentId: string,
-): Promise<ResourceDocument> {
+  documentIds: string | string[],
+  opts?: { ignoreMissing?: boolean },
+): Promise<ResourceDocument[]> {
+  const ids = Array.isArray(documentIds) ? documentIds : [documentIds];
+  const query = new URLSearchParams();
+  if (opts?.ignoreMissing !== undefined) query.set("ignore_missing", String(opts.ignoreMissing));
   const result = await request<unknown>(
     ctx,
-    `${BASE}/${encodeURIComponent(resourceId)}/data/${encodeURIComponent(documentId)}`,
+    `${BASE}/${encodeURIComponent(resourceId)}/data/${ids.map(encodeURIComponent).join(",")}${query.size ? `?${query}` : ""}`,
     { responseParser: parseBigIntJSON },
   );
-  return z.record(z.unknown()).parse(result);
+  return z
+    .object({ entries: z.array(z.record(z.unknown())) })
+    .passthrough()
+    .parse(result).entries;
 }
 
 export async function upsertResourceDocument(
@@ -665,11 +654,14 @@ export function deleteResourceDocuments(
   ctx: RequestContext,
   resourceId: string,
   documentIds: string | string[],
+  opts?: { ignoreMissing?: boolean },
 ): Promise<unknown> {
   const ids = Array.isArray(documentIds) ? documentIds : [documentIds];
+  const query = new URLSearchParams();
+  if (opts?.ignoreMissing !== undefined) query.set("ignore_missing", String(opts.ignoreMissing));
   return request(
     ctx,
-    `${BASE}/${encodeURIComponent(resourceId)}/data/${ids.map(encodeURIComponent).join(",")}`,
+    `${BASE}/${encodeURIComponent(resourceId)}/data/${ids.map(encodeURIComponent).join(",")}${query.size ? `?${query}` : ""}`,
     { method: "DELETE" },
   );
 }
