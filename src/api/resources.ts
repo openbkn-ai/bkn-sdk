@@ -14,6 +14,21 @@ import { resolveSmallModel } from "./models.js";
 
 const BASE = "/api/vega-backend/v1/resources";
 
+function normalizeDocumentIDs(documentIds: string | string[]): string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const rawID of Array.isArray(documentIds) ? documentIds : [documentIds]) {
+    for (const id of rawID.split(",").map((value) => value.trim())) {
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        ids.push(id);
+      }
+    }
+  }
+  if (ids.length === 0) throw new InputError("at least one document id is required");
+  return ids;
+}
+
 export interface PropertyFeature {
   name?: string;
   display_name?: string;
@@ -622,7 +637,7 @@ export async function getResourceDocuments(
   documentIds: string | string[],
   opts?: { ignoreMissing?: boolean },
 ): Promise<ResourceDocument[]> {
-  const ids = Array.isArray(documentIds) ? documentIds : [documentIds];
+  const ids = normalizeDocumentIDs(documentIds);
   const query = new URLSearchParams();
   if (opts?.ignoreMissing !== undefined) query.set("ignore_missing", String(opts.ignoreMissing));
   const result = await request<unknown>(
@@ -650,13 +665,13 @@ export async function upsertResourceDocument(
   return z.object({ id: z.string() }).passthrough().parse(result);
 }
 
-export function deleteResourceDocuments(
+export async function deleteResourceDocuments(
   ctx: RequestContext,
   resourceId: string,
   documentIds: string | string[],
   opts?: { ignoreMissing?: boolean },
 ): Promise<unknown> {
-  const ids = Array.isArray(documentIds) ? documentIds : [documentIds];
+  const ids = normalizeDocumentIDs(documentIds);
   const query = new URLSearchParams();
   if (opts?.ignoreMissing !== undefined) query.set("ignore_missing", String(opts.ignoreMissing));
   return request(

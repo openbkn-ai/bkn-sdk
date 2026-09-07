@@ -540,6 +540,58 @@ describe("vega lifecycle and document commands", () => {
       "POST",
     );
   });
+
+  it("passes document ignore-missing options to Vega", async () => {
+    const fetchMock = mockFetch({ entries: [] });
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "resource",
+        "document-get",
+        "r-1",
+        "d-1",
+        "missing",
+        "--ignore-missing",
+      ],
+      { from: "user" },
+    );
+
+    expect(new URL(fetchMock.mock.calls[0]?.[0] as string).searchParams.get("ignore_missing")).toBe(
+      "true",
+    );
+  });
+
+  it("passes document-delete ignore-missing to Vega", async () => {
+    const fetchMock = mockFetch({});
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "resource",
+        "document-delete",
+        "r-1",
+        "d-1",
+        "missing",
+        "--ignore-missing",
+      ],
+      { from: "user" },
+    );
+
+    const url = new URL(fetchMock.mock.calls[0]?.[0] as string);
+    expect(url.pathname).toContain("/data/d-1,missing");
+    expect(url.searchParams.get("ignore_missing")).toBe("true");
+  });
 });
 
 describe("vega sql", () => {

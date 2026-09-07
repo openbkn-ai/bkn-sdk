@@ -459,6 +459,16 @@ describe("typed Resource and document APIs", () => {
     });
   });
 
+  it("normalizes document ids and rejects an empty result before requesting", async () => {
+    const getFetch = mockFetch({ entries: [] });
+    await getResourceDocuments(ctx, "r-1", [" d-1 ", "", "d-1", "d-2,d-1"]);
+    expect(new URL(firstCall(getFetch)[0]).pathname).toContain("/data/d-1,d-2");
+
+    const deleteFetch = mockFetch();
+    await expect(deleteResourceDocuments(ctx, "r-1", [" ", ""])).rejects.toThrow(InputError);
+    expect(deleteFetch).not.toHaveBeenCalled();
+  });
+
   it("rejects an empty document deletion filter before making a request", async () => {
     const filterFetch = mockFetch();
     await expect(deleteResourceDocumentsByFilter(ctx, "r-1", {})).rejects.toThrow(InputError);
