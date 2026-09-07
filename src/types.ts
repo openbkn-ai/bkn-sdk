@@ -114,6 +114,59 @@ export interface TraceContext {
   baggage?: Record<string, string>;
 }
 
+export interface FixedMaskRule {
+  kind: "fixed";
+  replacement: string;
+}
+
+export interface PartialMaskRule {
+  kind: "partial";
+  keep_start: number;
+  keep_end: number;
+  replacement: string;
+}
+
+export interface EmailMaskRule {
+  kind: "email";
+  local_keep_start: number;
+  preserve_domain: boolean;
+  replacement: string;
+}
+
+export interface RoundMaskRule {
+  kind: "round";
+  step: number;
+}
+
+export interface DateGranularityMaskRule {
+  kind: "date_granularity";
+  granularity: "year" | "month" | "day" | "hour";
+}
+
+/** Optional masking contract carried by a DataProperty definition. */
+export type DataPropertyMaskRule =
+  | FixedMaskRule
+  | PartialMaskRule
+  | EmailMaskRule
+  | RoundMaskRule
+  | DateGranularityMaskRule;
+
+/** REST/SDK representation of an object type data property. */
+export interface DataPropertyDefinition {
+  name: string;
+  display_name: string;
+  type: string;
+  comment?: string;
+  mapped_field?: {
+    name: string;
+    type?: string;
+    display_name?: string;
+    comment?: string;
+  };
+  mask_rule?: DataPropertyMaskRule;
+  condition_operations?: string[];
+}
+
 /** Default list/query limits — see AGENTS.md conventions. */
 export const DEFAULT_LIST_LIMIT = 30;
 export const DEFAULT_QUERY_LIMIT = 50;
