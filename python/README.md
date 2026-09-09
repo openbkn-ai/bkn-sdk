@@ -386,9 +386,9 @@ than read a stale attribute.
 ## Not in this release
 
 Writes and action execution, aggregation over an object set (no endpoint exists —
-see above), typed wrappers for the rest of the catalog's tools — `find_skills`,
-`describe_resource`, `query_instance_subgraph` and the others reachable today
-only through `call_tool` — an async client, and offline generation from a local
+see above), typed wrappers for the catalog's MCP-only tools — the lifecycle
+pair and the sandbox tools, reachable today only through `call_tool` — an async
+client, and offline generation from a local
 `.bkn` directory. Each has a section in
 [the design](../docs/superpowers/specs/2026-08-11-python-osdk-design.md)
 describing the shape it takes when it lands.

@@ -54,7 +54,7 @@ const COMMAND_TOOL: Record<string, string> = {
   "context query-metric": "query_metric",
   "context get-logic-properties": "get_logic_properties_values",
   "context get-action-info": "get_action_info",
-  "context find-skills": "find_skills",
+  "context search-capabilities": "search_capabilities",
   "context kn-detail": "get_kn_detail",
   "context object-types": "get_object_types",
   "context relation-types": "get_relation_types",

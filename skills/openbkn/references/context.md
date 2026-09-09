@@ -261,15 +261,23 @@ openbkn context get-logic-properties <kn> --args '{
 openbkn context get-action-info <kn> --args '{"at_id": "at-1", "_instance_identity": {"id": "123"}}'
 ```
 
-### Skill recall
+### Capability search
+
+One ranking over every kind the network mounted — skills, functions, API tools
+and MCP tools — so "what can do this?" is one call, not one per kind.
 
 ```bash
-openbkn context find-skills <kn> <object-type-id> --top-k 5
+openbkn context search-capabilities <kn> --query "treatment" --limit 5
+openbkn context search-capabilities <kn> --types skill
+openbkn context search-capabilities <kn> --types function --metadata-types openapi
 ```
 
-`<object-type-id>` → `object_type_id`, `--top-k n` → `top_k` (1–20). For the
-richer args (skill_query, instance_identities) use the generic path:
-`tool-call <kn> find_skills --args '{"object_type_id":"ot_drug","skill_query":"treatment","top_k":5}'`.
+Each hit carries `capability_type`, which decides what comes next: `function`
+and `mcp_tool` are called through `execute_tool` with the returned
+`input_schema`, `skill` is read with `get_skill_content` and run with
+`execute_skill`. Omit `--query` to list what is mounted, in mount order.
+
+Replaces `find-skills` and the tool-only search, removed in bkn-foundry#1401.
 
 ### Standard MCP resources & prompts
 

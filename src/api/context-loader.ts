@@ -558,15 +558,32 @@ export function queryObjectInstance(
   return callTool(ctx, knId, "query_object_instance", args);
 }
 
-export function findSkills(
+/** Capability kinds a knowledge network can mount. `function` covers API tools too; split those
+ * apart with `metadataTypes`. */
+export type CapabilityType = "skill" | "function" | "mcp_tool";
+
+/** One ranking over every kind the network mounted (bkn-foundry#1370).
+ *
+ * Replaces find_skills and search_tools, which were this call with the kinds pinned and were
+ * removed in bkn-foundry#1401. */
+export function searchCapabilities(
   ctx: RequestContext,
   knId: string,
-  objectTypeId: string,
-  topK?: number,
+  opts: {
+    query?: string;
+    types?: CapabilityType[];
+    metadataTypes?: ("openapi" | "function")[];
+    ownerId?: string;
+    limit?: number;
+  } = {},
 ): Promise<unknown> {
-  const args: Record<string, unknown> = { object_type_id: objectTypeId };
-  if (topK !== undefined) args.top_k = topK;
-  return callTool(ctx, knId, "find_skills", args);
+  const args: Record<string, unknown> = {};
+  if (opts.query !== undefined) args.query = opts.query;
+  if (opts.types?.length) args.types = opts.types;
+  if (opts.metadataTypes?.length) args.metadata_types = opts.metadataTypes;
+  if (opts.ownerId !== undefined) args.owner_id = opts.ownerId;
+  if (opts.limit !== undefined) args.limit = opts.limit;
+  return callTool(ctx, knId, "search_capabilities", args);
 }
 
 /** Progressive KN-detail disclosure level: `summary` (skeleton + property names) | `full`. */

@@ -24,8 +24,8 @@ __all__ = [
     "describe_resource",
     "execute_action",
     "execute_skill",
+    "execute_tool",
     "explore_subgraph",
-    "find_skills",
     "get_action_execution",
     "get_action_info",
     "get_kn_detail",
@@ -42,6 +42,7 @@ __all__ = [
     "query_object_instance",
     "read_skill_file",
     "run_sql",
+    "search_capabilities",
     "search_instance",
     "search_schema",
 ]
@@ -165,6 +166,7 @@ def execute_skill(
     仍被识别，用于兼容已按旧名配置的部署。）
 
     Args:
+        kn_id: 知识网络 ID。Skill 必须已挂载到该网络才能读取/执行，未挂载返回 400。
         entry_shell: 沙箱内执行的入口命令，取自 SKILL.md 声明的入口。技能包已解压到工作目录，
             命令相对该目录执行。
         timeout: 执行超时秒数。
@@ -177,9 +179,48 @@ def execute_skill(
         kn_id,
         {},
         {
+            "kn_id": kn_id,
             "skill_id": skill_id,
             "entry_shell": entry_shell,
             "timeout": timeout,
+        },
+        context,
+    )
+
+
+def execute_tool(
+    kn_id: str,
+    toolbox_id: str,
+    tool_id: str,
+    arguments: dict[str, Any],
+    *, context: Context | None = None,
+) -> Any:
+    """执行一个已发布函数工具.
+
+    以调用者身份执行工具，返回工具的原始响应。 `toolbox_id` 与 `tool_id` 必须取自
+    `search_capabilities`（`owner_id` / `capability_id`）；`arguments` 按其返回的
+    `input_schema` 填，只放业务参数——令牌、会话 id 等传输信息由平台携带，写进 `arguments`
+    既不生效也会被记进调用参数。 **函数自身报错同样是
+    200**：调用成功不等于业务成功，需读响应体判断。
+    工具已停用、所属工具箱未发布，或当前账户无权访问时返回 400，`message` 说明原因，
+    请求不会打到执行代理。
+
+    Args:
+        kn_id: 知识网络 ID，须与 `search_capabilities` 所用一致。工具必须已挂载到该网络才可调用。
+        toolbox_id: 工具箱 ID，取自 `search_capabilities` 的 `owner_id`。
+        tool_id: 工具 ID，取自 `search_capabilities` 的 `capability_id`。
+        arguments: 工具的业务入参，按 `search_capabilities` 返回的 `input_schema` 填写。
+
+    """
+    return _send(
+        "/api/agent-retrieval/v1/kn/execute_tool",
+        kn_id,
+        {},
+        {
+            "kn_id": kn_id,
+            "toolbox_id": toolbox_id,
+            "tool_id": tool_id,
+            "arguments": arguments,
         },
         context,
     )
@@ -259,60 +300,6 @@ def explore_subgraph(
             "sort": sort,
             "offset": offset,
             "search_after": search_after,
-        },
-        context,
-    )
-
-
-def find_skills(
-    kn_id: str,
-    object_type_id: str,
-    *,
-    response_format: str | None = None,
-    instance_identities: list[Any] | None = None,
-    skill_query: str | None = None,
-    top_k: int | None = None,
-    context: Context | None = None,
-) -> Any:
-    """按业务上下文召回 Skill.
-
-    **召回模式由参数自动决定，不用显式指定**： | 传入参数 | 模式 | |---|---| | `kn_id` +
-    `object_type_id` | 对象类级：沿对象类与 `skills` 之间的关系路径召回 | | 再加
-    `instance_identities` | 实例级：从具体实例出发召回，并补充对象类级结果 | **`skill_query`
-    的检索方式随索引能力降级**：对 `skills` 实例的 `name` / `description` 追加文本过滤——BKN
-    已建向量索引时用 `knn`，已建全文索引时用 `match`，都没有时退化为 `like`。 `skills`
-    对象类至少要有 `skill_id` 与 `name` 两个数据属性，`description` 可选；不满足时返回 400
-    并在 `details` 里列出缺失属性。 **空结果是 200 不是错误**：没有匹配时返回 `entries:
-    []`，并可能带一个 `message` 说明为什么为空（如该对象类未绑定任何 Skill）以及下一步建议。
-
-    实测：网络没有绑定技能时返回 404
-    BknBackend.ObjectType.ObjectTypeNotFound(“对象类不存在”)。对象类是存在的，这个错误码指错了方向。
-
-    Args:
-        kn_id: 知识网络 ID。
-        object_type_id: 业务对象类 ID（取自 `search_schema` 返回的概念 ID）。必填，且必须存在于
-            该知识网络中。
-        instance_identities: 对象实例标识列表，**必须从 `query_object_instance` 或
-            `query_instance_subgraph` 结果里的 `_instance_identity`
-            取，不可自拼**。 传入即切换到实例级召回。
-        skill_query: Skill 语义过滤词，对 `skills` 实例的 `name` / `description` 追加文本过滤。
-            检索方式按索引能力降级：向量索引用 `knn`，全文索引用 `match`，否则 `like`。
-        top_k: 最多返回的 Skill 数量。
-
-    Returns the platform's own payload: entries, message.
-    """
-    return _send(
-        "/api/agent-retrieval/v1/kn/find_skills",
-        kn_id,
-        {
-            "response_format": response_format,
-        },
-        {
-            "kn_id": kn_id,
-            "object_type_id": object_type_id,
-            "instance_identities": instance_identities,
-            "skill_query": skill_query,
-            "top_k": top_k,
         },
         context,
     )
@@ -524,7 +511,9 @@ def get_skill_content(
     说明。
 
     Args:
-        skill_id: Skill ID，取自 `find_skills` 或 `list_skills`。
+        kn_id: 知识网络 ID。Skill 必须已挂载到该网络才能读取/执行，未挂载返回 400。
+        skill_id: Skill ID。取自 `search_capabilities`（当前网络已挂载的）或
+            `list_skills`（平台目录， 未必已挂载到本网络）。
 
     Returns the platform's own payload: content, files, message, skill_id, status, truncated.
     """
@@ -535,6 +524,7 @@ def get_skill_content(
             "response_format": response_format,
         },
         {
+            "kn_id": kn_id,
             "skill_id": skill_id,
         },
         context,
@@ -689,9 +679,10 @@ def list_skills(
 ) -> Any:
     """浏览已发布 Skill.
 
-    翻已发布 Skill 列表，不需要知识网络上下文。与 `find_skills` 互补：那条按对象类 /
-    实例召回，这条按名称或分类分页浏览。 只返回**已发布**状态的 Skill；草稿态不出现在这里。
-    **空结果是 200 不是错误**：无匹配时 `entries: []` 并带 `message` 说明。
+    翻已发布 Skill 列表，不需要知识网络上下文。与 `search_capabilities` 互补：那条在
+    某个网络已挂载的能力里按相关度召回，这条按名称或分类分页浏览整个平台目录。
+    只返回**已发布**状态的 Skill；草稿态不出现在这里。 **空结果是 200 不是错误**：无匹配时
+    `entries: []` 并带 `message` 说明。
 
     Args:
         name: 按 Skill 名称模糊过滤。
@@ -972,6 +963,7 @@ def read_skill_file(
     5 MiB 返回 413。
 
     Args:
+        kn_id: 知识网络 ID。Skill 必须已挂载到该网络才能读取/执行，未挂载返回 400。
         rel_path: 技能包内相对路径，取自 `get_skill_content` 的 `files[].rel_path`。 包外路径（含
             `../`）返回 400。
 
@@ -985,6 +977,7 @@ def read_skill_file(
             "response_format": response_format,
         },
         {
+            "kn_id": kn_id,
             "skill_id": skill_id,
             "rel_path": rel_path,
         },
@@ -1033,6 +1026,66 @@ def run_sql(
         {
             "sql": sql,
             "query_timeout": query_timeout,
+        },
+        context,
+    )
+
+
+def search_capabilities(
+    kn_id: str,
+    *,
+    response_format: str | None = None,
+    query: str | None = None,
+    types: list[Any] | None = None,
+    metadata_types: list[Any] | None = None,
+    owner_id: str | None = None,
+    limit: int | None = None,
+    context: Context | None = None,
+) -> Any:
+    """检索该知识网络已挂载的全部能力.
+
+    在一个排序空间里返回该知识网络已挂载、且当前账户可见的能力：Skill、函数工具、 API 工具与
+    MCP 工具混排，按相关度给出，而不是每类一段。 每条带
+    `capability_type`，据此决定下一步：`function` 与 `mcp_tool` 用 `execute_tool`
+    调用（命中带裁剪过的 `input_schema`，只保留业务入参，服务地址等 传输信息不下发），`skill`
+    用 `get_skill_content` 读取、`execute_skill` 执行。 `types` 按能力类型收窄；函数工具还可用
+    `metadata_types` 再分 `openapi`（API 工具） 与
+    `function`。两者都只在挂载集内收窄，越不出去。 `limit` 默认 20、上限
+    100：工具类命中都带一份入参 schema，调大会显著占用上下文。 命中数超过 `limit` 时
+    `truncated=true` 并给出 `message`。 回填 schema
+    时单个工具箱取列表失败会跳过该箱而不是整体失败：一个被撤销或损坏的
+    工具箱不该让调用方看不到其余所有能力。 **不带 `query`
+    时成员集由挂载决定，不由索引决定**：没有查询词就没有要排序的东西，
+    此时按绑定顺序列出挂载集，索引只用来补名称、说明与 `metadata_type`，索引没收录
+
+    Args:
+        kn_id: 知识网络 ID。范围取自该网络的能力绑定；未挂载任何能力时返回空列表并给出提示。
+        query: 可选。在该网络已挂载的能力内按名称与说明排序。留空则按绑定顺序列出全部，
+            此时不依赖检索索引。
+        types: 可选。收窄到某几类能力，留空为全部。只在挂载集内收窄，越不出去。
+        metadata_types: 可选。把 `function` 类再分开：`openapi` 是 API 工具，`function` 是函数。
+            留空为两者都要。与 `types`
+            是并且关系。这一项只有检索索引答得出，索引不可用时
+            本接口报错，不会当作没传。
+        owner_id: 可选。只看某个来源：函数工具的工具箱、MCP 工具的 Server。Skill 没有来源，
+            传了这个就不会返回 Skill。取自本接口此前返回的 `owner_id`。
+        limit: 可选。最多返回多少条。工具类命中都带入参 schema。
+
+    Returns the platform's own payload: capabilities, message, total_matched, truncated.
+    """
+    return _send(
+        "/api/agent-retrieval/v1/kn/search_capabilities",
+        kn_id,
+        {
+            "response_format": response_format,
+        },
+        {
+            "kn_id": kn_id,
+            "query": query,
+            "types": types,
+            "metadata_types": metadata_types,
+            "owner_id": owner_id,
+            "limit": limit,
         },
         context,
     )

@@ -189,7 +189,7 @@ def test_unset_optional_arguments_are_not_sent(deploy: Deploy) -> None:
 def test_a_route_that_sends_the_network_still_sends_it(deploy: Deploy) -> None:
     """`kn_id` is the first argument everywhere, but only the routes that declare
     it put it on the wire."""
-    kn.find_skills(KN, "order", context=CONTEXT)
+    kn.search_capabilities(KN, context=CONTEXT)
     kn.run_sql(KN, "SELECT 1 FROM {{.r}}", context=CONTEXT)
 
     assert deploy.bodies[0]["kn_id"] == KN
