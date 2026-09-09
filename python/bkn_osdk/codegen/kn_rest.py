@@ -128,8 +128,14 @@ def _function(op: dict[str, Any]) -> str:
         signature += [
             f"{_safe(f['name'])}: {ANNOTATION[f['type']]} | None = None" for f in optional
         ]
-    trailing = "context: Context | None = None"
-    signature.append(trailing if optional else f"*, {trailing}")
+    # The keyword-only marker is always its own line. Folding it onto `context` reads fine until
+    # a route has no optional fields at all — `execute_tool` is the first — and then the emitter
+    # produces `*, context: ...` on one line, which `ruff format` splits. The generated file is
+    # asserted to be exactly what the generator produces, so an emitter that disagrees with the
+    # formatter cannot be fixed by formatting the file.
+    if not optional:
+        signature.append("*")
+    signature.append("context: Context | None = None")
 
     def mapping(fields: list[dict[str, Any]]) -> str:
         if not fields:

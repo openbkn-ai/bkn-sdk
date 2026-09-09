@@ -38,12 +38,7 @@ RETIRED = {"kn_search"}
 
 #: Measured behaviour a caller cannot learn from the spec. Kept short and rare:
 #: most surprises belong in the capture itself, not in prose beside it.
-NOTES = {
-    "find_skills": (
-        "实测：网络没有绑定技能时返回 404 BknBackend.ObjectType.ObjectTypeNotFound"
-        "(“对象类不存在”)。对象类是存在的，这个错误码指错了方向。"
-    ),
-}
+NOTES: dict[str, str] = {}
 
 
 def resolve(schema: Any, spec: dict[str, Any], section: str = "schemas") -> dict[str, Any]:

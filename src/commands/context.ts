@@ -11,6 +11,11 @@ import { printJson } from "../utils/output.js";
 import { clientFrom, conversationSource, outputOptions, platformOf } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
+const list = (v: string) =>
+  v
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
 const collectArg = (v: string, prev: string[]): string[] => {
   prev.push(v);
   return prev;
@@ -117,12 +122,28 @@ export function contextCommand(): Command {
     });
 
   cmd
-    .command("find-skills <kn-id> <object-type-id>")
-    .description("Recall skills for an object type")
-    .option("--top-k <n>", "max skills (1-20)", int)
-    .action(async (knId: string, otId: string, opts, cmd: Command) => {
+    .command("search-capabilities <kn-id>")
+    .description(
+      "Rank every capability the network mounted: skills, functions, API tools, MCP tools",
+    )
+    .option("--query <text>", "rank by relevance; omit to list in mount order")
+    .option("--types <list>", "comma-separated: skill,function,mcp_tool", list)
+    .option(
+      "--metadata-types <list>",
+      "comma-separated: openapi,function (splits function tools)",
+      list,
+    )
+    .option("--owner-id <id>", "one toolbox or MCP server")
+    .option("--limit <n>", "max results (1-100)", int)
+    .action(async (knId: string, opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).context.findSkills(knId, otId, opts.topK),
+        await clientFrom(cmd).context.searchCapabilities(knId, {
+          query: opts.query,
+          types: opts.types,
+          metadataTypes: opts.metadataTypes,
+          ownerId: opts.ownerId,
+          limit: opts.limit,
+        }),
         outputOptions(cmd),
       );
     });
@@ -492,7 +513,7 @@ rewriting it with \`run-sql\` produces a number the platform will not agree with
       "templates",
       "prompts",
       "prompt",
-      "find-skills",
+      "search-capabilities",
     ],
     RUN: [
       "query-object-instance",

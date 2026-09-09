@@ -9,7 +9,6 @@ import {
   callManagedTool,
   callMethod,
   callTool,
-  findSkills,
   getActionInfo,
   getKnDetail,
   getLogicProperties,
@@ -24,6 +23,7 @@ import {
   queryInstanceSubgraph,
   queryObjectInstance,
   readResource,
+  searchCapabilities,
   searchSchema,
 } from "../api/context-loader.js";
 import type { RequestContext } from "../types.js";
@@ -34,8 +34,8 @@ export function context(ctx: RequestContext) {
       searchSchema(ctx, knId, query, opts),
     queryObjectInstance: (knId: string, args: Record<string, unknown>) =>
       queryObjectInstance(ctx, knId, args),
-    findSkills: (knId: string, objectTypeId: string, topK?: number) =>
-      findSkills(ctx, knId, objectTypeId, topK),
+    searchCapabilities: (knId: string, opts?: Parameters<typeof searchCapabilities>[2]) =>
+      searchCapabilities(ctx, knId, opts),
     // Progressive schema disclosure: skeleton first (summary), then drill down.
     knDetail: (knId: string, detailLevel?: DetailLevel) => getKnDetail(ctx, knId, detailLevel),
     objectTypes: (knId: string, ids: string[]) => getObjectTypes(ctx, knId, ids),

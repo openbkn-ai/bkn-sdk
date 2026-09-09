@@ -268,7 +268,7 @@ kn.query_object_instance(KN_ID, "order", limit=10, response_format="json")
 
 ## 这个版本没有的
 
-写入与行动执行、对象集上的聚合（没有对应端点，见上）、catalog 里其余工具的类型化包装 —— `find_skills`、`describe_resource`、`query_instance_subgraph` 等目前只能通过 `call_tool` 触达 —— 异步客户端，以及从本地 `.bkn` 目录离线生成。每一项在[设计文档](../docs/superpowers/specs/2026-08-11-python-osdk-design.md)里都有一节，写明它落地时会长成什么样。
+写入与行动执行、对象集上的聚合（没有对应端点，见上）、catalog 里只走 MCP 的那些工具的类型化包装 —— 生命周期两条与沙箱工具，目前只能通过 `call_tool` 触达 —— 异步客户端，以及从本地 `.bkn` 目录离线生成。每一项在[设计文档](../docs/superpowers/specs/2026-08-11-python-osdk-design.md)里都有一节，写明它落地时会长成什么样。
 
 ## 开发
 
