@@ -193,7 +193,8 @@ def execute_tool(
     toolbox_id: str,
     tool_id: str,
     arguments: dict[str, Any],
-    *, context: Context | None = None,
+    *,
+    context: Context | None = None,
 ) -> Any:
     """执行一个已发布函数工具.
 
