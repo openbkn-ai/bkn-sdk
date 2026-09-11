@@ -20,16 +20,9 @@ import {
   createObjectTypes,
   deleteKnowledgeNetwork,
 } from "../api/knowledge-networks.js";
-import { resolveSmallModelName } from "../api/models.js";
-import {
-  configureResourceIndex,
-  firstResource,
-  getResource,
-  listResources,
-  queryResource,
-} from "../api/resources.js";
+import { firstResource, getResource, listResources, queryResource } from "../api/resources.js";
 import { discoverCatalog, getDiscoverTask } from "../api/vega-discovery.js";
-import { createBuildTask, firstCatalog, getCatalog } from "../api/vega.js";
+import { firstCatalog, getCatalog } from "../api/vega.js";
 import type { RequestContext } from "../types.js";
 import { HttpError, InputError, NonJsonResponseError, formatError } from "../utils/errors.js";
 import {
@@ -49,7 +42,7 @@ export interface CreateFromCatalogOptions {
    * user-typed `--tables`; `skip` suits a list this SDK derived itself, where a
    * missing table means catalog discovery lagged rather than a wrong name.
    *
-   * The names skipped this way also become the only `pkMap` / `embeddingFields`
+   * The names skipped this way also become the only `pkMap`
    * keys allowed to be dropped — every other unresolvable key stays fatal, so a
    * typo can never quietly turn a PK override back into a guess.
    */
@@ -59,16 +52,12 @@ export interface CreateFromCatalogOptions {
    * already reported — a CSV whose import failed.
    *
    * Unlike `missingTables`, these are forgiven regardless of that setting: an
-   * entry naming one is dropped from `tables`, `pkMap` and `embeddingFields`
+   * entry naming one is dropped from `tables` and `pkMap`
    * alike, even when `tables` was typed by hand. Failing on a name this run
    * just reported would strand whatever it did manage to write.
    */
   absentTables?: string[];
   pkMap?: Record<string, string>;
-  build?: boolean;
-  /** Per-table resource columns to vectorize (sets resource schema index features). */
-  embeddingFields?: Record<string, string[]>;
-  embeddingModel?: string;
   noRollback?: boolean;
   /** Pre-fetched row samples per table (e.g. from a CSV import) for PK detection. */
   sampleRows?: Record<string, Array<Record<string, string | null>>>;
@@ -115,8 +104,8 @@ async function discoverCatalogAndWait(ctx: RequestContext, catalogId: string): P
  *
  * Absent means no *network* was left, and only that: every input check runs
  * before the network is created, so most failures create nothing at all. It
- * says nothing about the `build` loop, whose per-table index config and build
- * tasks live on Vega resources outside the network and are never rolled back.
+ * says nothing about Vega resources, whose index configuration and build tasks
+ * are managed independently of knowledge-network creation.
  *
  * Part of what this function throws, so callers may read it to tell the user
  * what to clean up. Deliberately a plain property rather
@@ -311,16 +300,6 @@ export async function createFromCatalog(
   opts: CreateFromCatalogOptions,
 ): Promise<unknown> {
   const log = opts.onProgress ?? (() => {});
-  // Validate the embedding model before anything is written. Resolution lives
-  // inside `configureResourceIndex`, i.e. step 5 — after the KN and its object
-  // types exist — so a bad id used to cost the whole run plus a rollback. Doing
-  // it here also means the build loop resolves once rather than once per table
-  // (a resolved name is not numeric, so the inner call short-circuits).
-  const embeddingModel =
-    opts.build && opts.embeddingModel
-      ? await resolveSmallModelName(ctx, opts.embeddingModel)
-      : opts.embeddingModel;
-
   // 1. List catalog tables, scanning once if the catalog is empty.
   //    `limit: -1` (NO_LIMIT), not the backend's default page: this list
   //    decides which tables become object types AND is the source of every
@@ -398,7 +377,7 @@ export async function createFromCatalog(
   }
   const targetNames = targets.map((t) => t.name);
 
-  // Validate --pk-map / --embedding-fields references BEFORE any side effect.
+  // Validate --pk-map references BEFORE any side effect.
   // Only the names already skipped above may be dropped here: those tables are
   // imported-but-not-yet-registered, and failing on them would strand rows
   // already written. A key naming anything else is a typo and stays fatal —
@@ -412,33 +391,6 @@ export async function createFromCatalog(
     catalog: allNames,
     onSkip: dropKey("--pk-map"),
   });
-  const embeddingFields = canonicalizeTableMap(
-    opts.embeddingFields,
-    targetNames,
-    "--embedding-fields",
-    { skippable, catalog: allNames, onSkip: dropKey("--embedding-fields") },
-  );
-  // Its column names too: `ensureFeature` is the only thing that checks them,
-  // and it runs in step 5 — so a typo used to surface after the import, the KN
-  // and its object types, with the earlier tables' writes already landed and
-  // not rolled back. Compare against `schema_definition`, which is what
-  // `ensureFeature` matches; `columns` is a different list.
-  if (opts.build) {
-    for (const t of targets) {
-      const fields = embeddingFields[t.name];
-      if (!fields?.length || t.featureFields.length === 0) continue;
-      const unknown = fields.filter((f) => !t.featureFields.includes(f));
-      if (unknown.length > 0) {
-        throw new InputError(
-          [
-            `--embedding-fields names ${unknown.join(", ")} on table '${t.name}',`,
-            "which its Vega resource does not expose.",
-            `Indexable fields: ${t.featureFields.join(", ")}.`,
-          ].join(" "),
-        );
-      }
-    }
-  }
   // Always best-effort: a sample keyed off a name the catalog does not use
   // falls back to a live query rather than failing the run.
   const providedSamples = canonicalizeTableMap(opts.sampleRows, targetNames, "sampleRows", {
@@ -532,33 +484,11 @@ export async function createFromCatalog(
     log(`Creating ${entries.length} object type(s)...`);
     await createObjectTypes(ctx, knId, entries);
 
-    // 5. Build each resource's index via a Vega BuildTask (no KN-level build).
-    const builds: Array<{ table: string; taskId: string }> = [];
-    if (opts.build) {
-      log("Submitting build tasks...");
-      for (const t of targets) {
-        const embedding = embeddingFields[t.name];
-        const primaryKey = tablePk.get(t.resourceId ?? t.name) as string;
-        await configureResourceIndex(ctx, t.resourceId as string, {
-          primaryKeyFields: [primaryKey],
-          incrementalFields: [primaryKey],
-          ...(embedding && embedding.length > 0 ? { embeddingFields: embedding } : {}),
-          ...(embeddingModel ? { embeddingModel } : {}),
-        });
-        const task = (await createBuildTask(ctx, {
-          resource_id: t.resourceId as string,
-          mode: "batch",
-        })) as { id?: string };
-        builds.push({ table: t.name, taskId: String(task.id ?? "") });
-      }
-    }
-
     rollbackKn = undefined; // success — keep the KN
     return {
       kn_id: knId,
       kn_name: opts.name,
       object_types: targets.map((t) => ({ name: t.name, pk: tablePk.get(t.resourceId ?? t.name) })),
-      build_tasks: builds,
     };
   } catch (e) {
     // Roll back here rather than in a `finally`, so the outcome is known before

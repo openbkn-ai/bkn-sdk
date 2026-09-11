@@ -7,7 +7,7 @@ import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { validateBknDirectory } from "../utils/bkn-validate.js";
 import { printJson } from "../utils/output.js";
-import { parseEmbeddingFields, parsePkMap } from "../utils/pk-detection.js";
+import { parsePkMap } from "../utils/pk-detection.js";
 import { clientFrom, csv, outputOptions, readBody } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
@@ -502,17 +502,10 @@ export function bknCommand(): Command {
     .command("push <directory>")
     .description("Pack a BKN directory into a tar and import it as a knowledge network")
     .option("--branch <name>", "target branch", "main")
-    .option("--build", "submit a Vega build task for each object type declaring a vector index")
-    .option(
-      "--embedding-model <name-or-id>",
-      "small-model name (or numeric ID, resolved to its name) for declared vector indexes (with --build)",
-    )
     .action(async (dir: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).kn.push(dir, {
           branch: opts.branch,
-          build: Boolean(opts.build),
-          embeddingModel: opts.embeddingModel,
         }),
         outputOptions(cmd),
       );
@@ -556,15 +549,6 @@ export function bknCommand(): Command {
     .requiredOption("--name <name>", "knowledge network name")
     .option("--tables <list>", "comma-separated table names (default: all)")
     .option("--pk-map <map>", "explicit primary keys: '<table>:<col>[,<table>:<col>...]'")
-    .option("--build", "submit a Vega build task per resource after creation")
-    .option(
-      "--embedding-fields <map>",
-      "columns to vectorize per table (with --build): '<table>:<col>[+<col>...][,...]'",
-    )
-    .option(
-      "--embedding-model <name-or-id>",
-      "small-model name (or numeric ID, resolved to its name) for the vector index (with --build)",
-    )
     .option("--no-rollback", "keep a partially-created KN on failure")
     .action(async (catalogId: string, opts, cmd: Command) => {
       printJson(
@@ -573,11 +557,6 @@ export function bknCommand(): Command {
           name: opts.name,
           tables: csv(opts.tables),
           pkMap: opts.pkMap ? parsePkMap(opts.pkMap) : undefined,
-          build: Boolean(opts.build),
-          embeddingFields: opts.embeddingFields
-            ? parseEmbeddingFields(opts.embeddingFields)
-            : undefined,
-          embeddingModel: opts.embeddingModel,
           noRollback: opts.rollback === false,
           onProgress: (m) => console.error(m),
         }),

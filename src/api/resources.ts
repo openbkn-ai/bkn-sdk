@@ -376,9 +376,8 @@ export interface ConfigureResourceIndexOptions {
  *
  * Deliberately reaches into mf-model-manager to resolve `embeddingModel`, which
  * ARCHITECTURE.md would place in `resources/`. The exception is intentional:
- * all four build entry points (`bkn push --build`, `create-from-catalog
- * --build`, `vega dataset build`) funnel through
- * here, so resolving once beats four call sites drifting apart. Keep it here.
+ * Vega dataset build configures resource index state here, so model resolution
+ * remains adjacent to the resource write.
  */
 export async function configureResourceIndex(
   ctx: RequestContext,
