@@ -83,7 +83,7 @@ tags: [tag1, tag2]               # 可选
   - Source 值：`property`（对象属性）/ `input`（用户输入）/ `const`（常量）
   - Binding：Source 为 property 时填属性名，const 时填常量值，input 时填 `-`
 - `### Data Source`（可选）：表格，列 Type | ID | Name；无资源绑定时可省略整节
-  - Type 固定为 `resource`；ID 填 Vega 资源 ID（来自 `resource list` 或 `vega resource list`），数据默认通过 Vega 实时查询。若对象声明了 vector 索引，可使用 `openbkn bkn push <dir> --build` 为对应资源提交 Vega 构建任务。
+  - Type 固定为 `resource`；ID 填 Vega 资源 ID（来自 `resource list` 或 `vega resource list`），数据默认通过 Vega 实时查询。索引配置与构建在 Vega 中管理，不在 BKN 中声明。
 
 ### 数据类型
 

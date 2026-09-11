@@ -235,36 +235,6 @@ describe("createFromCatalog table identifiers", () => {
     ).rejects.toThrow(/unknown table 'orders'\. Tables in this run: document, chunk/);
   });
 
-  it("resolves --tables and --embedding-fields through the same matching", async () => {
-    const f = mockFetch(
-      catalogRoutes([
-        { id: "r-1", name: "document", columns: ["id", "body"] },
-        { id: "r-2", name: "chunk", columns: ["id"] },
-      ]).concat([[/^\/api\/vega-backend\/v1\/build-tasks$/, () => ({ id: "task-1" })]]),
-    );
-    const out = (await createFromCatalog(ctx, {
-      catalogId: "c-1",
-      name: "kn",
-      tables: ["yanfeng_kb.document"],
-      pkMap: { "yanfeng_kb.document": "id" },
-      embeddingFields: { "yanfeng_kb.document": ["body"] },
-      build: true,
-    })) as { object_types: Array<{ name: string }>; build_tasks: Array<{ table: string }> };
-    expect(out.object_types.map((o) => o.name)).toEqual(["document"]);
-    expect(out.build_tasks).toEqual([{ table: "document", taskId: "task-1" }]);
-    // The vector feature landed on the resource before the build task ran.
-    const put = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.find(
-      ([, init]) => init.method === "PUT",
-    );
-    const body = JSON.parse(String(put?.[1]?.body)) as {
-      index_config: { primary_key_fields: string[]; incremental_fields: string[] };
-      schema_definition: Array<{ name: string; features?: Array<{ feature_type: string }> }>;
-    };
-    expect(body.index_config).toEqual({ primary_key_fields: ["id"], incremental_fields: ["id"] });
-    const schema = body.schema_definition;
-    expect(schema.find((p) => p.name === "body")?.features?.[0]?.feature_type).toBe("vector");
-  });
-
   it("matches a table key case-insensitively and with the qualifier on either side", async () => {
     mockFetch(catalogRoutes([{ id: "r-1", name: "yanfeng_kb.Document", columns: ["id"] }]));
     const out = (await createFromCatalog(ctx, {
@@ -342,42 +312,6 @@ describe("createFromCatalog table identifiers", () => {
     })) as { object_types: Array<{ name: string }> };
     expect(out.object_types.map((o) => o.name)).toEqual(["document"]);
     expect(logs.join("\n")).toMatch(/Skipping 1 table\(s\) not in the catalog.*chunk/);
-  });
-
-  it("rejects an unknown --embedding-fields column before it can write anything", async () => {
-    const f = mockFetch([
-      [/^\/api\/vega-backend\/v1\/catalogs\/[^/]+\/discover$/, () => ({})],
-      [
-        /^\/api\/vega-backend\/v1\/catalogs\/[^/]+$/,
-        () => ({
-          entries: [
-            {
-              id: "c-1",
-              name: "catalog",
-              type: "physical",
-              enabled: true,
-              connector_type: "mysql",
-            },
-          ],
-        }),
-      ],
-      ...catalogRoutes([{ id: "r-1", name: "document", columns: ["id", "body"], pk: "id" }]),
-    ]);
-    // What this buys: left to `ensureFeature` the same typo surfaces in step 5,
-    // after the KN and its object types exist and with earlier tables' PUTs and
-    // build tasks already landed and never rolled back.
-    await expect(
-      createFromCatalog(ctx, {
-        catalogId: "c-1",
-        name: "kn",
-        build: true,
-        embeddingFields: { document: ["bdy"] },
-      }),
-    ).rejects.toThrow(
-      /--embedding-fields names bdy on table 'document'.*Indexable fields: id, body/,
-    );
-    expect(paths(f)).not.toContain("/api/bkn-backend/v1/knowledge-networks");
-    expect(paths(f)).not.toContain("/api/vega-backend/v1/build-tasks");
   });
 
   it("names the network a failed rollback left behind", async () => {

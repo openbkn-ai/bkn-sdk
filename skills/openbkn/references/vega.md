@@ -100,12 +100,8 @@ openbkn vega dataset build <resource-id> --mode batch \
   --embedding-fields name --primary-key-fields <pk> --incremental-fields <time-or-id> [--embedding-model <name-or-id>] --wait
 ```
 
-## index is NOT auto-built on `bkn push`
+## Index build belongs to Vega
 
-`bkn push` / backend `CreateKN` never submits a build-task. To build declared vector fields, either:
-
-- `bkn push <dir> --build` — reads each object type's `vector` index declaration (`### Property Overrides` / `属性覆盖`, or an `索引`/`Index` column) + its `### Data Source` resource binding, and submits one BuildTask per resource. See [bkn.md](bkn.md).
-- `bkn create-from-catalog … --build --embedding-fields <table>:<col>` — build during KN creation.
-- Manual: `vega dataset build <resource-id>`.
+`bkn push` and `bkn create-from-catalog` only create or import knowledge-network metadata. Configure resource index fields and create BuildTasks through `vega dataset build`.
 
 Catalog ids are short slugs (e.g. `d7nicrcjto2s73d9g67g`), not data-connection UUIDs. `discover` only works on physical catalogs.

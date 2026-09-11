@@ -60,10 +60,7 @@ import {
   updateSchemaItem,
   validateMetric,
 } from "../api/knowledge-networks.js";
-import { configureResourceIndex } from "../api/resources.js";
-import { createBuildTask } from "../api/vega.js";
 import type { RequestContext } from "../types.js";
-import { collectIndexTargets } from "../utils/bkn-index.js";
 import { validateBknDirectory } from "../utils/bkn-validate.js";
 import { InputError } from "../utils/errors.js";
 import { extractTarToDirectory, packDirectoryToTar } from "../utils/tar.js";
@@ -138,48 +135,13 @@ export function kn(ctx: RequestContext) {
     relationTypePaths: (knId: string, body: unknown) => relationTypePaths(ctx, knId, body),
     bknResources: () => listBknResources(ctx),
     createFromCatalog: (opts: CreateFromCatalogOptions) => createFromCatalog(ctx, opts),
-    /**
-     * Pack a local BKN directory and upload it as a knowledge network. With
-     * `build`, also submit one Vega BuildTask per object type that declares a
-     * `vector` index — the platform does not auto-build these on import.
-     */
-    push: async (
-      dir: string,
-      opts?: { branch?: string; build?: boolean; embeddingModel?: string },
-    ) => {
+    /** Pack a local BKN directory and upload it as a knowledge network. */
+    push: async (dir: string, opts?: { branch?: string }) => {
       const validation = validateBknDirectory(dir);
       if (!validation.valid) {
         throw new InputError(`BKN validation failed:\n${validation.errors.join("\n")}`);
       }
-      const upload = await uploadBkn(ctx, packDirectoryToTar(dir), { branch: opts?.branch });
-      if (!opts?.build) return upload;
-      const targets = collectIndexTargets(dir);
-      const buildTasks: Array<{ objectType: string; resourceId: string; taskId: string }> = [];
-      for (const t of targets) {
-        if (!t.primaryKeyFields.length || !t.incrementalFields.length) {
-          throw new Error(
-            `Object type '${t.objectType}' declares a vector index but lacks primary or incremental key fields; batch Vega builds require both resource index_config.primary_key_fields and incremental_fields.`,
-          );
-        }
-        await configureResourceIndex(ctx, t.resourceId, {
-          primaryKeyFields: t.primaryKeyFields,
-          incrementalFields: t.incrementalFields,
-          embeddingFields: t.embeddingFields,
-          ...((t.embeddingModel ?? opts.embeddingModel)
-            ? { embeddingModel: t.embeddingModel ?? opts.embeddingModel }
-            : {}),
-        });
-        const task = (await createBuildTask(ctx, {
-          resource_id: t.resourceId,
-          mode: "batch",
-        })) as { id?: string };
-        buildTasks.push({
-          objectType: t.objectType,
-          resourceId: t.resourceId,
-          taskId: String(task.id ?? ""),
-        });
-      }
-      return { ...(upload as object), build_tasks: buildTasks };
+      return uploadBkn(ctx, packDirectoryToTar(dir), { branch: opts?.branch });
     },
     /** Download a knowledge network and extract it into a local directory. */
     pull: async (knId: string, dir: string, opts?: { branch?: string }) => {

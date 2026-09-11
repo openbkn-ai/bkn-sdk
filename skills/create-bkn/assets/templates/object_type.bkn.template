@@ -42,7 +42,7 @@ Incremental Key:
 -->
 
 <!-- 可选：无数据源绑定时省略整个 Data Source 节 -->
-<!-- Type 固定为 resource（Vega 资源 ID，默认实时查询；声明 vector 索引时可通过 `bkn push --build` 提交 Vega 构建任务） -->
+<!-- Type 固定为 resource（Vega 资源 ID，默认实时查询） -->
 
 ### Data Source
 
