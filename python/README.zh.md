@@ -236,13 +236,17 @@ with ensure_interaction(ctx, kn_id) as turn:
 
 ### 能力路由的命名函数
 
-context-loader 那一圈 —— `/api/agent-retrieval/v1/kn/` 下的 23 条路由 —— 也是生成的，源头是 foundry 自己的 OpenAPI：
+context-loader 那一圈 —— `/api/agent-retrieval/v1/kn/` 下的 25 条路由 —— 也是生成的，源头是 foundry 自己的 OpenAPI：
 
 ```python
 from bkn_osdk import kn
 
 kn.list_resources(KN_ID)
 kn.run_sql(KN_ID, "SELECT COUNT(*) AS n FROM {{.d9hff…}}")
+kn.run_cypher(
+    KN_ID,
+    "MATCH (o:order)-[:rel_order_customer]->(c:customer) RETURN c.city AS city, count(*) AS n",
+)
 kn.query_object_instance(KN_ID, "order", limit=10, response_format="json")
 ```
 

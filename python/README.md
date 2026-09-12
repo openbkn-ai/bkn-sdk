@@ -335,7 +335,7 @@ with ensure_interaction(ctx, kn_id) as turn:
 
 ### Named functions for the capability routes
 
-The context-loader surface — 23 routes under `/api/agent-retrieval/v1/kn/` — is
+The context-loader surface — 25 routes under `/api/agent-retrieval/v1/kn/` — is
 also generated, from foundry's own OpenAPI:
 
 ```python
@@ -343,6 +343,10 @@ from bkn_osdk import kn
 
 kn.list_resources(KN_ID)
 kn.run_sql(KN_ID, "SELECT COUNT(*) AS n FROM {{.d9hff…}}")
+kn.run_cypher(
+    KN_ID,
+    "MATCH (o:order)-[:rel_order_customer]->(c:customer) RETURN c.city AS city, count(*) AS n",
+)
 kn.query_object_instance(KN_ID, "order", limit=10, response_format="json")
 ```
 

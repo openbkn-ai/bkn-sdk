@@ -194,3 +194,25 @@ def test_a_route_that_sends_the_network_still_sends_it(deploy: Deploy) -> None:
 
     assert deploy.bodies[0]["kn_id"] == KN
     assert "kn_id" not in deploy.bodies[1]  # run_sql finds its data through the placeholder
+
+
+def test_a_cypher_query_carries_its_statement_and_values_in_the_body(deploy: Deploy) -> None:
+    """`run_cypher` names the network in the body, unlike `run_sql`: the statement
+    is written in model names, so the network is the only thing that says which
+    model it is compiled against. Parameters travel as they were given — a value
+    past 2^53 keeps every digit — and an unset branch is not sent."""
+    statement = "MATCH (o:order) WHERE o.id = $id RETURN o.no AS no"
+    kn.run_cypher(
+        KN,
+        statement,
+        parameters={"id": 9007199254740993},
+        response_format="json",
+        context=CONTEXT,
+    )
+
+    assert deploy.paths[0] == "/api/agent-retrieval/v1/kn/run_cypher"
+    assert deploy.queries[0] == {"response_format": "json"}
+    assert deploy.bodies[0]["kn_id"] == KN
+    assert deploy.bodies[0]["query"] == statement
+    assert deploy.bodies[0]["parameters"] == {"id": 9007199254740993}
+    assert "branch" not in deploy.bodies[0]

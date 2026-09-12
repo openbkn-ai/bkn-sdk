@@ -41,6 +41,7 @@ __all__ = [
     "query_metric",
     "query_object_instance",
     "read_skill_file",
+    "run_cypher",
     "run_sql",
     "search_capabilities",
     "search_instance",
@@ -158,8 +159,9 @@ def execute_skill(
     把 Skill 包投进沙箱会话解压，执行 `entry_shell` 指定的入口命令，回收 `exit_code` /
     `stdout` / `stderr`。 **`entry_shell` 必须取自 SKILL.md 声明的入口**，先用
     `get_skill_content` 读清楚再调；这条接口不校验命令与 Skill 的对应关系。 授权由
-    execution-factory 按账户强制：需要该 Skill 的 `execute` 或 `public_access`
-    权限，无权限返回 403。 `stdout` / `stderr` 各自超过 8000 字符会截断（`truncated=true`）。
+    execution-factory 按账户强制：必须拥有该 Skill 的 `execute` 权限； `public_access`
+    只代表公开读取，不能替代执行权限。无权限返回 403。 `stdout` / `stderr` 各自超过 8000
+    字符会截断（`truncated=true`）。
     **本端点由技能执行总闸控制**：`EXECUTE_SKILL_ENABLED=true` 时才注册这条 路由，同名 MCP
     工具也才出现在 `tools/list` 与 `GET /mcp/info`。默认关闭， 此时这条路径返回
     404——「这个部署没有技能执行能力」在路由表上成立。 （旧名 `MCP_EXECUTE_SKILL_ENABLED`
@@ -402,14 +404,16 @@ def get_kn_detail(
     里嵌套的对象类 / 关系类 / 行动类副本**： 这些是顶层数组的重复拷贝，概念组只保留
     `object_type_ids` 作为分组边界。 被剥掉的细节按需用 `get_object_types` /
     `get_relation_types` 取回。 对象类条目带
-    `related_metric_count`（该对象类下已建模指标数），`>0` 才值得 为取指标下钻。
+    `related_metric_count`（该对象类下已建模指标数），`>0` 才值得 为取指标下钻。 顶层带
+    `mounted_capabilities`：该网络已挂载的 Skill 与工具按类型计数。两个 `detail_level`
+    都会返回——它是网络的形状，不是可以剥
 
     Args:
         kn_id: 知识网络 ID。与 `x-kn-id` 头二选一，本字段优先。
         detail_level: 详情级别，见端点说明。
 
-    Returns the platform's own payload: action_types, comment, concept_groups, id, name,
-    object_types, relation_types.
+    Returns the platform's own payload: action_types, comment, concept_groups, id,
+    mounted_capabilities, name, object_types, relation_types.
     """
     return _send(
         "/api/agent-retrieval/v1/kn/get_kn_detail",
@@ -682,7 +686,8 @@ def list_skills(
 
     翻已发布 Skill 列表，不需要知识网络上下文。与 `search_capabilities` 互补：那条在
     某个网络已挂载的能力里按相关度召回，这条按名称或分类分页浏览整个平台目录。
-    只返回**已发布**状态的 Skill；草稿态不出现在这里。 **空结果是 200 不是错误**：无匹配时
+    只返回调用者拥有 `view` 权限且存在**已发布版本**的 Skill；纯草稿态不出现在这里。
+    已发布技能正在编辑下一版本时，仍返回当前已发布快照。 **空结果是 200 不是错误**：无匹配时
     `entries: []` 并带 `message` 说明。
 
     Args:
@@ -986,6 +991,54 @@ def read_skill_file(
     )
 
 
+def run_cypher(
+    kn_id: str,
+    query: str,
+    *,
+    response_format: str | None = None,
+    branch: str | None = None,
+    parameters: dict[str, Any] | None = None,
+    context: Context | None = None,
+) -> Any:
+    """对知识网络执行只读 Cypher.
+
+    编译并执行一条只读 Cypher 语句。**支持的子集**： - **MATCH**：一个或多个 MATCH 子句；一个
+    MATCH 里可以写逗号分隔的多条路径。 同名变量指同一个节点；不共享变量的两部分是笛卡尔积。 -
+    **节点**：变量首次出现时必须带标签（对象类 id 或名称），可带内联属性 `{prop: value}`。 -
+    **关系**：`-[:R]->`、`<-[:R]-`、无向 `-[:R]-`，每条必须指名一个关系类； 一条查询的模式最多
+    8 条关系、9 个节点（不与其他节点相连的节点也各算一张表）。 关系变量（`-[r:R]->`）不支持。
+    - **WHERE**：`=` `<>` `<` `>` `<=` `>=`、`IN [...]`、`IS NULL` / `IS NOT NULL`， 用 `AND`
+    / `OR` / `NOT` 组合，可加括号。值可写 `$name` 参数。 - **RETURN**：属性、`AS`
+    别名、`DISTINCT`，以及 `count` / `sum` / `avg` / `min` / `max`（含 `count(*)` 与
+    `DISTINCT` 形式）。有聚合时按 RETURN 中其余 列自动分组——这是 Cypher 的隐式 GROUP
+    BY，无需也不能自己写 GROUP BY。 - **ORDER BY / SKI
+
+    Args:
+        kn_id: 知识网络 ID，来自 `list_knowledge_networks`。
+        branch: 分支名。不传按主分支查。
+        query: 只读 Cypher 语句，语法子集见端点说明。
+        parameters: 语句里 `$name` 的取值。只能是字符串、数字或布尔值——参数是值，不会变成
+            表名或列名，因此不能用来拼标签、关系类型或属性名。`null` 会被拒绝： 判空写 `IS
+            NULL`。
+
+    Returns the platform's own payload: columns, entries.
+    """
+    return _send(
+        "/api/agent-retrieval/v1/kn/run_cypher",
+        kn_id,
+        {
+            "response_format": response_format,
+        },
+        {
+            "kn_id": kn_id,
+            "branch": branch,
+            "query": query,
+            "parameters": parameters,
+        },
+        context,
+    )
+
+
 def run_sql(
     kn_id: str,
     sql: str,
@@ -1055,9 +1108,9 @@ def search_capabilities(
     100：工具类命中都带一份入参 schema，调大会显著占用上下文。 命中数超过 `limit` 时
     `truncated=true` 并给出 `message`。 回填 schema
     时单个工具箱取列表失败会跳过该箱而不是整体失败：一个被撤销或损坏的
-    工具箱不该让调用方看不到其余所有能力。 **不带 `query`
-    时成员集由挂载决定，不由索引决定**：没有查询词就没有要排序的东西，
-    此时按绑定顺序列出挂载集，索引只用来补名称、说明与 `metadata_type`，索引没收录
+    工具箱不该让调用方看不到其余所有能力。
+    **生命周期门在可见性之前**：命中的能力先按所属工具箱 / MCP Server 的**发布状态**
+    与工具自身的**启用状态**过滤，这两项从执行工厂自己的记录读取（不依赖调用方 tok
 
     Args:
         kn_id: 知识网络 ID。范围取自该网络的能力绑定；未挂载任何能力时返回空列表并给出提示。
