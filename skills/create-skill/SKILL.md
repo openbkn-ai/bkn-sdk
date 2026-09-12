@@ -108,6 +108,35 @@ Full example (BOM level-1 kitting check):
 Details of `kn.query_metric` / `kn.run_sql` and the generated ontology layer: the bkn-osdk
 README under `python/`.
 
+### Calling another function
+
+A function may call another function mounted on the same network through the platform:
+
+```python
+from bkn_osdk import kn
+
+def handler(event):
+    answer = kn.execute_tool(event["kn_id"], event["box_id"], event["tool_id"],
+                             {"kn_id": event["kn_id"], "product": event["product"], "qty": 50})
+    body = answer.get("body", answer)           # the callee's raw response
+    if body.get("exit_code") not in (0, None):  # HTTP 200 does not mean the callee succeeded
+        return {"ok": False, "reason": body.get("stderr", "")[-300:]}
+    return {"ok": True, **(body.get("result") or {})}
+```
+
+- `kn.execute_tool` carries the sandbox's managed turn, so the callee's sandbox gets the same
+  caller credential and the trace shows the callee under this function's `execute_tool`
+  operation, with the callee's own reads below it.
+- Needs a sandbox bkn-osdk that has `kn.execute_tool` (bkn-sdk #100 or later). On an older
+  SDK the only route is `bkn_osdk.call("/api/agent-retrieval/v1/kn/execute_tool", ...)`, and
+  the request body **must** carry a `bkn_context` built from `BKN_CONVERSATION_ID`,
+  `BKN_INTERACTION_ID` and `BKN_PARENT_OPERATION_ID`; without it the callee's sandbox is
+  given no credential at all.
+- The callee's own mounting and permissions apply. There is no depth or cycle guard — do not
+  write functions that call each other.
+
+Example: [references/examples/functions/call_l1_check.py](references/examples/functions/call_l1_check.py).
+
 ### Code → tool (openbkn CLI 0.1.5+)
 
 ```bash
