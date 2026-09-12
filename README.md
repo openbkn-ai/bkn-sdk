@@ -129,12 +129,20 @@ format spec, templates, and a worked example under `references/`. It pairs with
 the `openbkn` skill, which then runs `openbkn bkn validate` / `push` on the
 tree it produced.
 
-Neither skill is part of the npm package — they're registered separately:
+A third skill, `skills/create-skill/`, guides an AI through **authoring a Skill
+package** for the execution factory — a `SKILL.md` that declares which metrics,
+functions, actions and MCP tools of one knowledge network it uses and how an
+agent should call them — and through writing a sandbox function with
+`bkn-osdk` and registering it as a tool. Templates and a worked example that
+was verified end-to-end live under `assets/` and `references/`.
+
+None of the skills is part of the npm package — they're registered separately:
 
 ```bash
 # Install a skill (globally), then ask in natural language:
-npx skills add openbkn-ai/bkn-sdk@openbkn -g -y      # operate the platform
-npx skills add openbkn-ai/bkn-sdk@create-bkn -g -y   # author .bkn files
+npx skills add openbkn-ai/bkn-sdk@openbkn -g -y        # operate the platform
+npx skills add openbkn-ai/bkn-sdk@create-bkn -g -y     # author .bkn files
+npx skills add openbkn-ai/bkn-sdk@create-skill -g -y   # author a Skill package / function tool
 
 #   "列出所有知识网络"  /  "list all knowledge networks"
 #   "从 Vega catalog vcat-1 建一个名为 customers 的知识网络并构建索引"
