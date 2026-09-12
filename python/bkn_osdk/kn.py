@@ -41,6 +41,7 @@ __all__ = [
     "query_metric",
     "query_object_instance",
     "read_skill_file",
+    "run_cypher",
     "run_sql",
     "search_capabilities",
     "search_instance",
@@ -158,8 +159,9 @@ def execute_skill(
     把 Skill 包投进沙箱会话解压，执行 `entry_shell` 指定的入口命令，回收 `exit_code` /
     `stdout` / `stderr`。 **`entry_shell` 必须取自 SKILL.md 声明的入口**，先用
     `get_skill_content` 读清楚再调；这条接口不校验命令与 Skill 的对应关系。 授权由
-    execution-factory 按账户强制：需要该 Skill 的 `execute` 或 `public_access`
-    权限，无权限返回 403。 `stdout` / `stderr` 各自超过 8000 字符会截断（`truncated=true`）。
+    execution-factory 按账户强制：必须拥有该 Skill 的 `execute` 权限； `public_access`
+    只代表公开读取，不能替代执行权限。无权限返回 403。 `stdout` / `stderr` 各自超过 8000
+    字符会截断（`truncated=true`）。
     **本端点由技能执行总闸控制**：`EXECUTE_SKILL_ENABLED=true` 时才注册这条 路由，同名 MCP
     工具也才出现在 `tools/list` 与 `GET /mcp/info`。默认关闭， 此时这条路径返回
     404——「这个部署没有技能执行能力」在路由表上成立。 （旧名 `MCP_EXECUTE_SKILL_ENABLED`
@@ -258,7 +260,8 @@ def explore_subgraph(
     `query_instance_subgraph` 逐节点加条件。 **`isolated_objects`
     是有效结论不是失败**：它明确回答了「这些起点在给定方向与
     跳数内没有关联」。不要因为它有值就重试或改问法。 **取主键**：与 `query_instance_subgraph`
-    一致，对象主键在 `_instance_identity` 里，可直接喂给 [action.yaml](
+    一致，对象主键在 `_instance_identity` 里，可直接喂给 [action.yaml](action.yaml) 或
+    [logic-property.yaml](logic-property.yaml)。
 
     Args:
         source_object_type_id: 探索起点的对象类 ID。
@@ -402,14 +405,17 @@ def get_kn_detail(
     里嵌套的对象类 / 关系类 / 行动类副本**： 这些是顶层数组的重复拷贝，概念组只保留
     `object_type_ids` 作为分组边界。 被剥掉的细节按需用 `get_object_types` /
     `get_relation_types` 取回。 对象类条目带
-    `related_metric_count`（该对象类下已建模指标数），`>0` 才值得 为取指标下钻。
+    `related_metric_count`（该对象类下已建模指标数），`>0` 才值得 为取指标下钻。 顶层带
+    `mounted_capabilities`：该网络已挂载的 Skill 与工具按类型计数。两个 `detail_level`
+    都会返回——它是网络的形状，不是可以剥掉的细节。同样只给计数： 要具体能力用
+    `search_capabilities`。
 
     Args:
         kn_id: 知识网络 ID。与 `x-kn-id` 头二选一，本字段优先。
         detail_level: 详情级别，见端点说明。
 
-    Returns the platform's own payload: action_types, comment, concept_groups, id, name,
-    object_types, relation_types.
+    Returns the platform's own payload: action_types, comment, concept_groups, id,
+    mounted_capabilities, name, object_types, relation_types.
     """
     return _send(
         "/api/agent-retrieval/v1/kn/get_kn_detail",
@@ -682,7 +688,8 @@ def list_skills(
 
     翻已发布 Skill 列表，不需要知识网络上下文。与 `search_capabilities` 互补：那条在
     某个网络已挂载的能力里按相关度召回，这条按名称或分类分页浏览整个平台目录。
-    只返回**已发布**状态的 Skill；草稿态不出现在这里。 **空结果是 200 不是错误**：无匹配时
+    只返回调用者拥有 `view` 权限且存在**已发布版本**的 Skill；纯草稿态不出现在这里。
+    已发布技能正在编辑下一版本时，仍返回当前已发布快照。 **空结果是 200 不是错误**：无匹配时
     `entries: []` 并带 `message` 说明。
 
     Args:
@@ -839,7 +846,8 @@ def query_metric(
     `step`**；`instant=true` 取单点（此时 `step` 被下游忽略）； `start` 与 `end`
     要么都给要么都不给。`step` 大小写不敏感。 这些规则在本服务就地校验并返回 400，规则逐条对齐
     ontology-query 的 `validateMetricQueryRequest`——本地比下游严会把合法调用误拒，比下游松只是
-    把同一个错误延后。 请求体与 ontology-query 的 `MetricQueryReque
+    把同一个错误延后。 请求体与 ontology-query 的 `MetricQueryRequestBody`
+    同构；响应只保留结果序列， 不回带指标定义（`related_metrics` 里已经有了）。
 
     Args:
         kn_id: 知识网络 ID。也可用 `x-kn-id` 头传。
@@ -907,7 +915,22 @@ def query_object_instance(
     没建索引的字段只保留按属性类型推导的比较算子。 **文本检索选哪个**：`match`
     走全文索引，按分析器分词后词法命中；`knn` 走向量
     索引，能召回字面不重合的表述（换个说法、跨语言）。两者是独立算子，没有隐式
-    融合；要同时用就放进 `or` 的 `sub_conditions`。`knn` 另需 `limit_key: k` 与 `limit
+    融合；要同时用就放进 `or` 的 `sub_conditions`。`knn` 另需 `limit_key: k` 与 `limit_value:
+    <近邻数>`。 条件里用了字段不支持的算子时，ontology-query 返回 400 并原样透传错误详情 （如
+    `OntologyQuery.InvalidParameter.Condition`）。 **`_score`
+    的取舍**：纯结构化过滤在底层落成常量打分查询，每条命中分数相同，
+    没有相关度语义，因此响应里的 `_score` 会被剥掉，避免调用方误以为结果按相关度
+    排序。只有查询里含 `knn` 或 `match` 这类真正打分的算子时才保留 `_score`。 **排序**：`sort`
+    可选，多字段按数组顺序依次比较（前一个相等才看后一个）。
+    不传时的默认序**不保证语义**——既不是「最新」也不是「最相关」，因此 「最近的 N
+    条」「金额最高的 N 个」必须显式传 `sort`，不能靠 `limit` 截默认序。 `field`
+    是否属于该对象类由 ontology-query 校验，非法字段或非法 `direction` 返回 400 并透传原因。
+    **总数**：响应的 `total_count` 为满足过滤条件的实例总数，不受 `limit` 限制，
+    无需请求方开启。判断「一共多少条」读它即可，不必翻页累加。三态要分清： - 有值且大于
+    0：真实总数。 - 值为 `0`：真实零命中（字段存在）。 -
+    **字段缺失**：本次没有计算总数，不能推断为 0。用 `search_after` 翻页时
+    第二页起即如此（下游在游标非空时强制关闭总数计算）。要总数就回到不带 `search_after`
+    的首次查询。
 
     Args:
         condition: 过滤条件。逻辑算子（`and` / `or`）用 `sub_conditions` 组合子条件； 叶子条件用
@@ -986,6 +1009,61 @@ def read_skill_file(
     )
 
 
+def run_cypher(
+    kn_id: str,
+    query: str,
+    *,
+    response_format: str | None = None,
+    branch: str | None = None,
+    parameters: dict[str, Any] | None = None,
+    context: Context | None = None,
+) -> Any:
+    """对知识网络执行只读 Cypher.
+
+    编译并执行一条只读 Cypher 语句。**支持的子集**： - **MATCH**：一个或多个 MATCH 子句；一个
+    MATCH 里可以写逗号分隔的多条路径。 同名变量指同一个节点；不共享变量的两部分是笛卡尔积。 -
+    **节点**：变量首次出现时必须带标签（对象类 id 或名称），可带内联属性 `{prop: value}`。 -
+    **关系**：`-[:R]->`、`<-[:R]-`、无向 `-[:R]-`，每条必须指名一个关系类； 一条查询的模式最多
+    8 条关系、9 个节点（不与其他节点相连的节点也各算一张表）。 关系变量（`-[r:R]->`）不支持。
+    - **WHERE**：`=` `<>` `<` `>` `<=` `>=`、`IN [...]`、`IS NULL` / `IS NOT NULL`， 用 `AND`
+    / `OR` / `NOT` 组合，可加括号。值可写 `$name` 参数。 - **RETURN**：属性、`AS`
+    别名、`DISTINCT`，以及 `count` / `sum` / `avg` / `min` / `max`（含 `count(*)` 与
+    `DISTINCT` 形式）。有聚合时按 RETURN 中其余 列自动分组——这是 Cypher 的隐式 GROUP
+    BY，无需也不能自己写 GROUP BY。 - **ORDER BY / SKIP / LIMIT**：ORDER BY
+    可用属性、返回列名或聚合。结果被聚合 或 DISTINCT 折叠后，只能按返回的值排序。
+    **不支持**（会被拒绝，报错指名是哪个语法与位置）：`OPTIONAL MATCH`、`WITH`、
+    `UNION`、变长路径 `[:R*1..3]`、`XOR`、`STARTS WITH` / `CONTAINS` / `ENDS WITH`、
+    返回整个节点、函数调用与算术表达式、写操作（`CREATE` / `MERGE` / `DELETE` / `SET` /
+    `REMOVE`）。 **行数**：不写 `LIMIT` 默认返回 1000 行；`LIMIT` 不得超过 10000。
+    **关系唯一性**：按 openCypher 语义，同一条路径里共用同一关系类的多跳互不相同，
+    编译器会自动补上主键不等的条件，调用方不必自己写。
+
+    Args:
+        kn_id: 知识网络 ID，来自 `list_knowledge_networks`。
+        branch: 分支名。不传按主分支查。
+        query: 只读 Cypher 语句，语法子集见端点说明。
+        parameters: 语句里 `$name` 的取值。只能是字符串、数字或布尔值——参数是值，不会变成
+            表名或列名，因此不能用来拼标签、关系类型或属性名。`null` 会被拒绝： 判空写 `IS
+            NULL`。
+
+    Returns the platform's own payload: columns, entries.
+    """
+    return _send(
+        "/api/agent-retrieval/v1/kn/run_cypher",
+        kn_id,
+        {
+            "response_format": response_format,
+        },
+        {
+            "kn_id": kn_id,
+            "branch": branch,
+            "query": query,
+            "parameters": parameters,
+        },
+        context,
+    )
+
+
 def run_sql(
     kn_id: str,
     sql: str,
@@ -1007,7 +1085,18 @@ def run_sql(
     开头的语句，但 vega 当前会拒绝 CTE， 因此调用方**不得使用 `WITH` / CTE 或 `UNION` /
     `INTERSECT` / `EXCEPT`**。 守卫会先剥掉注释、字符串字面量、反引号标识符与占位符，
     再判定：不允许多语句（剥离后仍含 `;`）、必须以 `SELECT` 或 `WITH` 开头、不得含 写入 / DDL
-    / 权限 / 过程类关键字（INSERT、UPD
+    / 权限 / 过程类关键字（INSERT、UPDATE、DELETE、DROP、ALTER、
+    CREATE、TRUNCATE、GRANT、REVOKE、REPLACE、MERGE、UPSERT、CALL、EXEC、
+    EXECUTE、RENAME、LOAD、COPY、INTO、ATTACH、DETACH、USE、VACUUM、ANALYZE、
+    REFRESH、COMMENT、PREPARE、DEALLOCATE）。 当前保证可用的只读语法为：单表或同一 catalog
+    内的 `JOIN`、`WHERE`、 `GROUP BY` / `HAVING`、`ORDER BY`、`LIMIT` 及常用聚合函数（如
+    `COUNT`、`SUM`、
+    `AVG`、`MIN`、`MAX`）。子查询和窗口函数不属于当前兼容性承诺，调用方不得依赖。 SQL Server
+    资源还要求 `SELECT` 输出列名唯一；使用 `JOIN` 时，`*` 必须带表别名 限定（如
+    `o.*`），不能使用裸 `*`。 守卫不是完整 SQL 解析器，是纵深防御的一层：vega 侧另有基于
+    SQLGlot AST 的 只读策略做最终裁决（拒绝非顶层
+    SELECT、WITH/CTE、集合运算等），两层都不可省。 **不分页**：固定单次返回，上限 10000
+    行。要更多数据请在 SQL 里自己收敛 （聚合、加条件、加 LIMIT）。
 
     Args:
         sql: MySQL 方言 SQL。表名必须写成 `{{.<resource_id>}}` 占位符， 也接受 `{{<resource_id>}}`
@@ -1055,9 +1144,22 @@ def search_capabilities(
     100：工具类命中都带一份入参 schema，调大会显著占用上下文。 命中数超过 `limit` 时
     `truncated=true` 并给出 `message`。 回填 schema
     时单个工具箱取列表失败会跳过该箱而不是整体失败：一个被撤销或损坏的
-    工具箱不该让调用方看不到其余所有能力。 **不带 `query`
+    工具箱不该让调用方看不到其余所有能力。
+    **生命周期门在可见性之前**：命中的能力先按所属工具箱 / MCP Server 的**发布状态**
+    与工具自身的**启用状态**过滤，这两项从执行工厂自己的记录读取（不依赖调用方 token，
+    内部面同样生效），核不到一律按未发布处理——索引最多滞后到下一次事件或对账，这一道
+    保证下线、停用后的能力在那个窗口里也不会被推荐。剔除后若不足 `limit` 且排序还有
+    更多，会**有界补召回一次**（最多 `limit×3`，不超过 100）；仍不足则 `truncated=true` 并用
+    `message` 说明结果不完整，不会静默少给。空结果全因下线或状态无法确认时， `message`
+    指向发布状态而不是权限。 **不带 `query`
     时成员集由挂载决定，不由索引决定**：没有查询词就没有要排序的东西，
-    此时按绑定顺序列出挂载集，索引只用来补名称、说明与 `metadata_type`，索引没收录
+    此时按绑定顺序列出挂载集，索引只用来补名称、说明与 `metadata_type`，索引没收录的
+    由目录（工具）或注册表（Skill）补齐。索引是异步构建的，新装的环境还没有，让它决定
+    成员集会使「刚挂上、还没进索引」的能力凭空消失。带 `query` 时索引不可用则报错——
+    排序没有可退化的东西。 **`metadata_types`
+    是例外**：绑定只记能力类型，不记工具箱种类，这个过滤只有索引 答得出。所以带
+    `metadata_types` 时索引不可用一律报错，不会退化成一份没过滤的列表。 **空结果是 200
+    不是错误**：无匹配时 `capabilities: []` 并带 `message` 说明。
 
     Args:
         kn_id: 知识网络 ID。范围取自该网络的能力绑定；未挂载任何能力时返回空列表并给出提示。
