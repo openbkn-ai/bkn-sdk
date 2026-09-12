@@ -7,7 +7,17 @@
  * No external side effects on import; required runtime APIs are validated synchronously.
  */
 export { createClient, type BknClient } from "./client.js";
-export type { ClientOptions, RequestContext } from "./types.js";
+export type {
+  ClientOptions,
+  DataPropertyDefinition,
+  DataPropertyMaskRule,
+  DateGranularityMaskRule,
+  EmailMaskRule,
+  FixedMaskRule,
+  PartialMaskRule,
+  RequestContext,
+  RoundMaskRule,
+} from "./types.js";
 export { DEFAULT_LIST_LIMIT, DEFAULT_QUERY_LIMIT } from "./types.js";
 export { HttpError, InputError, NonJsonResponseError, ToolError } from "./utils/errors.js";
 // The shape `kn.createFromCatalog` stamps onto a failure

@@ -247,6 +247,39 @@ openbkn context query-instance-subgraph <kn> --args '{
 }'
 ```
 
+### Cypher across object types — `run-cypher`
+
+When the question can be stated in object types and relation types — filter along a
+path, aggregate what it reaches — write it as read-only Cypher. Everything is named
+the way the model names it: labels are object type ids or names, relationship types
+are relation type ids or names, properties are logical property names. No resource
+id, no physical column; bkn-backend works out the joins from the relation types.
+
+```bash
+openbkn context run-cypher <kn> \
+  --query "MATCH (c:customer)<-[:rel_order_customer]-(o:order)
+           WHERE o.amount > \$floor
+           RETURN c.city AS city, count(*) AS orders ORDER BY orders DESC LIMIT 20" \
+  --params '{"floor": 100}'
+# → { "columns": [{"name": "city", "type": "string"}, ...], "entries": [{"city": ..., "orders": ...}] }
+```
+
+- Supported: several `MATCH` clauses and comma-separated paths (a repeated variable is
+  the same node); `-[:R]->`, `<-[:R]-`, undirected `-[:R]-`; `WHERE` with comparisons,
+  `IN`, `IS NULL`, `AND`/`OR`/`NOT`; `RETURN` with `AS`, `DISTINCT` and
+  `count`/`sum`/`avg`/`min`/`max` — aggregating groups by the other returned columns;
+  `ORDER BY`, `SKIP`, `LIMIT`.
+- Refused, naming the construct and its position: `OPTIONAL MATCH`, `WITH`, `UNION`,
+  variable-length paths `[:R*1..3]`, functions and arithmetic, returning a whole node
+  (`RETURN n` — return its properties instead), relationship variables `-[r:R]->`.
+- Limits: at most 8 relationships and 9 nodes per query; 1000 rows without `LIMIT`;
+  `LIMIT` above 10000 is refused.
+- `--params` is a JSON object of values. A parameter never becomes a label, relationship
+  type or property name. Quote `$name` in the shell (`\$floor` inside double quotes).
+- Fall back to `run-sql` only for what the subset cannot express (CTEs, `UNION`, window
+  functions) or for resources never modelled as object types.
+- `openbkn bkn cypher <kn> --query ...` runs the same statement outside any Trace session.
+
 ### Instance enrichment / actions — `--args <json>`
 
 ```bash
@@ -261,15 +294,23 @@ openbkn context get-logic-properties <kn> --args '{
 openbkn context get-action-info <kn> --args '{"at_id": "at-1", "_instance_identity": {"id": "123"}}'
 ```
 
-### Skill recall
+### Capability search
+
+One ranking over every kind the network mounted — skills, functions, API tools
+and MCP tools — so "what can do this?" is one call, not one per kind.
 
 ```bash
-openbkn context find-skills <kn> <object-type-id> --top-k 5
+openbkn context search-capabilities <kn> --query "treatment" --limit 5
+openbkn context search-capabilities <kn> --types skill
+openbkn context search-capabilities <kn> --types function --metadata-types openapi
 ```
 
-`<object-type-id>` → `object_type_id`, `--top-k n` → `top_k` (1–20). For the
-richer args (skill_query, instance_identities) use the generic path:
-`tool-call <kn> find_skills --args '{"object_type_id":"ot_drug","skill_query":"treatment","top_k":5}'`.
+Each hit carries `capability_type`, which decides what comes next: `function`
+and `mcp_tool` are called through `execute_tool` with the returned
+`input_schema`, `skill` is read with `get_skill_content` and run with
+`execute_skill`. Omit `--query` to list what is mounted, in mount order.
+
+Replaces `find-skills` and the tool-only search, removed in bkn-foundry#1401.
 
 ### Standard MCP resources & prompts
 

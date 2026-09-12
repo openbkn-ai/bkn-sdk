@@ -79,7 +79,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 | `auth` | 认证 / 会话 / 多用户 | `login`（`--token` / `-u -p` / 浏览器 / `--device`，均走 device-code）、`status`/`whoami`/`token`/`list`/`use`/`switch`/`users`/`export`、`change-password` |
 | `config` | 平台 CLI 配置 | `config show` / `config set <key> <value>` |
 | `appkey` | 用户自助签发的 AppKey（`bak_` 长期凭据，仅 Context Loader 可用） | `list`、`create --name <s> [--expire-days <n> \| --expires-at <rfc3339> \| --never-expire]`（明文 `key` **只返回一次**）、`regenerate <id>`（轮换：同 id 出新 key，旧 key 立即失效）、`revoke <id>`、`admin list [--owner-id]`/`admin revoke <id>` |
-| `bkn` | 知识网络 + Schema + 查询 + 本地包 | `list`/`get`/`search`/`stats`/`export`、`object-type/relation-type/action-type list/get/create/update/delete`、`action-type query/execute`、`metric …`、`concept-group …`、`action-log/action-schedule …`、`subgraph`、`relation-type-paths`、`resources`、`push <dir>`/`pull <kn> [dir]`、`validate <dir>`、`create-from-catalog <catalog> --name …`（`--build`、`--pk-map t:col`） |
+| `bkn` | 知识网络 + Schema + 查询 + 本地包 | `list`/`get`/`search`/`stats`/`export`、`object-type/relation-type/action-type list/get/create/update/delete`、`action-type query/execute`、`metric …`、`concept-group …`、`action-log/action-schedule …`、`subgraph`、`relation-type-paths`、`resources`、`push <dir>`/`pull <kn> [dir]`、`validate <dir>`、`create-from-catalog <catalog> --name … --pk-map t:col` |
 | `resource` | Vega-backend 资源 | `list`/`get`/`find --name`/`query`/`delete` |
 | `vega` | Catalog + 索引构建 + SQL | `catalog list/get`、`catalog resources`、`connector-types`、`sql --query "<sql>"`（直连 MySQL/PG/OpenSearch，SQL 用 `{{resource-id}}` 占位）、`build`（索引 BuildTask）+ 状态 |
 | `context` | MCP 检索 | 业务对话通过 MCP 工具 `bkn_start_interaction` / `bkn_finish_interaction` 管理；CLI 沿用 `tool-call` 透传，不另设生命周期命令 |
@@ -120,6 +120,7 @@ BuildTask 产出；`trace` 的 business-provenance 摘要（requests/interaction
 | vega-backend 资源 | [resource.md](references/resource.md) |
 | Context Loader（MCP） | [context.md](references/context.md) |
 | Skill 注册 / 生命周期 | [skill.md](references/skill.md) |
+| 写一个 Skill 包 / 沙箱函数（bkn-osdk） | [create-skill](../create-skill/SKILL.md) 技能 |
 | Toolbox / Tool | [toolbox.md](references/toolbox.md) |
 | 沙箱函数（代码→工具） | [function.md](references/function.md) |
 | Python 里读知识网络（bkn-osdk） | [osdk.md](references/osdk.md) |

@@ -11,7 +11,7 @@ import {
   type UpdateResourceOptions,
   configureResourceIndex,
   createResource,
-  createResourceDocuments,
+  createResourceDocument,
   deleteResource,
   deleteResourceDocuments,
   deleteResourceDocumentsByFilter,
@@ -19,12 +19,11 @@ import {
   enableResource,
   findResource,
   getResource,
-  getResourceDocument,
+  getResourceDocuments,
   listResources,
   queryResource,
   updateResource,
   upsertResourceDocument,
-  upsertResourceDocuments,
 } from "../api/resources.js";
 import type { RequestContext } from "../types.js";
 
@@ -42,15 +41,20 @@ export function resources(ctx: RequestContext) {
       configureResourceIndex(ctx, id, opts),
     find: (name: string, opts?: FindResourceOptions) => findResource(ctx, name, opts),
     query: (id: string, opts?: QueryResourceOptions) => queryResource(ctx, id, opts),
-    createDocuments: (id: string, documents: ResourceDocument[]) =>
-      createResourceDocuments(ctx, id, documents),
-    upsertDocuments: (id: string, documents: Array<ResourceDocument & { id: string }>) =>
-      upsertResourceDocuments(ctx, id, documents),
-    getDocument: (id: string, documentId: string) => getResourceDocument(ctx, id, documentId),
+    createDocument: (id: string, document: ResourceDocument) =>
+      createResourceDocument(ctx, id, document),
+    getDocuments: (
+      id: string,
+      documentIds: string | string[],
+      opts?: { ignoreMissing?: boolean },
+    ) => getResourceDocuments(ctx, id, documentIds, opts),
     upsertDocument: (id: string, documentId: string, document: ResourceDocument) =>
       upsertResourceDocument(ctx, id, documentId, document),
-    deleteDocuments: (id: string, documentIds: string | string[]) =>
-      deleteResourceDocuments(ctx, id, documentIds),
+    deleteDocuments: (
+      id: string,
+      documentIds: string | string[],
+      opts?: { ignoreMissing?: boolean },
+    ) => deleteResourceDocuments(ctx, id, documentIds, opts),
     deleteDocumentsByFilter: (id: string, filterCondition: Record<string, unknown>) =>
       deleteResourceDocumentsByFilter(ctx, id, filterCondition),
   };

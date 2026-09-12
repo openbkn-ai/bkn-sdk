@@ -529,7 +529,7 @@ Three emission rules:
   two APIs for one capability.
 
 What remains is genuine net gain: `run_sql`, `search_schema`, `describe_resource`,
-`list_resources`, `find_skills`, `get_action_info`, `execute_action`, `get_skill_content`,
+`list_resources`, `search_capabilities`, `get_action_info`, `execute_action`, `get_skill_content`,
 `execute_skill`, `list_action_executions`.
 
 This does not contradict [What the Python side does not replicate](#what-the-python-side-does-not-replicate).

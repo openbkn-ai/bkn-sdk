@@ -1,8 +1,12 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { markVersionCompatibleForTest } from "../../src/api/version-check.js";
+import { kn } from "../../src/resources/knowledge-networks.js";
+import type { RequestContext } from "../../src/types.js";
 import { validateBknDirectory } from "../../src/utils/bkn-validate.js";
+import { InputError } from "../../src/utils/errors.js";
 
 const temps: string[] = [];
 function bkn(files: Record<string, string>): string {
@@ -17,9 +21,29 @@ function bkn(files: Record<string, string>): string {
 }
 afterEach(() => {
   for (const d of temps.splice(0)) rmSync(d, { recursive: true, force: true });
+  vi.unstubAllGlobals();
 });
 
 const ot = (id: string, name: string) => `---\ntype: object_type\nid: ${id}\nname: ${name}\n---\n`;
+const network = "---\ntype: knowledge_network\nid: kn1\nname: KN One\n---\n";
+const otWithMaskRules = (rows: Array<[string, string, string]>) => `${ot("a", "Alpha")}
+## ObjectType: Alpha
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field | Mask Rule |
+|------|--------------|------|-------------|--------------|-----------|
+${rows.map(([name, type, rule]) => `| ${name} | ${name} | ${type} | | ${name} | ${rule} |`).join("\n")}
+`;
+const legacyOtWithoutMaskRule = `${ot("a", "Alpha")}
+## ObjectType: Alpha
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| secret | Secret | String | | secret |
+`;
 
 describe("bkn validate", () => {
   it("accepts a well-formed network", () => {
@@ -65,5 +89,92 @@ describe("bkn validate", () => {
     const r = validateBknDirectory(dir);
     expect(r.valid).toBe(true); // unknown endpoint is a warning, not an error
     expect(r.warnings.some((w) => w.includes("ghost"))).toBe(true);
+  });
+
+  it("accepts every supported mask-rule kind and Unicode boundaries", () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": otWithMaskRules([
+        ["secret", "String", `{"kind":"fixed","replacement":"保密"}`],
+        [
+          "account",
+          "keyword",
+          `{"kind":"partial","keep_start":0,"keep_end":64,"replacement":"\\u007c"}`,
+        ],
+        [
+          "email",
+          "text",
+          `{"kind":"email","local_keep_start":64,"preserve_domain":false,"replacement":"●"}`,
+        ],
+        ["amount", "decimal", `{"kind":"round","step":0.000001}`],
+        ["created_at", "DATETIME", `{"kind":"date_granularity","granularity":"day"}`],
+      ]),
+    });
+
+    expect(validateBknDirectory(dir).errors).toEqual([]);
+  });
+
+  it.each([
+    ["malformed JSON", "string", "{"],
+    ["unknown kind", "string", `{"kind":"regex","replacement":"*"}`],
+    ["unknown field", "string", `{"kind":"fixed","replacement":"*","keep_strat":1}`],
+    ["type mismatch", "boolean", `{"kind":"fixed","replacement":"*"}`],
+    ["keep bound", "string", `{"kind":"partial","keep_start":65,"keep_end":0,"replacement":"*"}`],
+    ["non-printable replacement", "string", JSON.stringify({ kind: "fixed", replacement: "\n" })],
+    ["round step", "integer", `{"kind":"round","step":0}`],
+    ["date precision", "date", `{"kind":"date_granularity","granularity":"day"}`],
+    ["unsupported property type", "vector", `{"kind":"fixed","replacement":"*"}`],
+  ])("rejects an invalid mask rule: %s", (_name, type, rule) => {
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": otWithMaskRules([["secret", type, rule]]),
+    });
+
+    const result = validateBknDirectory(dir);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((error) => error.includes("data property 'secret'"))).toBe(true);
+  });
+
+  it("rejects an invalid mask rule before push performs network I/O", async () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": otWithMaskRules([
+        ["secret", "json", `{"kind":"fixed","replacement":"*"}`],
+      ]),
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const ctx: RequestContext = {
+      baseUrl: "https://demo.example.com",
+      token: "token",
+      insecure: false,
+    };
+
+    await expect(kn(ctx).push(dir)).rejects.toBeInstanceOf(InputError);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("allows a legacy package without a Mask Rule column to reach upload", async () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": legacyOtWithoutMaskRule,
+    });
+    const fetchMock = vi.fn(
+      async (_url: string | URL, _init?: RequestInit) =>
+        new Response('{"id":"kn1"}', { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const ctx: RequestContext = {
+      baseUrl: "https://demo.example.com",
+      token: "token",
+      insecure: false,
+    };
+    markVersionCompatibleForTest(ctx);
+
+    await expect(kn(ctx).push(dir)).resolves.toEqual({ id: "kn1" });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const uploadUrl = fetchMock.mock.calls[0]?.[0];
+    expect(uploadUrl).toBeDefined();
+    expect(new URL(uploadUrl as string | URL).pathname).toBe("/api/bkn-backend/v1/bkns");
   });
 });

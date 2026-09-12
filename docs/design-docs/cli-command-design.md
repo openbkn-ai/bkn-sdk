@@ -28,7 +28,7 @@ openbkn
   resource  (res)  list | find | get | query | delete
   vega      health | stats | inspect | catalog | resource | dataset | query | sql | connector-type
   context   (context-loader)  search-schema | query-object-instance | query-instance-subgraph
-            | get-logic-properties | get-action-info | find-skills | tools | resources | resource
+            | get-logic-properties | get-action-info | search-capabilities | tools | resources | resource
             | templates | prompts | prompt | tool-call [--receipt --json]
 
   # models, skills, trace

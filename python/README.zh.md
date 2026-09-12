@@ -236,13 +236,17 @@ with ensure_interaction(ctx, kn_id) as turn:
 
 ### 能力路由的命名函数
 
-context-loader 那一圈 —— `/api/agent-retrieval/v1/kn/` 下的 23 条路由 —— 也是生成的，源头是 foundry 自己的 OpenAPI：
+context-loader 那一圈 —— `/api/agent-retrieval/v1/kn/` 下的 25 条路由 —— 也是生成的，源头是 foundry 自己的 OpenAPI：
 
 ```python
 from bkn_osdk import kn
 
 kn.list_resources(KN_ID)
 kn.run_sql(KN_ID, "SELECT COUNT(*) AS n FROM {{.d9hff…}}")
+kn.run_cypher(
+    KN_ID,
+    "MATCH (o:order)-[:rel_order_customer]->(c:customer) RETURN c.city AS city, count(*) AS n",
+)
 kn.query_object_instance(KN_ID, "order", limit=10, response_format="json")
 ```
 
@@ -268,7 +272,7 @@ kn.query_object_instance(KN_ID, "order", limit=10, response_format="json")
 
 ## 这个版本没有的
 
-写入与行动执行、对象集上的聚合（没有对应端点，见上）、catalog 里其余工具的类型化包装 —— `find_skills`、`describe_resource`、`query_instance_subgraph` 等目前只能通过 `call_tool` 触达 —— 异步客户端，以及从本地 `.bkn` 目录离线生成。每一项在[设计文档](../docs/superpowers/specs/2026-08-11-python-osdk-design.md)里都有一节，写明它落地时会长成什么样。
+写入与行动执行、对象集上的聚合（没有对应端点，见上）、catalog 里只走 MCP 的那些工具的类型化包装 —— 生命周期两条与沙箱工具，目前只能通过 `call_tool` 触达 —— 异步客户端，以及从本地 `.bkn` 目录离线生成。每一项在[设计文档](../docs/superpowers/specs/2026-08-11-python-osdk-design.md)里都有一节，写明它落地时会长成什么样。
 
 ## 开发
 
@@ -289,3 +293,9 @@ BKN_E2E=1 BKN_E2E_KN=ecommerce_ops_bkn_public BKN_BASE_URL=https://your-platform
 ```
 
 `BKN_E2E_OBJECT_TYPE` 指定被测的类；不给就自动挑一个有数据、且有关系可走的类。凭据的解析和任何调用方一样，所以 `openbkn auth login` 就够了。**建议对多个部署各跑一遍**：这个 SDK 依托开发的两台在路由名、指标、以及各自数据资源能服务哪些读上都出现过分歧。
+
+### 函数内部调用的 Trace 父操作
+
+沙箱同时注入会话、交互 ID 和 `BKN_PARENT_OPERATION_ID` 时，内部读取会将父 ID
+作为 `bkn_context.parent_operation_id` 传递。每次读取仍保留自己的操作与回执。
+显式切换到其他交互时不继承原父 ID；业务函数不需要增加参数。

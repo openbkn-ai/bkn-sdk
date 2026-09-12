@@ -16,6 +16,14 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
 - `openbkn bkn get <id>` — one network, summary + schema pointers.
 - `openbkn bkn query <id> ...` — query object types / instances (default limit 50).
 - `openbkn bkn push <dir>` / `openbkn bkn pull <id>` — upload/download a BKN package; optional encoding detection (`--no-detect-encoding`, `--source-encoding`).
+- An object type's `### Data Properties` table may include an optional `Mask Rule`
+  column containing one compact JSON object. The supported discriminated rules
+  are `fixed`, `partial`, and `email` for string-like properties; `round` for
+  numeric properties; and `date_granularity` for date/time properties. Legacy
+  tables without this column remain valid.
+- `bkn push` validates mask-rule JSON, required parameters, bounds, property-type
+  compatibility, and kind-specific fields before packaging or making a network
+  request. `bkn pull` preserves the `.bkn` payload unchanged.
 - When the lifecycle catalog requires `conversation_mode`, managed retrieval
   sends `new` without a conversation ID or `continue` with one. If that
   handshake fails, the SDK surfaces the lifecycle error and does not send an
@@ -27,7 +35,7 @@ There is **no KN-level build**. The legacy `bkn build` (a `job_type:"full"` job 
 
 A KN is the schema/ontology layer; it **references** already-built Catalog resources and does not own a build lifecycle. Rationale: KN→Catalog is one-to-many and the data layer must build independently of the schema layer — driving builds from a KN verb would invert the layering and be ambiguous.
 
-`bkn create-from-catalog` binds each catalog table to the Vega resource discovery already created for it (physical resources are no longer created through REST), then creates the KN and its object types (each OT bound to a resource). With `--build` it then **fans out a BuildTask per created resource** (`vega dataset build` semantics) and polls each — replacing the legacy single KN-level job. Build granularity = the resources this KN uses, not the whole catalog.
+`bkn create-from-catalog` binds each catalog table to the Vega resource discovery already created for it (physical resources are no longer created through REST), then creates the KN and its object types (each OT bound to a resource). It never configures or starts index builds; configure resource index fields and create BuildTasks through `openbkn vega dataset build`.
 
 ## SDK touchpoints
 

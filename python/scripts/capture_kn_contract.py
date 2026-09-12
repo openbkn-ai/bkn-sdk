@@ -38,12 +38,7 @@ RETIRED = {"kn_search"}
 
 #: Measured behaviour a caller cannot learn from the spec. Kept short and rare:
 #: most surprises belong in the capture itself, not in prose beside it.
-NOTES = {
-    "find_skills": (
-        "实测：网络没有绑定技能时返回 404 BknBackend.ObjectType.ObjectTypeNotFound"
-        "(“对象类不存在”)。对象类是存在的，这个错误码指错了方向。"
-    ),
-}
+NOTES: dict[str, str] = {}
 
 
 def resolve(schema: Any, spec: dict[str, Any], section: str = "schemas") -> dict[str, Any]:
@@ -133,7 +128,11 @@ def operation(path: str, method: str, op: dict[str, Any], spec: dict[str, Any]) 
         "operation": operation_id,
         **({"note": NOTES[operation_id]} if operation_id in NOTES else {}),
         "summary": " ".join(str(op.get("summary", "")).split()),
-        "description": " ".join(str(op.get("description", "")).split())[:600],
+        # Whole, not clipped: the generated docstring is the only documentation a
+        # caller of the named function sees, and a fixed cut ended mid-word —
+        # `run_cypher`'s stopped at "ORDER BY / SKI", before the constructs it
+        # refuses. The longest description is about 1300 characters.
+        "description": " ".join(str(op.get("description", "")).split()),
         "query": query,
         "body": body,
         # Every route on this surface refuses a context-free call — measured on

@@ -189,8 +189,41 @@ def test_unset_optional_arguments_are_not_sent(deploy: Deploy) -> None:
 def test_a_route_that_sends_the_network_still_sends_it(deploy: Deploy) -> None:
     """`kn_id` is the first argument everywhere, but only the routes that declare
     it put it on the wire."""
-    kn.find_skills(KN, "order", context=CONTEXT)
+    kn.search_capabilities(KN, context=CONTEXT)
     kn.run_sql(KN, "SELECT 1 FROM {{.r}}", context=CONTEXT)
 
     assert deploy.bodies[0]["kn_id"] == KN
     assert "kn_id" not in deploy.bodies[1]  # run_sql finds its data through the placeholder
+
+
+def test_a_cypher_query_carries_its_statement_and_values_in_the_body(deploy: Deploy) -> None:
+    """`run_cypher` names the network in the body, unlike `run_sql`: the statement
+    is written in model names, so the network is the only thing that says which
+    model it is compiled against. Parameters travel as they were given — a value
+    past 2^53 keeps every digit — and an unset branch is not sent."""
+    statement = "MATCH (o:order) WHERE o.id = $id RETURN o.no AS no"
+    kn.run_cypher(
+        KN,
+        statement,
+        parameters={"id": 9007199254740993},
+        response_format="json",
+        context=CONTEXT,
+    )
+
+    assert deploy.paths[0] == "/api/agent-retrieval/v1/kn/run_cypher"
+    assert deploy.queries[0] == {"response_format": "json"}
+    assert deploy.bodies[0]["kn_id"] == KN
+    assert deploy.bodies[0]["query"] == statement
+    assert deploy.bodies[0]["parameters"] == {"id": 9007199254740993}
+    assert "branch" not in deploy.bodies[0]
+
+
+def test_a_route_description_reaches_the_docstring_whole() -> None:
+    """The docstring is the only documentation a caller of a named function sees.
+    A fixed cut at 600 characters stopped `run_cypher`'s at "ORDER BY / SKI",
+    before the constructs it refuses and the row limits."""
+    description = operation("run_cypher")["description"]
+
+    assert "OPTIONAL MATCH" in description
+    assert "10000" in description
+    assert "OPTIONAL MATCH" in (kn.run_cypher.__doc__ or "")

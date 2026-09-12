@@ -6,9 +6,10 @@ import { Command } from "commander";
 import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { validateBknDirectory } from "../utils/bkn-validate.js";
+import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
-import { parseEmbeddingFields, parsePkMap } from "../utils/pk-detection.js";
-import { clientFrom, csv, outputOptions, readBody } from "./_shared.js";
+import { parsePkMap } from "../utils/pk-detection.js";
+import { clientFrom, csv, cypherParams, outputOptions, readBody } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 
@@ -502,17 +503,10 @@ export function bknCommand(): Command {
     .command("push <directory>")
     .description("Pack a BKN directory into a tar and import it as a knowledge network")
     .option("--branch <name>", "target branch", "main")
-    .option("--build", "submit a Vega build task for each object type declaring a vector index")
-    .option(
-      "--embedding-model <name-or-id>",
-      "small-model name (or numeric ID, resolved to its name) for declared vector indexes (with --build)",
-    )
     .action(async (dir: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).kn.push(dir, {
           branch: opts.branch,
-          build: Boolean(opts.build),
-          embeddingModel: opts.embeddingModel,
         }),
         outputOptions(cmd),
       );
@@ -544,6 +538,43 @@ export function bknCommand(): Command {
     });
 
   bkn
+    .command("cypher <kn-id>")
+    .description(
+      "Answer a read-only Cypher query over the network's model, outside any Trace session",
+    )
+    .requiredOption(
+      "--query <cypher>",
+      "read-only Cypher: labels are object types, relationship types are relation types",
+    )
+    .option(
+      "--params <json>",
+      "values for $name placeholders, as a JSON object: '{\"floor\": 100}'",
+    )
+    .option("--branch <branch>", "knowledge network branch (default: main)")
+    .addHelpText(
+      "after",
+      `
+The compiler behind \`openbkn context run-cypher\`, called directly: the same subset,
+the same limits, the same refusals naming the construct and its position. Answers
+{columns, entries}; the generated SQL is never returned. Nothing is recorded in BKN
+Trace — use context run-cypher when the query is part of a conversation an agent
+should be able to account for.
+
+  openbkn bkn cypher <kn-id> \\
+    --query "MATCH (c:customer)<-[:rel_order_customer]-(o:order) RETURN c.city AS city, count(*) AS orders"`,
+    )
+    .action(async (knId: string, opts, cmd: Command) => {
+      if (!opts.query.trim()) throw new InputError("--query must not be empty.");
+      printJson(
+        await clientFrom(cmd).kn.cypher(knId, opts.query, {
+          branch: opts.branch,
+          parameters: cypherParams(opts.params),
+        }),
+        outputOptions(cmd),
+      );
+    });
+
+  bkn
     .command("resources")
     .description("List BKN-backend resources")
     .action(async (_opts, cmd: Command) => {
@@ -556,15 +587,6 @@ export function bknCommand(): Command {
     .requiredOption("--name <name>", "knowledge network name")
     .option("--tables <list>", "comma-separated table names (default: all)")
     .option("--pk-map <map>", "explicit primary keys: '<table>:<col>[,<table>:<col>...]'")
-    .option("--build", "submit a Vega build task per resource after creation")
-    .option(
-      "--embedding-fields <map>",
-      "columns to vectorize per table (with --build): '<table>:<col>[+<col>...][,...]'",
-    )
-    .option(
-      "--embedding-model <name-or-id>",
-      "small-model name (or numeric ID, resolved to its name) for the vector index (with --build)",
-    )
     .option("--no-rollback", "keep a partially-created KN on failure")
     .action(async (catalogId: string, opts, cmd: Command) => {
       printJson(
@@ -573,11 +595,6 @@ export function bknCommand(): Command {
           name: opts.name,
           tables: csv(opts.tables),
           pkMap: opts.pkMap ? parsePkMap(opts.pkMap) : undefined,
-          build: Boolean(opts.build),
-          embeddingFields: opts.embeddingFields
-            ? parseEmbeddingFields(opts.embeddingFields)
-            : undefined,
-          embeddingModel: opts.embeddingModel,
           noRollback: opts.rollback === false,
           onProgress: (m) => console.error(m),
         }),
@@ -613,6 +630,7 @@ export function bknCommand(): Command {
       "search",
       "subgraph",
       "relation-type-paths",
+      "cypher",
       "resources",
       "action-execution",
       "validate",

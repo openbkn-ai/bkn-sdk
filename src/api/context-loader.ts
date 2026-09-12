@@ -478,8 +478,17 @@ export async function callTool(
   return (await callToolResult(ctx, knId, name, args, options)).value;
 }
 
+/**
+ * Tools whose `query` argument is a statement in a query language rather than the
+ * user's words. Recording it as the interaction's question would put machine text
+ * where Trace expects a person's question, so these are recorded by name, as
+ * `run_sql` (whose statement is `sql`) already is.
+ */
+const STATEMENT_QUERY_TOOLS = new Set(["run_cypher"]);
+
 /** The interaction's recorded question: the user's own words when the tool has them. */
 function questionFor(name: string, args: Record<string, unknown>): string {
+  if (STATEMENT_QUERY_TOOLS.has(name)) return name;
   return typeof args.query === "string" && args.query ? args.query : name;
 }
 
@@ -558,15 +567,32 @@ export function queryObjectInstance(
   return callTool(ctx, knId, "query_object_instance", args);
 }
 
-export function findSkills(
+/** Capability kinds a knowledge network can mount. `function` covers API tools too; split those
+ * apart with `metadataTypes`. */
+export type CapabilityType = "skill" | "function" | "mcp_tool";
+
+/** One ranking over every kind the network mounted (bkn-foundry#1370).
+ *
+ * Replaces find_skills and search_tools, which were this call with the kinds pinned and were
+ * removed in bkn-foundry#1401. */
+export function searchCapabilities(
   ctx: RequestContext,
   knId: string,
-  objectTypeId: string,
-  topK?: number,
+  opts: {
+    query?: string;
+    types?: CapabilityType[];
+    metadataTypes?: ("openapi" | "function")[];
+    ownerId?: string;
+    limit?: number;
+  } = {},
 ): Promise<unknown> {
-  const args: Record<string, unknown> = { object_type_id: objectTypeId };
-  if (topK !== undefined) args.top_k = topK;
-  return callTool(ctx, knId, "find_skills", args);
+  const args: Record<string, unknown> = {};
+  if (opts.query !== undefined) args.query = opts.query;
+  if (opts.types?.length) args.types = opts.types;
+  if (opts.metadataTypes?.length) args.metadata_types = opts.metadataTypes;
+  if (opts.ownerId !== undefined) args.owner_id = opts.ownerId;
+  if (opts.limit !== undefined) args.limit = opts.limit;
+  return callTool(ctx, knId, "search_capabilities", args);
 }
 
 /** Progressive KN-detail disclosure level: `summary` (skeleton + property names) | `full`. */
@@ -608,6 +634,35 @@ export function getRelationTypes(
 
 export function listTools(ctx: RequestContext, knId: string): Promise<unknown> {
   return callMethod(ctx, knId, "tools/list");
+}
+
+/** Options for {@link runCypher}. */
+export interface RunCypherOptions {
+  /** Knowledge network branch; the deploy reads `main` when omitted. */
+  branch?: string;
+  /**
+   * Values for the `$name` parameters in the query. Values only: a parameter never
+   * becomes a label, a relationship type or a property name.
+   */
+  parameters?: Record<string, unknown>;
+}
+
+/**
+ * Read-only Cypher over the network's model (`run_cypher`). Labels are object types,
+ * relationship types are relation types, properties are logical names — bkn-backend
+ * compiles the statement, so no resource id or physical column is needed. A refusal
+ * names the construct and its position; it arrives as the tool's error.
+ */
+export function runCypher(
+  ctx: RequestContext,
+  knId: string,
+  query: string,
+  opts?: RunCypherOptions,
+): Promise<unknown> {
+  const args: Record<string, unknown> = { query, response_format: "json" };
+  if (opts?.branch) args.branch = opts.branch;
+  if (opts?.parameters) args.parameters = opts.parameters;
+  return callTool(ctx, knId, "run_cypher", args);
 }
 
 /** Layer-2 subgraph query across relation-type paths (`query_instance_subgraph`). */

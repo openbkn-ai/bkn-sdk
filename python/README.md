@@ -335,7 +335,7 @@ with ensure_interaction(ctx, kn_id) as turn:
 
 ### Named functions for the capability routes
 
-The context-loader surface — 23 routes under `/api/agent-retrieval/v1/kn/` — is
+The context-loader surface — 25 routes under `/api/agent-retrieval/v1/kn/` — is
 also generated, from foundry's own OpenAPI:
 
 ```python
@@ -343,6 +343,10 @@ from bkn_osdk import kn
 
 kn.list_resources(KN_ID)
 kn.run_sql(KN_ID, "SELECT COUNT(*) AS n FROM {{.d9hff…}}")
+kn.run_cypher(
+    KN_ID,
+    "MATCH (o:order)-[:rel_order_customer]->(c:customer) RETURN c.city AS city, count(*) AS n",
+)
 kn.query_object_instance(KN_ID, "order", limit=10, response_format="json")
 ```
 
@@ -386,9 +390,9 @@ than read a stale attribute.
 ## Not in this release
 
 Writes and action execution, aggregation over an object set (no endpoint exists —
-see above), typed wrappers for the rest of the catalog's tools — `find_skills`,
-`describe_resource`, `query_instance_subgraph` and the others reachable today
-only through `call_tool` — an async client, and offline generation from a local
+see above), typed wrappers for the catalog's MCP-only tools — the lifecycle
+pair and the sandbox tools, reachable today only through `call_tool` — an async
+client, and offline generation from a local
 `.bkn` directory. Each has a section in
 [the design](../docs/superpowers/specs/2026-08-11-python-osdk-design.md)
 describing the shape it takes when it lands.
@@ -420,3 +424,10 @@ populated type that has relations to walk. Credentials resolve as they do for
 any caller, so `openbkn auth login` is enough. Run it against more than one
 deploy: the two this SDK was built against have disagreed about route names,
 metrics, and which reads their data resources can serve.
+
+### Function Trace parent
+
+When the sandbox supplies `BKN_PARENT_OPERATION_ID` together with its conversation
+and interaction IDs, internal reads send it as `bkn_context.parent_operation_id`.
+Each read keeps its own operation and receipt. An explicit override to a different
+turn does not inherit the sandbox's parent. Business functions need no new argument.

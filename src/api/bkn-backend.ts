@@ -73,6 +73,33 @@ export function listBknResources(ctx: RequestContext): Promise<unknown> {
   return request(ctx, "/api/bkn-backend/v1/resources");
 }
 
+/** Body of a Cypher query sent straight to bkn-backend. */
+export interface CypherQueryBody {
+  query: string;
+  /** Values for the `$name` parameters; values only, never identifiers. */
+  parameters?: Record<string, unknown>;
+}
+
+/**
+ * Compile and run one read-only Cypher query against a knowledge network.
+ * `POST /api/bkn-backend/v1/knowledge-networks/{kn_id}/cypher-queries[?branch=]`.
+ *
+ * A genuine POST, unlike the reads tunnelled below: no method override. Answers
+ * `{columns, entries}`; the generated SQL is never returned.
+ */
+export function runCypherQuery(
+  ctx: RequestContext,
+  knId: string,
+  body: CypherQueryBody,
+  branch?: string,
+): Promise<unknown> {
+  return request(ctx, knPath(knId, "cypher-queries"), {
+    method: "POST",
+    body,
+    query: { branch: branch || undefined },
+  });
+}
+
 /**
  * Query relation-type paths between object types (POST, caller-supplied body).
  * A read tunnelled over POST: without the override header the backend answers
