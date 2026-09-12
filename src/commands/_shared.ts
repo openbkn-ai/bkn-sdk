@@ -138,6 +138,26 @@ export function csv(value: string | undefined): string[] | undefined {
 }
 
 /** Resolve a request body from `--body '<json>'` or `--body-file <path>`. */
+/**
+ * Parse `--params` for a Cypher query: a JSON object mapping each `$name` to its value.
+ * Big integers survive as bigint, so an id past 2^53 still selects the row it names.
+ * Anything but an object is refused here — the compiler would refuse it later with
+ * less to say about which flag was wrong.
+ */
+export function cypherParams(raw: string | undefined): Record<string, unknown> | undefined {
+  if (raw === undefined) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = parseBigIntJSON(raw);
+  } catch {
+    throw new InputError("--params is not valid JSON.");
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new InputError(`--params must be a JSON object, as in '{"floor": 100}'.`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
 export function readBody(opts: { body?: string; bodyFile?: string }): unknown {
   const raw = opts.bodyFile ? readFileSync(opts.bodyFile, "utf8") : opts.body;
   if (!raw) throw new InputError("Provide --body '<json>' or --body-file <path>.");

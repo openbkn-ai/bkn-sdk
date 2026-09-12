@@ -10,6 +10,7 @@ import {
   getKnDetail,
   getObjectTypes,
   getRelationTypes,
+  runCypher,
 } from "../../src/api/context-loader.js";
 import { resetLifecycleCaches } from "../../src/api/lifecycle.js";
 import type { RequestContext } from "../../src/types.js";
@@ -162,6 +163,38 @@ describe("drill-down (get_object_types / get_relation_types)", () => {
     const p = toolCallBody(f);
     expect(p.name).toBe("get_relation_types");
     expect(p.arguments.ids).toEqual(["rel_a"]);
+  });
+});
+
+describe("run_cypher", () => {
+  it("sends the query as written, with branch, parameters and JSON output", async () => {
+    const f = mockMcp();
+    const query = "MATCH (o:order) WHERE o.id = $id RETURN o.no AS no";
+    await runCypher(ctx, "kn-cypher", query, {
+      branch: "dev",
+      parameters: { id: 9007199254740993n },
+    });
+
+    const p = toolCallBody(f);
+    expect(p.name).toBe("run_cypher");
+    // The query is not trimmed or rewritten: the compiler reports positions in it.
+    expect(p.arguments.query).toBe(query);
+    expect(p.arguments.branch).toBe("dev");
+    expect(p.arguments.response_format).toBe("json");
+    // An id past 2^53 has to arrive with every digit, or it selects a different row.
+    const raw = rpcCalls(f)
+      .map(([, init]) => init.body as string)
+      .find((body) => body.includes('"tools/call"'));
+    expect(raw).toContain('"id":9007199254740993');
+  });
+
+  it("leaves branch and parameters out when they were not given", async () => {
+    const f = mockMcp();
+    await runCypher(ctx, "kn-cypher-bare", "MATCH (o:order) RETURN o.no AS no");
+
+    const p = toolCallBody(f);
+    expect(p.arguments).not.toHaveProperty("branch");
+    expect(p.arguments).not.toHaveProperty("parameters");
   });
 });
 

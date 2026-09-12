@@ -4,6 +4,7 @@
 /** Context-loader resource surface (MCP over agent-retrieval). */
 import {
   type DetailLevel,
+  type RunCypherOptions,
   type SearchSchemaOptions,
   type ToolCallOptions,
   callManagedTool,
@@ -23,6 +24,7 @@ import {
   queryInstanceSubgraph,
   queryObjectInstance,
   readResource,
+  runCypher,
   searchCapabilities,
   searchSchema,
 } from "../api/context-loader.js";
@@ -60,6 +62,8 @@ export function context(ctx: RequestContext) {
       callMethod(ctx, knId, method, params),
     queryInstanceSubgraph: (knId: string, args: Record<string, unknown>) =>
       queryInstanceSubgraph(ctx, knId, args),
+    runCypher: (knId: string, query: string, opts?: RunCypherOptions) =>
+      runCypher(ctx, knId, query, opts),
     logicProperties: (knId: string, args: Record<string, unknown>) =>
       getLogicProperties(ctx, knId, args),
     actionInfo: (knId: string, args: Record<string, unknown>) => getActionInfo(ctx, knId, args),

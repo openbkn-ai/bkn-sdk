@@ -8,7 +8,13 @@ import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
-import { clientFrom, conversationSource, outputOptions, platformOf } from "./_shared.js";
+import {
+  clientFrom,
+  conversationSource,
+  cypherParams,
+  outputOptions,
+  platformOf,
+} from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 const list = (v: string) =>
@@ -280,6 +286,61 @@ adds paging and --need-total but records nothing in Trace.`,
     });
 
   cmd
+    .command("run-cypher <kn-id>")
+    .description(
+      "Filter along a path and aggregate across object types with read-only Cypher over the model",
+    )
+    // Not a requiredOption, for the same reason as run-sql: `--schema` sends no query.
+    .option(
+      "--query <cypher>",
+      "read-only Cypher: labels are object types, relationship types are relation types",
+    )
+    .option(
+      "--params <json>",
+      "values for $name placeholders, as a JSON object: '{\"floor\": 100}'",
+    )
+    .option("--branch <branch>", "knowledge network branch (default: main)")
+    .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
+    .addHelpText(
+      "after",
+      `
+Everything is named the way the model names it — no resource id, no physical column:
+
+  openbkn context search-schema <kn-id> "<what you are after>" --json
+      → object type and relation type ids or names, property names
+
+  openbkn context run-cypher <kn-id> \\
+    --query "MATCH (o:order)-[:rel_order_item_order]->(i:order_item)
+             WHERE o.status IN ['paid','shipped'] AND o.amount > \\$floor
+             RETURN o.status AS status, count(*) AS orders ORDER BY orders DESC LIMIT 20" \\
+    --params '{"floor": 100}'
+
+Supported: several MATCH clauses and comma-separated paths; -[:R]->, <-[:R]- and
+undirected -[:R]-; WHERE with comparisons, IN, IS NULL, AND/OR/NOT; RETURN with
+aliases, DISTINCT and count/sum/avg/min/max (grouping by the other returned columns);
+ORDER BY, SKIP, LIMIT. Refused with the construct and its position: OPTIONAL MATCH,
+WITH, UNION, variable-length paths, functions and arithmetic, returning a whole node.
+A query holds at most 8 relationships and 9 nodes; without LIMIT it returns 1000 rows,
+and LIMIT may not exceed 10000.
+
+What Cypher cannot say — CTEs, UNION, window functions — or a resource never modelled
+as an object type belongs in run-sql. The same query runs outside any Trace session
+through \`openbkn bkn cypher\`.`,
+    )
+    .action(async (knId: string, opts, cmd: Command) => {
+      if (opts.schema) return printToolSchema(cmd, knId, "run_cypher");
+      if (!opts.query)
+        throw new InputError("--query is required (or use --schema to see the shape)");
+      printJson(
+        await clientFrom(cmd).context.runCypher(knId, opts.query, {
+          branch: opts.branch,
+          parameters: cypherParams(opts.params),
+        }),
+        outputOptions(cmd),
+      );
+    });
+
+  cmd
     .command("explore-subgraph <kn-id> <object-type-id>")
     .description("Follow relations outward from one object type without naming a path first")
     // Same reason as run-sql: `--schema` answers without walking anything.
@@ -518,6 +579,7 @@ rewriting it with \`run-sql\` produces a number the platform will not agree with
     RUN: [
       "query-object-instance",
       "run-sql",
+      "run-cypher",
       "explore-subgraph",
       "query-metric",
       "query-instance-subgraph",
@@ -538,9 +600,11 @@ rewriting it with \`run-sql\` produces a number the platform will not agree with
      get-logic-properties / get-action-info  computed values, runnable actions
 
 PICKING THE RIGHT QUERY
-  Aggregation, ranking, GROUP BY or joins are not query-object-instance — send SQL through
-  \`tool-call <kn-id> run_sql\`. Unknown topology is \`tool-call <kn-id> explore_subgraph\`,
-  not a hand-built path.
+  Aggregation, ranking, GROUP BY or joins are not query-object-instance. When the question
+  can be stated in object types and relation types — filter along a path, aggregate what
+  it reaches — use \`run-cypher <kn-id>\`: model names only, no resource ids or physical
+  columns. SQL through \`run-sql <kn-id>\` is for what the Cypher subset cannot say.
+  Unknown topology is \`tool-call <kn-id> explore_subgraph\`, not a hand-built path.
 
 THE SAME ID, FOUR NAMES
   An object type's id is \`concept_id\` in search-schema output, \`id\` in kn-detail and

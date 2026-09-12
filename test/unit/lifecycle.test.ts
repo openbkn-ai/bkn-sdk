@@ -2,7 +2,12 @@
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { callManagedTool, callTool, searchSchema } from "../../src/api/context-loader.js";
+import {
+  callManagedTool,
+  callTool,
+  runCypher,
+  searchSchema,
+} from "../../src/api/context-loader.js";
 import { searchInstance } from "../../src/api/knowledge-networks.js";
 import { releaseLifecycleSessions, resetLifecycleCaches } from "../../src/api/lifecycle.js";
 import type { RequestContext } from "../../src/types.js";
@@ -932,6 +937,17 @@ describe("managed lifecycle on MCP business tools", () => {
       conversation_id: "conv_1",
       interaction_id: "int_1",
     });
+  });
+
+  // run_cypher's `query` is a Cypher statement, not something a person asked. Trace
+  // records the interaction's question as the user's words, so the statement stays out.
+  it("records run_cypher by tool name, not its statement, as the question", async () => {
+    const recorded = mockDeploy({ catalog: V2_CATALOG });
+    await runCypher(freshCtx(), "kn-managed-cypher", "MATCH (o:order) RETURN count(*) AS n");
+
+    expect(recorded.toolCalls.map((c) => c.name)).toEqual(["bkn_start_interaction", "run_cypher"]);
+    expect(recorded.toolCalls[0]?.arguments.question).toBe("run_cypher");
+    expect(recorded.toolCalls[1]?.arguments.query).toBe("MATCH (o:order) RETURN count(*) AS n");
   });
 
   it("passes a caller-built bkn_context through untouched and opens no session", async () => {

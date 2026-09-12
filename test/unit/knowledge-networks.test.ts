@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { relationTypePaths } from "../../src/api/bkn-backend.js";
+import { relationTypePaths, runCypherQuery } from "../../src/api/bkn-backend.js";
 import {
   dryRunMetric,
   executeActionType,
@@ -222,6 +222,36 @@ describe("reads tunnelled over POST", () => {
       "/api/bkn-backend/v1/knowledge-networks/kn-1/relation-type-paths",
     );
     expect(header(init, "X-HTTP-Method-Override")).toBe("GET");
+  });
+});
+
+describe("cypher queries", () => {
+  it("cypher-queries is a plain POST carrying the query, parameters and branch", async () => {
+    const f = mockFetch();
+    await runCypherQuery(
+      ctx,
+      "kn-1",
+      {
+        query: "MATCH (o:order) WHERE o.id = $id RETURN o.no AS no",
+        parameters: { id: 9007199254740993n },
+      },
+      "dev",
+    );
+    const [url, init] = firstCall(f);
+    const parsed = new URL(url);
+    expect(parsed.pathname).toBe("/api/bkn-backend/v1/knowledge-networks/kn-1/cypher-queries");
+    expect(parsed.searchParams.get("branch")).toBe("dev");
+    expect(init.method).toBe("POST");
+    // A real POST, unlike the tunnelled reads beside it.
+    expect(new Headers(init.headers).get("X-HTTP-Method-Override")).toBeNull();
+    expect(init.body as string).toContain('"id":9007199254740993');
+  });
+
+  it("cypher-queries sends no branch parameter when none was asked for", async () => {
+    const f = mockFetch();
+    await runCypherQuery(ctx, "kn-1", { query: "MATCH (o:order) RETURN o.no AS no" });
+    const [url] = firstCall(f);
+    expect(new URL(url).searchParams.has("branch")).toBe(false);
   });
 });
 

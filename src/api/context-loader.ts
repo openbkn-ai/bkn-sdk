@@ -478,8 +478,17 @@ export async function callTool(
   return (await callToolResult(ctx, knId, name, args, options)).value;
 }
 
+/**
+ * Tools whose `query` argument is a statement in a query language rather than the
+ * user's words. Recording it as the interaction's question would put machine text
+ * where Trace expects a person's question, so these are recorded by name, as
+ * `run_sql` (whose statement is `sql`) already is.
+ */
+const STATEMENT_QUERY_TOOLS = new Set(["run_cypher"]);
+
 /** The interaction's recorded question: the user's own words when the tool has them. */
 function questionFor(name: string, args: Record<string, unknown>): string {
+  if (STATEMENT_QUERY_TOOLS.has(name)) return name;
   return typeof args.query === "string" && args.query ? args.query : name;
 }
 
@@ -625,6 +634,35 @@ export function getRelationTypes(
 
 export function listTools(ctx: RequestContext, knId: string): Promise<unknown> {
   return callMethod(ctx, knId, "tools/list");
+}
+
+/** Options for {@link runCypher}. */
+export interface RunCypherOptions {
+  /** Knowledge network branch; the deploy reads `main` when omitted. */
+  branch?: string;
+  /**
+   * Values for the `$name` parameters in the query. Values only: a parameter never
+   * becomes a label, a relationship type or a property name.
+   */
+  parameters?: Record<string, unknown>;
+}
+
+/**
+ * Read-only Cypher over the network's model (`run_cypher`). Labels are object types,
+ * relationship types are relation types, properties are logical names — bkn-backend
+ * compiles the statement, so no resource id or physical column is needed. A refusal
+ * names the construct and its position; it arrives as the tool's error.
+ */
+export function runCypher(
+  ctx: RequestContext,
+  knId: string,
+  query: string,
+  opts?: RunCypherOptions,
+): Promise<unknown> {
+  const args: Record<string, unknown> = { query, response_format: "json" };
+  if (opts?.branch) args.branch = opts.branch;
+  if (opts?.parameters) args.parameters = opts.parameters;
+  return callTool(ctx, knId, "run_cypher", args);
 }
 
 /** Layer-2 subgraph query across relation-type paths (`query_instance_subgraph`). */
