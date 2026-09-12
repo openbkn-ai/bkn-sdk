@@ -478,8 +478,17 @@ export async function callTool(
   return (await callToolResult(ctx, knId, name, args, options)).value;
 }
 
+/**
+ * Tools whose `query` argument is a statement in a query language rather than the
+ * user's words. Recording it as the interaction's question would put machine text
+ * where Trace expects a person's question, so these are recorded by name, as
+ * `run_sql` (whose statement is `sql`) already is.
+ */
+const STATEMENT_QUERY_TOOLS = new Set(["run_cypher"]);
+
 /** The interaction's recorded question: the user's own words when the tool has them. */
 function questionFor(name: string, args: Record<string, unknown>): string {
+  if (STATEMENT_QUERY_TOOLS.has(name)) return name;
   return typeof args.query === "string" && args.query ? args.query : name;
 }
 
