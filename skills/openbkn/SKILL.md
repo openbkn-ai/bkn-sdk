@@ -120,6 +120,7 @@ BuildTask 产出；`trace` 的 business-provenance 摘要（requests/interaction
 | vega-backend 资源 | [resource.md](references/resource.md) |
 | Context Loader（MCP） | [context.md](references/context.md) |
 | Skill 注册 / 生命周期 | [skill.md](references/skill.md) |
+| 写一个 Skill 包 / 沙箱函数（bkn-osdk） | [create-skill](../create-skill/SKILL.md) 技能 |
 | Toolbox / Tool | [toolbox.md](references/toolbox.md) |
 | 沙箱函数（代码→工具） | [function.md](references/function.md) |
 | BKN Trace（diagnose / eval-set） | [trace.md](references/trace.md) |
