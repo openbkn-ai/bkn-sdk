@@ -133,7 +133,7 @@ BuildTask 产出；`trace` 的 business-provenance 摘要（requests/interaction
 | 场景 | 参考 |
 |------|------|
 | 从 Catalog / CSV 端到端建知识网络 | [build-kn.md](references/build-kn.md) |
-| 一次问答里反复取数 / 沙箱代码要读知识网络 | [osdk.md](references/osdk.md) —— 换 Python |
+| 一次问答里反复取数 / 沙箱代码要读知识网络 | [osdk.md](references/osdk.md) —— 换 Python，业务问答仍挂在本轮 turn 上 |
 | 排障速查（401 / 空列表 / 403 / EACP / trace 索引） | [troubleshooting.md](references/troubleshooting.md) |
 
 ## 调用示例

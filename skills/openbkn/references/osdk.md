@@ -9,8 +9,8 @@ CLI 一条命令回答一个问题。**要在一次推理里反复取数、把�
 | 你要做的 | 用什么 |
 |---|---|
 | 看一眼、改一下、发布一次 | `openbkn`（本 skill 其余部分） |
-| 一次问答里取数 5 次、每次依赖上一次的结果 | **Python** |
-| 沙箱里 `run_code` / `function run` 的代码要读知识网络 | **Python**（镜像里可直接 import） |
+| 一次问答里取数 5 次、每次依赖上一次的结果 | **Python**，挂在本轮 turn 上（见「业务问答里」） |
+| 沙箱里 `run_code` / `function run` 的代码要读知识网络 | **Python**（0.1.5 起镜像预装，见「沙箱里」） |
 | 写脚本、笔记本、离线分析 | **Python** |
 | 组织 / 用户 / 角色 / 建网 / 发布 | `openbkn`（SDK 是只读的） |
 
@@ -36,6 +36,9 @@ bkn.Order.where(bkn.Order.total_amount > 100).order_by(bkn.Order.created_at.desc
 
 ```bash
 pip install "bkn-osdk @ git+https://github.com/openbkn-ai/bkn-sdk@<sha>#subdirectory=python"
+# 没有 git 的环境改用归档地址，fragment 不变：
+pip install "bkn-osdk @ https://github.com/openbkn-ai/bkn-sdk/archive/<sha>.zip#subdirectory=python"
+
 openbkn -k auth login https://your-platform -u <user> -p <pass>   # 凭据 store 归 CLI 管
 bkn-osdk generate <kn-id> --out ./bkn                             # 生成本体层
 ```
@@ -46,23 +49,48 @@ bkn-osdk generate <kn-id> --out ./bkn                             # 生成本体
 凭据解析由内向外：`session(...)` → `configure(...)` → `BKN_TOKEN`/`BKN_BASE_URL` →
 `~/.bkn`（`openbkn auth login` 写的那份，**只有这条能自动刷新**）。
 
-## 沙箱里（agent 最常落地的地方）
+## 业务问答里：挂在本轮 turn 上
 
-`run_code` / `function run` 的代码里：
+本 skill 开头的受管硬门禁同样约束 Python：业务问答里的每一次读取，都要挂在
+`bkn_start_interaction` 返回的那个 turn 上。不交 turn 时 SDK 不报错，但读取会脱离它：
+类型化读直接裸发到 `ontology-query`，`kn.*` 与 `search()` 各自另开一个短命 interaction。
+只写 `traced=True` 也不够，作用域同样会另开一个。
+
+把 start 返回的两个 ID 连同 `traced=True` 一起交给作用域：
 
 ```python
-import bkn_osdk
-bkn_osdk.configure(base_url="https://your-platform", insecure=True)   # 这一行必须有
+with bkn_osdk.session(traced=True, conversation_id=cid, interaction_id=iid):
+    paid = bkn.Order.where(bkn.Order.status == "paid").take(50)   # 经 Context Loader 的 MCP 工具
+    kn.run_sql(KN_ID, "SELECT ...")                                 # 带同一个 bkn_context
+```
+
+- 作用域加入这个 turn，不另开，也**不会替你 finish**；本轮照常以 `bkn_finish_interaction` 收尾。
+- `traced=True` 让类型化读改走 Context Loader 的 MCP 工具。带 `order_by` 或要总数
+  （`.count()`）的查询仍走 REST，因为那个工具不认 `sort` / `need_total`，但请求带着同一个 turn。
+- 出错按硬门禁停下、原样报错，不要去掉 turn 重试。
+
+## 沙箱里（agent 最常落地的地方）
+
+0.1.5 起，沙箱模板镜像预装 `bkn-osdk`，平台为每次执行注入 `BKN_BASE_URL`（集群内地址）、
+`BKN_TOKEN`、`BKN_CONVERSATION_ID`、`BKN_INTERACTION_ID`。代码里什么都不用配：
+
+```python
 from bkn_osdk import kn
 kn.query_object_instance(KN_ID, "order", limit=10, response_format="json")
 ```
 
-沙箱里 `BKN_TOKEN`、`BKN_CONVERSATION_ID`、`BKN_INTERACTION_ID` 由平台注入，
-**但没有 `BKN_BASE_URL`，也没有 `~/.bkn`** —— 所以平台地址要自己点名，其余不用传。
+- **不要 `configure(base_url=...)` 指向网关地址。** 注入的是集群内地址，沙箱在集群内访问不到
+  网关，覆盖后调用在网络层失败。
+- 报 `No base URL`，说明该部署的沙箱 chart 里 `BKN_BASE_URL` 与 `BKN_SANDBOX_MCP_URL` 都没配。
+  让部署方补上集群内 agent-retrieval 地址，不要在代码里写死。
+- **turn 会自动继承。** 调用方在 `/function/execute` 的请求体里传了 `bkn_conversation_id` /
+  `bkn_interaction_id`，沙箱里的读就挂在宿主那次交互上，证据链是一条而不是两条。
+- 经 MCP 的 `run_code` 不把这两个 ID 放进环境变量（实测为空）。脚本里用 `bkn-osdk` 读业务数据时，
+  把本轮的两个 ID 按上一节写进 `session()`。
+- **0.1.4 及更早**：镜像不带 `bkn-osdk`，镜像里也没有 git。这些版本的沙箱代码用内建的
+  `sandbox_sdk.bkn`，见 [function.md](function.md)。
 
-**turn 会自动继承**：调用方在 `/function/execute` 的 body 里传了那两个 id，
-沙箱里的读就挂在宿主那次交互上，证据链是一条而不是两条。经 MCP 的 `run_code`
-拿不到这两个 id（实测两个变量都是空的）。
+写成可发布的函数工具，走 [create-skill](../../create-skill/SKILL.md) 技能。
 
 ## 三件容易踩的
 
@@ -72,9 +100,9 @@ kn.query_object_instance(KN_ID, "order", limit=10, response_format="json")
 的 `data_source.id` 取，**不是物理表名**。
 
 **2. 能力面必须带 turn，读路径不用。** MCP 工具与 `/kn/` REST 拒绝无上下文调用；
-`ontology-query` 的实例/子图/指标不拒。SDK 自动处理这个差别 —— `kn.*` 和
-`search()` 第一次就带上，类型化读先裸发。手写 `call_tool` 时才需要自己
-`ensure_interaction(ctx, kn_id)` 拿 `bkn_context`。
+`ontology-query` 的实例/子图/指标不拒。没有 turn 时 SDK 自己补：`kn.*` 和 `search()`
+开一个短命 interaction，类型化读先裸发。业务问答里不要依赖这个补法，按上文把本轮 turn
+交给 `session()`。手写 `call_tool` 时要自己 `ensure_interaction(ctx, kn_id)` 拿 `bkn_context`。
 
 **3. `== None` 不是过滤。** 平台回 400；缺失有自己的算子：`.exists()` / `.not_exists()`。
 
@@ -83,14 +111,14 @@ kn.query_object_instance(KN_ID, "order", limit=10, response_format="json")
 | 症状 | 多半是 |
 |---|---|
 | `Public.NotFound: 对象不存在` 但类型明明在 | 参数放错位置 —— 有三条路由的 `kn_id`/`ot_id` 走 query 不走 body（用 `kn.*` 就不会踩） |
-| `ObjectTypeNotFound` 调 `find_skills` 时 | 这个网络没绑技能，不是对象类不存在 |
 | `未绑定数据源` | 该对象类只有 schema 没有数据 |
-| `conversation_required` | 少了 turn，见上面第 2 条 |
-| `trace_core_unavailable` | 平台 Trace Core 挂了，需要 turn 的调用全停，类型化读不受影响 |
+| `conversation_required` | 少了 turn，见「业务问答里」 |
+| `No base URL`（沙箱里） | 部署没配沙箱的 BKN 地址，见「沙箱里」 |
+| `trace_core_unavailable` | 平台 Trace Core 不可用，需要 turn 的调用全部失败；业务问答里按硬门禁停下，不要改用裸读绕过 |
 
 ## 更细的
 
 包内文档：[python/README.md](https://github.com/openbkn-ai/bkn-sdk/blob/main/python/README.md)
 （[中文](https://github.com/openbkn-ai/bkn-sdk/blob/main/python/README.zh.md)）。
-十个能跑的例子在 [python/examples/](https://github.com/openbkn-ai/bkn-sdk/tree/main/python/examples)，
+能跑的例子在 [python/examples/](https://github.com/openbkn-ai/bkn-sdk/tree/main/python/examples)，
 按层分在 `ontology/` 与 `platform/` 两个目录里。
