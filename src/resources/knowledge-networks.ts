@@ -17,6 +17,7 @@ import {
   listConceptGroups,
   relationTypePaths,
   removeConceptGroupMembers,
+  runCypherQuery,
   setActionScheduleStatus,
   updateActionSchedule,
   updateConceptGroup,
@@ -133,6 +134,13 @@ export function kn(ctx: RequestContext) {
       setActionScheduleStatus(ctx, knId, scheduleId, body),
     actionScheduleDelete: (knId: string, ids: string) => deleteActionSchedules(ctx, knId, ids),
     relationTypePaths: (knId: string, body: unknown) => relationTypePaths(ctx, knId, body),
+    // Straight to the compiler, outside any Trace session; `context.runCypher` is the
+    // same query recorded as part of a conversation.
+    cypher: (
+      knId: string,
+      query: string,
+      opts?: { branch?: string; parameters?: Record<string, unknown> },
+    ) => runCypherQuery(ctx, knId, { query, parameters: opts?.parameters }, opts?.branch),
     bknResources: () => listBknResources(ctx),
     createFromCatalog: (opts: CreateFromCatalogOptions) => createFromCatalog(ctx, opts),
     /** Pack a local BKN directory and upload it as a knowledge network. */

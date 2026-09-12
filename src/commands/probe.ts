@@ -51,6 +51,7 @@ const COMMAND_TOOL: Record<string, string> = {
   "context query-instance-subgraph": "query_instance_subgraph",
   "context explore-subgraph": "explore_subgraph",
   "context run-sql": "run_sql",
+  "context run-cypher": "run_cypher",
   "context query-metric": "query_metric",
   "context get-logic-properties": "get_logic_properties_values",
   "context get-action-info": "get_action_info",

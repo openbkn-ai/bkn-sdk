@@ -627,6 +627,35 @@ export function listTools(ctx: RequestContext, knId: string): Promise<unknown> {
   return callMethod(ctx, knId, "tools/list");
 }
 
+/** Options for {@link runCypher}. */
+export interface RunCypherOptions {
+  /** Knowledge network branch; the deploy reads `main` when omitted. */
+  branch?: string;
+  /**
+   * Values for the `$name` parameters in the query. Values only: a parameter never
+   * becomes a label, a relationship type or a property name.
+   */
+  parameters?: Record<string, unknown>;
+}
+
+/**
+ * Read-only Cypher over the network's model (`run_cypher`). Labels are object types,
+ * relationship types are relation types, properties are logical names — bkn-backend
+ * compiles the statement, so no resource id or physical column is needed. A refusal
+ * names the construct and its position; it arrives as the tool's error.
+ */
+export function runCypher(
+  ctx: RequestContext,
+  knId: string,
+  query: string,
+  opts?: RunCypherOptions,
+): Promise<unknown> {
+  const args: Record<string, unknown> = { query, response_format: "json" };
+  if (opts?.branch) args.branch = opts.branch;
+  if (opts?.parameters) args.parameters = opts.parameters;
+  return callTool(ctx, knId, "run_cypher", args);
+}
+
 /** Layer-2 subgraph query across relation-type paths (`query_instance_subgraph`). */
 export function queryInstanceSubgraph(
   ctx: RequestContext,
