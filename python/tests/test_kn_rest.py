@@ -216,3 +216,14 @@ def test_a_cypher_query_carries_its_statement_and_values_in_the_body(deploy: Dep
     assert deploy.bodies[0]["query"] == statement
     assert deploy.bodies[0]["parameters"] == {"id": 9007199254740993}
     assert "branch" not in deploy.bodies[0]
+
+
+def test_a_route_description_reaches_the_docstring_whole() -> None:
+    """The docstring is the only documentation a caller of a named function sees.
+    A fixed cut at 600 characters stopped `run_cypher`'s at "ORDER BY / SKI",
+    before the constructs it refuses and the row limits."""
+    description = operation("run_cypher")["description"]
+
+    assert "OPTIONAL MATCH" in description
+    assert "10000" in description
+    assert "OPTIONAL MATCH" in (kn.run_cypher.__doc__ or "")

@@ -128,7 +128,11 @@ def operation(path: str, method: str, op: dict[str, Any], spec: dict[str, Any]) 
         "operation": operation_id,
         **({"note": NOTES[operation_id]} if operation_id in NOTES else {}),
         "summary": " ".join(str(op.get("summary", "")).split()),
-        "description": " ".join(str(op.get("description", "")).split())[:600],
+        # Whole, not clipped: the generated docstring is the only documentation a
+        # caller of the named function sees, and a fixed cut ended mid-word —
+        # `run_cypher`'s stopped at "ORDER BY / SKI", before the constructs it
+        # refuses. The longest description is about 1300 characters.
+        "description": " ".join(str(op.get("description", "")).split()),
         "query": query,
         "body": body,
         # Every route on this surface refuses a context-free call — measured on
