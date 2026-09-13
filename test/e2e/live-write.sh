@@ -98,30 +98,83 @@ chk_has "context conversation is remembered" '"(conversationId|source)"' context
 # validated envelope after a real managed call; it deliberately does not claim
 # cross-identity denial or exactly-once under a dropped response, both of which
 # need an approved two-identity fault-injection target.
-receipt_out="$(run context tool-call "$BKN_KN_ID" search_schema --arg query=team --receipt)"
-receipt_id="$(node -e '
+#
+# The turn is opened here rather than by the CLI so its interaction id is known.
+# Since foundry #1417 a completed receipt names no receipt, conversation or
+# interaction; the durable record is found through the interaction's operations.
+receipt_start="$(run context tool-call "$BKN_KN_ID" bkn_start_interaction \
+  --args '{"conversation_mode":"new","question":"live-write receipt readback","agent_name":"openbkn-e2e"}')"
+read -r receipt_conv receipt_int <<< "$(node -e '
   let s = "";
   process.stdin.on("data", (d) => { s += d; });
   process.stdin.on("end", () => {
     try {
       const j = JSON.parse(s);
-      const r = j?.bkn_receipt;
-      const valid = r && typeof r.receipt_id === "string" && r.receipt_id &&
-        typeof r.conversation_id === "string" && r.conversation_id &&
-        typeof r.interaction_id === "string" && r.interaction_id &&
-        ["pending", "completed", "failed"].includes(r.receipt_status);
-      process.stdout.write(valid ? r.receipt_id : "");
+      process.stdout.write(`${j.conversation_id || ""} ${j.interaction_id || ""}`);
     } catch {
       process.stdout.write("");
     }
   });
-' <<< "$receipt_out")"
-if errored "$receipt_out" || [ -z "$receipt_id" ]; then
-  echo "FAIL  context tool-call --receipt emits a validated envelope :: $(head -c 140 <<< "$receipt_out" | tr '\n' ' ')"
-  fail=$((fail + 1)); failed+=("context receipt envelope")
+' <<< "$receipt_start")"
+if errored "$receipt_start" || [ -z "${receipt_int:-}" ]; then
+  echo "FAIL  context receipt turn opens :: $(head -c 140 <<< "$receipt_start" | tr '\n' ' ')"
+  fail=$((fail + 1)); failed+=("context receipt turn")
 else
-  echo "PASS  context tool-call --receipt emits a validated envelope"; pass=$((pass + 1))
-  chk "trace receipt current-identity readback" trace receipts get "$receipt_id"
+  receipt_ctx="{\"conversation_id\":\"$receipt_conv\",\"interaction_id\":\"$receipt_int\"}"
+  receipt_out="$(run context tool-call "$BKN_KN_ID" search_schema \
+    --args "{\"query\":\"team\",\"bkn_context\":$receipt_ctx}" --receipt)"
+  # Prints the receipt_id when the receipt carries one, "-" for a valid receipt
+  # without it, and nothing for an invalid one. An identity field that is
+  # present has to be a real id and, for the turn, the turn this call ran in.
+  receipt_id="$(node -e '
+    const [conv, int] = process.argv.slice(1);
+    let s = "";
+    process.stdin.on("data", (d) => { s += d; });
+    process.stdin.on("end", () => {
+      try {
+        const r = JSON.parse(s)?.bkn_receipt;
+        const present = (k) => r[k] !== undefined;
+        const idOk = (k) => !present(k) || (typeof r[k] === "string" && r[k].length > 0);
+        const valid = r && ["pending", "completed", "failed"].includes(r.receipt_status) &&
+          ["receipt_id", "conversation_id", "interaction_id", "operation_id"].every(idOk) &&
+          (!present("conversation_id") || r.conversation_id === conv) &&
+          (!present("interaction_id") || r.interaction_id === int);
+        process.stdout.write(valid ? (r.receipt_id || "-") : "");
+      } catch {
+        process.stdout.write("");
+      }
+    });
+  ' "$receipt_conv" "$receipt_int" <<< "$receipt_out")"
+  if errored "$receipt_out" || [ -z "$receipt_id" ]; then
+    echo "FAIL  context tool-call --receipt emits a validated envelope :: $(head -c 140 <<< "$receipt_out" | tr '\n' ' ')"
+    fail=$((fail + 1)); failed+=("context receipt envelope")
+  else
+    echo "PASS  context tool-call --receipt emits a validated envelope"; pass=$((pass + 1))
+    if [ "$receipt_id" = "-" ]; then
+      receipt_id="$(node -e '
+        let s = "";
+        process.stdin.on("data", (d) => { s += d; });
+        process.stdin.on("end", () => {
+          try {
+            const op = (JSON.parse(s).entries || []).find((e) => e.tool_name === "search_schema");
+            process.stdout.write(op?.receipt_id || "");
+          } catch {
+            process.stdout.write("");
+          }
+        });
+      ' <<< "$(run trace interactions operations "$receipt_int")")"
+    fi
+    if [ -z "$receipt_id" ]; then
+      echo "FAIL  trace receipt current-identity readback :: no search_schema receipt in $receipt_int"
+      fail=$((fail + 1)); failed+=("trace receipt current-identity readback")
+    else
+      chk_has "trace receipt current-identity readback" "\"interaction_id\": *\"$receipt_int\"" \
+        trace receipts get "$receipt_id"
+    fi
+  fi
+  # Close the turn this block opened; a live one would be left for the server to expire.
+  run context tool-call "$BKN_KN_ID" bkn_finish_interaction \
+    --args "{\"interaction_id\":\"$receipt_int\",\"outcome\":\"completed\",\"answer\":\"live-write receipt readback\"}" >/dev/null
 fi
 
 # The remembered conversation has to survive a second command, which is the

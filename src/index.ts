@@ -81,7 +81,7 @@ export {
 // Resource namespaces (advanced: use with a resolved RequestContext).
 export { admin } from "./resources/admin.js";
 export { context } from "./resources/context-loader.js";
-export type { ManagedToolResult, ToolCallOptions } from "./api/context-loader.js";
+export type { ManagedToolResult, ToolCallOptions, ToolReceipt } from "./api/context-loader.js";
 export { kn } from "./resources/knowledge-networks.js";
 export { models } from "./resources/models.js";
 export { resources } from "./resources/resources.js";
