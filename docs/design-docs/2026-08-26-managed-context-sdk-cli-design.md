@@ -185,11 +185,18 @@ interaction-only 的兼容路径不适用此“完整 caller-owned context”规
 
 TypeScript 的 `OperationReceipt` interface 不是运行时验证。Receipt 成功路径至少验证：
 
-- `receipt_id`、`conversation_id`、`interaction_id`、`operation_id` 为非空字符串；
-- `receipt_status` 为当前 SDK `OperationReceipt` union 中的 `pending`、`completed` 或 `failed`；
-  未知状态安全失败，不能按 pending 或 completed 猜测；
-- 如果 SDK 注入了 `bkn_context`，Receipt 的 Conversation / Interaction 必须与注入值一致；
-- caller 自带 `bkn_context` 时，Receipt 的 Conversation / Interaction 也必须与该 context 一致。
+- `receipt_status` 为 `pending`、`completed` 或 `failed`；未知状态安全失败，不能按 pending
+  或 completed 猜测；
+- `receipt_id`、`conversation_id`、`interaction_id`、`operation_id` 出现时必须是非空字符串，
+  `observed_evidence_refs`、`business_refs`、`partial_reasons` 出现时必须是数组；
+- 如果 SDK 注入了 `bkn_context`，Receipt 带出的 Conversation / Interaction 必须与注入值一致；
+- caller 自带 `bkn_context` 时，Receipt 带出的 Conversation / Interaction 也必须与该 context 一致。
+
+> 2026-09-13 修订（bkn-sdk #107）：foundry #1417 起，正常完成的业务调用在 `bkn_receipt` 里只返回
+> `receipt_status`、`evidence_durability`、`observed_evidence_refs`、`business_refs`（有
+> `partial_reasons` 时一并返回），身份字段只随 `pending` 与终态重放回执返回。身份字段因此从必填改为
+> 「出现即校验」；精简回执视为属于返回它的这次调用。按 `receipt_id` 回读的 authorized 层只对带
+> `receipt_id` 的回执成立。
 
 不满足上述条件是 integrity failure，不能打印或返回为可信 Receipt。这里区分两个强度：
 
