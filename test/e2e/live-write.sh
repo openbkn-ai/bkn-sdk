@@ -31,12 +31,19 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_env.sh"
 STAMP="$(date +%Y%m%d-%H%M%S)-$$"
 SKILL_KEY="e2e-write-$STAMP"
 WORK="$(mktemp -d)"
+# The platform addresses a skill by the skill_id `register` hands back, never by
+# its name: every call below that took the name answered 404 on 0.1.5.
+SKILL_ID=""
 CREATED_SKILL=""
 
 cleanup() {
   local code=$?
   if [ -n "$CREATED_SKILL" ]; then
     echo "--- cleanup: deleting skill $CREATED_SKILL"
+    # A published skill cannot be deleted, and a run stopped between the two
+    # set-status checks leaves it published. Taking it offline first is a no-op
+    # the delete does not depend on when it already is.
+    run skill set-status "$CREATED_SKILL" offline >/dev/null 2>&1 || true
     # Best effort, and loud about failing: an orphan here is the next run's
     # confusing "already exists".
     if ! out="$(run skill delete "$CREATED_SKILL" 2>&1)"; then
@@ -46,7 +53,12 @@ cleanup() {
   rm -rf "$WORK"
   exit "$code"
 }
-trap cleanup EXIT INT TERM
+# Cleanup hangs off EXIT alone; a signal only exits with its own status, which
+# then runs it once. Trapping the signals to cleanup as well ran it twice (its
+# `exit` fires EXIT again) and reported a killed run as a success.
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 echo "### skill lifecycle ($SKILL_KEY)"
 
@@ -65,24 +77,43 @@ Created by the openbkn e2e write suite. If this is still here, a run was
 interrupted before its cleanup.
 SKILLMD
 
-chk "skill register" skill register "$WORK/skill"
-# Only mark it for cleanup once the platform has actually taken it: deleting a
-# name that was never created buries the real error under a second one.
-if run skill get "$SKILL_KEY" >/dev/null 2>&1; then
-  CREATED_SKILL="$SKILL_KEY"
-fi
+register_out="$(run skill register "$WORK/skill")"
+SKILL_ID="$(node -e '
+  let s = "";
+  process.stdin.on("data", (d) => { s += d; });
+  process.stdin.on("end", () => {
+    try {
+      process.stdout.write(JSON.parse(s).skill_id || "");
+    } catch {
+      process.stdout.write("");
+    }
+  });
+' <<< "$register_out")"
+if errored "$register_out" || [ -z "$SKILL_ID" ]; then
+  # Without an id there is nothing to clean up by; name the skill so a person can.
+  echo "FAIL  skill register (if the platform took it, delete the skill named $SKILL_KEY) :: $(head -c 140 <<< "$register_out" | tr '\n' ' ')"
+  fail=$((fail + 1)); failed+=("skill register")
+else
+  echo "PASS  skill register ($SKILL_ID)"; pass=$((pass + 1))
+  # Marked for cleanup as soon as the platform has handed back an id, so every
+  # later failure still ends in a delete.
+  CREATED_SKILL="$SKILL_ID"
 
-chk_has "skill get (after register)" "$SKILL_KEY" skill get "$SKILL_KEY"
-chk_has "skill list includes it" "$SKILL_KEY" skill list --limit 100
-chk "skill files" skill files "$SKILL_KEY"
-chk_has "skill read-file SKILL.md" "$SKILL_KEY" skill read-file "$SKILL_KEY" SKILL.md
-# `set-status` accepts unpublish | published | offline — nothing else; the CLI
-# passes an unknown value straight through to the backend.
-chk "skill set-status published" skill set-status "$SKILL_KEY" published
-chk "skill set-status offline" skill set-status "$SKILL_KEY" offline
-# `download <skill-id> [out-path]` — the path is positional.
-chk "skill download" skill download "$SKILL_KEY" "$WORK/roundtrip.zip"
-chk "skill history" skill history "$SKILL_KEY"
+  chk_has "skill get (after register)" "$SKILL_KEY" skill get "$SKILL_ID"
+  chk_has "skill list includes it" "$SKILL_ID" skill list --limit 100
+  # `set-status` accepts unpublish | published | offline — nothing else; the CLI
+  # passes an unknown value straight through to the backend.
+  chk "skill set-status published" skill set-status "$SKILL_ID" published
+  # `files` and `read-file` read the published version, which a freshly
+  # registered skill does not have yet — so they come after the publish.
+  chk_has "skill files" "SKILL.md" skill files "$SKILL_ID"
+  # Without --raw the answer is a download URL, not the text the name is in.
+  chk_has "skill read-file SKILL.md" "$SKILL_KEY" skill read-file "$SKILL_ID" SKILL.md --raw
+  # `download <skill-id> [out-path]` — the path is positional.
+  chk "skill download" skill download "$SKILL_ID" "$WORK/roundtrip.zip"
+  chk "skill history" skill history "$SKILL_ID"
+  chk "skill set-status offline" skill set-status "$SKILL_ID" offline
+fi
 
 echo "### context managed lifecycle"
 # The path a business call actually takes. On a deploy from 0.1.3 on these are
