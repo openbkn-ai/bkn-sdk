@@ -77,8 +77,10 @@ receipt has no consumable value and must be read back by `receipt_id` rather
 than retried. On a 0.1.5 platform a `completed` receipt carries only
 `receipt_status`, `evidence_durability`, `observed_evidence_refs` and
 `business_refs` (plus `partial_reasons` when set); `receipt_id` and the other
-identity fields come with `pending` and terminal-replay receipts, and the
-complete record stays in BKN Trace.
+identity fields come with `pending` and terminal-replay receipts. To read the
+complete record of a completed call, find its `receipt_id` with
+`openbkn trace interactions operations <interaction-id>` and pass it to
+`openbkn trace receipts get`.
 
 Tokens are stored per platform/user under `~/.bkn/` (override: `BKN_CONFIG_DIR`).
 

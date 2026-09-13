@@ -201,12 +201,15 @@ const RECEIPT_LIST_FIELDS = ["observed_evidence_refs", "business_refs", "partial
 /**
  * A receipt is trusted on its status, which decides what the SDK does with the call. The
  * identity fields may be absent (see `ToolReceipt`), but one that is present has to be a
- * usable id: an empty or non-string id is a malformed receipt, not a slim one.
+ * usable id: an empty or non-string id is a malformed receipt, not a slim one. A pending
+ * receipt is the exception: its value is not ready, and `receipt_id` is the only way back to
+ * it, so one without an id cannot be acted on.
  */
 function isToolReceipt(value: unknown): value is ToolReceipt {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const receipt = value as Record<string, unknown>;
   if (!RECEIPT_STATUSES.has(receipt.receipt_status as string)) return false;
+  if (receipt.receipt_status === "pending" && receipt.receipt_id === undefined) return false;
   for (const field of RECEIPT_IDENTITY_FIELDS) {
     const id = receipt[field];
     if (id !== undefined && (typeof id !== "string" || id.length === 0)) return false;

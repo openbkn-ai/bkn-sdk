@@ -63,7 +63,10 @@ Receipt 确认权威业务上下文。
 业务值。Receipt 仅证明其已通过本次调用的字段校验，不是 bearer credential；需要授权证据时，
 应在当前身份下运行 `openbkn trace receipts get <receipt-id>` 回读确认。
 不要用 `value` 是否为 `null` 判断结果是否可用；应检查 `bkn_receipt.receipt_status`。`pending` 表示
-业务值不可消费，应使用 `receipt_id` 回读，而不是重试业务工具。
+业务值不可消费，应使用 `receipt_id` 回读，而不是重试业务工具。0.1.5 平台上 `completed` 回执只带
+`receipt_status`、`evidence_durability`、`observed_evidence_refs`、`business_refs`（有 `partial_reasons` 时一并带上），
+没有 `receipt_id`；需要回读完整记录时，用 `openbkn trace interactions operations <interaction-id>` 找到该次调用的
+`receipt_id`，再执行 `openbkn trace receipts get`。`pending` 与终态重放回执仍带身份字段。
 
 Token 按平台/用户存于 `~/.bkn/`（可用 `BKN_CONFIG_DIR` 覆盖）。
 

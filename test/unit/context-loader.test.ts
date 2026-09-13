@@ -974,6 +974,10 @@ describe("slim receipts (foundry #1417)", () => {
     ["an empty receipt_id", { ...SLIM_RECEIPT, receipt_id: "" }],
     ["a non-string operation_id", { ...SLIM_RECEIPT, operation_id: 7 }],
     ["evidence refs that are not a list", { ...SLIM_RECEIPT, observed_evidence_refs: "ref-1" }],
+    [
+      "pending status but no receipt_id to read back",
+      { ...SLIM_RECEIPT, receipt_status: "pending" },
+    ],
   ])("still refuses a receipt with %s", async (_case, receipt) => {
     serveReceipt(receipt, "slim-bad-s1");
     const error = await callManagedTool(ctx, "kn-slim-bad", "search_schema", {
