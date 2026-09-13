@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 import bkn_osdk
+from bkn_osdk import http as http_module
 
 _ENV_VARS = (
     "BKN_TOKEN",
@@ -35,6 +36,9 @@ def isolated_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator
         monkeypatch.delenv(var, raising=False)
     store = tmp_path / "bkn"
     monkeypatch.setenv("BKN_CONFIG_DIR", str(store))
+    # The version floor reads health once per base URL; tests of other wire behavior
+    # would each see that extra request. test_platform_floor.py exercises it directly.
+    monkeypatch.setattr(http_module, "_ensure_platform_floor", lambda _ctx: None)
     bkn_osdk.configure()
     yield store
     bkn_osdk.configure()

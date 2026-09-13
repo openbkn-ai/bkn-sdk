@@ -178,3 +178,118 @@ describe("bkn validate", () => {
     expect(new URL(uploadUrl as string | URL).pathname).toBe("/api/bkn-backend/v1/bkns");
   });
 });
+
+describe("validateBknDirectory — capabilities section", () => {
+  const withCapabilities = (yamlBlock: string) =>
+    `---\ntype: knowledge_network\nid: kn1\nname: KN One\n${yamlBlock}---\n`;
+
+  it("counts declared entries and warns about none when every entry has ids and names", () => {
+    const dir = bkn({
+      "network.bkn": withCapabilities(
+        [
+          "capabilities:",
+          "  skills:",
+          "    - id: s1",
+          "      name: 盘点",
+          "  functions:",
+          "    - box_id: b1",
+          "      tool_id: t1",
+          "      box_name: 采购",
+          "      tool_name: 下单",
+          "  mcp_tools:",
+          "    - mcp_id: m1",
+          "      mcp_name: 搜索服务",
+          "      tool_name: search",
+          "",
+        ].join("\n"),
+      ),
+    });
+    const r = validateBknDirectory(dir);
+    expect(r.valid).toBe(true);
+    expect(r.capabilities).toEqual({ declared: 3, skipped: [] });
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("reports an entry with nothing to resolve by as a certain skip, without failing", () => {
+    const dir = bkn({
+      "network.bkn": withCapabilities(
+        [
+          "capabilities:",
+          "  skills:",
+          "    - {}",
+          "  functions:",
+          "    - box_id: b1",
+          "      tool_name: 下单",
+          "  mcp_tools:",
+          "    - mcp_name: 搜索服务",
+          "",
+        ].join("\n"),
+      ),
+    });
+    const r = validateBknDirectory(dir);
+    expect(r.valid).toBe(true);
+    expect(r.capabilities.declared).toBe(3);
+    expect(r.capabilities.skipped).toEqual([
+      { capability_type: "skill", reason: "not_found", detail: "a skill needs an id or a name" },
+      {
+        capability_type: "function",
+        name: "下单",
+        reason: "not_found",
+        detail: "a function needs box_id with tool_id, or box_name with tool_name",
+      },
+      { capability_type: "mcp_tool", reason: "not_found", detail: "an mcp tool needs tool_name" },
+    ]);
+    expect(r.warnings.filter((w) => w.includes("push will skip"))).toHaveLength(3);
+  });
+
+  it("warns that an id-only entry binds only where it was exported", () => {
+    const dir = bkn({
+      "network.bkn": withCapabilities("capabilities:\n  skills:\n    - id: s1\n"),
+    });
+    const r = validateBknDirectory(dir);
+    expect(r.capabilities).toEqual({ declared: 1, skipped: [] });
+    expect(r.warnings).toEqual([
+      "network.bkn: capabilities.skills entry 's1' has ids but no names; it binds only on the platform it was exported from.",
+    ]);
+  });
+
+  it.each([
+    ['capabilities: "not a mapping"\n', "is not a mapping of skills / functions / mcp_tools"],
+    ["capabilities:\n  skills: s1\n", ".skills is not a list"],
+    ["capabilities:\n  functions:\n    - t1\n", ".functions has an entry that is not a mapping"],
+  ])("flags a section push would drop whole: %j", (block, detail) => {
+    const r = validateBknDirectory(bkn({ "network.bkn": withCapabilities(block) }));
+    expect(r.valid).toBe(true);
+    expect(r.capabilities).toEqual({ declared: 0, malformed: detail, skipped: [] });
+    expect(r.warnings.some((w) => w.includes("push ignores the whole section"))).toBe(true);
+  });
+
+  it("warns about a list push does not know, which it would ignore", () => {
+    const r = validateBknDirectory(
+      bkn({ "network.bkn": withCapabilities("capabilities:\n  tools:\n    - tool_id: t1\n") }),
+    );
+    expect(r.capabilities).toEqual({ declared: 0, skipped: [] });
+    expect(r.warnings).toEqual([
+      "network.bkn: capabilities.tools is not a known list (skills, functions, mcp_tools); push ignores it.",
+    ]);
+  });
+
+  it("says the section went unchecked when the frontmatter is not valid YAML", () => {
+    const r = validateBknDirectory(
+      bkn({
+        "network.bkn": withCapabilities("capabilities:\n  skills:\n    - id: s1\nname: again\n"),
+      }),
+    );
+    expect(r.valid).toBe(true);
+    expect(r.capabilities).toEqual({ declared: 0, skipped: [] });
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toMatch(
+      /^network\.bkn: frontmatter is not valid YAML \(.+\); capabilities was not checked\.$/,
+    );
+  });
+
+  it("reports nothing for a network without the section", () => {
+    const r = validateBknDirectory(bkn({ "network.bkn": network }));
+    expect(r.capabilities).toEqual({ declared: 0, skipped: [] });
+  });
+});

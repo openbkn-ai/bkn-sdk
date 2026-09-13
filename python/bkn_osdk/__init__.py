@@ -42,6 +42,7 @@ from .errors import (
     HttpError,
     InputError,
     ObjectNotFound,
+    PlatformVersionError,
     SchemaDriftError,
     ToolError,
 )
@@ -88,6 +89,7 @@ __all__ = [
     "ObjectType",
     "ObjectTypeDef",
     "Page",
+    "PlatformVersionError",
     "Property",
     "PropertyDef",
     "PropertyRef",

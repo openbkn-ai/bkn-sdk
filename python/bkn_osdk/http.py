@@ -11,6 +11,7 @@ from a Python process.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 from urllib.parse import urljoin
 
@@ -18,9 +19,16 @@ import httpx
 
 from .auth import refreshed_token, token_for
 from .config import Context, resolve_context
-from .errors import HttpError, hint_for
+from .errors import HttpError, PlatformVersionError, hint_for
 
-__all__ = ["call", "request"]
+__all__ = ["MIN_PLATFORM_VERSION", "call", "request"]
+
+#: The first platform release whose Context Loader recalls skills and tools from a
+#: network's capability bindings. Earlier releases recall skills from a `skills` object
+#: type, a path this runtime does not describe; talking to one would look like it works.
+MIN_PLATFORM_VERSION = (0, 1, 5)
+HEALTH_PATH = "/api/bkn-backend/v1/health"
+_HEALTH_TIMEOUT = 5.0
 
 QueryValue = str | int | float | bool | list[str | int | float | bool] | None
 
@@ -42,6 +50,7 @@ def request(
     `ontology-query` takes a GET semantically but a body in practice.
     """
     url = path if path.startswith("http") else urljoin(f"{ctx.base_url}/", path.lstrip("/"))
+    _ensure_platform_floor(ctx)
     has_body = body is not None
     token = token_for(ctx)
 
@@ -109,6 +118,52 @@ def call(
         headers=headers,
         timeout=timeout,
     )
+
+
+def _ensure_platform_floor(ctx: Context) -> None:
+    """Refuse a platform that states a version below MIN_PLATFORM_VERSION.
+
+    Only a stated version is acted on; one health read per base URL per process. A health
+    route that is missing, unreachable or answers something unexpected lets the call
+    through: inside a sandbox the base URL is Context Loader itself, which does not serve
+    bkn-backend's health, and refusing there would break every Function on a current
+    platform.
+    """
+    if ctx.base_url not in _platform_versions:
+        _platform_versions[ctx.base_url] = _stated_version(ctx)
+    stated = _platform_versions[ctx.base_url]
+    if stated is not None and stated < MIN_PLATFORM_VERSION:
+        floor = ".".join(str(part) for part in MIN_PLATFORM_VERSION)
+        found = ".".join(str(part) for part in stated)
+        raise PlatformVersionError(
+            f"{ctx.base_url} runs platform {found}; bkn-osdk needs {floor} or later. "
+            "Upgrade the platform, or use a bkn-osdk released with it."
+        )
+
+
+def _stated_version(ctx: Context) -> tuple[int, int, int] | None:
+    try:
+        response = _client(ctx).get(
+            urljoin(f"{ctx.base_url}/", HEALTH_PATH.lstrip("/")),
+            headers={"accept": "application/json"},
+            timeout=min(ctx.timeout, _HEALTH_TIMEOUT),
+        )
+        if response.is_error:
+            return None
+        payload = response.json()
+    except (httpx.HTTPError, ValueError):
+        return None
+    if isinstance(payload, dict) and isinstance(payload.get("data"), dict):
+        payload = payload["data"]
+    raw = payload.get("ServerVersion") if isinstance(payload, dict) else None
+    match = re.match(r"^v?(\d+)\.(\d+)\.(\d+)", raw) if isinstance(raw, str) else None
+    if match is None:
+        return None
+    major, minor, patch = (int(group) for group in match.groups())
+    return (major, minor, patch)
+
+
+_platform_versions: dict[str, tuple[int, int, int] | None] = {}
 
 
 def _headers(

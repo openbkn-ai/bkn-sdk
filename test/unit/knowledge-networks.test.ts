@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { relationTypePaths, runCypherQuery } from "../../src/api/bkn-backend.js";
+import {
+  attachCapabilities,
+  detachCapabilities,
+  listCapabilities,
+  relationTypePaths,
+  runCypherQuery,
+} from "../../src/api/bkn-backend.js";
 import {
   dryRunMetric,
   executeActionType,
@@ -17,6 +23,7 @@ import {
   searchInstance,
 } from "../../src/api/knowledge-networks.js";
 import { resetLifecycleCaches } from "../../src/api/lifecycle.js";
+import { VersionCompatibilityError } from "../../src/api/version-check.js";
 import { readBody } from "../../src/commands/_shared.js";
 import type { RequestContext } from "../../src/types.js";
 import { verifiedContext } from "../setup/verified-context.js";
@@ -222,6 +229,91 @@ describe("reads tunnelled over POST", () => {
       "/api/bkn-backend/v1/knowledge-networks/kn-1/relation-type-paths",
     );
     expect(header(init, "X-HTTP-Method-Override")).toBe("GET");
+  });
+});
+
+describe("capability bindings", () => {
+  it("list sends each filter as its backend query parameter", async () => {
+    const f = mockFetch();
+    await listCapabilities(ctx, "kn-1", {
+      branch: "dev",
+      type: "function",
+      boxId: "b1",
+      metadataType: "openapi",
+      withDetail: true,
+      limit: 5,
+      offset: 10,
+    });
+    const [url, init] = firstCall(f);
+    const parsed = new URL(url);
+    expect(parsed.pathname).toBe("/api/bkn-backend/v1/knowledge-networks/kn-1/capabilities");
+    expect(Object.fromEntries(parsed.searchParams)).toEqual({
+      branch: "dev",
+      type: "function",
+      box_id: "b1",
+      metadata_type: "openapi",
+      with_detail: "true",
+      limit: "5",
+      offset: "10",
+    });
+    expect(init.method).toBe("GET");
+  });
+
+  it("list sends no filters that were not asked for", async () => {
+    const f = mockFetch();
+    await listCapabilities(ctx, "kn-1");
+    expect([...new URL(firstCall(f)[0]).searchParams.keys()]).toEqual([]);
+  });
+
+  it("attach posts the entries under capabilities", async () => {
+    const f = mockFetch();
+    await attachCapabilities(
+      ctx,
+      "kn-1",
+      [{ capability_type: "function", box_id: "b1", all_tools: true }],
+      "dev",
+    );
+    const [url, init] = firstCall(f);
+    expect(new URL(url).pathname).toBe("/api/bkn-backend/v1/knowledge-networks/kn-1/capabilities");
+    expect(new URL(url).searchParams.get("branch")).toBe("dev");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      capabilities: [{ capability_type: "function", box_id: "b1", all_tools: true }],
+    });
+  });
+
+  it("detach joins the ids into one path segment", async () => {
+    const f = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", f);
+    await expect(detachCapabilities(ctx, "kn-1", ["a", "b"])).resolves.toBeUndefined();
+    const [url, init] = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls[0] ?? [];
+    expect(new URL(String(url)).pathname).toBe(
+      "/api/bkn-backend/v1/knowledge-networks/kn-1/capabilities/a,b",
+    );
+    expect(init?.method).toBe("DELETE");
+  });
+
+  it("refuses a 0.1.4 platform before any capability request is sent", async () => {
+    const f = vi.fn(async (input: string | URL) => {
+      const body =
+        new URL(String(input)).pathname === "/api/bkn-backend/v1/health"
+          ? { ServerVersion: "0.1.4" }
+          : { entries: [] };
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+    vi.stubGlobal("fetch", f);
+    // A context that has not been through the preflight yet.
+    const fresh: RequestContext = {
+      baseUrl: "https://old.example.com",
+      token: "t",
+      insecure: false,
+    };
+
+    const error = await listCapabilities(fresh, "kn-1").catch((reason) => reason);
+    expect(error).toBeInstanceOf(VersionCompatibilityError);
+    expect((error as Error).message).toContain("platform version 0.1.4");
+    expect(f).toHaveBeenCalledOnce();
+    expect(new URL(String(f.mock.calls[0]?.[0])).pathname).toBe("/api/bkn-backend/v1/health");
   });
 });
 
