@@ -274,6 +274,20 @@ describe("validateBknDirectory — capabilities section", () => {
     ]);
   });
 
+  it("says the section went unchecked when the frontmatter is not valid YAML", () => {
+    const r = validateBknDirectory(
+      bkn({
+        "network.bkn": withCapabilities("capabilities:\n  skills:\n    - id: s1\nname: again\n"),
+      }),
+    );
+    expect(r.valid).toBe(true);
+    expect(r.capabilities).toEqual({ declared: 0, skipped: [] });
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toMatch(
+      /^network\.bkn: frontmatter is not valid YAML \(.+\); capabilities was not checked\.$/,
+    );
+  });
+
   it("reports nothing for a network without the section", () => {
     const r = validateBknDirectory(bkn({ "network.bkn": network }));
     expect(r.capabilities).toEqual({ declared: 0, skipped: [] });

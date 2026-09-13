@@ -281,7 +281,13 @@ function checkCapabilities(text: string, warnings: string[]): CapabilityCheck {
   let frontmatter: unknown;
   try {
     frontmatter = yaml.load(text.slice(3, end));
-  } catch {
+  } catch (error) {
+    // The line-by-line reader above still finds type/id/name in YAML like this, so without a
+    // word here validate would pass a section it never looked at.
+    const reason = error instanceof Error ? error.message.split("\n")[0] : "parse failed";
+    warnings.push(
+      `network.bkn: frontmatter is not valid YAML (${reason}); capabilities was not checked.`,
+    );
     return result;
   }
   if (!frontmatter || typeof frontmatter !== "object") return result;
