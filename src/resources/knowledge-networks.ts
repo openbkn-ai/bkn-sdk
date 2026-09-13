@@ -4,16 +4,21 @@
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import {
+  type CapabilityAttachEntry,
+  type CapabilityListOptions,
   addConceptGroupMembers,
+  attachCapabilities,
   createActionSchedule,
   createConceptGroup,
   deleteActionSchedules,
   deleteConceptGroup,
+  detachCapabilities,
   downloadBkn,
   getActionSchedule,
   getConceptGroup,
   listActionSchedules,
   listBknResources,
+  listCapabilities,
   listConceptGroups,
   relationTypePaths,
   removeConceptGroupMembers,
@@ -134,6 +139,15 @@ export function kn(ctx: RequestContext) {
       setActionScheduleStatus(ctx, knId, scheduleId, body),
     actionScheduleDelete: (knId: string, ids: string) => deleteActionSchedules(ctx, knId, ids),
     relationTypePaths: (knId: string, body: unknown) => relationTypePaths(ctx, knId, body),
+    capabilityList: (knId: string, opts?: CapabilityListOptions) =>
+      listCapabilities(ctx, knId, opts),
+    capabilityAttach: (
+      knId: string,
+      entries: CapabilityAttachEntry[],
+      opts?: { branch?: string },
+    ) => attachCapabilities(ctx, knId, entries, opts?.branch),
+    capabilityDetach: (knId: string, bindingIds: string[], opts?: { branch?: string }) =>
+      detachCapabilities(ctx, knId, bindingIds, opts?.branch),
     // Straight to the compiler, outside any Trace session; `context.runCypher` is the
     // same query recorded as part of a conversation.
     cypher: (

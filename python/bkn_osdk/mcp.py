@@ -194,7 +194,10 @@ def _post(ctx: Context, kn_id: str, session_id: str, body: dict[str, Any]) -> An
 
 def _raw_post(ctx: Context, kn_id: str, session_id: str | None, body: dict[str, Any]) -> Any:
     from .auth import refreshed_token, token_for
-    from .http import _client, _headers
+    from .http import _client, _ensure_platform_floor, _headers
+
+    # Skill recall runs over this transport, so it takes the same version floor as REST.
+    _ensure_platform_floor(ctx)
 
     def send(bearer: str) -> Any:
         headers = _headers(

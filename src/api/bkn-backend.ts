@@ -176,6 +176,90 @@ export function removeConceptGroupMembers(
   );
 }
 
+/**
+ * One capability to bind. The binding is always tool-level: a skill by id, a tool box tool
+ * by `(box_id, capability_id)`, an MCP Server tool by `(box_id = mcp_id, capability_id =
+ * tool name)`. `all_tools` names a box or server and is expanded by the backend at write
+ * time into one binding per tool it holds right now.
+ */
+export interface CapabilityAttachEntry {
+  capability_type: "skill" | "function" | "mcp_tool";
+  box_id?: string;
+  capability_id?: string;
+  all_tools?: boolean;
+  comment?: string;
+}
+
+export interface CapabilityListOptions {
+  branch?: string;
+  /** `skill`, `function` or `mcp_tool`. */
+  type?: string;
+  /** Narrow function / mcp_tool bindings to one tool box or MCP Server. */
+  boxId?: string;
+  /** `openapi` or `function`: the kind of tool box behind a function binding. */
+  metadataType?: string;
+  /** Also backfill description and status — one extra call per skill. */
+  withDetail?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * List what a knowledge network branch has bound, with names backfilled from the
+ * execution factory. `GET …/knowledge-networks/{kn_id}/capabilities`.
+ */
+export function listCapabilities(
+  ctx: RequestContext,
+  knId: string,
+  opts: CapabilityListOptions = {},
+): Promise<unknown> {
+  return request(ctx, knPath(knId, "capabilities"), {
+    query: {
+      branch: opts.branch || undefined,
+      type: opts.type || undefined,
+      box_id: opts.boxId || undefined,
+      metadata_type: opts.metadataType || undefined,
+      with_detail: opts.withDetail ? "true" : undefined,
+      limit: opts.limit,
+      offset: opts.offset,
+    },
+  });
+}
+
+/**
+ * Bind capabilities to a knowledge network branch; repeating a binding is a no-op.
+ * `POST …/knowledge-networks/{kn_id}/capabilities` → `{entries, total_count}`.
+ */
+export function attachCapabilities(
+  ctx: RequestContext,
+  knId: string,
+  capabilities: CapabilityAttachEntry[],
+  branch?: string,
+): Promise<unknown> {
+  return request(ctx, knPath(knId, "capabilities"), {
+    method: "POST",
+    body: { capabilities },
+    query: { branch: branch || undefined },
+  });
+}
+
+/**
+ * Release bindings by id. `DELETE …/knowledge-networks/{kn_id}/capabilities/{ids}`, the
+ * ids comma-joined in one path segment.
+ */
+export function detachCapabilities(
+  ctx: RequestContext,
+  knId: string,
+  bindingIds: string[],
+  branch?: string,
+): Promise<unknown> {
+  return request(
+    ctx,
+    knPath(knId, `capabilities/${bindingIds.map(encodeURIComponent).join(",")}`),
+    { method: "DELETE", query: { branch: branch || undefined } },
+  );
+}
+
 export function listActionSchedules(ctx: RequestContext, knId: string): Promise<unknown> {
   return request(ctx, knPath(knId, "action-schedules"));
 }

@@ -10,15 +10,37 @@
  */
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
+import yaml from "js-yaml";
 import type { DataPropertyMaskRule } from "../types.js";
 
 // validateObjectName parity: ISF caps BKN object names at 40 utf-8 codepoints.
 export const BKN_OBJECT_NAME_MAX_LENGTH = 40;
 
+/**
+ * A declared capability that push is certain to leave unbound, on whatever platform receives
+ * it. Same shape and reason codes as the `capabilities.skipped` entries push answers with.
+ */
+export interface CapabilitySkipPreview {
+  capability_type: "skill" | "function" | "mcp_tool";
+  name?: string;
+  reason: "not_found";
+  detail: string;
+}
+
+export interface CapabilityCheck {
+  /** Entries declared across skills, functions and mcp_tools. */
+  declared: number;
+  /** Set when the section cannot be decoded: push then drops all of it, silently. */
+  malformed?: string;
+  skipped: CapabilitySkipPreview[];
+}
+
 export interface ValidationResult {
   valid: boolean;
   dir: string;
   counts: { objectTypes: number; relationTypes: number; conceptGroups: number };
+  /** network.bkn's `capabilities:` section: how many entries it declares, and which cannot bind. */
+  capabilities: CapabilityCheck;
   errors: string[];
   warnings: string[];
 }
@@ -231,6 +253,107 @@ function endpointRefs(text: string): Array<{ source: string; target: string }> {
   return refs;
 }
 
+const CAPABILITY_LISTS = {
+  skills: "skill",
+  functions: "function",
+  mcp_tools: "mcp_tool",
+} as const;
+
+function field(entry: Record<string, unknown>, key: string): string {
+  const value = entry[key];
+  return value === undefined || value === null ? "" : String(value).trim();
+}
+
+/**
+ * Check network.bkn's `capabilities:` section the way bkn-backend reads it on import.
+ *
+ * The import never fails over this section. A section it cannot decode is dropped whole —
+ * push then reports nothing bound and nothing skipped — and an entry it cannot resolve is
+ * skipped. Only what holds on every platform is decided here: a malformed section or key,
+ * and an entry with neither ids nor names to resolve by. Entries that carry ids alone are
+ * warned about, since ids are local to the platform that exported them.
+ */
+function checkCapabilities(text: string, warnings: string[]): CapabilityCheck {
+  const result: CapabilityCheck = { declared: 0, skipped: [] };
+  if (!text.startsWith("---")) return result;
+  const end = text.indexOf("\n---", 3);
+  if (end === -1) return result;
+  let frontmatter: unknown;
+  try {
+    frontmatter = yaml.load(text.slice(3, end));
+  } catch {
+    return result;
+  }
+  if (!frontmatter || typeof frontmatter !== "object") return result;
+  const section = (frontmatter as Record<string, unknown>).capabilities;
+  if (section === undefined || section === null) return result;
+
+  const malformed = (detail: string): CapabilityCheck => {
+    warnings.push(`network.bkn: capabilities ${detail}; push ignores the whole section.`);
+    return { declared: 0, malformed: detail, skipped: [] };
+  };
+  if (typeof section !== "object" || Array.isArray(section)) {
+    return malformed("is not a mapping of skills / functions / mcp_tools");
+  }
+  const lists = section as Record<string, unknown>;
+  for (const [key, value] of Object.entries(lists)) {
+    if (!(key in CAPABILITY_LISTS)) {
+      warnings.push(
+        `network.bkn: capabilities.${key} is not a known list (skills, functions, mcp_tools); push ignores it.`,
+      );
+      continue;
+    }
+    if (value === null || value === undefined) continue;
+    if (!Array.isArray(value)) return malformed(`.${key} is not a list`);
+    if (value.some((item) => item !== null && (typeof item !== "object" || Array.isArray(item)))) {
+      return malformed(`.${key} has an entry that is not a mapping`);
+    }
+  }
+
+  for (const [key, type] of Object.entries(CAPABILITY_LISTS)) {
+    const entries = (lists[key] as Array<Record<string, unknown> | null> | undefined) ?? [];
+    for (const entry of entries) {
+      if (!entry) continue;
+      result.declared += 1;
+      const skip = (name: string, detail: string) =>
+        result.skipped.push({
+          capability_type: type,
+          ...(name ? { name } : {}),
+          reason: "not_found",
+          detail,
+        });
+      const idsOnly = (label: string) =>
+        warnings.push(
+          `network.bkn: capabilities.${key} entry '${label}' has ids but no names; it binds only on the platform it was exported from.`,
+        );
+      if (type === "skill") {
+        const [id, name] = [field(entry, "id"), field(entry, "name")];
+        if (!id && !name) skip("", "a skill needs an id or a name");
+        else if (!name) idsOnly(id);
+      } else if (type === "function") {
+        const [boxId, toolId] = [field(entry, "box_id"), field(entry, "tool_id")];
+        const [boxName, toolName] = [field(entry, "box_name"), field(entry, "tool_name")];
+        const label = toolName || toolId;
+        if (!(boxId && toolId) && !(boxName && toolName)) {
+          skip(label, "a function needs box_id with tool_id, or box_name with tool_name");
+        } else if (!(boxName && toolName)) idsOnly(label);
+      } else {
+        const [mcpId, mcpName] = [field(entry, "mcp_id"), field(entry, "mcp_name")];
+        const toolName = field(entry, "tool_name");
+        if (!toolName) skip("", "an mcp tool needs tool_name");
+        else if (!mcpId && !mcpName) skip(toolName, "an mcp tool needs mcp_id or mcp_name");
+        else if (!mcpName) idsOnly(toolName);
+      }
+    }
+  }
+  for (const s of result.skipped) {
+    warnings.push(
+      `network.bkn: push will skip ${s.capability_type} ${s.name ? `'${s.name}'` : "(unnamed)"}: ${s.detail}.`,
+    );
+  }
+  return result;
+}
+
 export function validateBknDirectory(dirPath: string): ValidationResult {
   const dir = resolve(dirPath);
   const errors: string[] = [];
@@ -241,6 +364,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
       valid: false,
       dir,
       counts: { objectTypes: 0, relationTypes: 0, conceptGroups: 0 },
+      capabilities: { declared: 0, skipped: [] },
       errors: [`Not a directory: ${dir}`],
       warnings: [],
     };
@@ -248,16 +372,19 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
 
   // network.bkn — required, must declare a knowledge_network.
   const networkPath = join(dir, "network.bkn");
+  let capabilities: CapabilityCheck = { declared: 0, skipped: [] };
   if (!existsSync(networkPath)) {
     errors.push("Missing network.bkn at the BKN root.");
   } else {
-    const fm = parseFrontmatter(readFileSync(networkPath, "utf8"));
+    const networkText = readFileSync(networkPath, "utf8");
+    const fm = parseFrontmatter(networkText);
     if (!fm) errors.push("network.bkn has no frontmatter block.");
     else {
       if (fm.type !== "knowledge_network")
         errors.push(`network.bkn type must be 'knowledge_network', got '${fm.type ?? ""}'.`);
       if (!fm.id) errors.push("network.bkn is missing 'id'.");
       if (!fm.name) errors.push("network.bkn is missing 'name'.");
+      capabilities = checkCapabilities(networkText, warnings);
     }
   }
 
@@ -315,6 +442,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
       relationTypes: rtFiles.length,
       conceptGroups: cgFiles.length,
     },
+    capabilities,
     errors,
     warnings,
   };

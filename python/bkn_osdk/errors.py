@@ -19,6 +19,7 @@ __all__ = [
     "HttpError",
     "InputError",
     "ObjectNotFound",
+    "PlatformVersionError",
     "SchemaDriftError",
     "ToolError",
     "lifecycle_hint",
@@ -31,6 +32,10 @@ class BknError(Exception):
 
 class InputError(BknError):
     """Caller-side mistake: missing credentials, bad arguments, unusable filter."""
+
+
+class PlatformVersionError(BknError):
+    """The platform states a version older than this runtime supports; nothing was sent."""
 
 
 class HttpError(BknError):

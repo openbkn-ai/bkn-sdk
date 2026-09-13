@@ -67,6 +67,8 @@ Export: `openbkn bkn pull <kn-id> [<dir>]`. More subcommands: `openbkn bkn --hel
 
 `openbkn bkn validate <dir>` — must pass before delivery or upload. It loads `network.bkn` and sibling `.bkn` files. Success prints counts; on failure fix `.bkn` files and re-run.
 
+A `capabilities:` section in `network.bkn` never fails validation or push. Read `capabilities.skipped` and the warnings instead: an entry listed there binds on no platform, and a malformed section is ignored whole. After `push`, the answer's `capabilities.skipped` names what this platform could not resolve.
+
 ## Per-type reference
 
 | Kind | Spec (section) | Template | Example (k8s) |
