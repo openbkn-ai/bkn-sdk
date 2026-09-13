@@ -173,7 +173,7 @@ openbkn context tool-call <kn> <tool-name> --arg k=v --arg n=10 --arg list='["a"
 
 ```bash
 openbkn --json context tool-call <kn> <tool-name> --args '{"k":"v"}' --receipt
-# → { "value": ..., "bkn_receipt": { "receipt_id": ..., "receipt_status": ... } }
+# → { "value": ..., "bkn_receipt": { "receipt_status": "completed", "evidence_durability": ..., "observed_evidence_refs": [...], "business_refs": [...] } }
 ```
 
 `--receipt` 必须配合 `--json` 或 `--compact`，不能与 `--schema` 一起使用。
@@ -184,6 +184,8 @@ openbkn --json context tool-call <kn> <tool-name> --args '{"k":"v"}' --receipt
 
 `value: null` 本身不是状态：`pending` Receipt 的 value 不可消费，必须依据
 `bkn_receipt.receipt_status` 判断，并使用 `receipt_id` 回读；不得通过重试业务工具取得结果。
+0.1.5 平台上 `completed` 回执只带状态、证据持久性与证据/业务引用（有 `partial_reasons` 时一并带上），
+`receipt_id` 等身份字段只随 `pending` 与终态重放回执返回；完整记录留在 BKN Trace。
 在 catalog 明确不支持 lifecycle 的部署上，`--receipt` 仍会执行一次业务调用，但若服务端不返回
 Receipt，命令以 `receipt_missing` 失败，业务副作用不会被回滚。
 

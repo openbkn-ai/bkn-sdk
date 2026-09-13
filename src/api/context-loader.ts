@@ -22,7 +22,7 @@ import {
   withManagedLifecycle,
 } from "./lifecycle.js";
 import { tlsFetch } from "./tls.js";
-import type { OperationReceipt } from "./trace-lifecycle.js";
+import type { EvidenceDurability, LifecycleBusinessRef } from "./trace-lifecycle.js";
 import { ensureCompatible, inheritVersionCheck } from "./version-check.js";
 
 const MCP_PATH = "/api/agent-retrieval/v1/mcp";
@@ -151,9 +151,31 @@ async function ensureSession(ctx: RequestContext, knId: string): Promise<string>
   return sessionId;
 }
 
+/**
+ * The receipt a managed MCP tool result carries.
+ *
+ * Since foundry #1417 a completed call carries only what an agent reads off it: status,
+ * durability and evidence references, plus `partial_reasons` when Core set any. The identity
+ * fields still arrive on pending and terminal-replay replies, and on deploys older than that
+ * change, so they are optional here rather than gone. Core keeps the complete receipt; read it
+ * with `openbkn trace interactions operations <interaction-id>`.
+ */
+export interface ToolReceipt {
+  receipt_status: "pending" | "completed" | "failed";
+  evidence_durability?: EvidenceDurability;
+  observed_evidence_refs?: string[];
+  business_refs?: LifecycleBusinessRef[];
+  partial_reasons?: string[];
+  receipt_id?: string;
+  conversation_id?: string;
+  interaction_id?: string;
+  operation_id?: string;
+  [field: string]: unknown;
+}
+
 export interface ManagedToolResult<T = unknown> {
   value: T;
-  receipt: OperationReceipt;
+  receipt: ToolReceipt;
 }
 
 /** Adapter-owned MCP metadata for lifecycle-safe host retries. */
@@ -164,31 +186,42 @@ export interface ToolCallOptions {
 
 interface UnwrappedToolResult {
   value: unknown;
-  receipt?: OperationReceipt;
+  receipt?: ToolReceipt;
 }
 
-function isOperationReceipt(value: unknown): value is OperationReceipt {
-  const receipt = value as Record<string, unknown> | undefined;
-  return (
-    typeof receipt?.receipt_id === "string" &&
-    receipt.receipt_id.length > 0 &&
-    typeof receipt.conversation_id === "string" &&
-    receipt.conversation_id.length > 0 &&
-    typeof receipt.interaction_id === "string" &&
-    receipt.interaction_id.length > 0 &&
-    typeof receipt.operation_id === "string" &&
-    receipt.operation_id.length > 0 &&
-    (receipt.receipt_status === "pending" ||
-      receipt.receipt_status === "completed" ||
-      receipt.receipt_status === "failed")
-  );
+const RECEIPT_STATUSES = new Set(["pending", "completed", "failed"]);
+const RECEIPT_IDENTITY_FIELDS = [
+  "receipt_id",
+  "conversation_id",
+  "interaction_id",
+  "operation_id",
+] as const;
+const RECEIPT_LIST_FIELDS = ["observed_evidence_refs", "business_refs", "partial_reasons"] as const;
+
+/**
+ * A receipt is trusted on its status, which decides what the SDK does with the call. The
+ * identity fields may be absent (see `ToolReceipt`), but one that is present has to be a
+ * usable id: an empty or non-string id is a malformed receipt, not a slim one.
+ */
+function isToolReceipt(value: unknown): value is ToolReceipt {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const receipt = value as Record<string, unknown>;
+  if (!RECEIPT_STATUSES.has(receipt.receipt_status as string)) return false;
+  for (const field of RECEIPT_IDENTITY_FIELDS) {
+    const id = receipt[field];
+    if (id !== undefined && (typeof id !== "string" || id.length === 0)) return false;
+  }
+  for (const field of RECEIPT_LIST_FIELDS) {
+    if (receipt[field] !== undefined && !Array.isArray(receipt[field])) return false;
+  }
+  return true;
 }
 
-function receiptFrom(structuredContent: unknown): OperationReceipt | undefined {
+function receiptFrom(structuredContent: unknown): ToolReceipt | undefined {
   const content = structuredContent as { bkn_receipt?: unknown; receipt?: unknown } | undefined;
   const candidate = content?.bkn_receipt ?? content?.receipt;
   if (candidate === undefined) return undefined;
-  if (!isOperationReceipt(candidate)) {
+  if (!isToolReceipt(candidate)) {
     throw new ToolError("Context-loader returned an invalid operation receipt.", "receipt_invalid");
   }
   return candidate;
@@ -340,15 +373,23 @@ function callerContextMatchesTrace(
   return business as BusinessContextIds;
 }
 
+/**
+ * A receipt that names its conversation or interaction must name the one this call ran in.
+ * A slim receipt names neither and is taken as belonging to the call that returned it — the
+ * same response, over the same session, that the context was sent on.
+ */
 function receiptMatchesBusinessContext(
   result: UnwrappedToolResult,
   businessContext: BusinessContextIds | undefined,
 ): UnwrappedToolResult {
+  const receipt = result.receipt;
   if (
-    result.receipt &&
+    receipt &&
     businessContext &&
-    (result.receipt.conversation_id !== businessContext.conversation_id ||
-      result.receipt.interaction_id !== businessContext.interaction_id)
+    ((receipt.conversation_id !== undefined &&
+      receipt.conversation_id !== businessContext.conversation_id) ||
+      (receipt.interaction_id !== undefined &&
+        receipt.interaction_id !== businessContext.interaction_id))
   ) {
     throw new Error("Context-loader receipt does not match the managed context.");
   }

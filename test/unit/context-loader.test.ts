@@ -919,3 +919,127 @@ describe("managed MCP tool calls", () => {
     expect(result.receipt).toEqual(receipt);
   });
 });
+
+// What a completed managed call carries since foundry #1417: no identity fields.
+const SLIM_RECEIPT = {
+  receipt_status: "completed",
+  evidence_durability: "durable",
+  observed_evidence_refs: [],
+  business_refs: [],
+};
+
+const CALLER_CONTEXT = {
+  conversation_id: "conversation_supply_chain",
+  interaction_id: "interaction_june_forecast",
+};
+
+function serveReceipt(receipt: unknown, session: string): void {
+  const body = JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    result: {
+      content: [{ type: "text", text: JSON.stringify({ concepts: ["forecast"] }) }],
+      structuredContent: { bkn_receipt: receipt },
+    },
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(body, { status: 200, headers: { "mcp-session-id": session } })),
+  );
+}
+
+describe("slim receipts (foundry #1417)", () => {
+  it("accepts a completed call's receipt without identity fields", async () => {
+    serveReceipt(SLIM_RECEIPT, "slim-s1");
+    const result = await callManagedTool(ctx, "kn-slim", "search_schema", {
+      query: "forecast",
+      bkn_context: CALLER_CONTEXT,
+    });
+    expect(result).toEqual({ value: { concepts: ["forecast"] }, receipt: SLIM_RECEIPT });
+  });
+
+  it("keeps partial_reasons, the one field an agent must see", async () => {
+    const receipt = { ...SLIM_RECEIPT, partial_reasons: ["evidence_capture_degraded"] };
+    serveReceipt(receipt, "slim-partial-s1");
+    const result = await callManagedTool(ctx, "kn-slim-partial", "search_schema", {
+      query: "forecast",
+      bkn_context: CALLER_CONTEXT,
+    });
+    expect(result.receipt.partial_reasons).toEqual(["evidence_capture_degraded"]);
+  });
+
+  it.each([
+    ["an unknown status", { ...SLIM_RECEIPT, receipt_status: "done" }],
+    ["no status at all", { evidence_durability: "durable" }],
+    ["an empty receipt_id", { ...SLIM_RECEIPT, receipt_id: "" }],
+    ["a non-string operation_id", { ...SLIM_RECEIPT, operation_id: 7 }],
+    ["evidence refs that are not a list", { ...SLIM_RECEIPT, observed_evidence_refs: "ref-1" }],
+  ])("still refuses a receipt with %s", async (_case, receipt) => {
+    serveReceipt(receipt, "slim-bad-s1");
+    const error = await callManagedTool(ctx, "kn-slim-bad", "search_schema", {
+      query: "forecast",
+      bkn_context: CALLER_CONTEXT,
+    }).catch((reason) => reason);
+    expect(error).toMatchObject({ code: "receipt_invalid" });
+  });
+
+  it("still refuses a receipt that names a different interaction", async () => {
+    serveReceipt({ ...SLIM_RECEIPT, interaction_id: "interaction_other" }, "slim-mismatch-s1");
+    await expect(
+      callManagedTool(ctx, "kn-slim-mismatch", "search_schema", {
+        query: "forecast",
+        bkn_context: CALLER_CONTEXT,
+      }),
+    ).rejects.toThrow("Context-loader receipt does not match the managed context.");
+  });
+
+  it("serves a plain tool call on the automatic lifecycle path, as the CLI makes it", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL, init?: RequestInit) => {
+        if (String(input).endsWith("/mcp/info")) {
+          return new Response(JSON.stringify({ tools: [{ name: "bkn_start_interaction" }] }));
+        }
+        const rpc = JSON.parse(init?.body as string) as {
+          method?: string;
+          params?: { name: string };
+        };
+        const headers = { "mcp-session-id": "slim-auto-session" };
+        if (rpc.method !== "tools/call" || !rpc.params) {
+          return new Response(JSON.stringify({ jsonrpc: "2.0", result: {} }), { headers });
+        }
+        calls.push(rpc.params.name);
+        const start = rpc.params.name === "bkn_start_interaction";
+        return new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            result: {
+              content: [
+                { type: "text", text: start ? "started" : JSON.stringify({ capabilities: [] }) },
+              ],
+              structuredContent: start
+                ? { conversation_id: "conv-slim", interaction_id: "int-slim" }
+                : { bkn_receipt: SLIM_RECEIPT },
+            },
+          }),
+          { headers },
+        );
+      }),
+    );
+
+    await expect(
+      callTool(
+        verifiedContext({
+          baseUrl: "https://slim-auto.example.com",
+          token: "slim-token",
+          insecure: false,
+        }),
+        "kn-slim-auto",
+        "search_capabilities",
+        { query: "库存" },
+      ),
+    ).resolves.toEqual({ capabilities: [] });
+    expect(calls).toEqual(["bkn_start_interaction", "search_capabilities"]);
+  });
+});

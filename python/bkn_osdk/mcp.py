@@ -8,9 +8,9 @@ run time, and it is the surface the TypeScript SDK calls for every
 context-loader capability, so keeping to it keeps one contract across the two
 clients. It carries what REST does not:
 
-* the `bkn_receipt` — operation id, payload hash, business refs down to the
-  property — that puts a read in the evidence chain in-band, rather than only
-  server-side;
+* the `bkn_receipt` — status, evidence durability and the evidence and
+  business refs down to the property — that puts a read in the evidence chain
+  in-band, rather than only server-side;
 * the capability tools themselves (`search_schema` and its neighbours), which
   have no stable REST equivalent: `semantic-search` was withdrawn between two
   deploys this SDK was tested against, while the tool name did not move;
