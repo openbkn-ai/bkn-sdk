@@ -90,7 +90,8 @@ SKILL_ID="$(node -e '
   });
 ' <<< "$register_out")"
 if errored "$register_out" || [ -z "$SKILL_ID" ]; then
-  echo "FAIL  skill register :: $(head -c 140 <<< "$register_out" | tr '\n' ' ')"
+  # Without an id there is nothing to clean up by; name the skill so a person can.
+  echo "FAIL  skill register (if the platform took it, delete the skill named $SKILL_KEY) :: $(head -c 140 <<< "$register_out" | tr '\n' ' ')"
   fail=$((fail + 1)); failed+=("skill register")
 else
   echo "PASS  skill register ($SKILL_ID)"; pass=$((pass + 1))
@@ -105,7 +106,7 @@ else
   chk "skill set-status published" skill set-status "$SKILL_ID" published
   # `files` and `read-file` read the published version, which a freshly
   # registered skill does not have yet — so they come after the publish.
-  chk "skill files" skill files "$SKILL_ID"
+  chk_has "skill files" "SKILL.md" skill files "$SKILL_ID"
   # Without --raw the answer is a download URL, not the text the name is in.
   chk_has "skill read-file SKILL.md" "$SKILL_KEY" skill read-file "$SKILL_ID" SKILL.md --raw
   # `download <skill-id> [out-path]` — the path is positional.
