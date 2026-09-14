@@ -140,7 +140,10 @@ export type CatalogConnectorTypeStatsResponse = z.infer<typeof CatalogConnectorT
 
 export const IndexCapabilities = z
   .object({
-    fulltext_analyzers: z.array(z.object({ id: z.string() }).passthrough()),
+    fulltext_analyzers: z
+      .array(z.object({ id: z.string() }).passthrough())
+      .nullish()
+      .transform((value) => value ?? []),
     checked_at: z.number(),
   })
   .passthrough();

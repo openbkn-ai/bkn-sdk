@@ -103,6 +103,10 @@ openbkn vega resource update <resource-id> \
 openbkn vega resource build <resource-id> --execute-type full --wait
 ```
 
+`--schema-definition` replaces the complete field list; it does not merge individual
+fields. Run `openbkn vega resource get <resource-id>` first, preserve every existing
+property in the array, and edit the required features before updating.
+
 ## Index build belongs to Vega
 
 `bkn push` and `bkn create-from-catalog` only create or import knowledge-network metadata. Save index configuration through `vega resource update`, then create BuildTasks through `vega resource build`; inspect them through `vega build-task`.

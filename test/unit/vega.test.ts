@@ -185,6 +185,11 @@ describe("vega uses the vega-backend base path", () => {
     expect(new URL(firstCall(capabilitiesFetch)[0]).pathname).toBe(
       "/api/vega-backend/v1/index-capabilities",
     );
+
+    mockFetch({ fulltext_analyzers: null, checked_at: 1720000000001 });
+    await expect(getIndexCapabilities(ctx)).resolves.toMatchObject({
+      fulltext_analyzers: [],
+    });
   });
 
   it("listCatalogs sends filters and sort params", async () => {
