@@ -47,6 +47,13 @@ const expectedUpdateTime = (value: string): number => {
   }
   return parsed;
 };
+const positiveTimeout = (value: string): number => {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new InputError("--timeout must be a positive integer");
+  }
+  return parsed;
+};
 const confidenceThreshold = (value: string): number => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
@@ -1129,7 +1136,7 @@ export function vegaCommand(): Command {
     .description("Create a batch BuildTask from the resource's saved index configuration")
     .option("--execute-type <type>", "batch execution type: incremental | full")
     .option("--wait", "poll until the build reaches a terminal state")
-    .option("--timeout <s>", "wait timeout in seconds", (v) => Number.parseInt(v, 10), 300)
+    .option("--timeout <s>", "wait timeout in seconds", positiveTimeout, 300)
     .action(async (resourceId: string, _opts, cmd: Command) => {
       const o = cmd.optsWithGlobals();
       const task = await clientFrom(cmd).vega.build(

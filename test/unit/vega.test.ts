@@ -107,6 +107,8 @@ describe("vega uses the vega-backend base path", () => {
           category: "table",
           enabled: true,
           available: true,
+          tags: null,
+          operations: null,
         },
       ],
       total_count: 1,
@@ -123,7 +125,10 @@ describe("vega uses the vega-backend base path", () => {
         limit: 10,
         offset: 20,
       }),
-    ).resolves.toEqual(body);
+    ).resolves.toMatchObject({
+      entries: [{ type: "mysql", tags: undefined, operations: undefined }],
+      total_count: 1,
+    });
     const u = new URL(firstCall(f)[0]);
     expect(u.pathname).toBe("/api/vega-backend/v1/connector-types");
     expect(u.searchParams.get("name")).toBe("sql");
@@ -147,11 +152,17 @@ describe("vega uses the vega-backend base path", () => {
       category: "table",
       enabled: true,
       available: true,
+      tags: null,
+      operations: null,
       field_config: { host: { name: "Host", type: "string", required: true } },
     };
     const f = mockFetch(detail);
 
-    await expect(getConnectorType(ctx, "my/sql")).resolves.toEqual(detail);
+    await expect(getConnectorType(ctx, "my/sql")).resolves.toMatchObject({
+      type: "mysql",
+      tags: undefined,
+      operations: undefined,
+    });
     expect(new URL(firstCall(f)[0]).pathname).toBe("/api/vega-backend/v1/connector-types/my%2Fsql");
   });
 
@@ -368,6 +379,7 @@ describe("createBuildTask", () => {
           catalog_id: "c-1",
           status: "completed",
           mode: "batch",
+          index_name: "vega-build-1",
           total_count: 10,
           synced_count: 10,
           synced_mark: "mark-1",
@@ -383,7 +395,8 @@ describe("createBuildTask", () => {
       total_count: 1,
     });
 
-    await expect(listBuildTasks(ctx)).resolves.toEqual({
+    const tasks = await listBuildTasks(ctx);
+    expect(tasks).toEqual({
       entries: [
         {
           id: "t-1",
@@ -391,6 +404,7 @@ describe("createBuildTask", () => {
           catalog_id: "c-1",
           status: "completed",
           mode: "batch",
+          index_name: "vega-build-1",
           total_count: 10,
           synced_count: 10,
           synced_mark: "mark-1",
@@ -405,6 +419,7 @@ describe("createBuildTask", () => {
       ],
       total_count: 1,
     });
+    expectTypeOf(tasks.entries[0]?.index_name).toEqualTypeOf<string | undefined>();
   });
 
   it("parses summaries without vectorized_count and preserves it from legacy responses", async () => {
@@ -455,22 +470,47 @@ describe("createBuildTask", () => {
     expect(result.entries[0]?.last_progress_time).toBeUndefined();
   });
 
-  it("exposes the persisted batch execute type and lifecycle timestamps", async () => {
+  it("exposes the complete build-task detail fields", async () => {
     mockFetch({
       id: "t-1",
+      resource_id: "r-1",
+      resource_name: "Orders",
+      catalog_id: "c-1",
+      catalog_name: "Production",
       mode: "batch",
+      status: "failed",
       execute_type: "incremental",
+      index_name: "vega-build-1",
+      total_count: 10,
+      synced_count: 8,
+      synced_mark: "checkpoint-8",
+      error_msg: "partial failure",
+      creator: { id: "u-1", name: "User", type: "user" },
+      create_time: 100,
       start_time: 120,
       finish_time: 200,
       last_progress_time: 180,
+      failure_detail: "two rows failed",
+      index_config: { primary_key_fields: ["id"] },
     });
-    await expect(getBuildTask(ctx, "t-1")).resolves.toMatchObject({
+    const task = await getBuildTask(ctx, "t-1");
+    expect(task).toMatchObject({
       id: "t-1",
+      resource_name: "Orders",
+      catalog_name: "Production",
       execute_type: "incremental",
+      index_name: "vega-build-1",
+      synced_mark: "checkpoint-8",
+      error_msg: "partial failure",
+      creator: { id: "u-1", name: "User", type: "user" },
+      create_time: 100,
       start_time: 120,
       finish_time: 200,
       last_progress_time: 180,
+      failure_detail: "two rows failed",
     });
+    expectTypeOf(task.index_name).toEqualTypeOf<string | undefined>();
+    expectTypeOf(task.failure_detail).toEqualTypeOf<string | undefined>();
   });
 
   it("starts, stops, and deletes build tasks", async () => {

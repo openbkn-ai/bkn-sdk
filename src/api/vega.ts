@@ -73,6 +73,9 @@ export const ConnectorCategory = z.enum([
 ]);
 export type ConnectorCategory = z.infer<typeof ConnectorCategory>;
 
+const nullAsAbsent = <T extends z.ZodTypeAny>(schema: T) =>
+  schema.nullish().transform((value) => value ?? undefined);
+
 export const ConnectorFieldConfig = z
   .object({
     name: z.string(),
@@ -88,14 +91,14 @@ export const ConnectorTypeSummary = z
   .object({
     type: z.string(),
     name: z.string(),
-    tags: z.array(z.string()).optional(),
+    tags: nullAsAbsent(z.array(z.string())),
     description: z.string().optional(),
     mode: ConnectorMode,
     category: ConnectorCategory,
     endpoint: z.string().optional(),
     enabled: z.boolean(),
     available: z.boolean(),
-    operations: z.array(z.string()).optional(),
+    operations: nullAsAbsent(z.array(z.string())),
   })
   .passthrough();
 export type ConnectorTypeSummary = z.infer<typeof ConnectorTypeSummary>;
@@ -301,17 +304,31 @@ export const BuildTask = z
   .object({
     id: z.string(),
     resource_id: z.string().optional(),
+    resource_name: z.string().optional(),
+    catalog_id: z.string().optional(),
+    catalog_name: z.string().optional(),
     mode: BuildMode.optional(),
     status: BuildTaskStatus.optional(),
     state: z.string().optional(),
+    execute_type: BuildTaskExecuteType.optional(),
+    index_name: z.string().optional(),
     total_count: z.number().optional(),
     synced_count: z.number().optional(),
+    synced_mark: z.string().optional(),
+    error_msg: z.string().optional(),
+    creator: z
+      .object({
+        id: z.string(),
+        name: z.string().optional(),
+        type: z.string(),
+      })
+      .optional(),
+    create_time: z.number().optional(),
     start_time: z.number().optional(),
     finish_time: z.number().optional(),
     last_progress_time: z.number().optional(),
+    failure_detail: z.string().optional(),
     index_config: z.unknown().optional(),
-    catalog_id: z.string().optional(),
-    execute_type: BuildTaskExecuteType.optional(),
     index_health: z
       .object({
         embedding: z.string(),
@@ -335,6 +352,7 @@ export const BuildTaskSummary = z
     status: BuildTaskStatus,
     mode: BuildMode,
     execute_type: BuildTaskExecuteType.optional(),
+    index_name: z.string().optional(),
     total_count: z.number(),
     synced_count: z.number(),
     synced_mark: z.string(),

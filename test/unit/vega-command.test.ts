@@ -795,6 +795,35 @@ describe("vega resource build", () => {
       execute_type: "full",
     });
   });
+
+  it.each(["1.5", "abc", "0", "-1"])(
+    "rejects invalid timeout %s before creating a task",
+    async (timeout) => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+      suppressOutput();
+
+      await expect(
+        cli().parseAsync(
+          [
+            "--base-url",
+            "https://demo.example.com",
+            "--token",
+            "t",
+            "vega",
+            "resource",
+            "build",
+            "r-1",
+            "--wait",
+            "--timeout",
+            timeout,
+          ],
+          { from: "user" },
+        ),
+      ).rejects.toThrow("--timeout must be a positive integer");
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("vega build-task list", () => {
