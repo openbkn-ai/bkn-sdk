@@ -183,16 +183,19 @@ export async function chatCompletionsStream(
   onDelta: (text: string) => void,
 ): Promise<string> {
   await ensureCompatible(ctx, new URL(`${ctx.baseUrl}${API}/chat/completions`));
-  const res = await authFetch(ctx, () =>
-    tlsFetch(ctx.insecure, `${ctx.baseUrl}${API}/chat/completions`, {
-      method: "POST",
-      headers: {
-        ...buildHeaders(ctx),
-        "content-type": "application/json",
-        accept: "text/event-stream",
-      },
-      body: stringifyBigIntJSON({ model, messages, stream: true }),
-    }),
+  const res = await authFetch(
+    ctx,
+    () =>
+      tlsFetch(ctx.insecure, `${ctx.baseUrl}${API}/chat/completions`, {
+        method: "POST",
+        headers: {
+          ...buildHeaders(ctx),
+          "content-type": "application/json",
+          accept: "text/event-stream",
+        },
+        body: stringifyBigIntJSON({ model, messages, stream: true }),
+      }),
+    { url: `${ctx.baseUrl}${API}/chat/completions` },
   );
   if (!res.ok) throw new HttpError(res.status, res.statusText, await res.text());
 

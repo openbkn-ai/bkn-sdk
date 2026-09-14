@@ -92,6 +92,8 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
       ? { rememberedConversationId: opts.rememberedConversationId }
       : {}),
     ...(opts.onConversationOpened ? { onConversationOpened: opts.onConversationOpened } : {}),
+    ...(opts.retry !== undefined ? { retry: opts.retry } : {}),
+    ...(opts.onRetry ? { onRetry: opts.onRetry } : {}),
   };
   configureVersionCheck(ctx, opts.versionCheckMode ?? "memory");
   return ctx;

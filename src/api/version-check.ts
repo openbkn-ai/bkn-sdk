@@ -6,6 +6,7 @@ import pkg from "../../package.json" with { type: "json" };
 import { readVersionCheckCache, writeVersionCheckCache } from "../config/store.js";
 import type { RequestContext } from "../types.js";
 import { isDryRun } from "../utils/dry-run.js";
+import { networkErrorCode, withRetry } from "./retry.js";
 import { tlsFetch } from "./tls.js";
 
 const VERSION_PATH = "/api/bkn-backend/v1/health";
@@ -127,14 +128,14 @@ function isFresh(checkedAt: string): boolean {
 }
 
 async function readServerVersion(ctx: RequestContext): Promise<string> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
+  const url = `${ctx.baseUrl}${VERSION_PATH}`;
   try {
-    const response = await tlsFetch(ctx.insecure, `${ctx.baseUrl}${VERSION_PATH}`, {
-      method: "GET",
-      signal: controller.signal,
-    });
-    const body = await response.text();
+    // The first request of a command, so the one a restarting gateway hits
+    // first. Each attempt gets its own deadline: one budget shared by the
+    // retries would leave none for the attempt after the gateway comes back.
+    const { response, body } = await withRetry(ctx, "GET", url, () => fetchHealth(ctx, url)).then(
+      async (res) => ({ response: res, body: await res.text() }),
+    );
     if (!response.ok) {
       throw new VersionCompatibilityError(
         `Cannot verify platform version: GET ${VERSION_PATH} returned HTTP ${response.status}. The request was not sent.`,
@@ -158,12 +159,36 @@ async function readServerVersion(ctx: RequestContext): Promise<string> {
   } catch (error) {
     if (error instanceof VersionCompatibilityError) throw error;
     throw new VersionCompatibilityError(
-      `Cannot verify platform version from GET ${VERSION_PATH}: ${error instanceof Error ? error.message : "request failed"}. The request was not sent.`,
+      `Cannot verify platform version from GET ${VERSION_PATH}: ${describeFailure(error)}. The request was not sent.`,
     );
+  }
+}
+
+/** `fetch failed` alone says nothing; the system error code says whether anything is listening. */
+function describeFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : "request failed";
+  const code = networkErrorCode(error);
+  return code && !message.includes(code) ? `${message} (${code})` : message;
+}
+
+/** GET the health route within {@link HEALTH_TIMEOUT_MS}, body included. */
+async function fetchHealth(ctx: RequestContext, url: string): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
+  try {
+    const res = await tlsFetch(ctx.insecure, url, { method: "GET", signal: controller.signal });
+    const text = await res.text();
+    return new Response(NULL_BODY_STATUS.has(res.status) ? null : text, {
+      status: res.status,
+      statusText: res.statusText,
+      headers: res.headers,
+    });
   } finally {
     clearTimeout(timer);
   }
 }
+
+const NULL_BODY_STATUS = new Set([101, 204, 205, 304]);
 
 function serverVersionOf(payload: unknown): string | undefined {
   if (!payload || typeof payload !== "object") return undefined;

@@ -109,13 +109,16 @@ async function post(
   const isHandshake =
     rpcMethod === "initialize" || Boolean(rpcMethod?.startsWith("notifications/"));
   const send = () =>
-    authFetch(ctx, () =>
-      tlsFetch(ctx.insecure, mcpUrl(ctx), {
-        method: "POST",
-        headers: headers(ctx, knId, sessionId),
-        body: stringifyBigIntJSON(body),
-        ...(controller ? { signal: controller.signal } : {}),
-      }),
+    authFetch(
+      ctx,
+      () =>
+        tlsFetch(ctx.insecure, mcpUrl(ctx), {
+          method: "POST",
+          headers: headers(ctx, knId, sessionId),
+          body: stringifyBigIntJSON(body),
+          ...(controller ? { signal: controller.signal } : {}),
+        }),
+      { url: mcpUrl(ctx) },
     );
   try {
     const res = await (isHandshake ? withoutPreview(send) : send());

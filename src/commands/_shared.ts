@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import type { Command } from "commander";
 import { type BknClient, createClient } from "../client.js";
 import { activePlatform, readPlatformConfig, updatePlatformConfig } from "../config/store.js";
-import type { TraceContextOptions } from "../types.js";
+import type { RetryNotice, TraceContextOptions } from "../types.js";
 import { trimTrailingSlashes } from "../utils/base-url.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
@@ -82,6 +82,23 @@ export function traceOptionsFrom(o: Record<string, unknown>): TraceContextOption
 }
 
 /** Build a client from a command's merged (global + local) options. */
+/**
+ * Say why a command paused. A retried request that ends up succeeding would
+ * otherwise look like a hang; one that ends up failing, like a one-shot error.
+ * stderr, so `--json` output on stdout stays parseable.
+ */
+export function reportRetry(n: RetryNotice): void {
+  let path = n.url;
+  try {
+    path = new URL(n.url).pathname;
+  } catch {
+    // Not an absolute URL — print what was given.
+  }
+  process.stderr.write(
+    `openbkn: ${n.method} ${path} failed (${n.reason}); retry ${n.retry}/${n.retries} in ${(n.delayMs / 1000).toFixed(1)}s\n`,
+  );
+}
+
 export function clientFrom(cmd: Command): BknClient {
   const o = cmd.optsWithGlobals();
   const trace = traceOptionsFrom(o);
@@ -93,6 +110,7 @@ export function clientFrom(cmd: Command): BknClient {
     user: o.user,
     insecure: o.insecure,
     versionCheckMode: "cli",
+    ...(o.retry === false ? { retry: false as const } : { onRetry: reportRetry }),
     ...(trace ? { trace } : {}),
     ...(remembered.source === "stored" && remembered.id
       ? { rememberedConversationId: remembered.id }

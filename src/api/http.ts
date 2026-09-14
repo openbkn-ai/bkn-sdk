@@ -10,6 +10,7 @@ import type { RequestContext } from "../types.js";
 import { HttpError, NonJsonResponseError } from "../utils/errors.js";
 import { stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { buildHeaders } from "./headers.js";
+import { withRetry } from "./retry.js";
 import { tlsFetch } from "./tls.js";
 import { ensureCompatible } from "./version-check.js";
 
@@ -55,25 +56,35 @@ export async function request<T = unknown>(
 
   const hasBody = init.body !== undefined;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), init.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const timeoutMs = init.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const deadline = Date.now() + timeoutMs;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   const method = init.method ?? (hasBody ? "POST" : "GET");
   const headers = buildHeaders(ctx, {
     ...(hasBody ? { "content-type": "application/json" } : {}),
     ...init.headers,
   });
+  // Retries share the request's one timeout: a caller's 30s stays 30s.
   const send = () =>
-    tlsFetch(
-      ctx.insecure,
+    withRetry(
+      ctx,
+      method,
       url,
-      {
-        method,
-        headers,
-        body: hasBody ? stringifyBigIntJSON(init.body) : undefined,
-        redirect: init.redirect,
-        signal: controller.signal,
-      },
-      init.headersTimeoutMs,
+      () =>
+        tlsFetch(
+          ctx.insecure,
+          url,
+          {
+            method,
+            headers,
+            body: hasBody ? stringifyBigIntJSON(init.body) : undefined,
+            redirect: init.redirect,
+            signal: controller.signal,
+          },
+          init.headersTimeoutMs,
+        ),
+      { deadline },
     );
 
   try {

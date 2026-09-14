@@ -52,6 +52,34 @@ export interface ClientOptions {
   onConversationOpened?: (conversationId: string) => void;
   /** @internal CLI clients persist successful version checks for a short TTL. */
   versionCheckMode?: "memory" | "cli";
+  /**
+   * Retry transient failures (refused connection, 503, 429; and for GET/PUT/
+   * DELETE also a dropped connection, 502, 504) with exponential backoff. On by
+   * default — 3 retries from 1s; `false` turns it off. See `api/retry.ts`.
+   */
+  retry?: Partial<RetryPolicy> | false;
+  /** Called before each retry, e.g. to tell a user why a command is pausing. */
+  onRetry?: (notice: RetryNotice) => void;
+}
+
+export interface RetryPolicy {
+  /** Retries after the first attempt. */
+  retries: number;
+  /** Delay before the first retry; doubles each time (±20% jitter). */
+  baseDelayMs: number;
+  /** Ceiling for any one delay, including a server's `Retry-After`. */
+  maxDelayMs: number;
+}
+
+export interface RetryNotice {
+  method: string;
+  url: string;
+  /** What failed: a system error code (`ECONNREFUSED`) or `HTTP 503`. */
+  reason: string;
+  /** Which retry this is, 1-based, of `retries`. */
+  retry: number;
+  retries: number;
+  delayMs: number;
 }
 
 /** Fully resolved request context — every field is known. */
@@ -82,6 +110,10 @@ export interface RequestContext {
   rememberedConversationId?: string;
   /** See {@link ClientOptions.onConversationOpened}. */
   onConversationOpened?: (conversationId: string) => void;
+  /** See {@link ClientOptions.retry}. Absent means the default policy. */
+  retry?: Partial<RetryPolicy> | false;
+  /** See {@link ClientOptions.onRetry}. */
+  onRetry?: (notice: RetryNotice) => void;
 }
 
 export interface TraceContextOptions {
