@@ -59,6 +59,8 @@ export interface RefreshableTokens {
   accessToken: string;
   refreshToken?: string;
   idToken?: string;
+  /** Access-token expiry (ISO 8601), when the grant reported one. */
+  expiresAt?: string;
 }
 
 export interface RequestContext {
@@ -70,12 +72,15 @@ export interface RequestContext {
   /** Stable per-client BKN Trace context propagated on outbound requests. */
   trace?: TraceContext;
   /**
-   * Stored-credential refresh: on a 401, swap the refresh token for a fresh
-   * access token, persist it, and retry once. Absent for explicit `--token`/env.
+   * Stored-credential refresh: swap the refresh token for a fresh access token
+   * shortly before it expires, or on a 401 (then retry once), and persist it.
+   * Absent for explicit `--token`/env.
    */
   refresh?: {
     refreshToken: string;
     clientId?: string;
+    /** Expiry of the current `token` (ISO 8601) — what an opaque token has instead of `exp`. */
+    expiresAt?: string;
     persist: (tokens: RefreshableTokens) => void;
   };
   /** See {@link ClientOptions.rememberedConversationId}. */

@@ -147,6 +147,7 @@ export function registerAuthLeaves(cmd: Command): void {
         auth.attachToken(url, tokens.accessToken, {
           refreshToken: tokens.refreshToken,
           idToken: tokens.idToken,
+          expiresAt: tokens.expiresAt,
           username: account,
           insecure: g.insecure,
         }),
@@ -189,7 +190,7 @@ export function registerAuthLeaves(cmd: Command): void {
             {
               baseUrl: me.baseUrl,
               token: auth.currentToken({ user: g.user }),
-              insecure: Boolean(g.insecure),
+              insecure: g.insecure ?? auth.sessionInsecure({ user: g.user }),
             },
             me.sub,
           )) as { account?: string; name?: string };

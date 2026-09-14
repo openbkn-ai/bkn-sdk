@@ -23,6 +23,11 @@ export interface OAuthTokens {
   accessToken: string;
   refreshToken?: string;
   idToken?: string;
+  /**
+   * When the access token expires (ISO 8601), from the grant's `expires_in`.
+   * The only expiry an opaque (non-JWT) access token has.
+   */
+  expiresAt?: string;
 }
 
 export function normalizeBaseUrl(value: string): string {
@@ -33,11 +38,15 @@ function mapToken(data: {
   access_token: string;
   refresh_token?: string;
   id_token?: string;
+  expires_in?: number;
 }): OAuthTokens {
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
     idToken: data.id_token,
+    ...(typeof data.expires_in === "number" && data.expires_in > 0
+      ? { expiresAt: new Date(Date.now() + data.expires_in * 1000).toISOString() }
+      : {}),
   };
 }
 

@@ -30,3 +30,15 @@ export function decodeJwt(token: string): JwtClaims | undefined {
 export function isExpired(claims: JwtClaims | undefined, nowMs = Date.now()): boolean {
   return claims?.exp !== undefined && claims.exp * 1000 < nowMs;
 }
+
+/**
+ * When an access token expires, in epoch ms: its own `exp` if it is a JWT,
+ * else the `expiresAt` its grant reported. `undefined` means unknown — an
+ * opaque token saved before expiry was recorded.
+ */
+export function tokenExpiresAtMs(accessToken: string, expiresAt?: string): number | undefined {
+  const exp = decodeJwt(accessToken)?.exp;
+  if (typeof exp === "number") return exp * 1000;
+  const at = expiresAt ? Date.parse(expiresAt) : Number.NaN;
+  return Number.isNaN(at) ? undefined : at;
+}

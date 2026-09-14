@@ -11,12 +11,13 @@
  * "token is invalid".
  */
 import type { RequestContext } from "../types.js";
-import { tryRefresh } from "./http.js";
+import { refreshIfExpiring, renewAfter401 } from "./http.js";
 
 /**
  * Run `send`, and on a 401 with stored refresh credentials, refresh the access
- * token once and run it again. `send` MUST rebuild its request — and therefore
- * its `Authorization` header — on each call, so the retry uses the refreshed
+ * token once and run it again. A token about to expire is renewed before the
+ * first send. `send` MUST rebuild its request — and therefore its
+ * `Authorization` header — on each call, so the retry uses the refreshed
  * `ctx.token`. The response body is never read here, so the returned Response
  * is always safe to consume (JSON, bytes, or a stream).
  */
@@ -24,8 +25,10 @@ export async function authFetch(
   ctx: RequestContext,
   send: () => Promise<Response>,
 ): Promise<Response> {
+  await refreshIfExpiring(ctx);
+  const sentToken = ctx.token;
   let res = await send();
-  if (res.status === 401 && ctx.refresh && (await tryRefresh(ctx))) {
+  if (res.status === 401 && ctx.refresh && (await renewAfter401(ctx, sentToken))) {
     res = await send();
   }
   return res;
