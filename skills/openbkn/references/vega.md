@@ -104,8 +104,9 @@ openbkn vega resource build <resource-id> --execute-type full --wait
 ```
 
 `--schema-definition` replaces the complete field list; it does not merge individual
-fields. Run `openbkn vega resource get <resource-id>` first, preserve every existing
-property in the array, and edit the required features before updating.
+fields. Run `openbkn --json vega resource get <resource-id>` first, copy the complete
+array from `entries[0].schema_definition`, and edit only the required features before
+updating.
 
 ## Index build belongs to Vega
 
