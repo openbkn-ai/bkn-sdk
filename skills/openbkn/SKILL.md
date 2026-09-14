@@ -81,7 +81,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 | `appkey` | 用户自助签发的 AppKey（`bak_` 长期凭据，仅 Context Loader 可用） | `list`、`create --name <s> [--expire-days <n> \| --expires-at <rfc3339> \| --never-expire]`（明文 `key` **只返回一次**）、`regenerate <id>`（轮换：同 id 出新 key，旧 key 立即失效）、`revoke <id>`、`admin list [--owner-id]`/`admin revoke <id>` |
 | `bkn` | 知识网络 + Schema + 查询 + 本地包 | `list`/`get`/`search`/`stats`/`export`、`object-type/relation-type/action-type list/get/create/update/delete`、`action-type query/execute`、`metric …`、`concept-group …`、`capability list/attach/detach`、`action-log/action-schedule …`、`subgraph`、`relation-type-paths`、`resources`、`push <dir>`/`pull <kn> [dir]`、`validate <dir>`、`create-from-catalog <catalog> --name … --pk-map t:col` |
 | `resource` | Vega-backend 资源 | `list`/`get`/`find --name`/`query`/`delete` |
-| `vega` | Catalog + 索引构建 + SQL | `catalog list/get`、`catalog resources`、`connector-types`、`sql --query "<sql>"`（直连 MySQL/PG/OpenSearch，SQL 用 `{{resource-id}}` 占位）、`build`（索引 BuildTask）+ 状态 |
+| `vega` | Catalog + 资源 + 索引构建 + SQL | `catalog list/get/stats`、`catalog resources`、`resource create/update/delete/build`、`build-task list/get/start/stop/delete`、`connector-type list/get`、`index-capabilities`、`sql --query "<sql>"`（直连 MySQL/PG/OpenSearch，SQL 用 `{{resource-id}}` 占位） |
 | `context` | MCP 检索 | 业务对话通过 MCP 工具 `bkn_start_interaction` / `bkn_finish_interaction` 管理；CLI 沿用 `tool-call` 透传，不另设生命周期命令 |
 | `model` | 模型工厂 | `llm/small list/get/add/edit/delete/test`、`llm chat <name\|id> -m "…" [--stream]`（id 自动解析成 name）、`small embeddings/rerank <name>`（只收 name，填数字 id 会 400；与 chat 不同，暂不解析 id）、`llm set-default/unset-default <id>`、`small set-default/unset-default <id>`、`small get-default [--type embedding\|reranker]` |
 | `skill` | Skill 注册/市场/生命周期/沙箱执行 | `list`/`market`/`get`/`names <id...>`/`content`/`read-file`/`files [path] [--tree]`/`history`/`set-status`、`execute <id> --entry '<shell>'`、`register <dir>`/`download`/`install`、`update-metadata`/`update-package`、`republish`/`publish-history`；读类命令带 `--raw`（要正文而非对象存储 URL）与 `--draft`（读草稿版而非已发布版） |
@@ -104,8 +104,8 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
   execution-factory / agent-observability / bkn-agent）。先在那里查准路径和
   请求体，再 `call`，不要猜路径
 
-另注：知识网络没有"整网构建"这回事，索引数据由 `openbkn vega dataset build <resource-id>` 的
-BuildTask 产出；`trace` 的 business-provenance 摘要（requests/interactions）自 foundry 0.1.4 起
+另注：知识网络没有"整网构建"这回事。先用 `openbkn vega resource update <resource-id>`
+保存索引配置，再由 `openbkn vega resource build <resource-id>` 创建 BuildTask；`trace` 的 business-provenance 摘要（requests/interactions）自 foundry 0.1.4 起
 只在企业版注册，社区版部署上会 404。
 
 ## 详细参考（references/）

@@ -56,7 +56,7 @@ echo "### vega / resources"
 chk "vega catalog list" vega catalog list --limit 5
 chk "vega connector-type list" vega connector-type list
 chk "vega resource list" vega resource list --limit 5
-chk "vega dataset build-list" vega dataset build-list --limit 3
+chk "vega build-task list" vega build-task list --limit 3
 chk "resource list" resource list --limit 5
 chk "resource find" resource find --name a --limit 50
 

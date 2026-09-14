@@ -86,7 +86,7 @@ export function buildProgram(): Command {
                          context query-object-instance --args '<json>'
     Look at the data     vega catalog list  ->  resource find --name <t>  ->  resource query <id>
     Build from a catalog bkn create-from-catalog <catalog-id> --name "<n>"  ->
-                         vega dataset build <resource-id>
+                         vega resource build <resource-id>
     Edit as files        bkn pull <kn-id> ./kn  ->  bkn validate ./kn  ->  bkn push ./kn
     Ship a capability    skill register ./my-skill; toolbox create --name "<n>"  ->
                          tool upload ./api.yaml --toolbox <id>  ->  toolbox publish <id>

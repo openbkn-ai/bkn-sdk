@@ -9,7 +9,6 @@ import {
   type QueryResourceOptions,
   type ResourceDocument,
   type UpdateResourceOptions,
-  configureResourceIndex,
   createResource,
   createResourceDocument,
   deleteResource,
@@ -37,8 +36,6 @@ export function resources(ctx: RequestContext) {
     update: (id: string, patch: UpdateResourceOptions) => updateResource(ctx, id, patch),
     enable: (id: string) => enableResource(ctx, id),
     disable: (id: string) => disableResource(ctx, id),
-    configureIndex: (id: string, opts: Parameters<typeof configureResourceIndex>[2]) =>
-      configureResourceIndex(ctx, id, opts),
     find: (name: string, opts?: FindResourceOptions) => findResource(ctx, name, opts),
     query: (id: string, opts?: QueryResourceOptions) => queryResource(ctx, id, opts),
     createDocument: (id: string, document: ResourceDocument) =>

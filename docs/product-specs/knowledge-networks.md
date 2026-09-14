@@ -35,7 +35,7 @@ There is **no KN-level build**. The legacy `bkn build` (a `job_type:"full"` job 
 
 A KN is the schema/ontology layer; it **references** already-built Catalog resources and does not own a build lifecycle. Rationale: KN→Catalog is one-to-many and the data layer must build independently of the schema layer — driving builds from a KN verb would invert the layering and be ambiguous.
 
-`bkn create-from-catalog` binds each catalog table to the Vega resource discovery already created for it (physical resources are no longer created through REST), then creates the KN and its object types (each OT bound to a resource). It never configures or starts index builds; configure resource index fields and create BuildTasks through `openbkn vega dataset build`.
+`bkn create-from-catalog` binds each catalog table to the Vega resource discovery already created for it (physical resources are no longer created through REST), then creates the KN and its object types (each OT bound to a resource). It never configures or starts index builds; update the Resource schema/index configuration, then create a BuildTask through `openbkn vega resource build`.
 
 ## SDK touchpoints
 

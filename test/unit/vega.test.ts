@@ -3,6 +3,7 @@ import {
   type CatalogDeletionImpact,
   type CatalogSummary,
   CreateBuildTaskRequest,
+  catalogConnectorTypeStats,
   catalogHealthStatus,
   createBuildTask,
   createCatalog,
@@ -12,6 +13,8 @@ import {
   getBuildTask,
   getCatalog,
   getCatalogHealthCheckSchedule,
+  getConnectorType,
+  getIndexCapabilities,
   listBuildTasks,
   listCatalogResources,
   listCatalogs,
@@ -94,14 +97,83 @@ describe("vega uses the vega-backend base path", () => {
     );
   });
 
-  it("listConnectorTypes sorts by name", async () => {
-    const f = mockFetch();
-    await listConnectorTypes(ctx);
+  it("listConnectorTypes sends filters and parses typed summaries", async () => {
+    const body = {
+      entries: [
+        {
+          type: "mysql",
+          name: "MySQL",
+          mode: "local",
+          category: "table",
+          enabled: true,
+          available: true,
+        },
+      ],
+      total_count: 1,
+    };
+    const f = mockFetch(body);
+    await expect(
+      listConnectorTypes(ctx, {
+        name: "sql",
+        tag: "database",
+        mode: "local",
+        category: "table",
+        enabled: true,
+        available: true,
+        limit: 10,
+        offset: 20,
+      }),
+    ).resolves.toEqual(body);
     const u = new URL(firstCall(f)[0]);
     expect(u.pathname).toBe("/api/vega-backend/v1/connector-types");
+    expect(u.searchParams.get("name")).toBe("sql");
+    expect(u.searchParams.get("tag")).toBe("database");
+    expect(u.searchParams.get("mode")).toBe("local");
+    expect(u.searchParams.get("category")).toBe("table");
+    expect(u.searchParams.get("enabled")).toBe("true");
+    expect(u.searchParams.get("available")).toBe("true");
+    expect(u.searchParams.get("limit")).toBe("10");
+    expect(u.searchParams.get("offset")).toBe("20");
     expect(u.searchParams.get("sort")).toBe("name");
     expect(u.searchParams.get("direction")).toBe("asc");
     expect(u.searchParams.has("order")).toBe(false);
+  });
+
+  it("gets typed connector details", async () => {
+    const detail = {
+      type: "mysql",
+      name: "MySQL",
+      mode: "local",
+      category: "table",
+      enabled: true,
+      available: true,
+      field_config: { host: { name: "Host", type: "string", required: true } },
+    };
+    const f = mockFetch(detail);
+
+    await expect(getConnectorType(ctx, "my/sql")).resolves.toEqual(detail);
+    expect(new URL(firstCall(f)[0]).pathname).toBe("/api/vega-backend/v1/connector-types/my%2Fsql");
+  });
+
+  it("gets catalog connector stats and local-index capabilities", async () => {
+    const statsFetch = mockFetch({
+      entries: [{ catalog_type: "physical", connector_type: "mysql", catalog_count: 3 }],
+    });
+    await expect(catalogConnectorTypeStats(ctx, { name: "prod" })).resolves.toMatchObject({
+      entries: [{ connector_type: "mysql", catalog_count: 3 }],
+    });
+    expect(new URL(firstCall(statsFetch)[0]).searchParams.get("name")).toBe("prod");
+
+    const capabilitiesFetch = mockFetch({
+      fulltext_analyzers: [{ id: "standard" }],
+      checked_at: 1720000000000,
+    });
+    await expect(getIndexCapabilities(ctx)).resolves.toMatchObject({
+      fulltext_analyzers: [{ id: "standard" }],
+    });
+    expect(new URL(firstCall(capabilitiesFetch)[0]).pathname).toBe(
+      "/api/vega-backend/v1/index-capabilities",
+    );
   });
 
   it("listCatalogs sends filters and sort params", async () => {

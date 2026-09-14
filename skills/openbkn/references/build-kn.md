@@ -5,7 +5,8 @@ From a Vega catalog of tables:
 openbkn bkn create-from-catalog <catalog-id> --name my-kn
 #   lists tables → introspects columns → resolves one PK per table → creates a
 #   binds existing Vega resources → creates the KN → batch-creates object types.
-#   Configure and build indexes separately with `openbkn vega dataset build`.
+#   Save index config with `openbkn vega resource update`, then build with
+#   `openbkn vega resource build`.
 ```
 From local CSVs: load them into the catalog's own database, then
 `openbkn vega catalog discover <catalog-id>` and build from the catalog as

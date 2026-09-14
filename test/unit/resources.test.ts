@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   type ResourceSummary,
-  configureResourceIndex,
   createResource,
   createResourceDocument,
   deleteResource,
@@ -18,9 +17,9 @@ import {
   updateResource,
   upsertResourceDocument,
 } from "../../src/api/resources.js";
-import type { ResourceLocalStatus } from "../../src/index.js";
+import type { ResourceIndexConfig, ResourceLocalStatus } from "../../src/index.js";
 import type { RequestContext } from "../../src/types.js";
-import { HttpError, InputError } from "../../src/utils/errors.js";
+import { InputError } from "../../src/utils/errors.js";
 import { verifiedContext } from "../setup/verified-context.js";
 
 const ctx = verifiedContext<RequestContext>({
@@ -53,25 +52,6 @@ function resourceFixture(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
-/** Resource responses plus the small-model list a name-to-id lookup reads. */
-function mockSmallModelAware(body: unknown): typeof fetch {
-  const fn = vi.fn(async (input: string) =>
-    new URL(input).pathname.startsWith("/api/mf-model-manager")
-      ? new Response(
-          JSON.stringify({
-            data: [
-              { model_id: "sm-1", model_name: "small-model-1" },
-              { model_id: "sm-2", model_name: "text-embedding-v4" },
-            ],
-          }),
-          { status: 200 },
-        )
-      : new Response(JSON.stringify(body), { status: 200 }),
-  );
-  vi.stubGlobal("fetch", fn);
-  return fn as unknown as typeof fetch;
-}
-
 function firstCall(fetchMock: typeof fetch): CallArgs {
   const args = (fetchMock as unknown as { mock: { calls: CallArgs[] } }).mock.calls[0];
   if (!args) throw new Error("fetch not called");
@@ -83,6 +63,9 @@ afterEach(() => vi.unstubAllGlobals());
 describe("ResourceLocalStatus", () => {
   it("is exported from the SDK entry point", () => {
     expectTypeOf<ResourceLocalStatus>().toEqualTypeOf<"unavailable" | "available" | "stale">();
+    expectTypeOf<ResourceIndexConfig["default_keyword_ignore_above"]>().toEqualTypeOf<
+      number | undefined
+    >();
   });
 });
 
@@ -189,7 +172,7 @@ describe("listResources", () => {
   });
 });
 
-describe("updateResource/configureResourceIndex", () => {
+describe("updateResource", () => {
   it("merges required resource fields before PUT update", async () => {
     const f = mockFetch({
       entries: [
@@ -201,7 +184,11 @@ describe("updateResource/configureResourceIndex", () => {
       ],
     });
     await updateResource(ctx, "r-1", {
-      indexConfig: { primary_key_fields: ["id"], incremental_fields: ["updated_at"] },
+      indexConfig: {
+        primary_key_fields: ["id"],
+        incremental_fields: ["updated_at"],
+        default_keyword_ignore_above: 512,
+      },
     });
     const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
     expect(new URL(calls[1]?.[0] ?? "").pathname).toBe("/api/vega-backend/v1/resources/r-1");
@@ -215,6 +202,7 @@ describe("updateResource/configureResourceIndex", () => {
     expect(body.index_config).toEqual({
       primary_key_fields: ["id"],
       incremental_fields: ["updated_at"],
+      default_keyword_ignore_above: 512,
     });
     expect(body.expected_update_time).toBe(1720000000123);
   });
@@ -230,126 +218,6 @@ describe("updateResource/configureResourceIndex", () => {
     expect(new URL(requestCalls[1]?.[0] ?? "").pathname).toBe(
       "/api/vega-backend/v1/resources/r%202/disable",
     );
-  });
-
-  it("writes resource index_config and schema features for build intent", async () => {
-    const f = mockSmallModelAware({
-      entries: [
-        resourceFixture({
-          update_time: 1720000000456,
-          schema_definition: [
-            { name: "title", type: "text" },
-            { name: "body", type: "text", features: [] },
-          ],
-        }),
-      ],
-    });
-    await configureResourceIndex(ctx, "r-1", {
-      primaryKeyFields: ["id"],
-      incrementalFields: ["updated_at"],
-      embeddingFields: ["title"],
-      embeddingModel: "small-model-1",
-      fulltextFields: ["body"],
-      fulltextAnalyzer: "ik_max_word",
-    });
-    const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
-    const body = JSON.parse(calls.at(-1)?.[1].body as string);
-    expect(body.index_config).toEqual({
-      primary_key_fields: ["id"],
-      incremental_fields: ["updated_at"],
-      default_embedding_model: "small-model-1",
-      default_fulltext_analyzer: "ik_max_word",
-    });
-    expect(body.expected_update_time).toBe(1720000000456);
-    expect(body.schema_definition[0].features[0]).toMatchObject({
-      feature_type: "vector",
-      ref_property: "",
-      // The id, not the name it was given: a feature's config takes the id and
-      // the PUT is refused outright with a name.
-      config: { embedding_model: "sm-1" },
-    });
-    expect(body.schema_definition[1].features[0]).toMatchObject({
-      feature_type: "fulltext",
-      ref_property: "",
-      config: { analyzer: "ik_max_word" },
-    });
-  });
-
-  it("gives the index config the name and the feature the id", async () => {
-    const resource = {
-      entries: [
-        resourceFixture({
-          schema_definition: [{ name: "title", type: "text" }],
-        }),
-      ],
-    };
-    const fn = vi.fn(async (input: string) =>
-      new URL(input).pathname.startsWith("/api/mf-model-manager")
-        ? new Response(JSON.stringify({ model_name: "text-embedding-v4" }), { status: 200 })
-        : new Response(JSON.stringify(resource), { status: 200 }),
-    );
-    vi.stubGlobal("fetch", fn);
-    await configureResourceIndex(ctx, "r-1", {
-      embeddingFields: ["title"],
-      embeddingModel: "2064382281006583808",
-    });
-    const calls = (fn as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
-    const lookup = calls.find(([u]) => String(u).includes("/mf-model-manager"));
-    expect(new URL(lookup?.[0] ?? "").searchParams.get("model_id")).toBe("2064382281006583808");
-    const body = JSON.parse(calls.at(-1)?.[1].body as string);
-    expect(body.index_config.default_embedding_model).toBe("text-embedding-v4");
-    // Verified live, one field at a time: a name here answers the PUT with
-    // `embedding model ID "text-embedding-v4" for field "title" not found`.
-    expect(body.schema_definition[0].features[0].config).toEqual({
-      embedding_model: "2064382281006583808",
-    });
-  });
-
-  it("rejects an unknown embedding model id before touching the resource", async () => {
-    const fn = vi.fn(async (input: string) =>
-      new URL(input).pathname.startsWith("/api/mf-model-manager")
-        ? new Response("{}", { status: 404 })
-        : new Response(JSON.stringify({ entries: [resourceFixture()] }), { status: 200 }),
-    );
-    vi.stubGlobal("fetch", fn);
-    await expect(configureResourceIndex(ctx, "r-1", { embeddingModel: "999" })).rejects.toThrow(
-      /No small model found with id 999/,
-    );
-    const methods = (fn as unknown as { mock: { calls: CallArgs[] } }).mock.calls.map(
-      ([, init]) => init.method,
-    );
-    expect(methods).not.toContain("PUT");
-  });
-
-  it("keeps a gateway 404 as a routing failure, not as a bad-id InputError", async () => {
-    const fn = vi.fn(async (input: string) =>
-      new URL(input).pathname.startsWith("/api/mf-model-manager")
-        ? new Response("<html><body>404 Not Found</body></html>", {
-            status: 404,
-            headers: { "content-type": "text/html" },
-          })
-        : new Response(JSON.stringify({ entries: [resourceFixture()] }), { status: 200 }),
-    );
-    vi.stubGlobal("fetch", fn);
-    // A deploy without model-factory answers 404 too — but nothing behind the
-    // route saw the id, so "you typed a bad id" is the wrong conclusion.
-    const err = await configureResourceIndex(ctx, "r-1", { embeddingModel: "999" }).catch((e) => e);
-    expect(err).toBeInstanceOf(HttpError);
-    expect((err as HttpError).gateway).toBe(true);
-    expect((err as HttpError).hint).toMatch(/did not reach the service/);
-  });
-
-  it("keeps a model-factory auth failure as itself, not as a bad-id InputError", async () => {
-    const fn = vi.fn(async (input: string) =>
-      new URL(input).pathname.startsWith("/api/mf-model-manager")
-        ? new Response(JSON.stringify({ error: "token expired" }), { status: 401 })
-        : new Response(JSON.stringify({ entries: [resourceFixture()] }), { status: 200 }),
-    );
-    vi.stubGlobal("fetch", fn);
-    // Exit code 3 (auth), not 2 (bad input) — "log in again" ≠ "you typed a wrong id".
-    const err = await configureResourceIndex(ctx, "r-1", { embeddingModel: "999" }).catch((e) => e);
-    expect(err).toBeInstanceOf(HttpError);
-    expect((err as HttpError).status).toBe(401);
   });
 });
 
@@ -395,7 +263,7 @@ describe("queryResource", () => {
 
 describe("typed Resource and document APIs", () => {
   it("creates a typed dataset resource", async () => {
-    const f = mockFetch(resourceFixture({ category: "dataset" }));
+    const f = mockFetch({ id: "r-1" });
     await expect(
       createResource(ctx, {
         catalogId: "c-1",
@@ -403,7 +271,7 @@ describe("typed Resource and document APIs", () => {
         category: "dataset",
         schemaDefinition: [{ name: "id", type: "string" }],
       }),
-    ).resolves.toMatchObject({ id: "r-1", update_time: 2 });
+    ).resolves.toEqual({ id: "r-1" });
     expect(JSON.parse(firstCall(f)[1].body as string)).toEqual({
       catalog_id: "c-1",
       name: "orders",
@@ -549,69 +417,11 @@ describe("absent collections arriving as null", () => {
     expect(first?.features).toHaveLength(1);
   });
 
-  it("indexes a resource whose properties carry no features yet", async () => {
-    // The read is `configureResourceIndex`'s first act, so a resource it cannot
-    // parse is a resource it can never index — which is every resource on both
-    // reference deploys until this parsed.
-    const f = mockFetch({
-      entries: [
-        resourceFixture({
-          update_time: 7,
-          schema_definition: [{ name: "title", type: "text", attributes: null, features: null }],
-        }),
-      ],
-    });
-    await configureResourceIndex(ctx, "r-1", { embeddingFields: ["title"] });
-    const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
-    const body = JSON.parse(calls[1]?.[1].body as string);
-    expect(body.schema_definition[0].features[0]).toMatchObject({
-      feature_type: "vector",
-      ref_property: "",
-    });
-  });
-
   it("still rejects a property whose features are the wrong shape", async () => {
     // Reading null as absent must not turn the schema into a rubber stamp.
     mockFetch({
       entries: [resourceFixture({ schema_definition: [{ name: "title", features: 42 }] })],
     });
     await expect(getResource(ctx, "r-1")).rejects.toThrow();
-  });
-});
-
-describe("a feature indexes the column it hangs on", () => {
-  // Read off both reference deploys: 90 stored features, every one of them with
-  // an empty `ref_property`, none naming its own column. The platform's
-  // validator rejects a feature whose `ref_property` equals the field it is
-  // attached to, so writing the field name there is what made index builds
-  // fail — the shape was never the platform's, only ours.
-  it("leaves an already-stored empty ref_property alone", async () => {
-    const f = mockSmallModelAware({
-      entries: [
-        resourceFixture({
-          update_time: 9,
-          schema_definition: [
-            {
-              name: "title",
-              type: "text",
-              features: [
-                { name: "title_vector", feature_type: "vector", ref_property: "", config: {} },
-              ],
-            },
-          ],
-        }),
-      ],
-    });
-    await configureResourceIndex(ctx, "r-1", {
-      embeddingFields: ["title"],
-      embeddingModel: "text-embedding-v4",
-    });
-    const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
-    const written = JSON.parse(calls.at(-1)?.[1].body as string).schema_definition[0].features[0];
-    // Reusing the found feature must not "complete" it into a self-reference:
-    // that turned a resource the platform had accepted into one it would refuse
-    // the next time anything touched its index.
-    expect(written.ref_property).toBe("");
-    expect(written.config).toEqual({ embedding_model: "sm-2" });
   });
 });

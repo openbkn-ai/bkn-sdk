@@ -91,7 +91,7 @@ const GROUP_ID_SOURCES: Array<[RegExp, string]> = [
   [/^vega discover-schedule\b/, "openbkn vega discover-schedule list"],
   [/^vega discover-task\b/, "openbkn vega discover-task list"],
   [/^vega semantic-task\b/, "openbkn vega semantic-task list"],
-  [/^vega dataset\b/, "openbkn vega dataset build-list"],
+  [/^vega build-task\b/, "openbkn vega build-task list"],
   [/^bkn action-schedule\b/, "openbkn bkn action-schedule list <kn-id>"],
   [/^vega connector-type\b/, "openbkn vega connector-type list"],
   [/^resource\b/, "openbkn resource list"],

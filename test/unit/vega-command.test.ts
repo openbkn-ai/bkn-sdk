@@ -147,6 +147,153 @@ describe("vega resource discovery commands", () => {
   });
 });
 
+describe("vega resource writes", () => {
+  it("creates a dataset with schema and index configuration", async () => {
+    const fetchMock = mockFetch({ id: "r-1" });
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "resource",
+        "create",
+        "--catalog-id",
+        "c-1",
+        "--name",
+        "documents",
+        "--category",
+        "dataset",
+        "--schema-definition",
+        '[{"name":"title","type":"text"}]',
+        "--index-config",
+        '{"default_keyword_ignore_above":512}',
+      ],
+      { from: "user" },
+    );
+
+    const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
+    expect(body).toMatchObject({
+      catalog_id: "c-1",
+      name: "documents",
+      category: "dataset",
+      schema_definition: [{ name: "title", type: "text" }],
+      index_config: { default_keyword_ignore_above: 512 },
+    });
+  });
+
+  it("updates index configuration through resource update", async () => {
+    const current = {
+      id: "r-1",
+      catalog_id: "c-1",
+      name: "orders",
+      category: "table",
+      status: "active",
+      enabled: true,
+      source_identifier: "orders",
+      creator: { id: "u-1", type: "user" },
+      create_time: 1,
+      updater: { id: "u-1", type: "user" },
+      update_time: 2,
+    };
+    const fetchMock = vi.fn(async (_input: string, init?: RequestInit) =>
+      init?.method === "PUT"
+        ? new Response(null, { status: 204 })
+        : new Response(JSON.stringify({ entries: [current] }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "resource",
+        "update",
+        "r-1",
+        "--index-config",
+        '{"default_keyword_ignore_above":256}',
+      ],
+      { from: "user" },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const body = JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string);
+    expect(body.index_config).toEqual({ default_keyword_ignore_above: 256 });
+    expect(body.expected_update_time).toBe(2);
+  });
+
+  it("deletes multiple resources", async () => {
+    const fetchMock = mockFetch();
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "resource",
+        "delete",
+        "r-1",
+        "r-2",
+        "--ignore-missing",
+      ],
+      { from: "user" },
+    );
+
+    const url = new URL(fetchMock.mock.calls[0]?.[0] as string);
+    expect(url.pathname).toBe("/api/vega-backend/v1/resources/r-1,r-2");
+    expect(url.searchParams.get("ignore_missing")).toBe("true");
+  });
+});
+
+describe("vega read-only capability commands", () => {
+  it("maps catalog stats, connector filters, and index capabilities", async () => {
+    const fetchMock = mockFetch({ entries: [], total_count: 0 });
+    suppressOutput();
+    const base = ["--base-url", "https://demo.example.com", "--token", "t", "vega"];
+
+    await cli().parseAsync([...base, "catalog", "stats", "--name", "prod"], { from: "user" });
+    await cli().parseAsync(
+      [
+        ...base,
+        "connector-type",
+        "list",
+        "--mode",
+        "local",
+        "--category",
+        "table",
+        "--available",
+        "true",
+      ],
+      { from: "user" },
+    );
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ fulltext_analyzers: [], checked_at: 1 }), { status: 200 }),
+    );
+    await cli().parseAsync([...base, "index-capabilities"], { from: "user" });
+
+    const stats = new URL(fetchMock.mock.calls[0]?.[0] as string);
+    expect(stats.pathname).toBe("/api/vega-backend/v1/catalogs/stats/by-connector-type");
+    expect(stats.searchParams.get("name")).toBe("prod");
+    const connectors = new URL(fetchMock.mock.calls[1]?.[0] as string);
+    expect(connectors.searchParams.get("mode")).toBe("local");
+    expect(connectors.searchParams.get("category")).toBe("table");
+    expect(connectors.searchParams.get("available")).toBe("true");
+    expect(new URL(fetchMock.mock.calls[2]?.[0] as string).pathname).toBe(
+      "/api/vega-backend/v1/index-capabilities",
+    );
+  });
+});
+
 describe("vega optimistic updates", () => {
   it("requires an optimistic-lock version for every Vega PUT command", async () => {
     suppressOutput();
@@ -617,37 +764,40 @@ describe("vega sql", () => {
   });
 });
 
-describe("vega dataset build", () => {
-  it("rejects streaming before updating the resource or creating a task", async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
+describe("vega resource build", () => {
+  it("creates a batch task without updating the resource", async () => {
+    const fetchMock = mockFetch({ id: "task-1" });
+    suppressOutput();
 
-    await expect(
-      cli().parseAsync(
-        [
-          "--base-url",
-          "https://demo.example.com",
-          "--token",
-          "t",
-          "vega",
-          "dataset",
-          "build",
-          "r-1",
-          "--mode",
-          "streaming",
-          "--primary-key-fields",
-          "id",
-          "--incremental-fields",
-          "updated_at",
-        ],
-        { from: "user" },
-      ),
-    ).rejects.toThrow("only batch build mode is currently supported");
-    expect(fetchMock).not.toHaveBeenCalled();
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "resource",
+        "build",
+        "r-1",
+        "--execute-type",
+        "full",
+      ],
+      { from: "user" },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(new URL(fetchMock.mock.calls[0]?.[0] as string).pathname).toBe(
+      "/api/vega-backend/v1/build-tasks",
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      resource_id: "r-1",
+      mode: "batch",
+      execute_type: "full",
+    });
   });
 });
 
-describe("vega dataset build-list", () => {
+describe("vega build-task list", () => {
   it("expands comma-separated statuses into repeated query parameters", async () => {
     const fetchMock = mockFetch({ entries: [], total_count: 0 });
     suppressOutput();
@@ -659,8 +809,8 @@ describe("vega dataset build-list", () => {
         "--token",
         "t",
         "vega",
-        "dataset",
-        "build-list",
+        "build-task",
+        "list",
         "--status",
         "pending,running",
       ],
@@ -682,8 +832,8 @@ describe("vega dataset build-list", () => {
         "--token",
         "t",
         "vega",
-        "dataset",
-        "build-list",
+        "build-task",
+        "list",
         "--execute-type",
         "incremental",
       ],
@@ -706,8 +856,8 @@ describe("vega dataset build-list", () => {
           "--token",
           "t",
           "vega",
-          "dataset",
-          "build-list",
+          "build-task",
+          "list",
           "--execute-type",
           "unknown",
         ],
@@ -729,8 +879,8 @@ describe("vega dataset build-list", () => {
           "--token",
           "t",
           "vega",
-          "dataset",
-          "build-list",
+          "build-task",
+          "list",
           "--status",
           ",",
         ],
@@ -752,8 +902,8 @@ describe("vega dataset build-list", () => {
           "--token",
           "t",
           "vega",
-          "dataset",
-          "build-list",
+          "build-task",
+          "list",
           "--status",
           "",
         ],
@@ -775,8 +925,8 @@ describe("vega dataset build-list", () => {
           "--token",
           "t",
           "vega",
-          "dataset",
-          "build-list",
+          "build-task",
+          "list",
           "--status",
           "queued",
         ],
@@ -798,8 +948,8 @@ describe("vega dataset build-list", () => {
           "--token",
           "t",
           "vega",
-          "dataset",
-          "build-list",
+          "build-task",
+          "list",
           "--active",
         ],
         { from: "user" },
@@ -818,8 +968,8 @@ describe("vega dataset build-list", () => {
         "--token",
         "t",
         "vega",
-        "dataset",
-        "build-list",
+        "build-task",
+        "list",
         "--sort",
         "finish_time",
         "--direction",
@@ -854,8 +1004,8 @@ describe("vega dataset build-list", () => {
             "--token",
             "t",
             "vega",
-            "dataset",
-            "build-list",
+            "build-task",
+            "list",
             flag,
             value,
           ],

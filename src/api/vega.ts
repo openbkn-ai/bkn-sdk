@@ -59,6 +59,90 @@ export const CatalogHealthCheckStatus = z.enum([
 ]);
 export type CatalogHealthCheckStatus = z.infer<typeof CatalogHealthCheckStatus>;
 
+export const ConnectorMode = z.enum(["local", "remote"]);
+export type ConnectorMode = z.infer<typeof ConnectorMode>;
+
+export const ConnectorCategory = z.enum([
+  "table",
+  "index",
+  "topic",
+  "file",
+  "fileset",
+  "metric",
+  "api",
+]);
+export type ConnectorCategory = z.infer<typeof ConnectorCategory>;
+
+export const ConnectorFieldConfig = z
+  .object({
+    name: z.string(),
+    type: z.enum(["string", "integer", "number", "boolean", "object", "array"]),
+    description: z.string().optional(),
+    required: z.boolean().optional(),
+    encrypted: z.boolean().optional(),
+  })
+  .passthrough();
+export type ConnectorFieldConfig = z.infer<typeof ConnectorFieldConfig>;
+
+export const ConnectorTypeSummary = z
+  .object({
+    type: z.string(),
+    name: z.string(),
+    tags: z.array(z.string()).optional(),
+    description: z.string().optional(),
+    mode: ConnectorMode,
+    category: ConnectorCategory,
+    endpoint: z.string().optional(),
+    enabled: z.boolean(),
+    available: z.boolean(),
+    operations: z.array(z.string()).optional(),
+  })
+  .passthrough();
+export type ConnectorTypeSummary = z.infer<typeof ConnectorTypeSummary>;
+
+export const ConnectorType = ConnectorTypeSummary.extend({
+  field_config: z.record(ConnectorFieldConfig).optional(),
+});
+export type ConnectorType = z.infer<typeof ConnectorType>;
+
+export const ListConnectorTypesResponse = z
+  .object({ entries: z.array(ConnectorTypeSummary), total_count: z.number() })
+  .passthrough();
+export type ListConnectorTypesResponse = z.infer<typeof ListConnectorTypesResponse>;
+
+export interface ListConnectorTypesOptions {
+  name?: string;
+  tag?: string;
+  mode?: ConnectorMode;
+  category?: ConnectorCategory;
+  enabled?: boolean;
+  available?: boolean;
+  limit?: number;
+  offset?: number;
+  sort?: "name";
+  direction?: SortDirection;
+}
+
+export const CatalogConnectorTypeStat = z.object({
+  catalog_type: z.enum(["physical", "logical"]),
+  connector_type: z.string(),
+  catalog_count: z.number(),
+});
+export type CatalogConnectorTypeStat = z.infer<typeof CatalogConnectorTypeStat>;
+
+export const CatalogConnectorTypeStatsResponse = z
+  .object({ entries: z.array(CatalogConnectorTypeStat) })
+  .passthrough();
+export type CatalogConnectorTypeStatsResponse = z.infer<typeof CatalogConnectorTypeStatsResponse>;
+
+export const IndexCapabilities = z
+  .object({
+    fulltext_analyzers: z.array(z.object({ id: z.string() }).passthrough()),
+    checked_at: z.number(),
+  })
+  .passthrough();
+export type IndexCapabilities = z.infer<typeof IndexCapabilities>;
+
 export const Catalog = z
   .object({
     id: z.string(),
@@ -717,12 +801,46 @@ export async function catalogHealthStatus(
   return CatalogHealthStatus.parse(result);
 }
 
-export function listConnectorTypes(ctx: RequestContext): Promise<unknown> {
-  return request(ctx, `${VEGA_BASE}/connector-types`, {
-    query: { sort: "name", direction: "asc" },
+export async function catalogConnectorTypeStats(
+  ctx: RequestContext,
+  opts: { name?: string } = {},
+): Promise<CatalogConnectorTypeStatsResponse> {
+  const result = await request<unknown>(ctx, `${VEGA_BASE}/catalogs/stats/by-connector-type`, {
+    query: { name: opts.name || undefined },
   });
+  return CatalogConnectorTypeStatsResponse.parse(result);
 }
 
-export function getConnectorType(ctx: RequestContext, type: string): Promise<unknown> {
-  return request(ctx, `${VEGA_BASE}/connector-types/${encodeURIComponent(type)}`);
+export async function listConnectorTypes(
+  ctx: RequestContext,
+  opts: ListConnectorTypesOptions = {},
+): Promise<ListConnectorTypesResponse> {
+  const result = await request<unknown>(ctx, `${VEGA_BASE}/connector-types`, {
+    query: {
+      name: opts.name || undefined,
+      tag: opts.tag || undefined,
+      mode: opts.mode,
+      category: opts.category,
+      enabled: opts.enabled === undefined ? undefined : String(opts.enabled),
+      available: opts.available === undefined ? undefined : String(opts.available),
+      limit: opts.limit ?? DEFAULT_LIST_LIMIT,
+      offset: opts.offset,
+      sort: opts.sort ?? "name",
+      direction: opts.direction ?? "asc",
+    },
+  });
+  return ListConnectorTypesResponse.parse(result);
+}
+
+export async function getConnectorType(ctx: RequestContext, type: string): Promise<ConnectorType> {
+  const result = await request<unknown>(
+    ctx,
+    `${VEGA_BASE}/connector-types/${encodeURIComponent(type)}`,
+  );
+  return ConnectorType.parse(result);
+}
+
+export async function getIndexCapabilities(ctx: RequestContext): Promise<IndexCapabilities> {
+  const result = await request<unknown>(ctx, `${VEGA_BASE}/index-capabilities`);
+  return IndexCapabilities.parse(result);
 }
