@@ -40,8 +40,10 @@ import {
   type DeleteCatalogOptions,
   type ListBuildTasksOptions,
   type ListCatalogsOptions,
+  type ListConnectorTypesOptions,
   type RawQueryRequest,
   type UpdateCatalogRequest,
+  catalogConnectorTypeStats,
   catalogHealthStatus,
   createBuildTask,
   createCatalog,
@@ -53,6 +55,7 @@ import {
   getCatalog,
   getCatalogHealthCheckSchedule,
   getConnectorType,
+  getIndexCapabilities,
   listBuildTasks,
   listCatalogResources,
   listCatalogs,
@@ -104,8 +107,10 @@ export function vega(ctx: RequestContext) {
     catalogResources: (id: string, category?: string, limit?: number, offset?: number) =>
       listCatalogResources(ctx, id, category, limit, offset),
     catalogHealth: (id: string) => catalogHealthStatus(ctx, id),
-    connectorTypes: () => listConnectorTypes(ctx),
+    catalogConnectorTypeStats: (opts?: { name?: string }) => catalogConnectorTypeStats(ctx, opts),
+    connectorTypes: (opts?: ListConnectorTypesOptions) => listConnectorTypes(ctx, opts),
     connectorType: (type: string) => getConnectorType(ctx, type),
+    indexCapabilities: () => getIndexCapabilities(ctx),
 
     /** Run SQL / OpenSearch DSL directly against a data source. */
     sql: (body: RawQueryRequest) => runSql(ctx, body),

@@ -3,6 +3,7 @@
 | Command | Notes |
 |---------|-------|
 | `catalog list [--limit] [--offset]` / `catalog get <id>` | Catalogs. |
+| `catalog stats [--name <s>]` | Count visible catalogs by catalog type and connector type. |
 | `catalog resources <id> [--category table] [--limit n] [--offset n]` | Resources under a catalog. The SDK defaults to 30; `--limit -1` fetches all. |
 | `catalog delete <id> [--dry-run]` | Preview deletion impact with `--dry-run`; omit it to delete. Running tasks and protected resources block deletion. |
 | `catalog health <ids...>` | Health-status for one or more catalogs. |
@@ -11,13 +12,14 @@
 | `discover-schedule create\|list\|get\|update\|delete\|enable\|disable` | Manage catalog discovery schedules. Update is a full replacement and requires the current state plus `--expected-update-time`. |
 | `discover-task list [--resource-id <id>]\|get\|delete` | Inspect or clean up discovery-task history. Task `queue_priority` is output-only; it cannot be used to sort or reprioritize tasks. |
 | `semantic-task create\|list\|get\|delete` | Manage semantic-understanding tasks. |
-| `connector-type list` / `connector-type get <type>` | Available connector types. |
+| `connector-type list [filters]` / `connector-type get <type>` | Read connector types. Registration and mutation are intentionally not exposed. |
+| `index-capabilities` | Read the local index's available fulltext analyzers and probe timestamp. |
 | `sql --query "<sql>"` / `sql -d <json>` | Run SQL or OpenSearch DSL directly against a data source. SQL uses a `{{<resource-id>}}` table placeholder; DSL identifies its resource with top-level `resource_id`. See [§ vega sql](#vega-sql--run-sql--dsl-against-a-data-source). |
-| `resource …` | Vega-backend resources (mirror of top-level `resource`). |
+| `resource list\|get\|create\|update\|delete` | Manage Vega-backend resources. Index configuration is saved with `resource update --schema-definition <json> --index-config <json>`. |
 | `vega resource document-create\|document-get\|document-upsert\|document-delete\|document-delete-filter` | Manage documents for a dataset resource. Delete-by-filter requires a non-empty filter. |
-| `dataset build <resource-id> --mode batch [--embedding-fields a,b] [--primary-key-fields k] [--incremental-fields k] [--embedding-model <name-or-id>] [--fulltext-fields a,b] [--fulltext-analyzer <n>] [--execute-type incremental\|full] [--wait] [--timeout <s>]` | Create an index BuildTask. **Index build lives on the resource (one resource = one table); there is no KN-level build.** `batch` requires both key groups: `--primary-key-fields` generates document IDs and `--incremental-fields` drives batch cursors. `--embedding-model` takes the model name or a numeric id. Both are resolved: the index config stores the **name** (an id there fails the build), while each vector feature's `config.embedding_model` stores the **id** (a name there is refused by the PUT with `embedding model ID "…" for field "…" not found`). |
-| `dataset build-status <task-id>` | BuildTask status + progress. |
-| `dataset build-list [--status pending,running]` | List BuildTasks. Multiple statuses are OR filters; valid states include `cancelled`. |
+| `resource build <resource-id> [--execute-type incremental\|full] [--wait] [--timeout <s>]` | Create a batch index BuildTask from the Resource's already-saved schema and index configuration. It does not update the Resource. |
+| `build-task get <task-id>` / `build-task list [--status pending,running]` | Read BuildTask status and progress. Multiple statuses are OR filters; valid states include `cancelled`. |
+| `build-task start <task-id> [--reset]` / `build-task stop <task-id>` / `build-task delete <ids...>` | Manage the BuildTask lifecycle. |
 
 ## `vega sql` — run SQL / DSL against a data source
 
@@ -90,18 +92,24 @@ openbkn vega sql -d '{"query":"SELECT ... FROM {{<res-id>}}","query_format":"sql
 
 ## catalog → resource → index
 
-A **catalog** is a container (`physical` = real data source via a connector; `logical` = internal namespace). A **resource** is one table/dataset inside it (`resource.catalog_id` → its catalog). The OpenSearch/vector index is built **per resource**, on the field(s) you pass to `--embedding-fields`. The MySQL/connector binding itself is registered platform-side — the CLI reads + discovers catalogs and builds resources, it does not create the data-source connection.
+A **catalog** is a container (`physical` = real data source via a connector; `logical` = internal namespace). A **resource** is one table/dataset inside it (`resource.catalog_id` → its catalog). OpenSearch/vector indexes are built **per resource**. Feature declarations live in `schema_definition`, while defaults and key fields live in `index_config`; both are Resource configuration. The MySQL/connector binding itself is registered platform-side.
 
-Build a `name` field on a MySQL table:
+Save the schema/features and index configuration, then build:
 
 ```bash
 openbkn resource find --name <table> --exact          # → resource_id
-openbkn vega dataset build <resource-id> --mode batch \
-  --embedding-fields name --primary-key-fields <pk> --incremental-fields <time-or-id> [--embedding-model <name-or-id>] --wait
+openbkn vega resource update <resource-id> \
+  --schema-definition '<schema-json>' --index-config '<index-config-json>'
+openbkn vega resource build <resource-id> --execute-type full --wait
 ```
+
+`--schema-definition` replaces the complete field list; it does not merge individual
+fields. Run `openbkn --json vega resource get <resource-id>` first, copy the complete
+array from `entries[0].schema_definition`, and edit only the required features before
+updating.
 
 ## Index build belongs to Vega
 
-`bkn push` and `bkn create-from-catalog` only create or import knowledge-network metadata. Configure resource index fields and create BuildTasks through `vega dataset build`.
+`bkn push` and `bkn create-from-catalog` only create or import knowledge-network metadata. Save index configuration through `vega resource update`, then create BuildTasks through `vega resource build`; inspect them through `vega build-task`.
 
 Catalog ids are short slugs (e.g. `d7nicrcjto2s73d9g67g`), not data-connection UUIDs. `discover` only works on physical catalogs.

@@ -651,7 +651,7 @@ not bound until you attach it (\`capability list\` counts it under boxes[].unmou
     });
 
   // `bkn job …` is gone: the backend dropped KN-level build jobs, and index
-  // builds are Vega build tasks now (`openbkn vega dataset build*`).
+  // builds are Vega build tasks now (`openbkn vega resource build`).
 
   bkn
     .command("push <directory>")
@@ -832,7 +832,7 @@ REQUEST BODIES
 
 CREATING FROM DATA
   create-from-catalog <catalog-id> --name "<n>" builds a network from a Vega catalog,
-  then \`openbkn vega dataset build <resource-id>\` produces the index. There is no
+  then \`openbkn vega resource build <resource-id>\` produces the index. There is no
   whole-network build.`,
   );
   return group(bkn, "DATA & KNOWLEDGE");

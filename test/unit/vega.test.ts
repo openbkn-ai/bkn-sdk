@@ -3,6 +3,7 @@ import {
   type CatalogDeletionImpact,
   type CatalogSummary,
   CreateBuildTaskRequest,
+  catalogConnectorTypeStats,
   catalogHealthStatus,
   createBuildTask,
   createCatalog,
@@ -12,6 +13,8 @@ import {
   getBuildTask,
   getCatalog,
   getCatalogHealthCheckSchedule,
+  getConnectorType,
+  getIndexCapabilities,
   listBuildTasks,
   listCatalogResources,
   listCatalogs,
@@ -94,14 +97,99 @@ describe("vega uses the vega-backend base path", () => {
     );
   });
 
-  it("listConnectorTypes sorts by name", async () => {
-    const f = mockFetch();
-    await listConnectorTypes(ctx);
+  it("listConnectorTypes sends filters and parses typed summaries", async () => {
+    const body = {
+      entries: [
+        {
+          type: "mysql",
+          name: "MySQL",
+          mode: "local",
+          category: "table",
+          enabled: true,
+          available: true,
+          tags: null,
+          operations: null,
+        },
+      ],
+      total_count: 1,
+    };
+    const f = mockFetch(body);
+    await expect(
+      listConnectorTypes(ctx, {
+        name: "sql",
+        tag: "database",
+        mode: "local",
+        category: "table",
+        enabled: true,
+        available: true,
+        limit: 10,
+        offset: 20,
+      }),
+    ).resolves.toMatchObject({
+      entries: [{ type: "mysql", tags: undefined, operations: undefined }],
+      total_count: 1,
+    });
     const u = new URL(firstCall(f)[0]);
     expect(u.pathname).toBe("/api/vega-backend/v1/connector-types");
+    expect(u.searchParams.get("name")).toBe("sql");
+    expect(u.searchParams.get("tag")).toBe("database");
+    expect(u.searchParams.get("mode")).toBe("local");
+    expect(u.searchParams.get("category")).toBe("table");
+    expect(u.searchParams.get("enabled")).toBe("true");
+    expect(u.searchParams.get("available")).toBe("true");
+    expect(u.searchParams.get("limit")).toBe("10");
+    expect(u.searchParams.get("offset")).toBe("20");
     expect(u.searchParams.get("sort")).toBe("name");
     expect(u.searchParams.get("direction")).toBe("asc");
     expect(u.searchParams.has("order")).toBe(false);
+  });
+
+  it("gets typed connector details", async () => {
+    const detail = {
+      type: "mysql",
+      name: "MySQL",
+      mode: "local",
+      category: "table",
+      enabled: true,
+      available: true,
+      tags: null,
+      operations: null,
+      field_config: { host: { name: "Host", type: "string", required: true } },
+    };
+    const f = mockFetch(detail);
+
+    await expect(getConnectorType(ctx, "my/sql")).resolves.toMatchObject({
+      type: "mysql",
+      tags: undefined,
+      operations: undefined,
+    });
+    expect(new URL(firstCall(f)[0]).pathname).toBe("/api/vega-backend/v1/connector-types/my%2Fsql");
+  });
+
+  it("gets catalog connector stats and local-index capabilities", async () => {
+    const statsFetch = mockFetch({
+      entries: [{ catalog_type: "physical", connector_type: "mysql", catalog_count: 3 }],
+    });
+    await expect(catalogConnectorTypeStats(ctx, { name: "prod" })).resolves.toMatchObject({
+      entries: [{ connector_type: "mysql", catalog_count: 3 }],
+    });
+    expect(new URL(firstCall(statsFetch)[0]).searchParams.get("name")).toBe("prod");
+
+    const capabilitiesFetch = mockFetch({
+      fulltext_analyzers: [{ id: "standard" }],
+      checked_at: 1720000000000,
+    });
+    await expect(getIndexCapabilities(ctx)).resolves.toMatchObject({
+      fulltext_analyzers: [{ id: "standard" }],
+    });
+    expect(new URL(firstCall(capabilitiesFetch)[0]).pathname).toBe(
+      "/api/vega-backend/v1/index-capabilities",
+    );
+
+    mockFetch({ fulltext_analyzers: null, checked_at: 1720000000001 });
+    await expect(getIndexCapabilities(ctx)).resolves.toMatchObject({
+      fulltext_analyzers: [],
+    });
   });
 
   it("listCatalogs sends filters and sort params", async () => {
@@ -296,6 +384,7 @@ describe("createBuildTask", () => {
           catalog_id: "c-1",
           status: "completed",
           mode: "batch",
+          index_name: "vega-build-1",
           total_count: 10,
           synced_count: 10,
           synced_mark: "mark-1",
@@ -311,7 +400,8 @@ describe("createBuildTask", () => {
       total_count: 1,
     });
 
-    await expect(listBuildTasks(ctx)).resolves.toEqual({
+    const tasks = await listBuildTasks(ctx);
+    expect(tasks).toEqual({
       entries: [
         {
           id: "t-1",
@@ -319,6 +409,7 @@ describe("createBuildTask", () => {
           catalog_id: "c-1",
           status: "completed",
           mode: "batch",
+          index_name: "vega-build-1",
           total_count: 10,
           synced_count: 10,
           synced_mark: "mark-1",
@@ -333,6 +424,7 @@ describe("createBuildTask", () => {
       ],
       total_count: 1,
     });
+    expectTypeOf(tasks.entries[0]?.index_name).toEqualTypeOf<string | undefined>();
   });
 
   it("parses summaries without vectorized_count and preserves it from legacy responses", async () => {
@@ -383,22 +475,47 @@ describe("createBuildTask", () => {
     expect(result.entries[0]?.last_progress_time).toBeUndefined();
   });
 
-  it("exposes the persisted batch execute type and lifecycle timestamps", async () => {
+  it("exposes the complete build-task detail fields", async () => {
     mockFetch({
       id: "t-1",
+      resource_id: "r-1",
+      resource_name: "Orders",
+      catalog_id: "c-1",
+      catalog_name: "Production",
       mode: "batch",
+      status: "failed",
       execute_type: "incremental",
+      index_name: "vega-build-1",
+      total_count: 10,
+      synced_count: 8,
+      synced_mark: "checkpoint-8",
+      error_msg: "partial failure",
+      creator: { id: "u-1", name: "User", type: "user" },
+      create_time: 100,
       start_time: 120,
       finish_time: 200,
       last_progress_time: 180,
+      failure_detail: "two rows failed",
+      index_config: { primary_key_fields: ["id"] },
     });
-    await expect(getBuildTask(ctx, "t-1")).resolves.toMatchObject({
+    const task = await getBuildTask(ctx, "t-1");
+    expect(task).toMatchObject({
       id: "t-1",
+      resource_name: "Orders",
+      catalog_name: "Production",
       execute_type: "incremental",
+      index_name: "vega-build-1",
+      synced_mark: "checkpoint-8",
+      error_msg: "partial failure",
+      creator: { id: "u-1", name: "User", type: "user" },
+      create_time: 100,
       start_time: 120,
       finish_time: 200,
       last_progress_time: 180,
+      failure_detail: "two rows failed",
     });
+    expectTypeOf(task.index_name).toEqualTypeOf<string | undefined>();
+    expectTypeOf(task.failure_detail).toEqualTypeOf<string | undefined>();
   });
 
   it("starts, stops, and deletes build tasks", async () => {

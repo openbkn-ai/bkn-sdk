@@ -14,7 +14,7 @@ openbkn
   call      (curl)  curl-style passthrough with auto-injected auth headers
 
   # knowledge networks
-  # NOTE: no `build` here — KN-level build removed; index build = `vega dataset build`
+  # NOTE: no `build` here — KN-level build removed; index build = `vega resource build`
   bkn       list | get | create | create-from-catalog | update | delete
             | stats | export | validate | push | pull | search | subgraph | resources
             object-type | relation-type | relation-type-paths | action-type | concept-group | metric
@@ -26,7 +26,7 @@ openbkn
 
   # data platform
   resource  (res)  list | find | get | query | delete
-  vega      health | stats | inspect | catalog | resource | dataset | query | sql | connector-type
+  vega      catalog | resource | build-task | discover-* | semantic-task | sql | connector-type
   context   (context-loader)  search-schema | query-object-instance | query-instance-subgraph
             | get-logic-properties | get-action-info | search-capabilities | tools | resources | resource
             | templates | prompts | prompt | tool-call [--receipt --json]

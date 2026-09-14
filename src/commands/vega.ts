@@ -3,6 +3,7 @@
 
 /** `openbkn vega …` — Catalog reads + index BuildTask. */
 import { Command } from "commander";
+import type { ResourceIndexConfig, ResourceProperty } from "../api/resources.js";
 import {
   DiscoverScheduleSort,
   DiscoverStrategy,
@@ -20,6 +21,8 @@ import {
   BuildTaskSort,
   BuildTaskStatus,
   type CatalogHealthCheckScheduleConfig,
+  ConnectorCategory,
+  ConnectorMode,
   type RawQueryRequest,
   SortDirection,
 } from "../api/vega.js";
@@ -41,6 +44,13 @@ const expectedUpdateTime = (value: string): number => {
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) {
     throw new InputError("--expected-update-time must be a positive integer timestamp");
+  }
+  return parsed;
+};
+const positiveTimeout = (value: string): number => {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new InputError("--timeout must be a positive integer");
   }
   return parsed;
 };
@@ -85,6 +95,14 @@ const parseJsonArray = (value: string, flag: string): Record<string, unknown>[] 
   }
   return parsed as Record<string, unknown>[];
 };
+
+const parseResourceProperties = (value: string): ResourceProperty[] =>
+  parseJsonArray(value, "--schema-definition").map((property) => {
+    if (typeof property.name !== "string" || property.name.length === 0) {
+      throw new InputError("--schema-definition properties must have a non-empty string name");
+    }
+    return property as unknown as ResourceProperty;
+  });
 
 const healthCheckSchedule = (
   mode?: string,
@@ -254,6 +272,28 @@ const sortDirection = (raw?: string): SortDirection | undefined => {
   return parsed.data;
 };
 
+const connectorMode = (raw?: string) => {
+  if (raw === undefined) return undefined;
+  const parsed = ConnectorMode.safeParse(raw);
+  if (!parsed.success) {
+    throw new InputError(
+      `invalid connector mode "${raw}"; expected one of ${ConnectorMode.options.join(", ")}`,
+    );
+  }
+  return parsed.data;
+};
+
+const connectorCategory = (raw?: string) => {
+  if (raw === undefined) return undefined;
+  const parsed = ConnectorCategory.safeParse(raw);
+  if (!parsed.success) {
+    throw new InputError(
+      `invalid connector category "${raw}"; expected one of ${ConnectorCategory.options.join(", ")}`,
+    );
+  }
+  return parsed.data;
+};
+
 export function vegaCommand(): Command {
   const vega = new Command("vega").description(
     "Data sources: catalogs, connectors, SQL, index builds",
@@ -294,6 +334,16 @@ export function vegaCommand(): Command {
     .description("Get a catalog by id")
     .action(async (id: string, _opts, cmd: Command) => {
       printJson(await clientFrom(cmd).vega.getCatalog(id), outputOptions(cmd));
+    });
+  catalog
+    .command("stats")
+    .description("Count visible catalogs by catalog and connector type")
+    .option("--name <s>", "filter by catalog name before aggregation")
+    .action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).vega.catalogConnectorTypeStats({ name: opts.name }),
+        outputOptions(cmd),
+      );
     });
   catalog
     .command("resources <id>")
@@ -739,14 +789,43 @@ export function vegaCommand(): Command {
   connector
     .command("list")
     .description("List connector types")
-    .action(async (_opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).vega.connectorTypes(), outputOptions(cmd));
+    .option("--name <s>", "filter by name")
+    .option("--tag <s>", "filter by tag")
+    .option("--mode <mode>", `runtime mode: ${ConnectorMode.options.join(" | ")}`)
+    .option("--category <category>", `category: ${ConnectorCategory.options.join(" | ")}`)
+    .option("--enabled <bool>", "filter by enabled state", bool)
+    .option("--available <bool>", "filter by runtime availability", bool)
+    .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
+    .option("--offset <n>", "page offset", int, 0)
+    .option("--direction <dir>", `sort direction: ${SortDirection.options.join(" | ")}`)
+    .action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).vega.connectorTypes({
+          name: opts.name,
+          tag: opts.tag,
+          mode: connectorMode(opts.mode),
+          category: connectorCategory(opts.category),
+          enabled: opts.enabled,
+          available: opts.available,
+          limit: opts.limit,
+          offset: opts.offset,
+          direction: sortDirection(opts.direction),
+        }),
+        outputOptions(cmd),
+      );
     });
   connector
     .command("get <type>")
     .description("Get a connector type")
     .action(async (type: string, _opts, cmd: Command) => {
       printJson(await clientFrom(cmd).vega.connectorType(type), outputOptions(cmd));
+    });
+
+  vega
+    .command("index-capabilities")
+    .description("List local-index analyzers and capability probe time")
+    .action(async (_opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).vega.indexCapabilities(), outputOptions(cmd));
     });
 
   vega
@@ -856,6 +935,106 @@ export function vegaCommand(): Command {
       printJson(await clientFrom(cmd).resource.get(id), outputOptions(cmd));
     });
   resource
+    .command("create")
+    .description("Create a dataset or logic-view resource")
+    .requiredOption("--catalog-id <id>", "catalog id")
+    .requiredOption("--name <s>", "resource name")
+    .requiredOption("--category <category>", "resource category: dataset | logicview")
+    .option("--id <id>", "explicit resource id")
+    .option("--tags <t1,t2>", "comma-separated tags")
+    .option("--description <s>", "description")
+    .option("--schema-definition <json>", "schema_definition JSON array")
+    .option("--index-config <json>", "index_config JSON object")
+    .option("--logic-definition <json>", "logic_definition JSON array")
+    .action(async (opts, cmd: Command) => {
+      if (opts.category !== "dataset" && opts.category !== "logicview") {
+        throw new InputError("--category must be dataset or logicview");
+      }
+      printJson(
+        await clientFrom(cmd).resource.create({
+          id: opts.id,
+          catalogId: opts.catalogId,
+          name: opts.name,
+          category: opts.category,
+          ...(opts.tags !== undefined ? { tags: csv(opts.tags) ?? [] } : {}),
+          description: opts.description,
+          ...(opts.schemaDefinition !== undefined
+            ? {
+                schemaDefinition: parseResourceProperties(opts.schemaDefinition),
+              }
+            : {}),
+          ...(opts.indexConfig !== undefined
+            ? {
+                indexConfig: parseJsonObject(
+                  opts.indexConfig,
+                  "--index-config",
+                ) as ResourceIndexConfig,
+              }
+            : {}),
+          ...(opts.logicDefinition !== undefined
+            ? { logicDefinition: parseJsonArray(opts.logicDefinition, "--logic-definition") }
+            : {}),
+        }),
+        outputOptions(cmd),
+      );
+    });
+  resource
+    .command("update <id>")
+    .description("Update resource metadata, schema, features, or index configuration")
+    .option("--name <s>", "resource name")
+    .option("--tags <t1,t2>", "comma-separated tags")
+    .option("--description <s>", "description")
+    .option("--schema-definition <json>", "replacement schema_definition JSON array")
+    .option("--index-config <json>", "replacement index_config JSON object")
+    .option("--logic-definition <json>", "replacement logic_definition JSON array")
+    .option("--expected-update-time <ms>", "optimistic-lock update time", expectedUpdateTime)
+    .action(async (id: string, opts, cmd: Command) => {
+      const hasPatch = [
+        opts.name,
+        opts.tags,
+        opts.description,
+        opts.schemaDefinition,
+        opts.indexConfig,
+        opts.logicDefinition,
+      ].some((value) => value !== undefined);
+      if (!hasPatch) throw new InputError("provide at least one resource field to update");
+      printJson(
+        await clientFrom(cmd).resource.update(id, {
+          name: opts.name,
+          ...(opts.tags !== undefined ? { tags: csv(opts.tags) ?? [] } : {}),
+          description: opts.description,
+          ...(opts.schemaDefinition !== undefined
+            ? {
+                schemaDefinition: parseResourceProperties(opts.schemaDefinition),
+              }
+            : {}),
+          ...(opts.indexConfig !== undefined
+            ? {
+                indexConfig: parseJsonObject(
+                  opts.indexConfig,
+                  "--index-config",
+                ) as ResourceIndexConfig,
+              }
+            : {}),
+          ...(opts.logicDefinition !== undefined
+            ? { logicDefinition: parseJsonArray(opts.logicDefinition, "--logic-definition") }
+            : {}),
+          expectedUpdateTime: opts.expectedUpdateTime,
+        }),
+        outputOptions(cmd),
+      );
+    });
+  resource
+    .command("delete <ids...>")
+    .description("Delete one or more resources")
+    .option("--ignore-missing", "ignore missing resource ids")
+    .action(async (ids: string[], opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).resource.delete(ids, { ignoreMissing: opts.ignoreMissing }),
+        outputOptions(cmd),
+      );
+    });
+  resource
     .command("discover <id>")
     .description("Trigger metadata discovery for a resource")
     .action(async (id: string, _opts, cmd: Command) => {
@@ -952,70 +1131,36 @@ export function vegaCommand(): Command {
       );
     });
 
-  const dataset = vega.command("dataset").description("Dataset index build tasks");
-  dataset
+  resource
     .command("build <resource-id>")
-    .description("Build a resource's index (creates a BuildTask)")
-    .requiredOption("--mode <mode>", "build mode: batch")
-    .option("--embedding-fields <list>", "comma-separated fields to vectorize")
-    .option("--primary-key-fields <list>", "comma-separated fields used to generate document IDs")
-    .option("--incremental-fields <list>", "comma-separated fields used for batch cursors")
-    .option(
-      "--embedding-model <name-or-id>",
-      "default small-model name (a numeric ID is resolved to its name)",
-    )
-    .option("--fulltext-fields <list>", "comma-separated fields for fulltext index")
-    .option("--fulltext-analyzer <name>", "fulltext analyzer")
+    .description("Create a batch BuildTask from the resource's saved index configuration")
     .option("--execute-type <type>", "batch execution type: incremental | full")
     .option("--wait", "poll until the build reaches a terminal state")
-    .option("--timeout <s>", "wait timeout in seconds", (v) => Number.parseInt(v, 10), 300)
+    .option("--timeout <s>", "wait timeout in seconds", positiveTimeout, 300)
     .action(async (resourceId: string, _opts, cmd: Command) => {
       const o = cmd.optsWithGlobals();
-      if (o.mode !== "batch") {
-        throw new InputError("only batch build mode is currently supported");
-      }
-      const embeddingFields = csv(o.embeddingFields);
-      const primaryKeyFields = csv(o.primaryKeyFields);
-      const incrementalFields = csv(o.incrementalFields);
-      const fulltextFields = csv(o.fulltextFields);
-      if (
-        embeddingFields ||
-        primaryKeyFields ||
-        incrementalFields ||
-        o.embeddingModel ||
-        fulltextFields ||
-        o.fulltextAnalyzer
-      ) {
-        await clientFrom(cmd).resource.configureIndex(resourceId, {
-          embeddingFields,
-          primaryKeyFields,
-          incrementalFields,
-          embeddingModel: o.embeddingModel,
-          fulltextFields,
-          fulltextAnalyzer: o.fulltextAnalyzer,
-        });
-      }
       const task = await clientFrom(cmd).vega.build(
         {
           resource_id: resourceId,
-          mode: o.mode,
-          execute_type: o.executeType,
+          mode: "batch",
+          execute_type: buildTaskExecuteType(o.executeType),
         },
         { wait: Boolean(o.wait), timeoutMs: o.timeout * 1000 },
       );
       printJson(task, outputOptions(cmd));
     });
 
-  dataset
-    .command("build-status <task-id>")
+  const buildTask = vega.command("build-task").description("Resource index BuildTasks");
+  buildTask
+    .command("get <task-id>")
     .description("Show a BuildTask's state and progress")
     .action(async (taskId: string, _opts, cmd: Command) => {
       const task = await clientFrom(cmd).vega.buildStatus(taskId);
       printJson(task, outputOptions(cmd));
     });
 
-  dataset
-    .command("build-list")
+  buildTask
+    .command("list")
     .description("List BuildTasks")
     .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
     .option("--offset <n>", "page offset", int, 0)
@@ -1046,8 +1191,8 @@ export function vegaCommand(): Command {
       );
     });
 
-  dataset
-    .command("build-start <task-id>")
+  buildTask
+    .command("start <task-id>")
     .description("Start a BuildTask")
     .option("--reset", "restart a full task from the beginning (rejected for incremental tasks)")
     .action(async (taskId: string, opts, cmd: Command) => {
@@ -1057,15 +1202,15 @@ export function vegaCommand(): Command {
       );
     });
 
-  dataset
-    .command("build-stop <task-id>")
+  buildTask
+    .command("stop <task-id>")
     .description("Stop a BuildTask")
     .action(async (taskId: string, _opts, cmd: Command) => {
       printJson(await clientFrom(cmd).vega.stopBuildTask(taskId), outputOptions(cmd));
     });
 
-  dataset
-    .command("build-delete <ids...>")
+  buildTask
+    .command("delete <ids...>")
     .description("Delete one or more BuildTasks")
     .option("--ignore-missing", "ignore missing task ids")
     .action(async (ids: string[], opts, cmd: Command) => {
@@ -1081,19 +1226,23 @@ export function vegaCommand(): Command {
     GROUPS: [
       "catalog",
       "resource",
+      "build-task",
       "connector-type",
-      "dataset",
       "discover-schedule",
       "discover-task",
       "semantic-task",
     ],
+    READ: ["index-capabilities"],
     RUN: ["sql"],
   });
 
   groupChildren(resource, {
     READ: ["list", "get", "document-get"],
-    RUN: ["query", "discover"],
+    RUN: ["query", "discover", "build"],
     WRITE: [
+      "create",
+      "update",
+      "delete",
       "enable",
       "disable",
       "document-create",
@@ -1103,8 +1252,14 @@ export function vegaCommand(): Command {
     ],
   });
 
+  groupChildren(buildTask, {
+    READ: ["list", "get"],
+    RUN: ["start", "stop"],
+    WRITE: ["delete"],
+  });
+
   groupChildren(catalog, {
-    READ: ["list", "get", "resources", "health", "health-check-schedule"],
+    READ: ["list", "get", "stats", "resources", "health", "health-check-schedule"],
     RUN: ["test-connection", "test-connection-config", "discover"],
     WRITE: ["create", "update", "enable", "disable", "delete", "set-health-check-schedule"],
   });
@@ -1120,8 +1275,8 @@ QUERYING DIRECTLY
   {{<resource-id>}} placeholder rather than the physical table it happens to have.
 
 BUILDING AN INDEX
-  dataset build <resource-id> creates a BuildTask; build-status / build-list follow it.
-  Indexes are per resource — a knowledge network has no build of its own.`,
+  resource update <resource-id> saves schema_definition and index_config. Then resource build
+  <resource-id> creates a BuildTask; build-task get / list follow it.`,
   );
   return group(vega, "DATA & KNOWLEDGE");
 }

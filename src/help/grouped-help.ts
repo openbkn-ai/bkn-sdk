@@ -65,11 +65,11 @@ const VERB_SECTIONS: Array<[RegExp, string]> = [
     "READ",
   ],
   [
-    /^(query|execute|debug|run|test|chat|embeddings|rerank|diagnose|scan|discover|build|dry-run|validate|token|download|install|call|sql|receipt|fingerprint|test-connection|test-connection-config|attempt|retry|start|resume|ensure-current|create-new-generation|close|complete|fail|cancel|handoff|operations|build-status|build-list)$/,
+    /^(query|execute|debug|run|test|chat|embeddings|rerank|diagnose|scan|discover|build|dry-run|validate|token|download|install|call|sql|receipt|fingerprint|test-connection|test-connection-config|attempt|retry|start|stop|resume|ensure-current|create-new-generation|close|complete|fail|cancel|handoff|operations)$/,
     "RUN",
   ],
   [
-    /^(create|update|delete|add|edit|remove|set|register|upload|publish|unpublish|republish|import|activate|login|logout|use|switch|change-password|enable|disable|push|assign-role|revoke-role|add-member|remove-member|reset-password|grant-perm|revoke-perm|add-members|remove-members|set-status|regenerate|revoke|build-start|build-stop|build-delete|publish-history|update-metadata|update-package|create-from-catalog|export-config)$/,
+    /^(create|update|delete|add|edit|remove|set|register|upload|publish|unpublish|republish|import|activate|login|logout|use|switch|change-password|enable|disable|push|assign-role|revoke-role|add-member|remove-member|reset-password|grant-perm|revoke-perm|add-members|remove-members|set-status|regenerate|revoke|publish-history|update-metadata|update-package|create-from-catalog|export-config)$/,
     "WRITE",
   ],
 ];
