@@ -185,7 +185,7 @@ export function queryActionType(
   return request(
     ctx,
     `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-types/${encodeURIComponent(atId)}/`,
-    { method: "POST", body, responseParser: parseBigIntJSON },
+    { method: "POST", body, responseParser: parseBigIntJSON, idempotent: true },
   );
 }
 
@@ -225,7 +225,7 @@ export function queryMetricData(
   return request(
     ctx,
     `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/metrics/${encodeURIComponent(metricId)}/data`,
-    { method: "POST", body, responseParser: parseBigIntJSON },
+    { method: "POST", body, responseParser: parseBigIntJSON, idempotent: true },
   );
 }
 
@@ -235,6 +235,7 @@ export function dryRunMetric(ctx: RequestContext, knId: string, body: unknown): 
     method: "POST",
     body,
     responseParser: parseBigIntJSON,
+    idempotent: true,
   });
 }
 
@@ -475,6 +476,7 @@ export function searchInstance(
       `${RETRIEVAL_BASE}/search_instance`,
       {
         method: "POST",
+        idempotent: true,
         body: { ...searchBody(knId, query, opts), bkn_context: opts.bknContext },
       },
     );
@@ -482,6 +484,7 @@ export function searchInstance(
   return withManagedLifecycle(ctx, knId, query, (bknContext, requestContext) =>
     request(requestContext, `${RETRIEVAL_BASE}/search_instance`, {
       method: "POST",
+      idempotent: true,
       body: {
         ...searchBody(knId, query, opts),
         ...(bknContext ? { bkn_context: bknContext } : {}),

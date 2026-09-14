@@ -47,7 +47,7 @@ openbkn --json context tool-call <kn-id> <tool-name> --args '{"k":"v"}' --receip
 # 全局参数：--base-url --token --user --json/--compact -k/--insecure
 #           --conversation-id/--interaction-id（BKN Trace 关联，等价 env：BKN_CONVERSATION_ID/BKN_INTERACTION_ID）
 #           --new-conversation（这条命令不沿用记住的 conversation）
-#           --no-retry（遇到瞬时错误直接失败；默认对连接被拒、503、429——GET/PUT/DELETE 还包括连接中断、502、504——指数退避重试 3 次）
+#           --no-retry（读请求遇到瞬时错误也不重试；默认读——GET、查询、search——在连接被拒/中断、429、502~504 时指数退避重试 3 次；写一律不重试）
 openbkn --help        # 分组命令树
 ```
 

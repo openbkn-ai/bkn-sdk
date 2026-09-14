@@ -10,7 +10,7 @@ import type { RequestContext } from "../types.js";
 import { HttpError, NonJsonResponseError } from "../utils/errors.js";
 import { stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { buildHeaders } from "./headers.js";
-import { withRetry } from "./retry.js";
+import { isRead, withRetry } from "./retry.js";
 import { tlsFetch } from "./tls.js";
 import { ensureCompatible } from "./version-check.js";
 
@@ -34,6 +34,13 @@ export interface RequestInitEx {
   headersTimeoutMs?: number;
   /** Optional parser for a successful non-empty response body. */
   responseParser?: (text: string) => unknown;
+  /**
+   * Declare that this request only reads, so a transient failure may be
+   * retried (see `api/retry.ts`). Needed only for a read sent as a POST without
+   * the method-override header — a search, a query, a dry-run. Left out, GET is
+   * a read and a POST is a write, which is never resent.
+   */
+  idempotent?: boolean;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -69,8 +76,7 @@ export async function request<T = unknown>(
   const send = () =>
     withRetry(
       ctx,
-      method,
-      url,
+      { method, url, read: isRead(method, init.headers, init.idempotent), deadline },
       () =>
         tlsFetch(
           ctx.insecure,
@@ -84,7 +90,6 @@ export async function request<T = unknown>(
           },
           init.headersTimeoutMs,
         ),
-      { deadline },
     );
 
   try {

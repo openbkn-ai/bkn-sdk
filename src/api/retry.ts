@@ -2,22 +2,19 @@
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 /**
- * Retry an outbound request through a transient failure — a gateway restarting,
- * a backend briefly unavailable, a rate limit — with exponential backoff.
+ * Retry a read through a transient failure — a gateway restarting, a backend
+ * briefly unavailable, a rate limit — with exponential backoff.
  *
- * Only failures that say "try again" are retried, and only where resending is
- * safe:
+ * Reads only, as docs/RELIABILITY.md requires: a write (create / update /
+ * delete, an import, a build, an action or tool run, a chat turn) is never
+ * resent, whatever failed — its error is surfaced for the caller to decide.
+ * A read is a GET / HEAD / OPTIONS, a POST carrying `X-HTTP-Method-Override:
+ * GET` (the platform's own mark for a query too large for a URL), or a request
+ * its caller declares `idempotent` — a search, a query, a dry-run.
  *
- * - The connection was refused or never resolved, so no byte of the request
- *   reached anyone: every method.
- * - HTTP 503 / 429: the server declined to act on it: every method.
- * - The connection dropped mid-exchange, or a gateway answered 502 / 504: the
- *   backend may already have acted, so only methods that are safe to repeat
- *   (GET, HEAD, OPTIONS, PUT, DELETE). A POST here is often a write — an import,
- *   an action run — and doing it twice is worse than reporting it once.
- *
- * Everything else — a 4xx, a 500, a timeout the caller set, a dry-run preview —
- * is returned or thrown on the first attempt, unchanged.
+ * For a read, these are retried: a connection refused, reset or timed out; DNS
+ * `EAI_AGAIN`; HTTP 429, 502, 503, 504. Everything else — another 4xx or 5xx,
+ * a timeout the caller set, a dry-run preview — returns or throws at once.
  */
 import type { RequestContext, RetryNotice, RetryPolicy } from "../types.js";
 
@@ -27,19 +24,39 @@ export const DEFAULT_RETRY_POLICY: RetryPolicy = {
   maxDelayMs: 30_000,
 };
 
-const IDEMPOTENT = new Set(["GET", "HEAD", "OPTIONS", "PUT", "DELETE"]);
+const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
-/** Failed before the request was sent. */
-const NOT_SENT = new Set([
+const TRANSIENT_CODES = new Set([
   "ECONNREFUSED",
+  "ECONNRESET",
+  "EPIPE",
+  "ETIMEDOUT",
   "EHOSTUNREACH",
   "ENETUNREACH",
   "EAI_AGAIN",
   "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_SOCKET",
+  "UND_ERR_CLOSED",
 ]);
 
-/** Failed after the request may have reached the server. */
-const DROPPED = new Set(["ECONNRESET", "EPIPE", "ETIMEDOUT", "UND_ERR_SOCKET", "UND_ERR_CLOSED"]);
+const TRANSIENT_STATUS = new Set([429, 502, 503, 504]);
+
+/**
+ * Whether a request only reads: by method, by the platform's method-override
+ * header, or by its caller's word.
+ */
+export function isRead(
+  method: string,
+  headers?: Record<string, string>,
+  declared?: boolean,
+): boolean {
+  if (declared !== undefined) return declared;
+  if (READ_METHODS.has(method.toUpperCase())) return true;
+  const override = Object.entries(headers ?? {}).find(
+    ([k]) => k.toLowerCase() === "x-http-method-override",
+  )?.[1];
+  return override?.toUpperCase() === "GET";
+}
 
 /** The system error code behind a failed `fetch` ("fetch failed" carries it on `.cause`). */
 export function networkErrorCode(err: unknown): string | undefined {
@@ -50,17 +67,6 @@ export function networkErrorCode(err: unknown): string | undefined {
   // A refused dual-stack connect surfaces as an AggregateError of per-address errors.
   const code = e?.cause?.code ?? e?.cause?.errors?.[0]?.code ?? e?.code;
   return typeof code === "string" ? code : undefined;
-}
-
-function retryableError(err: unknown, idempotent: boolean): string | undefined {
-  const code = networkErrorCode(err);
-  if (!code) return undefined;
-  return NOT_SENT.has(code) || (idempotent && DROPPED.has(code)) ? code : undefined;
-}
-
-function retryableStatus(status: number, idempotent: boolean): boolean {
-  if (status === 503 || status === 429) return true;
-  return idempotent && (status === 502 || status === 504);
 }
 
 /** `Retry-After` as delta-seconds or an HTTP date, in ms; `undefined` when absent or unreadable. */
@@ -82,21 +88,26 @@ export function retryPolicyOf(ctx: RequestContext): RetryPolicy | undefined {
   return { ...DEFAULT_RETRY_POLICY, ...ctx.retry };
 }
 
+export interface RetryTarget {
+  method: string;
+  url: string | URL;
+  /** Whether resending is safe — see {@link isRead}. Anything else is sent once. */
+  read: boolean;
+  /** Epoch ms: give up rather than sleep past it — the caller's own timeout would cut the next try short. */
+  deadline?: number;
+}
+
 /**
- * Run `send`, and again after a backoff while it fails transiently. `send` must
- * build a fresh request each call. Gives up early rather than sleep past
- * `deadline` (epoch ms) — the caller's own timeout would cut the next try short.
+ * Run `send`, and again after a backoff while a read fails transiently. `send`
+ * must build a fresh request each call.
  */
 export async function withRetry(
   ctx: RequestContext,
-  method: string,
-  url: string | URL,
+  target: RetryTarget,
   send: () => Promise<Response>,
-  opts: { deadline?: number } = {},
 ): Promise<Response> {
   const policy = retryPolicyOf(ctx);
-  if (!policy || policy.retries <= 0) return send();
-  const idempotent = IDEMPOTENT.has(method.toUpperCase());
+  if (!target.read || !policy || policy.retries <= 0) return send();
 
   for (let retry = 1; ; retry += 1) {
     let res: Response | undefined;
@@ -105,17 +116,18 @@ export async function withRetry(
     let waitMs: number | undefined;
     try {
       res = await send();
-      if (!retryableStatus(res.status, idempotent)) return res;
+      if (!TRANSIENT_STATUS.has(res.status)) return res;
       reason = `HTTP ${res.status}`;
       waitMs = retryAfterMs(res.headers.get("retry-after"));
     } catch (err) {
-      reason = retryableError(err, idempotent);
-      if (!reason) throw err;
+      const code = networkErrorCode(err);
+      if (!code || !TRANSIENT_CODES.has(code)) throw err;
+      reason = code;
       failure = err;
     }
 
     const delayMs = Math.min(policy.maxDelayMs, waitMs ?? backoffMs(policy, retry));
-    const outOfTime = opts.deadline !== undefined && Date.now() + delayMs >= opts.deadline;
+    const outOfTime = target.deadline !== undefined && Date.now() + delayMs >= target.deadline;
     if (retry > policy.retries || outOfTime) {
       if (res) return res;
       throw failure;
@@ -124,8 +136,8 @@ export async function withRetry(
     // cloned body's cancel settles only once every branch is cancelled.
     res?.body?.cancel().catch(() => {});
     const notice: RetryNotice = {
-      method: method.toUpperCase(),
-      url: String(url),
+      method: target.method.toUpperCase(),
+      url: String(target.url),
       reason,
       retry,
       retries: policy.retries,

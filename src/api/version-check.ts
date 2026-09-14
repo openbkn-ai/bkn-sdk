@@ -133,9 +133,9 @@ async function readServerVersion(ctx: RequestContext): Promise<string> {
     // The first request of a command, so the one a restarting gateway hits
     // first. Each attempt gets its own deadline: one budget shared by the
     // retries would leave none for the attempt after the gateway comes back.
-    const { response, body } = await withRetry(ctx, "GET", url, () => fetchHealth(ctx, url)).then(
-      async (res) => ({ response: res, body: await res.text() }),
-    );
+    const { response, body } = await withRetry(ctx, { method: "GET", url, read: true }, () =>
+      fetchHealth(ctx, url),
+    ).then(async (res) => ({ response: res, body: await res.text() }));
     if (!response.ok) {
       throw new VersionCompatibilityError(
         `Cannot verify platform version: GET ${VERSION_PATH} returned HTTP ${response.status}. The request was not sent.`,

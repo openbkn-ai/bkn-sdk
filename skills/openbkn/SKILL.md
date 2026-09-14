@@ -54,7 +54,7 @@ openbkn [--base-url <url>] [--token <tok>] [--user <id|name>] \
 
 - 默认输出为**人类可读表格**；`--json`（或 `--compact`）输出可被脚本解析的精确 JSON。
 - `-k/--insecure` 关闭 TLS 校验（自签名平台）。`auth login -k` 会按平台记住，之后该平台的命令无需再带；免校验只作用于该平台的请求，不碰进程全局，无需 `NODE_TLS_REJECT_UNAUTHORIZED`。
-- 瞬时错误自动重试：连接被拒、503、429 对所有请求重试；连接中断、502、504 只对 GET/PUT/DELETE 重试（POST 可能已经生效，不重发）。指数退避 3 次，每次重试在 stderr 打一行 `openbkn: … retry n/3 in …s`；`--no-retry` 关闭。
+- 瞬时错误自动重试**只针对读**：连接被拒/中断/超时、429、502、503、504 时指数退避重试 3 次，每次在 stderr 打一行 `openbkn: … retry n/3 in …s`；`--no-retry` 关闭。读 = GET、带 `X-HTTP-Method-Override: GET` 的查询、search、metric 查询、MCP 只读工具（search_*/query_*/get_*/list_*/run_sql/run_cypher 等）。**写一律不重试**（create/update/delete、push、build、execute_action/execute_tool/run_code、chat），失败直接报错，由调用方决定是否重跑。
 - **以实时 `--help` 为准。** `openbkn --help` 看分组命令地图，`openbkn <group> <sub> --help` 看确切参数。**不要猜参数**。
 
 ## 认证（凭据按平台/用户分层存于 `~/.bkn/`，可用 `BKN_CONFIG_DIR` 覆盖）

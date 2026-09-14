@@ -4,6 +4,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import pkg from "../../package.json" with { type: "json" };
 import { authFetch } from "../../src/api/auth-fetch.js";
+import { isReadFrame } from "../../src/api/context-loader.js";
 import { request } from "../../src/api/http.js";
 import { configureVersionCheck } from "../../src/api/version-check.js";
 import { reportRetry } from "../../src/commands/_shared.js";
@@ -57,32 +58,54 @@ describe("transport retry", () => {
   it("rides out a gateway restart: refused connections, then an answer", async () => {
     const fetch = platform(netError("ECONNREFUSED"), netError("ECONNREFUSED"), ok());
     const c = retryCtx();
-    await expect(request(c, "/api/x", { body: { q: 1 } })).resolves.toEqual({ ok: true });
+    await expect(request(c, "/api/x")).resolves.toEqual({ ok: true });
     expect(fetch).toHaveBeenCalledTimes(3);
-    // A refused connect sent nothing, so even a POST is safe to resend.
     expect(c.notices.map((n) => [n.method, n.reason, n.retry, n.retries])).toEqual([
-      ["POST", "ECONNREFUSED", 1, 3],
-      ["POST", "ECONNREFUSED", 2, 3],
+      ["GET", "ECONNREFUSED", 1, 3],
+      ["GET", "ECONNREFUSED", 2, 3],
     ]);
   });
 
-  it("retries a 503 — the server declined to act — for any method", async () => {
-    const fetch = platform(status(503), ok());
-    await request(retryCtx(), "/api/x", { body: {} });
-    expect(fetch).toHaveBeenCalledTimes(2);
+  it("retries a read through each transient failure", async () => {
+    const failures = [
+      () => netError("ECONNRESET"),
+      () => netError("ETIMEDOUT"),
+      () => netError("EAI_AGAIN"),
+      () => status(429),
+      () => status(502),
+      () => status(503),
+      () => status(504),
+    ];
+    for (const failure of failures) {
+      const fetch = platform(failure(), ok());
+      await request(retryCtx(), "/api/x");
+      expect(fetch).toHaveBeenCalledTimes(2);
+    }
   });
 
-  it("retries a dropped connection and a 502/504 only where resending is safe", async () => {
-    for (const failure of [() => netError("ECONNRESET"), () => status(502), () => status(504)]) {
-      const get = platform(failure(), ok());
-      await request(retryCtx(), "/api/x");
-      expect(get).toHaveBeenCalledTimes(2);
-
-      // The backend may already have run the POST: report it, do not repeat it.
-      const post = platform(failure(), ok());
-      await expect(request(retryCtx(), "/api/x", { body: {} })).rejects.toBeDefined();
-      expect(post).toHaveBeenCalledTimes(1);
+  it("never resends a write, whatever failed (docs/RELIABILITY.md)", async () => {
+    for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+      for (const failure of [() => netError("ECONNREFUSED"), () => status(503)]) {
+        const fetch = platform(failure(), ok());
+        await expect(request(retryCtx(), "/api/x", { method, body: {} })).rejects.toBeDefined();
+        expect(fetch).toHaveBeenCalledTimes(1);
+      }
     }
+  });
+
+  it("counts a POST as a read when it says so", async () => {
+    // The platform's own mark for a query sent as a POST.
+    const override = platform(status(503), ok());
+    await request(retryCtx(), "/api/x", {
+      body: {},
+      headers: { "X-HTTP-Method-Override": "GET" },
+    });
+    expect(override).toHaveBeenCalledTimes(2);
+
+    // A search or dry-run its caller declares idempotent.
+    const declared = platform(status(503), ok());
+    await request(retryCtx(), "/api/x", { body: {}, idempotent: true });
+    expect(declared).toHaveBeenCalledTimes(2);
   });
 
   it("leaves errors that will not change on retry alone", async () => {
@@ -126,22 +149,27 @@ describe("transport retry", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("treats a direct fetch of unknown method as a POST", async () => {
+  it("sends a direct fetch once unless it is marked a read", async () => {
     const c = retryCtx();
-    const drop = vi.fn(async () => {
-      throw netError("ECONNRESET");
-    });
-    await expect(authFetch(c, drop)).rejects.toThrow("fetch failed");
-    expect(drop).toHaveBeenCalledTimes(1);
+    const refusedOnce = () => {
+      let n = 0;
+      return vi.fn(async () => {
+        n += 1;
+        if (n === 1) throw netError("ECONNREFUSED");
+        return ok();
+      });
+    };
+    const upload = refusedOnce();
+    await expect(authFetch(c, upload)).rejects.toThrow("fetch failed");
+    expect(upload).toHaveBeenCalledTimes(1);
 
-    let n = 0;
-    const refused = vi.fn(async () => {
-      n += 1;
-      if (n === 1) throw netError("ECONNREFUSED");
-      return ok();
-    });
-    await expect(authFetch(c, refused)).resolves.toMatchObject({ status: 200 });
-    expect(refused).toHaveBeenCalledTimes(2);
+    const download = refusedOnce();
+    await expect(authFetch(c, download, { method: "GET" })).resolves.toMatchObject({ status: 200 });
+    expect(download).toHaveBeenCalledTimes(2);
+
+    const search = refusedOnce();
+    await expect(authFetch(c, search, { read: true })).resolves.toMatchObject({ status: 200 });
+    expect(search).toHaveBeenCalledTimes(2);
   });
 
   it("retries the version preflight, which a restarting gateway meets first", async () => {
@@ -164,6 +192,32 @@ describe("transport retry", () => {
     configureVersionCheck(c, "memory");
     await expect(request(c, "/api/x")).resolves.toEqual({ ok: true });
     expect(fetch).toHaveBeenCalledTimes(3); // refused, health, business
+  });
+});
+
+describe("MCP frames", () => {
+  const call = (name: string) => ({ method: "tools/call", params: { name, arguments: {} } });
+
+  it("resends read-only tools and the handshake", () => {
+    for (const name of ["query_object_instance", "search_schema", "run_sql", "run_cypher"]) {
+      expect(isReadFrame(call(name))).toBe(true);
+    }
+    expect(isReadFrame({ method: "initialize" })).toBe(true);
+    expect(isReadFrame({ method: "tools/list" })).toBe(true);
+  });
+
+  it("sends tools that act, and tools it does not know, once", () => {
+    for (const name of [
+      "execute_action",
+      "execute_tool",
+      "run_code",
+      "run_shell",
+      "bkn_start_interaction",
+      "bkn_finish_interaction",
+      "some_new_tool",
+    ]) {
+      expect(isReadFrame(call(name))).toBe(false);
+    }
   });
 });
 

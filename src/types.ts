@@ -53,9 +53,10 @@ export interface ClientOptions {
   /** @internal CLI clients persist successful version checks for a short TTL. */
   versionCheckMode?: "memory" | "cli";
   /**
-   * Retry transient failures (refused connection, 503, 429; and for GET/PUT/
-   * DELETE also a dropped connection, 502, 504) with exponential backoff. On by
-   * default — 3 retries from 1s; `false` turns it off. See `api/retry.ts`.
+   * Retry a read (GET, a query, a search) through a transient failure — a
+   * refused or dropped connection, 429, 502-504 — with exponential backoff.
+   * Writes are never retried. On by default — 3 retries from 1s; `false` turns
+   * it off. See `api/retry.ts`.
    */
   retry?: Partial<RetryPolicy> | false;
   /** Called before each retry, e.g. to tell a user why a command is pausing. */

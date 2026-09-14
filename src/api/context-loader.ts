@@ -89,6 +89,50 @@ function parseBody(text: string): unknown {
   }
 }
 
+/**
+ * Tools that only read, so a transient failure may resend them. Anything not
+ * listed — `execute_action`, `execute_tool`, `run_code`, `run_shell`, the
+ * lifecycle tools, a tool this list has not heard of — is sent once
+ * (docs/RELIABILITY.md: never auto-retry writes).
+ */
+const READ_ONLY_TOOLS = new Set([
+  "describe_resource",
+  "explore_subgraph",
+  "get_action_execution",
+  "get_action_info",
+  "get_kn_detail",
+  "get_logic_properties_values",
+  "get_object_types",
+  "get_relation_types",
+  "get_skill_content",
+  "list_action_executions",
+  "list_knowledge_networks",
+  "list_resources",
+  "list_skills",
+  "query_instance_subgraph",
+  "query_metric",
+  "query_object_instance",
+  "read_skill_file",
+  "run_cypher",
+  "run_sql",
+  "search_capabilities",
+  "search_instance",
+  "search_schema",
+]);
+
+/** Whether a JSON-RPC frame only reads: the handshake, the tool list, or a read-only tool. */
+export function isReadFrame(body: unknown): boolean {
+  const rpc = body as { method?: string; params?: { name?: unknown } } | undefined;
+  if (rpc?.method === "tools/call") {
+    return typeof rpc.params?.name === "string" && READ_ONLY_TOOLS.has(rpc.params.name);
+  }
+  return (
+    rpc?.method === "initialize" ||
+    rpc?.method === "tools/list" ||
+    Boolean(rpc?.method?.startsWith("notifications/"))
+  );
+}
+
 async function post(
   ctx: RequestContext,
   knId: string,
@@ -118,7 +162,7 @@ async function post(
           body: stringifyBigIntJSON(body),
           ...(controller ? { signal: controller.signal } : {}),
         }),
-      { url: mcpUrl(ctx) },
+      { url: mcpUrl(ctx), read: isReadFrame(body) },
     );
   try {
     const res = await (isHandshake ? withoutPreview(send) : send());
