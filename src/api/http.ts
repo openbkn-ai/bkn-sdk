@@ -5,8 +5,10 @@
  * Thin fetch wrapper: explicit timeout, auth headers, JSON in/out, typed errors.
  * The single choke point for every backend call — resources build on this.
  */
+import { tokenExpiresAtMs } from "../auth/jwt.js";
 import { refreshAccessToken } from "../auth/oauth.js";
 import type { RequestContext } from "../types.js";
+import { isDryRun } from "../utils/dry-run.js";
 import { HttpError, NonJsonResponseError } from "../utils/errors.js";
 import { stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { buildHeaders } from "./headers.js";
@@ -58,17 +60,18 @@ export async function request<T = unknown>(
   const timer = setTimeout(() => controller.abort(), init.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
   const method = init.method ?? (hasBody ? "POST" : "GET");
-  const headers = buildHeaders(ctx, {
-    ...(hasBody ? { "content-type": "application/json" } : {}),
-    ...init.headers,
-  });
+  // Headers are rebuilt per send: a refresh between the first send and the
+  // retry replaces `ctx.token`, and the retry must carry the new one.
   const send = () =>
     tlsFetch(
       ctx.insecure,
       url,
       {
         method,
-        headers,
+        headers: buildHeaders(ctx, {
+          ...(hasBody ? { "content-type": "application/json" } : {}),
+          ...init.headers,
+        }),
         body: hasBody ? stringifyBigIntJSON(init.body) : undefined,
         redirect: init.redirect,
         signal: controller.signal,
@@ -77,10 +80,14 @@ export async function request<T = unknown>(
     );
 
   try {
+    await refreshIfExpiring(ctx);
+    const sentToken = ctx.token;
     let res = await send();
+    let renewal: Renewal = ctx.refresh ? "not-needed" : "unavailable";
     // On a 401 with stored credentials, refresh the access token once and retry.
-    if (res.status === 401 && ctx.refresh && (await tryRefresh(ctx))) {
-      res = await send();
+    if (res.status === 401 && ctx.refresh) {
+      renewal = (await renewAfter401(ctx, sentToken)) ? "renewed" : "failed";
+      if (renewal === "renewed") res = await send();
     }
     const text = await res.text();
     const contentType = res.headers.get("content-type") ?? "";
@@ -88,7 +95,7 @@ export async function request<T = unknown>(
       // Both hints can apply at once — an auth proxy answers a revoked AppKey
       // with an HTML 401 — so join them rather than letting either win.
       const gateway = gatewayHint(url, res.status, contentType, text);
-      const hints = [gateway, hintFor(ctx, res.status, text)].filter(Boolean);
+      const hints = [gateway, hintFor(ctx, res.status, text, renewal)].filter(Boolean);
       throw new HttpError(
         res.status,
         res.statusText,
@@ -153,14 +160,40 @@ function gatewayHint(
   ].join(" ");
 }
 
+/** What became of the access token on the way to this response. */
+type Renewal = "unavailable" | "not-needed" | "renewed" | "failed";
+
+const APPKEY_TIP =
+  "For unattended or long-running scripts, issue a long-lived AppKey with `openbkn appkey create` and pass it as `--token bak_…`.";
+
 /**
  * Status-specific next-step guidance. An AppKey (`bak_…`) 401 means the key is
  * invalid/expired/revoked or its owner was disabled — re-issue, don't retry or
  * `auth login` (an AppKey has no login/refresh).
+ *
+ * Any other 401 says which of the three things happened to the token, because
+ * a bare 401 reads as "the platform is down" and the fix differs per case.
  */
-function hintFor(ctx: RequestContext, status: number, body: string): string | undefined {
+function hintFor(
+  ctx: RequestContext,
+  status: number,
+  body: string,
+  renewal: Renewal,
+): string | undefined {
   if (status === 401 && ctx.token.startsWith("bak_")) {
     return "AppKey invalid / expired / revoked / owner disabled — re-issue with `openbkn appkey create` (or `appkey regenerate <id>`). Do not auto-retry.";
+  }
+  if (status === 401) {
+    switch (renewal) {
+      case "failed":
+        return `The access token expired and could not be renewed: the refresh token was rejected (expired or revoked). Run \`openbkn auth login ${ctx.baseUrl}\` again. ${APPKEY_TIP}`;
+      case "renewed":
+        return `The access token was renewed, and the platform still rejects it — the session was revoked or the account disabled. Run \`openbkn auth login ${ctx.baseUrl}\` again.`;
+      case "unavailable":
+        return `The token is expired or invalid, and no refresh token is saved for it (a \`--token\` / BKN_TOKEN value is never renewed). Run \`openbkn auth login ${ctx.baseUrl}\`. ${APPKEY_TIP}`;
+      default:
+        break;
+    }
   }
   return lifecycleHint(body);
 }
@@ -206,21 +239,67 @@ function requiredAction(body: string): string | undefined {
   }
 }
 
+/**
+ * In-flight refresh per context. The platform rotates refresh tokens, so two
+ * concurrent requests refreshing with the same one would have the second
+ * rejected — and a replayed refresh token can revoke the whole session.
+ */
+const refreshing = new WeakMap<RequestContext, Promise<boolean>>();
+
 /** Refresh ctx.token from its refresh token, persist, and report success. */
-export async function tryRefresh(ctx: RequestContext): Promise<boolean> {
-  if (!ctx.refresh) return false;
+export function tryRefresh(ctx: RequestContext): Promise<boolean> {
+  if (!ctx.refresh) return Promise.resolve(false);
+  const pending = refreshing.get(ctx);
+  if (pending) return pending;
+  const run = refreshOnce(ctx).finally(() => refreshing.delete(ctx));
+  refreshing.set(ctx, run);
+  return run;
+}
+
+async function refreshOnce(ctx: RequestContext): Promise<boolean> {
+  const refresh = ctx.refresh;
+  if (!refresh) return false;
   try {
     const t = await refreshAccessToken(
       ctx.baseUrl,
-      ctx.refresh.refreshToken,
-      ctx.refresh.clientId,
+      refresh.refreshToken,
+      refresh.clientId,
       ctx.insecure,
     );
     ctx.token = t.accessToken;
-    if (t.refreshToken) ctx.refresh.refreshToken = t.refreshToken;
-    ctx.refresh.persist(t);
+    if (t.refreshToken) refresh.refreshToken = t.refreshToken;
+    refresh.expiresAt = t.expiresAt;
+    refresh.persist(t);
     return true;
   } catch {
     return false; // surface the original 401
   }
+}
+
+/**
+ * Renew after a 401 on a request sent with `sentToken`. When another request
+ * already replaced the token meanwhile, the retry just needs the new one.
+ */
+export function renewAfter401(ctx: RequestContext, sentToken: string): Promise<boolean> {
+  if (ctx.token !== sentToken) return Promise.resolve(true);
+  return tryRefresh(ctx);
+}
+
+/** Renew this long before expiry, so a token cannot lapse between check and use. */
+const EXPIRY_SKEW_MS = 60_000;
+
+/**
+ * Renew a stored-credential token that is expired or about to be, before the
+ * request rather than after its 401 — the 401 path costs a failed round-trip
+ * and cannot help a request whose body is a one-shot stream.
+ *
+ * A failed renewal is not an error here: the request goes out with the token
+ * it has, and a 401 then says what to do. Skipped under `--dry-run`, which
+ * promises to leave the stored credential alone.
+ */
+export async function refreshIfExpiring(ctx: RequestContext): Promise<void> {
+  if (!ctx.refresh || isDryRun()) return;
+  const expiresAt = tokenExpiresAtMs(ctx.token, ctx.refresh.expiresAt);
+  if (expiresAt === undefined || expiresAt - Date.now() > EXPIRY_SKEW_MS) return;
+  await tryRefresh(ctx);
 }

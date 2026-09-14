@@ -245,6 +245,20 @@ def test_a_write_back_preserves_everything_else_in_the_file(
     assert saved["baseUrl"] == PLATFORM
 
 
+def test_a_write_back_drops_the_replaced_tokens_expiry(
+    isolated_config: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The CLI renews early on ``expiresAt``; the old token's would outlive it."""
+    exchange = Exchange(rotate=True)
+    _serve(monkeypatch, exchange)
+    ctx = stored_context(isolated_config, expiresAt="2026-01-01T00:00:00.000Z")
+
+    http_module.request(ctx, "/api/thing")
+
+    saved = json.loads(_token_path(isolated_config).read_text(encoding="utf-8"))
+    assert "expiresAt" not in saved
+
+
 def test_a_server_that_does_not_rotate_gets_no_write(
     isolated_config: Path, platform: Exchange
 ) -> None:

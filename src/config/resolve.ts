@@ -3,7 +3,7 @@
 
 import { configureVersionCheck } from "../api/version-check.js";
 import { createTraceContext } from "../trace-context.js";
-import type { ClientOptions, RequestContext } from "../types.js";
+import type { ClientOptions, RefreshableTokens, RequestContext } from "../types.js";
 import { trimTrailingSlashes } from "../utils/base-url.js";
 import { InputError } from "../utils/errors.js";
 import { activePlatform, findUserId, readToken, usersOfPlatform, writeToken } from "./store.js";
@@ -56,7 +56,8 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
     !explicit && stored?.refreshToken
       ? {
           refreshToken: stored.refreshToken,
-          persist: (t: { accessToken: string; refreshToken?: string; idToken?: string }) => {
+          ...(stored.expiresAt ? { expiresAt: stored.expiresAt } : {}),
+          persist: (t: RefreshableTokens) => {
             writeToken(
               normalized,
               {
@@ -64,6 +65,9 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
                 accessToken: t.accessToken,
                 refreshToken: t.refreshToken ?? stored.refreshToken,
                 idToken: t.idToken ?? stored.idToken,
+                // The old expiry belongs to the old token; keeping it would
+                // make every later command refresh again.
+                expiresAt: t.expiresAt,
               },
               // `--user` picks an identity for this command only; a refresh
               // must not promote it to the default for the next one.

@@ -119,11 +119,11 @@ describe("appkey 401 → re-issue guidance (OPE-22)", () => {
     expect(msg).not.toContain("auth login");
   });
 
-  it("a non-AppKey (OAuth) 401 keeps the default auth-login guidance", async () => {
+  it("a non-AppKey (OAuth) 401 gets auth-login guidance, not the AppKey re-issue one", async () => {
     mock401();
     const oauthCtx = verifiedContext({ ...ctx, token: "ory_at_xyz" });
     const err = await request(oauthCtx, "/api/agent-retrieval/v1/mcp/info").catch((e) => e);
-    expect((err as HttpError).hint).toBeUndefined();
+    expect((err as HttpError).hint).not.toMatch(/re-issue|Do not auto-retry/);
     expect(formatError(err)).toContain("auth login");
   });
 });

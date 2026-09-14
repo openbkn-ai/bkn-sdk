@@ -93,6 +93,80 @@ describe("auth store round-trip", () => {
     }
   });
 
+  it("currentTokenFresh renews through the `-k` the session was saved with", async () => {
+    auth.attachToken("https://demo.example.com", jwt({ sub: "u-k", exp: 1 }), {
+      refreshToken: "RT-k",
+      insecure: true,
+    });
+    let dispatcher: unknown;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit & { dispatcher?: unknown }) => {
+        dispatcher = init?.dispatcher;
+        return new Response(JSON.stringify({ access_token: "NEW" }), { status: 200 });
+      }),
+    );
+    try {
+      // No `-k` on this command: a self-signed platform must not need it again.
+      expect(await auth.currentTokenFresh()).toBe("NEW");
+      expect(dispatcher).toBeDefined(); // the insecure path carries its own dispatcher
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("currentTokenFresh refuses to print a token it knows is dead", async () => {
+    auth.attachToken("https://demo.example.com", jwt({ sub: "u-d", exp: 1 }), {
+      refreshToken: "RT-d",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response('{"error":"invalid_grant"}', { status: 400 })),
+    );
+    try {
+      await expect(auth.currentTokenFresh()).rejects.toThrow(
+        /expired and could not be renewed.*auth login/,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("currentTokenFresh keeps an opaque token whose recorded expiry is still ahead", async () => {
+    auth.attachToken("https://demo.example.com", "opaque-live", {
+      refreshToken: "RT-l",
+      expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+    });
+    const f = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", f);
+    try {
+      expect(await auth.currentTokenFresh()).toBe("opaque-live");
+      expect(f).not.toHaveBeenCalled();
+      expect(auth.status().expired).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("currentTokenFresh records the renewed token's expiry", async () => {
+    auth.attachToken("https://demo.example.com", "opaque-old", { refreshToken: "RT-e" });
+    const f = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ access_token: "opaque-new", expires_in: 3600 }), {
+          status: 200,
+        }),
+    );
+    vi.stubGlobal("fetch", f);
+    try {
+      expect(await auth.currentTokenFresh()).toBe("opaque-new");
+      // Known expiry now — the next call can tell it is still good.
+      expect(await auth.currentTokenFresh()).toBe("opaque-new");
+      expect(f).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("two users on one platform coexist and switch", () => {
     const t1 = jwt({ sub: "u-1", preferred_username: "alice" });
     const t2 = jwt({ sub: "u-2", preferred_username: "bob" });

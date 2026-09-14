@@ -6,7 +6,7 @@
  * Interactive browser/password OAuth lives in `auth/oauth.ts` and is persisted
  * here via `attachToken`.
  */
-import { type JwtClaims, decodeJwt, isExpired } from "../auth/jwt.js";
+import { type JwtClaims, decodeJwt, tokenExpiresAtMs } from "../auth/jwt.js";
 import { refreshAccessToken } from "../auth/oauth.js";
 import {
   type PlatformUser,
@@ -51,7 +51,13 @@ function usernameOf(token: TokenConfig | undefined): string | undefined {
 export function attachToken(
   baseUrl: string,
   accessToken: string,
-  opts: { refreshToken?: string; idToken?: string; username?: string; insecure?: boolean } = {},
+  opts: {
+    refreshToken?: string;
+    idToken?: string;
+    expiresAt?: string;
+    username?: string;
+    insecure?: boolean;
+  } = {},
 ): { baseUrl: string; userId: string; username?: string } {
   const url = normalize(baseUrl);
   const token: TokenConfig = {
@@ -59,6 +65,9 @@ export function attachToken(
     accessToken,
     refreshToken: opts.refreshToken,
     idToken: opts.idToken,
+    // An opaque access token has no `exp`; this is how a later command knows
+    // to renew it before it lapses rather than after a 401.
+    expiresAt: opts.expiresAt,
     // Remember `-k` so a self-signed platform needn't repeat it every command.
     tlsInsecure: opts.insecure ? true : undefined,
     // Prefer the account the user typed (-u); device tokens carry no username.
@@ -102,13 +111,24 @@ export function status(opts: { user?: string } = {}): AuthStatus {
   if (!baseUrl) return { hasToken: false };
   const userId = targetUser(baseUrl, opts.user);
   const token = readToken(baseUrl, userId);
+  const expiresAt = token ? tokenExpiresAtMs(token.accessToken, token.expiresAt) : undefined;
   return {
     baseUrl,
     userId,
     hasToken: token !== undefined,
     username: usernameOf(token),
-    expired: token ? isExpired(decodeJwt(token.accessToken)) : undefined,
+    expired: expiresAt === undefined ? undefined : expiresAt < Date.now(),
   };
+}
+
+/**
+ * Whether the saved session skips TLS verification (`auth login -k`), for the
+ * few commands that call the platform without a full request context.
+ */
+export function sessionInsecure(opts: { user?: string } = {}): boolean {
+  const baseUrl = activePlatform();
+  const token = baseUrl ? readToken(baseUrl, targetUser(baseUrl, opts.user)) : undefined;
+  return token?.tlsInsecure === true;
 }
 
 export function currentToken(opts: { user?: string } = {}): string {
@@ -133,18 +153,25 @@ export async function currentTokenFresh(
   if (!baseUrl || !token) {
     throw new InputError("Not logged in. Run `openbkn auth login <url> --token <t>`.");
   }
-  // Refresh unless we can positively prove the token is still valid. A JWT is
-  // refreshed only when its `exp` has passed; an opaque token (Ory access
-  // tokens are opaque — no decodable `exp`) is always refreshed, since `auth
-  // token`'s output is consumed externally where no 401-retry can recover it.
-  const claims = decodeJwt(token.accessToken);
-  const decodable = claims?.exp !== undefined;
-  const needsRefresh = decodable ? isExpired(claims) : true;
+  // Refresh unless we can positively prove the token is still valid: its expiry
+  // (a JWT's `exp`, else the `expiresAt` its grant reported) is more than a
+  // minute away. An opaque token with no recorded expiry is always refreshed,
+  // since `auth token`'s output is consumed externally where no 401-retry can
+  // recover it.
+  const expiresAt = tokenExpiresAtMs(token.accessToken, token.expiresAt);
+  const expired = expiresAt !== undefined && expiresAt < Date.now();
+  const needsRefresh = expiresAt === undefined || expiresAt - Date.now() < 60_000;
   // Refreshing rotates the stored credential, which `--dry-run` promises not to
   // do. Hand back what is stored, exactly as `--no-refresh` would.
   if (token.refreshToken && needsRefresh && !isDryRun()) {
     try {
-      const t = await refreshAccessToken(baseUrl, token.refreshToken, undefined, opts.insecure);
+      const t = await refreshAccessToken(
+        baseUrl,
+        token.refreshToken,
+        undefined,
+        // A self-signed platform logged in with `-k` must not need it again here.
+        opts.insecure ?? token.tlsInsecure,
+      );
       writeToken(
         baseUrl,
         {
@@ -152,14 +179,26 @@ export async function currentTokenFresh(
           accessToken: t.accessToken,
           refreshToken: t.refreshToken ?? token.refreshToken,
           idToken: t.idToken ?? token.idToken,
+          expiresAt: t.expiresAt,
         },
         { setActive: !opts.user },
       );
       return t.accessToken;
-    } catch {
-      // Refresh failed (revoked / offline) — return the stale token; the
-      // caller learns it's expired when the server rejects it.
+    } catch (e) {
+      // Printing a token already known to be dead hands the caller a 401 later,
+      // somewhere that cannot say why. Only a token that may still be valid
+      // (not yet expired, or of unknown expiry) is worth returning.
+      if (expired) {
+        throw new InputError(
+          `The saved access token has expired and could not be renewed (${e instanceof Error ? e.message : String(e)}). Run \`openbkn auth login ${baseUrl}\` again.`,
+        );
+      }
     }
+  }
+  if (expired && !token.refreshToken) {
+    throw new InputError(
+      `The saved access token has expired and no refresh token is saved for it. Run \`openbkn auth login ${baseUrl}\` again.`,
+    );
   }
   return token.accessToken;
 }

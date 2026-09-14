@@ -126,3 +126,107 @@ describe("managed-context errors", () => {
     );
   });
 });
+
+describe("access-token renewal", () => {
+  const base = "https://demo.example.com";
+
+  function jwt(exp: number): string {
+    const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
+    return `${b64({ alg: "RS256" })}.${b64({ sub: "u", exp })}.sig`;
+  }
+
+  /** A context holding stored refresh credentials, as `resolveContext` builds one. */
+  function refreshable(token: string, over: { expiresAt?: string } = {}): RequestContext {
+    return verifiedContext<RequestContext>({
+      baseUrl: base,
+      token,
+      insecure: false,
+      refresh: { refreshToken: "RT", persist: vi.fn(), ...over },
+    });
+  }
+
+  /**
+   * Answer the token endpoint with `NEW`, and every API call by whether its
+   * bearer is `NEW` — recording each bearer the API saw.
+   */
+  function platform(opts: { refresh?: "ok" | "reject"; refreshDelayMs?: number } = {}) {
+    const bearers: string[] = [];
+    let refreshes = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL, init?: RequestInit) => {
+        if (String(url).endsWith("/oauth2/token")) {
+          refreshes += 1;
+          if (opts.refreshDelayMs) await new Promise((r) => setTimeout(r, opts.refreshDelayMs));
+          return opts.refresh === "reject"
+            ? new Response('{"error":"invalid_grant"}', { status: 400 })
+            : new Response(JSON.stringify({ access_token: "NEW", expires_in: 3600 }), {
+                status: 200,
+              });
+        }
+        const bearer = String((init?.headers as Record<string, string>).authorization);
+        bearers.push(bearer);
+        return bearer === "Bearer NEW"
+          ? new Response('{"ok":true}', { status: 200 })
+          : new Response('{"error":"token expired"}', { status: 401 });
+      }),
+    );
+    return { bearers, refreshes: () => refreshes };
+  }
+
+  it("retries a 401 with the renewed token, not the one that was rejected", async () => {
+    const p = platform();
+    const c = refreshable("OLD");
+    await expect(request(c, "/api/x")).resolves.toEqual({ ok: true });
+    // Regression: the retry used to resend the headers built before the refresh.
+    expect(p.bearers).toEqual(["Bearer OLD", "Bearer NEW"]);
+    expect(c.refresh?.persist).toHaveBeenCalledWith(
+      expect.objectContaining({ accessToken: "NEW", expiresAt: expect.any(String) }),
+    );
+  });
+
+  it("renews an expired JWT before sending, so no request is rejected first", async () => {
+    const p = platform();
+    await request(refreshable(jwt(1)), "/api/x");
+    expect(p.bearers).toEqual(["Bearer NEW"]);
+  });
+
+  it("renews an opaque token whose recorded expiry is under a minute away", async () => {
+    const p = platform();
+    const soon = new Date(Date.now() + 30_000).toISOString();
+    await request(refreshable("OPAQUE", { expiresAt: soon }), "/api/x");
+    expect(p.bearers).toEqual(["Bearer NEW"]);
+  });
+
+  it("leaves a token with time to spare alone", async () => {
+    const p = platform();
+    const later = new Date(Date.now() + 30 * 60_000).toISOString();
+    await request(refreshable("OPAQUE", { expiresAt: later }), "/api/x");
+    // Sent as-is first; this stub's 401 is what triggers the one renewal.
+    expect(p.bearers).toEqual(["Bearer OPAQUE", "Bearer NEW"]);
+    expect(p.refreshes()).toBe(1);
+  });
+
+  it("renews once for concurrent 401s — refresh tokens rotate, a second use is refused", async () => {
+    const p = platform({ refreshDelayMs: 20 });
+    const c = refreshable("OLD");
+    await Promise.all([request(c, "/api/a"), request(c, "/api/b"), request(c, "/api/c")]);
+    expect(p.refreshes()).toBe(1);
+    expect(p.bearers.filter((b) => b === "Bearer NEW")).toHaveLength(3);
+  });
+
+  it("says the refresh token was rejected when renewal fails", async () => {
+    platform({ refresh: "reject" });
+    const err = await request(refreshable("OLD"), "/api/x").catch((e) => e);
+    expect((err as HttpError).status).toBe(401);
+    expect(formatError(err)).toMatch(/could not be renewed: the refresh token was rejected/);
+    expect(formatError(err)).toMatch(/openbkn auth login https:\/\/demo\.example\.com/);
+  });
+
+  it("points a non-renewable token at login and at AppKeys for scripts", async () => {
+    platform();
+    const err = await request(ctx, "/api/x").catch((e) => e);
+    expect(formatError(err)).toMatch(/no refresh token is saved/);
+    expect(formatError(err)).toMatch(/openbkn appkey create/);
+  });
+});

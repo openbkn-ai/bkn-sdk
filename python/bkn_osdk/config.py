@@ -395,12 +395,17 @@ def write_refreshed_token(
     the two token fields move; everything else in the file is preserved, and a
     failure to write is swallowed — the process has a working access token
     either way, and a read-only store is not a reason to fail a query.
+
+    Except ``expiresAt``, which is dropped: it dates the access token being
+    replaced, and the CLI renews early on it — kept, it would make the CLI
+    spend a refresh on a token that is still new.
     """
     path = _user_dir(base_url, user_id) / "token.json"
     existing = _read_json(path)
     if existing is None:
         return
     updated = {**existing, "accessToken": access_token, "refreshToken": refresh_token}
+    updated.pop("expiresAt", None)
     try:
         path.write_text(json.dumps(updated, indent=2) + "\n", encoding="utf-8")
         path.chmod(0o600)
