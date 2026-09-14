@@ -46,6 +46,9 @@ function freshCtx(extra: Partial<RequestContext> = {}): RequestContext {
     baseUrl: `https://deploy-${hostSeq}.example.com`,
     token: "t",
     insecure: false,
+    // These pin the lifecycle's own attempts; transport retry (api/retry.ts)
+    // would absorb a 503 / 429 / 502 before the lifecycle ever saw it.
+    retry: false,
     ...extra,
   });
 }

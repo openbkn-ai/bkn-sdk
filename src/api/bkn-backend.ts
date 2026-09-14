@@ -61,8 +61,10 @@ export async function downloadBkn(
   const url = new URL(`${ctx.baseUrl}${BKNS}/${encodeURIComponent(knId)}`);
   url.searchParams.set("branch", opts.branch ?? "main");
   await ensureCompatible(ctx, url);
-  const res = await authFetch(ctx, () =>
-    tlsFetch(ctx.insecure, url, { method: "GET", headers: buildHeaders(ctx) }),
+  const res = await authFetch(
+    ctx,
+    () => tlsFetch(ctx.insecure, url, { method: "GET", headers: buildHeaders(ctx) }),
+    { method: "GET", url },
   );
   if (!res.ok) throw new HttpError(res.status, res.statusText, await res.text());
   return Buffer.from(await res.arrayBuffer());

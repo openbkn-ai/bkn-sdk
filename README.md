@@ -53,6 +53,8 @@ openbkn --json context tool-call <kn-id> <tool-name> --args '{"k":"v"}' --receip
 # Global flags: --base-url, --token, --user, --json/--compact, -k/--insecure,
 #               --conversation-id/--interaction-id (BKN Trace correlation; also BKN_CONVERSATION_ID/BKN_INTERACTION_ID)
 #               --new-conversation (ignore the remembered conversation for this command)
+#               --no-retry (fail on the first transient error; by default a refused connection,
+#               503 or 429 — and for GET/PUT/DELETE a dropped connection, 502 or 504 — is retried 3 times with backoff)
 openbkn --help        # grouped command map
 ```
 

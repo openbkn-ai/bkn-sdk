@@ -48,6 +48,10 @@ export function buildProgram(): Command {
     )
     .option("-k, --insecure", "skip TLS verification (dev / self-signed only)")
     .option("--dry-run", "print the request this command would send, and send nothing")
+    .option(
+      "--no-retry",
+      "fail on the first transient error (refused connection, 503, 429) instead of retrying 3 times with backoff",
+    )
     // The pointer that replaces the full-help dump is installed for every
     // command by `installGroupedHelp`, which knows each one's path.
     .showHelpAfterError();

@@ -28,18 +28,12 @@ export async function exportConfig(
   id: string,
   type: ImpexType = "toolbox",
 ): Promise<Uint8Array> {
-  await ensureCompatible(
+  const url = `${ctx.baseUrl}${IMPEX}/export/${encodeURIComponent(type)}/${encodeURIComponent(id)}`;
+  await ensureCompatible(ctx, new URL(url));
+  const res = await authFetch(
     ctx,
-    new URL(`${ctx.baseUrl}${IMPEX}/export/${encodeURIComponent(type)}/${encodeURIComponent(id)}`),
-  );
-  const res = await authFetch(ctx, () =>
-    tlsFetch(
-      ctx.insecure,
-      `${ctx.baseUrl}${IMPEX}/export/${encodeURIComponent(type)}/${encodeURIComponent(id)}`,
-      {
-        headers: buildHeaders(ctx),
-      },
-    ),
+    () => tlsFetch(ctx.insecure, url, { headers: buildHeaders(ctx) }),
+    { method: "GET", url },
   );
   const buf = new Uint8Array(await res.arrayBuffer());
   if (!res.ok) throw new HttpError(res.status, res.statusText, new TextDecoder().decode(buf));

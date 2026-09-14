@@ -12,6 +12,7 @@
  */
 import type { RequestContext } from "../types.js";
 import { tryRefresh } from "./http.js";
+import { withRetry } from "./retry.js";
 
 /**
  * Run `send`, and on a 401 with stored refresh credentials, refresh the access
@@ -19,14 +20,21 @@ import { tryRefresh } from "./http.js";
  * its `Authorization` header — on each call, so the retry uses the refreshed
  * `ctx.token`. The response body is never read here, so the returned Response
  * is always safe to consume (JSON, bytes, or a stream).
+ *
+ * Transient failures are retried too (see `api/retry.ts`). `method` decides how
+ * far: left out, the request is treated as a POST and resent only when it
+ * provably was not acted on.
  */
 export async function authFetch(
   ctx: RequestContext,
   send: () => Promise<Response>,
+  opts: { method?: string; url?: string | URL; deadline?: number } = {},
 ): Promise<Response> {
-  let res = await send();
+  const attempt = () =>
+    withRetry(ctx, opts.method ?? "POST", opts.url ?? "", send, { deadline: opts.deadline });
+  let res = await attempt();
   if (res.status === 401 && ctx.refresh && (await tryRefresh(ctx))) {
-    res = await send();
+    res = await attempt();
   }
   return res;
 }

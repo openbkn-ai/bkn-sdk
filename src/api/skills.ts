@@ -88,11 +88,12 @@ export async function downloadSkill(
   skillId: string,
   view: SkillView = "published",
 ): Promise<Uint8Array> {
-  await ensureCompatible(ctx, new URL(`${ctx.baseUrl}${skillPath(skillId, view, "download")}`));
-  const res = await authFetch(ctx, () =>
-    tlsFetch(ctx.insecure, `${ctx.baseUrl}${skillPath(skillId, view, "download")}`, {
-      headers: buildHeaders(ctx),
-    }),
+  const url = `${ctx.baseUrl}${skillPath(skillId, view, "download")}`;
+  await ensureCompatible(ctx, new URL(url));
+  const res = await authFetch(
+    ctx,
+    () => tlsFetch(ctx.insecure, url, { headers: buildHeaders(ctx) }),
+    { method: "GET", url },
   );
   if (!res.ok) throw new HttpError(res.status, res.statusText, await res.text());
   return new Uint8Array(await res.arrayBuffer());
