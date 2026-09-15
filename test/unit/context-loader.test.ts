@@ -413,7 +413,7 @@ describe("managed MCP tool calls", () => {
 
   it.each([
     ["completed terminal replay", "completed", "receipt_terminal"],
-    ["failed terminal replay", "failed", "receipt_failed"],
+    ["failed terminal replay", "failed", "receipt_terminal"],
   ])("retains a replay receipt on a managed tool error: %s", async (_, status, code) => {
     const receipt = {
       receipt_id: `receipt-${status}`,
@@ -455,8 +455,10 @@ describe("managed MCP tool calls", () => {
       jsonrpc: "2.0",
       id: 1,
       result: {
-        content: [{ type: "text", text: JSON.stringify({ concepts: ["forecast"] }) }],
+        isError: true,
+        content: [{ type: "text", text: JSON.stringify({ error: { code: "receipt_terminal" } }) }],
         structuredContent: {
+          error: { code: "receipt_terminal" },
           bkn_receipt: {
             receipt_id: "receipt-mismatch",
             conversation_id: "other-conversation",
