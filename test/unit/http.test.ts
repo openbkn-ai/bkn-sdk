@@ -87,6 +87,23 @@ describe("request 401 recovery", () => {
     await expect(request(ctx, "/api/example")).rejects.toMatchObject({ status: 401 });
     expect(fetch).toHaveBeenCalledOnce();
   });
+
+  it("does not print URL credentials or query tokens in a 401 login hint", async () => {
+    respond('{"code":"Public.Unauthorized"}', {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
+    const sensitiveUrl = "https://user:dummy-password@demo.example.com/?token=dummy-query-token";
+    const error = await request(
+      verifiedContext({ ...ctx, baseUrl: sensitiveUrl }),
+      "/api/bkn-backend/v1/knowledge-networks",
+    ).catch((caught) => caught);
+    const message = formatError(error);
+    expect(message).toContain("openbkn auth login https://demo.example.com");
+    expect(message).not.toContain("dummy-password");
+    expect(message).not.toContain("dummy-query-token");
+    expect(message).not.toContain("user:");
+  });
 });
 
 describe("non-JSON responses", () => {

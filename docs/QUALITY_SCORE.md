@@ -42,6 +42,8 @@ Update this table as each signal changes (e.g. live-parity count as commands are
   `kn_id` before any request. It verifies
   that a nonempty `properties` list triggers one schema GET and missing or
   invisible fields stop the MCP query. `test/unit/auth-command.test.ts` checks
-  that the env-shadow warning does not print URL credentials.
+  that the env-shadow warning does not print URL credentials. The 401 hint in
+  `test/unit/http.test.ts` also strips URL userinfo and query tokens before
+  suggesting a new login.
   `test/unit/query-object-instance-dry-run.test.ts` checks that the query preview
   sends nothing, including schema reads and MCP handshakes.

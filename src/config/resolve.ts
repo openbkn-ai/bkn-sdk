@@ -4,7 +4,7 @@
 import { configureVersionCheck } from "../api/version-check.js";
 import { createTraceContext } from "../trace-context.js";
 import type { ClientOptions, RefreshableTokens, RequestContext } from "../types.js";
-import { trimTrailingSlashes } from "../utils/base-url.js";
+import { baseUrlForDisplay, trimTrailingSlashes } from "../utils/base-url.js";
 import { InputError } from "../utils/errors.js";
 import { activePlatform, findUserId, readToken, usersOfPlatform, writeToken } from "./store.js";
 
@@ -21,8 +21,9 @@ function resolveUserId(baseUrl: string, userOrName: string): string {
   const known = usersOfPlatform(baseUrl)
     .map((u) => u.username ?? u.userId)
     .join(", ");
+  const displayBaseUrl = baseUrlForDisplay(baseUrl);
   throw new InputError(
-    `No saved user '${userOrName}' on ${baseUrl}. Saved: ${known || "(none)"}. See \`openbkn auth users ${baseUrl}\`.`,
+    `No saved user '${userOrName}' on ${displayBaseUrl}. Saved: ${known || "(none)"}. See \`openbkn auth users ${displayBaseUrl}\`.`,
   );
 }
 

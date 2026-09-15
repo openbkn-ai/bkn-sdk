@@ -8,6 +8,7 @@
 import { tokenExpiresAtMs } from "../auth/jwt.js";
 import { refreshAccessToken } from "../auth/oauth.js";
 import type { RequestContext } from "../types.js";
+import { baseUrlForDisplay } from "../utils/base-url.js";
 import { isDryRun } from "../utils/dry-run.js";
 import { HttpError, NonJsonResponseError } from "../utils/errors.js";
 import { stringifyBigIntJSON } from "../utils/json-bigint.js";
@@ -180,6 +181,7 @@ function hintFor(
   body: string,
   renewal: Renewal,
 ): string | undefined {
+  const displayBaseUrl = baseUrlForDisplay(ctx.baseUrl);
   const envHint =
     status === 401 && ctx.tokenFromEnv
       ? "The token came from the BKN_TOKEN environment variable, which overrides any `openbkn auth login` session — `unset BKN_TOKEN` to use the login instead."
@@ -195,15 +197,15 @@ function hintFor(
     switch (renewal) {
       case "failed":
         return withEnv(
-          `The access token expired and could not be renewed: the refresh token was rejected (expired or revoked). Run \`openbkn auth login ${ctx.baseUrl}\` again. ${APPKEY_TIP}`,
+          `The access token expired and could not be renewed: the refresh token was rejected (expired or revoked). Run \`openbkn auth login ${displayBaseUrl}\` again. ${APPKEY_TIP}`,
         );
       case "renewed":
         return withEnv(
-          `The access token was renewed, and the platform still rejects it — the session was revoked or the account disabled. Run \`openbkn auth login ${ctx.baseUrl}\` again.`,
+          `The access token was renewed, and the platform still rejects it — the session was revoked or the account disabled. Run \`openbkn auth login ${displayBaseUrl}\` again.`,
         );
       case "unavailable":
         return withEnv(
-          `The token is expired or invalid, and no refresh token is saved for it (a \`--token\` / BKN_TOKEN value is never renewed). Run \`openbkn auth login ${ctx.baseUrl}\`. ${APPKEY_TIP}`,
+          `The token is expired or invalid, and no refresh token is saved for it (a \`--token\` / BKN_TOKEN value is never renewed). Run \`openbkn auth login ${displayBaseUrl}\`. ${APPKEY_TIP}`,
         );
       default:
         break;
