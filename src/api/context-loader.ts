@@ -310,14 +310,12 @@ function unwrapToolResult(parsed: unknown, extractBusinessReceipt = true): Unwra
     // the caller's conversation and interaction before exposing it on a typed
     // error. The server's stable structured code wins over receipt status.
     const message = readableServerError(raw) || raw;
-    return {
-      value: null,
-      receipt,
-      toolError: {
-        message: `Context-loader error: ${message}`,
-        code: toolErrorCode(structuredContent) ?? lifecycleCodeInText(message),
-      },
+    const toolError = {
+      message: `Context-loader error: ${message}`,
+      code: toolErrorCode(structuredContent) ?? lifecycleCodeInText(message),
     };
+    if (!receipt) throw new ToolError(toolError.message, toolError.code);
+    return { value: null, receipt, toolError };
   }
   if (receipt?.receipt_status === "failed") {
     return {
@@ -432,6 +430,19 @@ function receiptMatchesBusinessContext(
   return result;
 }
 
+// finalisedToolResult is intentionally invoked inside the managed lifecycle
+// callback. A stale-session ToolError must be visible to withManagedLifecycle
+// so it can reopen an interaction once; a receipt-bearing error is checked
+// against that interaction before it becomes a ManagedToolError.
+function finalizedToolResult(
+  result: UnwrappedToolResult,
+  businessContext: BusinessContextIds | undefined,
+): UnwrappedToolResult {
+  const verified = receiptMatchesBusinessContext(result, businessContext);
+  throwToolError(verified);
+  return verified;
+}
+
 /**
  * Call an MCP tool exactly as given, with no lifecycle context attached.
  *
@@ -519,7 +530,7 @@ async function callToolResult(
   // the tool call; replacing that key would orphan the registration, and
   // `parent_operation_id` / `causation_event_ids` would be dropped with it.
   if (callerContext) {
-    return receiptMatchesBusinessContext(
+    return finalizedToolResult(
       await callToolRawResult(
         requestContextForBusinessContext(ctx, callerContext),
         knId,
@@ -542,7 +553,7 @@ async function callToolResult(
         name,
         bknContext ? { ...args, bkn_context: bknContext } : args,
         options,
-      ).then((result) => receiptMatchesBusinessContext(result, bknContext)),
+      ).then((result) => finalizedToolResult(result, bknContext)),
     requireReceipt,
   );
 }
