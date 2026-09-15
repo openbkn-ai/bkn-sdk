@@ -178,6 +178,21 @@ export interface ManagedToolResult<T = unknown> {
   receipt: ToolReceipt;
 }
 
+/**
+ * A managed MCP call was refused after ContextLoader had produced a trusted
+ * receipt. The error keeps that receipt so callers can read its authoritative
+ * terminal state without treating a replay as a successful tool result.
+ */
+export class ManagedToolError extends ToolError {
+  readonly receipt: ToolReceipt;
+
+  constructor(message: string, code: string | undefined, receipt: ToolReceipt) {
+    super(message, code);
+    this.name = "ManagedToolError";
+    this.receipt = receipt;
+  }
+}
+
 /** Adapter-owned MCP metadata for lifecycle-safe host retries. */
 export interface ToolCallOptions {
   hostConversationKey?: string;
@@ -187,6 +202,7 @@ export interface ToolCallOptions {
 interface UnwrappedToolResult {
   value: unknown;
   receipt?: ToolReceipt;
+  toolError?: { message: string; code?: string };
 }
 
 const RECEIPT_STATUSES = new Set(["pending", "completed", "failed"]);
@@ -284,27 +300,34 @@ function unwrapToolResult(parsed: unknown, extractBusinessReceipt = true): Unwra
   if (result === undefined) return { value: parsed };
   const structuredContent = result.structuredContent;
   const receipt = extractBusinessReceipt ? receiptFrom(structuredContent) : undefined;
-  if (receipt?.receipt_status === "failed") {
-    throw new ToolError("Context-loader operation receipt is failed.", "receipt_failed");
-  }
-  if (receipt?.receipt_status === "pending") return { value: null, receipt };
   const content = result.content;
   if (result.isError === true) {
     const raw =
       Array.isArray(content) && content[0] && typeof content[0].text === "string"
         ? content[0].text
         : "tool call failed";
-    // The tool hands back the platform envelope as a JSON string; a caller wants
-    // the sentence inside it, not the envelope.
+    // Do not throw here. callToolResult still has to verify a receipt against
+    // the caller's conversation and interaction before exposing it on a typed
+    // error. The server's stable structured code wins over receipt status.
     const message = readableServerError(raw) || raw;
-    // The structured error code, not the prose, is what tells a caller whether
-    // the failure is retryable — a dead lifecycle session is reopenable, a bad
-    // argument is not.
-    throw new ToolError(
-      `Context-loader error: ${message}`,
-      toolErrorCode(structuredContent) ?? lifecycleCodeInText(message),
-    );
+    const toolError = {
+      message: `Context-loader error: ${message}`,
+      code: toolErrorCode(structuredContent) ?? lifecycleCodeInText(message),
+    };
+    if (!receipt) throw new ToolError(toolError.message, toolError.code);
+    return { value: null, receipt, toolError };
   }
+  if (receipt?.receipt_status === "failed") {
+    return {
+      value: null,
+      receipt,
+      toolError: {
+        message: "Context-loader operation receipt is failed.",
+        code: "receipt_failed",
+      },
+    };
+  }
+  if (receipt?.receipt_status === "pending") return { value: null, receipt };
   if (Array.isArray(content) && content[0] && typeof content[0].text === "string") {
     try {
       return { value: parseBigIntJSON(content[0].text), receipt };
@@ -320,6 +343,14 @@ function unwrapToolResult(parsed: unknown, extractBusinessReceipt = true): Unwra
   }
   if (receipt) return { value: structuredBusinessValue(structuredContent) ?? null, receipt };
   return { value: structuredContent ?? result };
+}
+
+function throwToolError(result: UnwrappedToolResult): void {
+  if (!result.toolError) return;
+  if (result.receipt) {
+    throw new ManagedToolError(result.toolError.message, result.toolError.code, result.receipt);
+  }
+  throw new ToolError(result.toolError.message, result.toolError.code);
 }
 
 function toolCallParams(
@@ -399,6 +430,19 @@ function receiptMatchesBusinessContext(
   return result;
 }
 
+// finalisedToolResult is intentionally invoked inside the managed lifecycle
+// callback. A stale-session ToolError must be visible to withManagedLifecycle
+// so it can reopen an interaction once; a receipt-bearing error is checked
+// against that interaction before it becomes a ManagedToolError.
+function finalizedToolResult(
+  result: UnwrappedToolResult,
+  businessContext: BusinessContextIds | undefined,
+): UnwrappedToolResult {
+  const verified = receiptMatchesBusinessContext(result, businessContext);
+  throwToolError(verified);
+  return verified;
+}
+
 /**
  * Call an MCP tool exactly as given, with no lifecycle context attached.
  *
@@ -438,7 +482,9 @@ export async function callToolRaw(
   options?: ToolCallOptions,
   timeoutMs?: number,
 ): Promise<unknown> {
-  return (await callToolRawResult(ctx, knId, name, args, options, timeoutMs)).value;
+  const result = await callToolRawResult(ctx, knId, name, args, options, timeoutMs);
+  throwToolError(result);
+  return result.value;
 }
 
 /**
@@ -484,7 +530,7 @@ async function callToolResult(
   // the tool call; replacing that key would orphan the registration, and
   // `parent_operation_id` / `causation_event_ids` would be dropped with it.
   if (callerContext) {
-    return receiptMatchesBusinessContext(
+    return finalizedToolResult(
       await callToolRawResult(
         requestContextForBusinessContext(ctx, callerContext),
         knId,
@@ -507,7 +553,7 @@ async function callToolResult(
         name,
         bknContext ? { ...args, bkn_context: bknContext } : args,
         options,
-      ).then((result) => receiptMatchesBusinessContext(result, bknContext)),
+      ).then((result) => finalizedToolResult(result, bknContext)),
     requireReceipt,
   );
 }
@@ -519,7 +565,9 @@ export async function callTool(
   args: Record<string, unknown>,
   options?: ToolCallOptions,
 ): Promise<unknown> {
-  return (await callToolResult(ctx, knId, name, args, options)).value;
+  const result = await callToolResult(ctx, knId, name, args, options);
+  throwToolError(result);
+  return result.value;
 }
 
 /**
@@ -545,6 +593,7 @@ export async function callManagedTool<T = unknown>(
   options?: ToolCallOptions,
 ): Promise<ManagedToolResult<T>> {
   const result = await callToolResult(ctx, knId, name, args, options, true);
+  throwToolError(result);
   if (!result.receipt) {
     throw new ToolError(
       "Context-loader managed tool response did not include bkn_receipt",
