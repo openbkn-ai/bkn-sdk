@@ -4,7 +4,14 @@
 /** `openbkn function …` — run code in the platform sandbox, before it is anything. */
 import { readFileSync } from "node:fs";
 import { Command } from "commander";
-import type { DependencyInfo, FunctionDefinition, ParameterDef } from "../api/functions.js";
+import {
+  type DependencyInfo,
+  FunctionAiGenerationType as FUNCTION_AI_GENERATION_TYPES,
+  type FunctionAiGenerationRequest,
+  type FunctionAiGenerationType,
+  type FunctionDefinition,
+  type ParameterDef,
+} from "../api/functions.js";
 import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
@@ -90,6 +97,48 @@ export function functionDefinitionFrom(file: string, opts: CodeFlags): FunctionD
   };
 }
 
+/** Validate a Function generation direction before a request is opened. */
+export function generationType(value: string): FunctionAiGenerationType {
+  if ((FUNCTION_AI_GENERATION_TYPES as readonly string[]).includes(value)) {
+    return value as FunctionAiGenerationType;
+  }
+  throw new InputError(
+    `type must be one of: ${FUNCTION_AI_GENERATION_TYPES.join(" | ")} (got '${value}')`,
+  );
+}
+
+export interface GenerationFlags {
+  query?: string;
+  code?: string;
+  inputs?: string;
+  outputs?: string;
+}
+
+/** Convert the type-specific CLI flags to the documented JSON request body. */
+export function generationRequestFrom(
+  type: FunctionAiGenerationType,
+  opts: GenerationFlags,
+): FunctionAiGenerationRequest {
+  const inputs = parameterList(opts.inputs, "inputs");
+  const outputs = parameterList(opts.outputs, "outputs");
+  if (type === "python_function_generator") {
+    if (!opts.query?.trim()) {
+      throw new InputError("--query is required for python_function_generator");
+    }
+    if (opts.code !== undefined) {
+      throw new InputError("--code only applies to metadata_param_generator");
+    }
+    return { query: opts.query, inputs, outputs };
+  }
+  if (opts.query !== undefined) {
+    throw new InputError("--query only applies to python_function_generator");
+  }
+  if (!opts.code) {
+    throw new InputError("--code <file> is required for metadata_param_generator");
+  }
+  return { code: readCode(opts.code), inputs, outputs };
+}
+
 export function functionCommand(): Command {
   const cmd = new Command("function").description(
     "Sandbox functions: run Python on the platform without registering anything",
@@ -166,9 +215,34 @@ export function functionCommand(): Command {
       printJson(await clientFrom(cmd).functions.template(opts.type), outputOptions(cmd));
     });
 
+  cmd
+    .command("generate <type>")
+    .description("Generate function code or parameter metadata with the platform's default LLM")
+    .option("--query <text>", "natural-language request (python_function_generator)")
+    .option("--code <file>", "existing code to analyse (metadata_param_generator; `-` reads stdin)")
+    .option("--inputs <json>", "known input parameters to constrain generation")
+    .option("--outputs <json>", "known output parameters to constrain generation")
+    .action(async (type: string, opts: GenerationFlags, cmd: Command) => {
+      const direction = generationType(type);
+      printJson(
+        await clientFrom(cmd).functions.generate(direction, generationRequestFrom(direction, opts)),
+        outputOptions(cmd),
+      );
+    });
+
+  cmd
+    .command("prompt <type>")
+    .description("Read the prompt template used for one Function AI generation direction")
+    .action(async (type: string, _opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).functions.promptTemplate(generationType(type)),
+        outputOptions(cmd),
+      );
+    });
+
   groupChildren(cmd, {
-    READ: ["deps", "versions", "template"],
-    RUN: ["run", "infer-schema"],
+    READ: ["deps", "versions", "template", "prompt"],
+    RUN: ["run", "infer-schema", "generate"],
   });
 
   guide(
@@ -195,6 +269,8 @@ export function functionCommand(): Command {
   ORDER OF WORK
   function deps                      what is already importable
   function run ./add.py --event ...  iterate here; nothing is kept
+  function generate python_function_generator --query "..."
+                                     draft a handler with the platform model
   toolbox create --type function     a box to keep it in
   tool create ./add.py --toolbox     the same code, now a tool
   tool enable <tool-id> --toolbox    a tool is off until enabled, then agents
