@@ -187,10 +187,6 @@ function validateTableSection(
   }
   if (!nested && next && blockEnd === dataStart && !/^#{1,6}\s/.test(next)) {
     errors.push(`${rel}:${blockEnd + 1}: table row must start with '|'; the BKN parser skips it.`);
-  } else if (!nested && next && blockEnd > dataStart && !/^#{1,6}\s/.test(next)) {
-    errors.push(
-      `${rel}:${blockEnd + 1}: text continues immediately after a table row; a newline inside a cell ends the table. Keep each row on one line.`,
-    );
   }
   if (!nested) {
     const resumed = lines.findIndex(

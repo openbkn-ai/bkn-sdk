@@ -609,7 +609,7 @@ export function queryObjectInstance(
   knId: string,
   args: Record<string, unknown>,
 ): Promise<unknown> {
-  validateQueryObjectInstanceArgs(args);
+  validateQueryObjectInstanceArgs(args, knId);
   return callTool(ctx, knId, "query_object_instance", args);
 }
 

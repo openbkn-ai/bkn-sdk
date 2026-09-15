@@ -181,9 +181,6 @@ describe("bkn validate", () => {
     expect(result.errors).toContain(
       "object_types/b.bkn:13: table row has 4 columns; expected 5. Check for a pipe or newline inside a cell.",
     );
-    expect(result.errors).toContain(
-      "object_types/b.bkn:14: text continues immediately after a table row; a newline inside a cell ends the table. Keep each row on one line.",
-    );
   });
 
   it("rejects Markdown escaped pipes because the backend still splits them", () => {
@@ -401,7 +398,7 @@ ordinary explanation
     ]);
   });
 
-  it("rejects a physical continuation after an otherwise complete table row", () => {
+  it("accepts prose immediately after a complete table, as the backend parser does", () => {
     const dir = bkn({
       "network.bkn": network,
       "object_types/a.bkn": `${ot("a", "Alpha")}
@@ -412,13 +409,11 @@ ordinary explanation
 | Name | Display Name | Type | Description | Mapped Field |
 |------|--------------|------|-------------|--------------|
 | id | ID | string | comment | id |
-continued line
+Data comes from the catalog.
 `,
     });
 
-    expect(validateBknDirectory(dir).errors).toEqual([
-      "object_types/a.bkn:14: text continues immediately after a table row; a newline inside a cell ends the table. Keep each row on one line.",
-    ]);
+    expect(validateBknDirectory(dir).errors).toEqual([]);
   });
 
   it("rejects later pipe rows that a structured section silently drops", () => {

@@ -37,8 +37,11 @@ Update this table as each signal changes (e.g. live-parity count as commands are
   interrupted rows, and mixed logic-property formats, plus rejection before any
   upload. Three existing BKN directories were checked for new false positives.
 - `test/unit/query-object-instance.test.ts` checks the real CLI and SDK wrapper
-  reject unknown argument names, malformed nested conditions, and extra filter
-  or sort keys without making a request. Actual property membership needs
-  object-type schema: no extra read
-  or cached schema is available in an independent CLI invocation, so that
-  validation remains a coverage gap.
+  reject unknown argument names, malformed nested conditions, extra filter or
+  sort keys, combined `condition`/`filters`, `cursor`/`offset`, and mismatched
+  `kn_id` before any request. It verifies
+  that a nonempty `properties` list triggers one schema GET and missing or
+  invisible fields stop the MCP query. `test/unit/auth-command.test.ts` checks
+  that the env-shadow warning does not print URL credentials.
+  `test/unit/query-object-instance-dry-run.test.ts` checks that the query preview
+  sends nothing, including schema reads and MCP handshakes.

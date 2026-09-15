@@ -49,7 +49,9 @@ function warnEnvShadow(baseUrl: string | undefined): void {
   }
   const envBase = process.env.BKN_BASE_URL;
   if (envBase && baseUrl && trimTrailingSlashes(envBase) !== trimTrailingSlashes(baseUrl)) {
-    notes.push(`BKN_BASE_URL is set to ${envBase} — other commands go there, not ${baseUrl}.`);
+    notes.push(
+      "BKN_BASE_URL is set to a different platform — other commands use it instead of this saved session.",
+    );
     vars.push("BKN_BASE_URL");
   }
   if (vars.length === 0) return;

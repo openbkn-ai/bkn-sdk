@@ -37,8 +37,9 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
   check with `verifyIntegrity: true`.
 - `bkn validate` checks the physical Markdown rows in structured table sections
   that the backend imports (including `metrics/`), reporting the relative file
-  path and line for missing leading pipes, misaligned columns, or a row continued
-  on the next line. Description sections, `network.bkn`, and `risk_types/` tables
+  path and line for missing leading pipes, misaligned columns, or an incomplete
+  physical row. Ordinary prose directly after a complete table is accepted,
+  as the backend parser accepts it. Description sections, `network.bkn`, and `risk_types/` tables
   remain prose. `bkn push` rejects these errors before packaging.
   The backend treats even `\|` as a column separator, so table cell text must
   use a different character in place of a pipe and stay on one physical line.
@@ -51,12 +52,19 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
 - The dedicated `context query-object-instance` command and SDK wrapper reject
   unknown top-level argument keys, extra `filters[]` / `sort[]` keys, and
   misspelled nested condition keys before opening an MCP session. Each filter
-  requires `field`, `op`, and `value`; each sort item requires `field` and an
+  requires `field`, `op`, and `value`; `condition` and `filters` cannot be combined
+  because the backend ignores `filters` when `condition` is present. `cursor`
+  and `offset` are mutually exclusive, and an explicit `kn_id` must match the
+  network being queried. Each sort item requires `field` and an
   `asc` or `desc` direction. A composite condition uses `sub_conditions`; vector
-  search uses `condition.operation=knn`. `properties` must be an array of field
-  names. To check whether a field actually belongs to the object type, callers
-  inspect `context object-types <kn-id> <ot-id>` first; that schema is not
-  fetched implicitly during the query. The generic `context tool-call` remains
+  search uses `condition.operation=knn`. `properties` must be an array of nonblank field
+  names. When a nonempty `properties` list is supplied, the dedicated wrapper
+  reads the object-type schema once through BKN REST and rejects names absent
+  from its data properties before sending the MCP query. Logic properties use
+  `get-logic-properties` instead. A hidden or
+  unreadable schema also stops the query. Calls without `properties` do not add
+  this read; `--dry-run` previews the MCP tool arguments before any schema read
+  or session handshake and sends no request. The generic `context tool-call` remains
   a raw MCP path.
 
 ## Index building (via Catalog BuildTask — no KN-level build)

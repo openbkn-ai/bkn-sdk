@@ -27,6 +27,7 @@ Design: [BKN CLI P0 integrity checks](../../superpowers/specs/2026-09-15-bkn-p0-
 - The before/after list is filtered by `view_detail`; hidden object types are
   outside the comparison. `--dry-run` previews the upload POST without the
   integrity reads.
-- Property membership in `query_object_instance.properties` cannot be decided
-  without an object-type schema. The independent CLI invocation has no such
-  prior response or cache; no implicit extra request was added.
+- Property membership in `query_object_instance.properties` is checked with one
+  additional object-type schema GET when the list is nonempty. The query stops
+  if the schema is not visible or a requested name is missing. `--dry-run`
+  previews the MCP tool arguments before the read or handshake, sending no request.

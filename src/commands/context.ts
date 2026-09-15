@@ -614,8 +614,11 @@ THE SAME ID, FOUR NAMES
 QUERY ARGUMENTS
   query-object-instance rejects unknown argument keys before calling the platform. Combine
   conditions with condition.sub_conditions, not condition.conditions; vector search belongs in
-  condition.operation=knn, not a top-level knn argument. For properties and condition.field,
-  run object-types <kn-id> <ot-id> first to see the valid field names. --schema shows the
+  condition.operation=knn, not a top-level knn argument. Do not combine condition and filters:
+  the platform ignores filters when condition is present. Use cursor or offset, never both;
+  any kn_id in --args must match <kn-id>. For properties and condition.field,
+  run object-types <kn-id> <ot-id> first to see the valid field names. Specifying properties
+  also reads the object-type schema once and rejects unknown names before the query. --schema shows the
   argument shape advertised by this deploy.
 
 RAW MCP

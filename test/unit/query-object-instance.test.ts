@@ -1,11 +1,18 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { queryObjectInstance } from "../../src/api/context-loader.js";
 import { buildProgram } from "../../src/cli-program.js";
+import { context } from "../../src/resources/context-loader.js";
 import type { RequestContext } from "../../src/types.js";
-import { validateQueryObjectInstanceArgs } from "../../src/utils/query-object-instance-args.js";
+import {
+  validateQueryObjectInstanceArgs,
+  validateRequestedProperties,
+} from "../../src/utils/query-object-instance-args.js";
 import { verifiedContext } from "../setup/verified-context.js";
 
 const ctx = verifiedContext<RequestContext>({
@@ -27,6 +34,16 @@ describe("query_object_instance argument validation", () => {
       { ot_id: "ot-1", condition: { operation: "and", conditions: [] } },
       "condition.sub_conditions",
     ],
+    [
+      {
+        ot_id: "ot-1",
+        condition: { field: "status", operation: "==", value_from: "const", value: "open" },
+        filters: [{ field: "region", op: "==", value: "CN" }],
+      },
+      "the platform ignores filters",
+    ],
+    [{ ot_id: "ot-1", cursor: "next-page", offset: 30 }, "cursor and offset cannot be combined"],
+    [{ ot_id: "ot-1", kn_id: "another-kn" }, "kn_id must match"],
     [
       {
         ot_id: "ot-1",
@@ -59,6 +76,12 @@ describe("query_object_instance argument validation", () => {
       '{"ot_id":"ot-1","condition":{"operation":"and","conditions":[]}}',
       "condition.sub_conditions",
     ],
+    [
+      '{"ot_id":"ot-1","condition":{"field":"status","operation":"==","value_from":"const","value":"open"},"filters":[{"field":"region","op":"==","value":"CN"}]}',
+      "the platform ignores filters",
+    ],
+    ['{"ot_id":"ot-1","cursor":"next-page","offset":30}', "cursor and offset cannot be combined"],
+    ['{"ot_id":"ot-1","kn_id":"another-kn"}', "kn_id must match"],
     [
       '{"ot_id":"ot-1","filters":[{"field":"name","op":"==","value":"pod","negate":true}]}',
       "filters[0] argument negate",
@@ -143,7 +166,7 @@ describe("query_object_instance argument validation", () => {
     ).not.toThrow();
   });
 
-  it("accepts a recursive condition and valid property-list shape without fetching a schema", () => {
+  it("accepts a recursive condition and valid property-list shape", () => {
     expect(() =>
       validateQueryObjectInstanceArgs({
         ot_id: "ot-1",
@@ -165,5 +188,119 @@ describe("query_object_instance argument validation", () => {
         },
       }),
     ).not.toThrow();
+  });
+
+  it("reads the object-type schema once and rejects unknown fields before any MCP query", async () => {
+    const fetch = vi.fn(
+      async (_input: string | URL | Request, _init?: RequestInit) =>
+        new Response(
+          JSON.stringify({
+            entries: [
+              {
+                id: "ot-1",
+                data_properties: [{ name: "name" }],
+                logic_properties: [{ name: "score" }],
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(
+      context(ctx).queryObjectInstance("kn-1", { ot_id: "ot-1", properties: ["naem"] }),
+    ).rejects.toThrow("has no queryable data property 'naem'. Available: name");
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(String(fetch.mock.calls[0]?.[0])).toContain(
+      "/knowledge-networks/kn-1/object-types/ot-1",
+    );
+    expect(fetch.mock.calls[0]?.[1]?.method).toBe("GET");
+  });
+
+  it("fails closed when the schema response does not expose the requested object type", async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ entries: [] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(
+      context(ctx).queryObjectInstance("kn-1", { ot_id: "ot-1", properties: ["name"] }),
+    ).rejects.toThrow("its schema is not visible");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs the CLI schema check and rejects an unknown field before any MCP request", async () => {
+    const configDir = mkdtempSync(join(tmpdir(), "bkn-query-schema-"));
+    const previousConfigDir = process.env.BKN_CONFIG_DIR;
+    process.env.BKN_CONFIG_DIR = configDir;
+    const fetch = vi.fn(async (input: string | URL | Request) => {
+      const path = new URL(String(input)).pathname;
+      return new Response(
+        JSON.stringify(
+          path.endsWith("/health")
+            ? { ServerVersion: "0.1.5" }
+            : { entries: [{ id: "ot-1", data_properties: [{ name: "name" }] }] },
+        ),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    try {
+      await expect(
+        buildProgram().parseAsync(
+          [
+            "--base-url",
+            ctx.baseUrl,
+            "--token",
+            ctx.token,
+            "context",
+            "query-object-instance",
+            "kn-1",
+            "--args",
+            '{"ot_id":"ot-1","properties":["naem"]}',
+          ],
+          { from: "user" },
+        ),
+      ).rejects.toThrow("has no queryable data property 'naem'");
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(fetch.mock.calls.map(([input]) => new URL(String(input)).pathname)).toEqual([
+        "/api/bkn-backend/v1/health",
+        "/api/bkn-backend/v1/knowledge-networks/kn-1/object-types/ot-1",
+      ]);
+    } finally {
+      if (previousConfigDir === undefined) delete process.env.BKN_CONFIG_DIR;
+      else process.env.BKN_CONFIG_DIR = previousConfigDir;
+      rmSync(configDir, { recursive: true, force: true });
+    }
+  });
+
+  it("checks static arguments before attempting the schema read", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(
+      context(ctx).queryObjectInstance("kn-1", {
+        ot_id: "ot-1",
+        properties: ["name"],
+        sort_by: "name",
+      }),
+    ).rejects.toThrow("sort_by");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("accepts data property names and directs logic property names to their dedicated query", () => {
+    const schema = {
+      entries: [
+        {
+          id: "ot-1",
+          data_properties: [{ name: "name" }],
+          logic_properties: [{ name: "score" }],
+        },
+      ],
+    };
+    expect(() => validateRequestedProperties("ot-1", ["name"], schema)).not.toThrow();
+    expect(() => validateRequestedProperties("ot-1", ["score"], schema)).toThrow(
+      "Use get-logic-properties for computed fields",
+    );
   });
 });

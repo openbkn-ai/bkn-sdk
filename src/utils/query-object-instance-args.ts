@@ -105,7 +105,10 @@ function checkSort(value: unknown): void {
 }
 
 /** Reject argument mistakes that the MCP tool can otherwise silently ignore. */
-export function validateQueryObjectInstanceArgs(args: Record<string, unknown>): void {
+export function validateQueryObjectInstanceArgs(
+  args: Record<string, unknown>,
+  knId?: string,
+): void {
   if (!object(args)) throw new InputError("query-object-instance --args must be a JSON object");
   for (const key of Object.keys(args)) {
     if (key === "knn") {
@@ -122,15 +125,66 @@ export function validateQueryObjectInstanceArgs(args: Record<string, unknown>): 
   if (typeof args.ot_id !== "string" || !args.ot_id) {
     throw new InputError("query-object-instance requires a non-empty ot_id in --args");
   }
+  if (knId && args.kn_id !== undefined && args.kn_id !== knId) {
+    throw new InputError(`query-object-instance kn_id must match the requested network '${knId}'`);
+  }
+  if (args.condition !== undefined && args.filters !== undefined) {
+    throw new InputError(
+      "query-object-instance condition and filters cannot be combined; the platform ignores filters when condition is present",
+    );
+  }
+  if (args.cursor !== undefined && args.offset !== undefined) {
+    throw new InputError("query-object-instance cursor and offset cannot be combined");
+  }
   if (args.condition !== undefined) checkCondition(args.condition, "condition");
   if (args.filters !== undefined) checkFilters(args.filters);
   if (args.sort !== undefined) checkSort(args.sort);
   if (
     args.properties !== undefined &&
-    (!Array.isArray(args.properties) || !args.properties.every((name) => typeof name === "string"))
+    (!Array.isArray(args.properties) ||
+      !args.properties.every((name) => typeof name === "string" && name.trim().length > 0))
   ) {
     throw new InputError(
       "query-object-instance properties must be an array of field names; use context object-types to find valid names",
+    );
+  }
+}
+
+/** Check requested fields against one object type returned by the BKN schema GET. */
+export function validateRequestedProperties(
+  otId: string,
+  requested: string[],
+  schema: unknown,
+): void {
+  if (!object(schema) || !Array.isArray(schema.entries)) {
+    throw new InputError(
+      `Cannot validate properties for object type '${otId}': unreadable schema.`,
+    );
+  }
+  const entry = schema.entries.find((item) => object(item) && item.id === otId);
+  if (!object(entry)) {
+    throw new InputError(
+      `Cannot validate properties for object type '${otId}': its schema is not visible.`,
+    );
+  }
+  if (!Array.isArray(entry.data_properties)) {
+    throw new InputError(
+      `Cannot validate properties for object type '${otId}': unreadable schema.`,
+    );
+  }
+  const available = new Set<string>();
+  for (const property of entry.data_properties) {
+    if (!object(property) || typeof property.name !== "string" || !property.name) {
+      throw new InputError(
+        `Cannot validate properties for object type '${otId}': unreadable schema.`,
+      );
+    }
+    available.add(property.name);
+  }
+  const missing = requested.filter((name) => !available.has(name));
+  if (missing.length > 0) {
+    throw new InputError(
+      `Object type '${otId}' has no queryable data property ${missing.map((name) => `'${name}'`).join(", ")}. Available: ${[...available].sort().join(", ") || "(none)"}. Use get-logic-properties for computed fields.`,
     );
   }
 }
