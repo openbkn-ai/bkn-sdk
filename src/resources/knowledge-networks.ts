@@ -68,7 +68,9 @@ import {
 } from "../api/knowledge-networks.js";
 import type { RequestContext } from "../types.js";
 import { validateBknDirectory } from "../utils/bkn-validate.js";
-import { InputError } from "../utils/errors.js";
+import { isDryRun } from "../utils/dry-run.js";
+import { HttpError, InputError } from "../utils/errors.js";
+import { lostIndexWarnings, snapshotObjectTypes } from "../utils/push-integrity.js";
 import { extractTarToDirectory, packDirectoryToTar } from "../utils/tar.js";
 import { type CreateFromCatalogOptions, createFromCatalog } from "./bkn-create.js";
 
@@ -158,12 +160,55 @@ export function kn(ctx: RequestContext) {
     bknResources: () => listBknResources(ctx),
     createFromCatalog: (opts: CreateFromCatalogOptions) => createFromCatalog(ctx, opts),
     /** Pack a local BKN directory and upload it as a knowledge network. */
-    push: async (dir: string, opts?: { branch?: string }) => {
+    push: async (
+      dir: string,
+      opts?: {
+        branch?: string;
+        /** Read before/after object-type bindings and index operators. */
+        verifyIntegrity?: boolean;
+        /** Called for each verified loss or an unreadable post-push check. */
+        onIntegrityWarning?: (warning: string) => void;
+      },
+    ) => {
       const validation = validateBknDirectory(dir);
       if (!validation.valid) {
         throw new InputError(`BKN validation failed:\n${validation.errors.join("\n")}`);
       }
-      return uploadBkn(ctx, packDirectoryToTar(dir), { branch: opts?.branch });
+      const branch = opts?.branch ?? "main";
+      // The request preview must reach the upload itself, without a read first.
+      const verify =
+        !isDryRun() && (opts?.verifyIntegrity || opts?.onIntegrityWarning !== undefined);
+      let before: ReturnType<typeof snapshotObjectTypes> | undefined;
+      if (verify) {
+        try {
+          before = snapshotObjectTypes(
+            await listObjectTypes(ctx, validation.networkId, { branch }),
+          );
+        } catch (error) {
+          if (!(error instanceof HttpError && error.status === 404 && !error.gateway)) {
+            throw error;
+          }
+        }
+      }
+      const result = await uploadBkn(ctx, packDirectoryToTar(dir), { branch });
+      if (!before) return result;
+
+      let warnings: string[];
+      try {
+        warnings = lostIndexWarnings(
+          before,
+          snapshotObjectTypes(await listObjectTypes(ctx, validation.networkId, { branch })),
+        );
+      } catch {
+        warnings = [
+          `Could not verify object-type bindings/index operators on branch '${branch}' after push; inspect them before relying on search.`,
+        ];
+      }
+      for (const warning of warnings) opts?.onIntegrityWarning?.(warning);
+      if (warnings.length === 0) return result;
+      return result && typeof result === "object" && !Array.isArray(result)
+        ? { ...result, integrity_warnings: warnings }
+        : { result, integrity_warnings: warnings };
     },
     /** Download a knowledge network and extract it into a local directory. */
     pull: async (knId: string, dir: string, opts?: { branch?: string }) => {

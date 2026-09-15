@@ -8,6 +8,7 @@
 import { tokenExpiresAtMs } from "../auth/jwt.js";
 import { refreshAccessToken } from "../auth/oauth.js";
 import type { RequestContext } from "../types.js";
+import { baseUrlForDisplay } from "../utils/base-url.js";
 import { isDryRun } from "../utils/dry-run.js";
 import { HttpError, NonJsonResponseError } from "../utils/errors.js";
 import { stringifyBigIntJSON } from "../utils/json-bigint.js";
@@ -35,9 +36,16 @@ export interface RequestInitEx {
   headersTimeoutMs?: number;
   /** Optional parser for a successful non-empty response body. */
   responseParser?: (text: string) => unknown;
+  /**
+   * Declare a body-carrying request to be a read. Only API helpers for
+   * semantically read-only POST endpoints may set this; mutations must never
+   * opt in because a response may have been lost after the server applied one.
+   */
+  retryable?: boolean;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
+const READ_RETRY_DELAYS_MS = [100, 200] as const;
 
 export async function request<T = unknown>(
   ctx: RequestContext,
@@ -79,15 +87,18 @@ export async function request<T = unknown>(
       init.headersTimeoutMs,
     );
 
+  const retryableRead = method.toUpperCase() === "GET" || init.retryable === true;
+  const sendWithReadRetries = () => sendWithRetries(send, retryableRead, controller.signal);
+
   try {
     await refreshIfExpiring(ctx);
     const sentToken = ctx.token;
-    let res = await send();
+    let res = await sendWithReadRetries();
     let renewal: Renewal = ctx.refresh ? "not-needed" : "unavailable";
     // On a 401 with stored credentials, refresh the access token once and retry.
     if (res.status === 401 && ctx.refresh) {
       renewal = (await renewAfter401(ctx, sentToken)) ? "renewed" : "failed";
-      if (renewal === "renewed") res = await send();
+      if (renewal === "renewed") res = await sendWithReadRetries();
     }
     const text = await res.text();
     const contentType = res.headers.get("content-type") ?? "";
@@ -125,6 +136,83 @@ export async function request<T = unknown>(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Retry only explicit reads after a transient transport failure or server 5xx. */
+async function sendWithRetries(
+  send: () => Promise<Response>,
+  retryableRead: boolean,
+  signal: AbortSignal,
+): Promise<Response> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const response = await send();
+      if (
+        !retryableRead ||
+        !isTransientServerFailure(response.status) ||
+        attempt === READ_RETRY_DELAYS_MS.length
+      ) {
+        return response;
+      }
+      // Do not leave an unread error body holding a pooled connection while
+      // the next attempt is being sent. Its content is not user-visible: the
+      // final response is the one that becomes an HttpError if it still fails.
+      void response.body?.cancel().catch(() => undefined);
+    } catch (error) {
+      if (
+        !retryableRead ||
+        !isTransientNetworkFailure(error) ||
+        attempt === READ_RETRY_DELAYS_MS.length
+      ) {
+        throw error;
+      }
+    }
+    const delayMs = READ_RETRY_DELAYS_MS[attempt];
+    // The attempt checks above establish this, but keep the indexed access
+    // explicit under noUncheckedIndexedAccess.
+    if (delayMs === undefined) throw new Error("Missing read retry delay");
+    await waitForRetry(delayMs, signal);
+  }
+}
+
+function isTransientServerFailure(status: number): boolean {
+  return status >= 500 && status <= 599;
+}
+
+function isTransientNetworkFailure(error: unknown): boolean {
+  if (isAbortError(error)) return false;
+  // Native fetch reports transport failures as TypeError. The explicit TLS
+  // codes are configuration failures, so another identical send cannot help.
+  const code =
+    error && typeof error === "object" && "cause" in error
+      ? (error as { cause?: { code?: unknown } }).cause?.code
+      : undefined;
+  if (typeof code === "string" && code.includes("CERT")) return false;
+  return error instanceof TypeError;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function waitForRetry(delayMs: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const timer = setTimeout(done, delayMs);
+    const abort = () => {
+      clearTimeout(timer);
+      done(signal.reason);
+    };
+    function done(error?: unknown): void {
+      signal.removeEventListener("abort", abort);
+      if (error === undefined) resolve();
+      else reject(error);
+    }
+    signal.addEventListener("abort", abort, { once: true });
+  });
 }
 
 /**
@@ -180,22 +268,37 @@ function hintFor(
   body: string,
   renewal: Renewal,
 ): string | undefined {
+  const displayBaseUrl = baseUrlForDisplay(ctx.baseUrl);
+  const envHint =
+    status === 401 && ctx.tokenFromEnv
+      ? "The token came from the BKN_TOKEN environment variable, which overrides any `openbkn auth login` session — `unset BKN_TOKEN` to use the login instead."
+      : undefined;
+  const withEnv = (hint?: string): string | undefined =>
+    [envHint, hint].filter(Boolean).join(" ") || undefined;
   if (status === 401 && ctx.token.startsWith("bak_")) {
-    return "AppKey invalid / expired / revoked / owner disabled — re-issue with `openbkn appkey create` (or `appkey regenerate <id>`). Do not auto-retry.";
+    return withEnv(
+      "AppKey invalid / expired / revoked / owner disabled — re-issue with `openbkn appkey create` (or `appkey regenerate <id>`). Do not auto-retry.",
+    );
   }
   if (status === 401) {
     switch (renewal) {
       case "failed":
-        return `The access token expired and could not be renewed: the refresh token was rejected (expired or revoked). Run \`openbkn auth login ${ctx.baseUrl}\` again. ${APPKEY_TIP}`;
+        return withEnv(
+          `The access token expired and could not be renewed: the refresh token was rejected (expired or revoked). Run \`openbkn auth login ${displayBaseUrl}\` again. ${APPKEY_TIP}`,
+        );
       case "renewed":
-        return `The access token was renewed, and the platform still rejects it — the session was revoked or the account disabled. Run \`openbkn auth login ${ctx.baseUrl}\` again.`;
+        return withEnv(
+          `The access token was renewed, and the platform still rejects it — the session was revoked or the account disabled. Run \`openbkn auth login ${displayBaseUrl}\` again.`,
+        );
       case "unavailable":
-        return `The token is expired or invalid, and no refresh token is saved for it (a \`--token\` / BKN_TOKEN value is never renewed). Run \`openbkn auth login ${ctx.baseUrl}\`. ${APPKEY_TIP}`;
+        return withEnv(
+          `The token is expired or invalid, and no refresh token is saved for it (a \`--token\` / BKN_TOKEN value is never renewed). Run \`openbkn auth login ${displayBaseUrl}\`. ${APPKEY_TIP}`,
+        );
       default:
         break;
     }
   }
-  return lifecycleHint(body);
+  return withEnv(lifecycleHint(body));
 }
 
 const LIFECYCLE_ACTIONS = new Set([

@@ -86,6 +86,21 @@ export class ToolError extends Error {
   }
 }
 
+/**
+ * A wait for server-side work ran out of time while the work was still going.
+ * Not a failure of the work — it may yet finish — so `last` carries the state
+ * it was last seen in, for the caller to report or keep waiting on.
+ */
+export class WaitTimeoutError extends Error {
+  readonly last: unknown;
+
+  constructor(message: string, last: unknown) {
+    super(message);
+    this.name = "WaitTimeoutError";
+    this.last = last;
+  }
+}
+
 /** Raised for bad CLI/SDK input before any request is made. */
 export class InputError extends Error {
   constructor(message: string, options?: ErrorOptions) {

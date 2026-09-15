@@ -137,6 +137,41 @@ export function csv(value: string | undefined): string[] | undefined {
     .filter(Boolean);
 }
 
+/** Read JSON arguments from an option, a file, or stdin (`--args -`). */
+export function readJsonArgs(
+  opts: { args?: string; argsFile?: string },
+  required = false,
+): Record<string, unknown> | undefined {
+  if (opts.args !== undefined && opts.argsFile !== undefined) {
+    throw new InputError("--args and --args-file cannot be combined");
+  }
+  const file = opts.argsFile ?? (opts.args === "-" ? "-" : undefined);
+  let raw = opts.args;
+  if (file !== undefined) {
+    try {
+      raw = readFileSync(file === "-" ? 0 : file, "utf8");
+    } catch (error) {
+      throw new InputError(
+        `Cannot read ${file === "-" ? "stdin" : `--args-file '${file}'`}: ${error instanceof Error ? error.message : error}`,
+      );
+    }
+  }
+  if (raw === undefined) {
+    if (required) throw new InputError("--args is required (run with --schema to see its shape)");
+    return undefined;
+  }
+  let parsed: unknown;
+  try {
+    parsed = parseBigIntJSON(raw);
+  } catch {
+    throw new InputError("--args must be valid JSON");
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new InputError("--args must be a JSON object");
+  }
+  return parsed as Record<string, unknown>;
+}
+
 /** Resolve a request body from `--body '<json>'` or `--body-file <path>`. */
 /**
  * Parse `--params` for a Cypher query: a JSON object mapping each `$name` to its value.

@@ -674,8 +674,9 @@ describe("managed lifecycle on semantic search", () => {
         const url = String(input);
         if (url.endsWith("/mcp/info")) {
           probes += 1;
-          // One blip, then the deploy answers normally.
-          if (probes === 1) return new Response("gateway", { status: 502 });
+          // A malformed catalog is a probe failure that is not safe to retry
+          // at the transport layer; the next probe will answer normally.
+          if (probes === 1) return new Response("not JSON", { status: 200 });
           return new Response(JSON.stringify(V2_CATALOG), { status: 200 });
         }
         if (url.endsWith("/v1/mcp")) {

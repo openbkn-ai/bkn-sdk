@@ -14,3 +14,39 @@ Phase 2 toolchain landed. Each criterion cites a concrete repo signal; write **T
 | CI | lint + test on PR | ✅ `.github/workflows/ci.yml` on push to `main` + all PRs: `check:deps` (own step, legible failure), `lint`, `test`, `build`. Release via `.github/workflows/release.yml` (OIDC Trusted Publishing + provenance) |
 
 Update this table as each signal changes (e.g. live-parity count as commands are filled in).
+
+## CLI reliability regression coverage
+
+- `test/unit/trace-command.test.ts` runs the complete CLI tree and checks the
+  outgoing query for conversation/interaction filters before and after the
+  command. Ambient Trace context does not become an implicit search filter.
+- `test/unit/http.test.ts` checks Authorization on the wire after refresh, request
+  preservation, the one-refresh limit on failure, BKN_TOKEN-origin 401 hints, and
+  bounded recovery of retryable reads after network or 5xx failures. It also
+  checks that ordinary POST writes are never replayed. `knowledge-networks.test.ts`
+  verifies that only the four body-carrying ontology query helpers opt in; an
+  action execution remains a single send.
+- `test/unit/build-wait.test.ts` uses fake time to check short wait deadlines and
+  a task completing during the final poll interval, alongside task failure and
+  unlimited-wait cases. Status requests still use the normal HTTP timeout.
+- `test/unit/push-integrity.test.ts` checks CLI request order, branch-scoped
+  snapshots, binding/operator loss warnings, unreadable reads, and new networks.
+  Verified SDK calls use the same comparison. An isolated network was imported
+  twice on the 14.103.77.23 test environment without false integrity warnings.
+- `test/unit/push-integrity-dry-run.test.ts` checks that `bkn push --dry-run`
+  previews the upload POST with redacted credentials and sends no read or write.
+- `test/unit/bkn-validate.test.ts` checks file/line diagnostics for misaligned
+  Markdown rows, escaped pipes, line continuations, first-table truncation,
+  interrupted rows, and mixed logic-property formats, plus rejection before any
+  upload. Three existing BKN directories were checked for new false positives.
+- `test/unit/query-object-instance.test.ts` checks the real CLI and SDK wrapper
+  reject unknown argument names, malformed nested conditions, extra filter or
+  sort keys, combined `condition`/`filters`, `cursor`/`offset`, and mismatched
+  `kn_id` before any request. It verifies
+  that a nonempty `properties` list triggers one schema GET and missing or
+  invisible fields stop the MCP query. `test/unit/auth-command.test.ts` checks
+  that the env-shadow warning does not print URL credentials. The 401 hint in
+  `test/unit/http.test.ts` also strips URL userinfo and query tokens before
+  suggesting a new login.
+  `test/unit/query-object-instance-dry-run.test.ts` checks that the query preview
+  sends nothing, including schema reads and MCP handshakes.

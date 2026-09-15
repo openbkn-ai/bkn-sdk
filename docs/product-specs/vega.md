@@ -41,7 +41,8 @@ CLI:
 
 - `openbkn vega resource update <resource-id> --schema-definition '<json>' --index-config '<json>'` — replace Resource schema/features and index configuration through the canonical Resource update API. Keyword defaults use `index_config.default_keyword_ignore_above` (1–8191, default 256).
 - `openbkn vega resource build <resource-id> [--execute-type incremental|full] [--wait] [--timeout <s>]` — create a batch BuildTask without changing Resource configuration. BuildTask accepts table Resources only.
-- `openbkn vega build-task get <task-id>` — progress: `status` + `synced_count`; a document is counted only after all required index processing, including vectorization, succeeds.
+- `openbkn vega build-task get <task-id> [--wait] [--timeout <s>]` — progress: `status` + `synced_count`; a document is counted only after all required index processing, including vectorization, succeeds.
+- `--wait` on either build or get reports progress on stderr and exits non-zero when the task fails, stops, or the wait times out. `--timeout 0` waits without a polling deadline; status requests retain their HTTP timeout. A timed-out task keeps running on the server.
 - `openbkn vega build-task list --status pending,running` — filter by one or
   more statuses; the SDK sends repeated `status` query parameters. Use
   `--sort create_time|start_time|finish_time|last_progress_time` and

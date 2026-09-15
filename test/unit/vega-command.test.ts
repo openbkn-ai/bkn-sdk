@@ -796,7 +796,7 @@ describe("vega resource build", () => {
     });
   });
 
-  it.each(["1.5", "abc", "0", "-1"])(
+  it.each(["1.5", "abc", "-1"])(
     "rejects invalid timeout %s before creating a task",
     async (timeout) => {
       const fetchMock = vi.fn();
@@ -820,10 +820,44 @@ describe("vega resource build", () => {
           ],
           { from: "user" },
         ),
-      ).rejects.toThrow("--timeout must be a positive integer");
+      ).rejects.toThrow("--timeout must be a whole number of seconds");
       expect(fetchMock).not.toHaveBeenCalled();
     },
   );
+
+  it("accepts timeout 0 as an unlimited wait", async () => {
+    const fetchMock = vi.fn(
+      async (url: string | URL) =>
+        new Response(
+          JSON.stringify(
+            String(url).endsWith("/build-tasks")
+              ? { id: "task-1" }
+              : { id: "task-1", status: "completed" },
+          ),
+          { status: 200 },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "resource",
+        "build",
+        "r-1",
+        "--wait",
+        "--timeout",
+        "0",
+      ],
+      { from: "user" },
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("vega build-task list", () => {

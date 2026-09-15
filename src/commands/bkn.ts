@@ -136,6 +136,9 @@ export function bknCommand(): Command {
 
   bkn
     .command("search <kn-id> <query>")
+    // A search question may begin with a minus sign (for example, "-40℃").
+    // Commander otherwise treats that second positional argument as an option.
+    .allowUnknownOption()
     .description(
       "Recall instances from a plain sentence — no object type or field names needed → {nodes, object_types}",
     )
@@ -659,7 +662,11 @@ not bound until you attach it (\`capability list\` counts it under boxes[].unmou
     .option("--branch <name>", "target branch", "main")
     .action(async (dir: string, opts, cmd: Command) => {
       const declared = validateBknDirectory(dir).capabilities;
-      const result = await clientFrom(cmd).kn.push(dir, { branch: opts.branch });
+      const result = await clientFrom(cmd).kn.push(dir, {
+        branch: opts.branch,
+        verifyIntegrity: true,
+        onIntegrityWarning: (warning) => process.stderr.write(`warning: ${warning}\n`),
+      });
       warnUnboundCapabilities(result, declared);
       printJson(result, outputOptions(cmd));
     });

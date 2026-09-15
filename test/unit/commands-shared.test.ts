@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { readBody } from "../../src/commands/_shared.js";
+import { readBody, readJsonArgs } from "../../src/commands/_shared.js";
 
 const BIGINT = 110101199001152345n;
 const tempDirs: string[] = [];
@@ -25,5 +25,26 @@ describe("readBody", () => {
     writeFileSync(path, '{"condition":{"value":110101199001152345}}');
 
     expect(readBody({ bodyFile: path })).toEqual({ condition: { value: BIGINT } });
+  });
+});
+
+describe("readJsonArgs", () => {
+  it("reads a JSON object from --args-file and preserves unsafe integers", () => {
+    const dir = mkdtempSync(join(tmpdir(), "bkn-args-"));
+    tempDirs.push(dir);
+    const path = join(dir, "args.json");
+    writeFileSync(path, '{"instance_id":110101199001152345}');
+
+    expect(readJsonArgs({ argsFile: path })).toEqual({ instance_id: BIGINT });
+  });
+
+  it("rejects competing inline and file argument sources", () => {
+    expect(() => readJsonArgs({ args: "{}", argsFile: "args.json" })).toThrow(
+      "--args and --args-file cannot be combined",
+    );
+  });
+
+  it.each(["null", "[]", "42", '"text"'])("rejects a non-object JSON argument: %s", (args) => {
+    expect(() => readJsonArgs({ args })).toThrow("--args must be a JSON object");
   });
 });

@@ -19,6 +19,143 @@ function respond(body: string, init: ResponseInit): void {
 
 afterEach(() => vi.unstubAllGlobals());
 
+describe("request 401 recovery", () => {
+  it("rebuilds Authorization after refresh while preserving the request", async () => {
+    const persist = vi.fn();
+    const context = verifiedContext<RequestContext>({
+      ...ctx,
+      token: "old-token",
+      refresh: { refreshToken: "refresh-token", persist },
+    });
+    const sent: Array<{ authorization: string | null; init?: RequestInit }> = [];
+    const fetch = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      if (String(url).endsWith("/oauth2/token")) {
+        return Response.json({ access_token: "new-token", refresh_token: "new-refresh-token" });
+      }
+      const authorization = new Headers(init?.headers).get("authorization");
+      sent.push({ authorization, init });
+      return authorization === "Bearer new-token"
+        ? Response.json({ entries: [] })
+        : Response.json({ error: "expired" }, { status: 401 });
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(
+      request(context, "/api/example/query", {
+        body: { limit: 10 },
+        headers: { "x-example": "kept" },
+      }),
+    ).resolves.toEqual({ entries: [] });
+
+    expect(sent.map((s) => s.authorization)).toEqual(["Bearer old-token", "Bearer new-token"]);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(persist).toHaveBeenCalledWith(
+      expect.objectContaining({ accessToken: "new-token", refreshToken: "new-refresh-token" }),
+    );
+    for (const { init } of sent) {
+      expect(init?.method).toBe("POST");
+      expect(init?.body).toBe('{"limit":10}');
+      expect(new Headers(init?.headers).get("x-example")).toBe("kept");
+      expect(new Headers(init?.headers).get("content-type")).toBe("application/json");
+    }
+  });
+
+  it.each([true, false])("stops after one refresh attempt (refresh succeeds: %s)", async (ok) => {
+    const persist = vi.fn();
+    const context = verifiedContext<RequestContext>({
+      ...ctx,
+      refresh: { refreshToken: "refresh-token", persist },
+    });
+    const fetch = vi.fn(async (url: string | URL) => {
+      if (String(url).endsWith("/oauth2/token")) {
+        return ok
+          ? Response.json({ access_token: "new-token" })
+          : Response.json({ error: "invalid_grant" }, { status: 400 });
+      }
+      return Response.json({ error: "unauthorized" }, { status: 401 });
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(request(context, "/api/example")).rejects.toMatchObject({ status: 401 });
+    expect(fetch).toHaveBeenCalledTimes(ok ? 3 : 2);
+    expect(persist).toHaveBeenCalledTimes(ok ? 1 : 0);
+  });
+
+  it("does not refresh an explicit token without stored refresh credentials", async () => {
+    const fetch = vi.fn(async () => Response.json({ error: "expired" }, { status: 401 }));
+    vi.stubGlobal("fetch", fetch);
+    await expect(request(ctx, "/api/example")).rejects.toMatchObject({ status: 401 });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it("does not print URL credentials or query tokens in a 401 login hint", async () => {
+    respond('{"code":"Public.Unauthorized"}', {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
+    const sensitiveUrl = "https://user:dummy-password@demo.example.com/?token=dummy-query-token";
+    const error = await request(
+      verifiedContext({ ...ctx, baseUrl: sensitiveUrl }),
+      "/api/bkn-backend/v1/knowledge-networks",
+    ).catch((caught) => caught);
+    const message = formatError(error);
+    expect(message).toContain("openbkn auth login https://demo.example.com");
+    expect(message).not.toContain("dummy-password");
+    expect(message).not.toContain("dummy-query-token");
+    expect(message).not.toContain("user:");
+  });
+});
+
+describe("read retries", () => {
+  it("recovers a GET after transient 5xx responses", async () => {
+    const fetch = vi
+      .fn<() => Promise<Response>>()
+      .mockResolvedValueOnce(Response.json({ error: "temporary" }, { status: 503 }))
+      .mockResolvedValueOnce(Response.json({ error: "temporary" }, { status: 502 }))
+      .mockResolvedValueOnce(Response.json({ entries: ["recovered"] }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(request(ctx, "/api/example")).resolves.toEqual({ entries: ["recovered"] });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("recovers a GET after a transient network failure", async () => {
+    const fetch = vi
+      .fn<() => Promise<Response>>()
+      .mockRejectedValueOnce(new TypeError("fetch failed"))
+      .mockResolvedValueOnce(Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(request(ctx, "/api/example")).resolves.toEqual({ ok: true });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops after the bounded number of GET retries", async () => {
+    const fetch = vi.fn(async () => Response.json({ error: "temporary" }, { status: 503 }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(request(ctx, "/api/example")).rejects.toMatchObject({ status: 503 });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("retries an API-marked POST query but not an ordinary POST", async () => {
+    const fetch = vi
+      .fn<() => Promise<Response>>()
+      .mockResolvedValueOnce(Response.json({ error: "temporary" }, { status: 503 }))
+      .mockResolvedValueOnce(Response.json({ entries: [] }))
+      .mockResolvedValueOnce(Response.json({ error: "temporary" }, { status: 503 }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(
+      request(ctx, "/api/example/query", { method: "POST", body: {}, retryable: true }),
+    ).resolves.toEqual({ entries: [] });
+    await expect(
+      request(ctx, "/api/example/create", { method: "POST", body: {} }),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+});
+
 describe("non-JSON responses", () => {
   it("hints that an HTML error page never reached the service", async () => {
     respond("<html><body><center>404 Not Found</center></body></html>", {
@@ -49,6 +186,31 @@ describe("non-JSON responses", () => {
     // to re-issue. Neither may hide the other.
     expect((err as HttpError).hint).toMatch(/did not reach the service/);
     expect((err as HttpError).hint).toMatch(/appkey create/);
+  });
+
+  it("names BKN_TOKEN on a 401, since it silently outranks a fresh `auth login`", async () => {
+    respond('{"code":"Public.Unauthorized"}', {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
+    const err = await request(
+      verifiedContext({ ...ctx, token: "bak_stale", tokenFromEnv: true }),
+      "/api/bkn-backend/v1/knowledge-networks",
+    ).catch((e) => e);
+    expect((err as HttpError).hint).toMatch(/BKN_TOKEN.*unset BKN_TOKEN/);
+    expect((err as HttpError).hint).toMatch(/appkey create/);
+  });
+
+  it("keeps BKN_TOKEN out of a 401 hint when the token came from the session", async () => {
+    respond('{"code":"Public.Unauthorized"}', {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
+    const err = await request(
+      verifiedContext({ ...ctx, token: "bak_123" }),
+      "/api/bkn-backend/v1/knowledge-networks",
+    ).catch((e) => e);
+    expect((err as HttpError).hint).not.toMatch(/BKN_TOKEN/);
   });
 
   it("carries the routing hint into a 403, which reads as a permissions problem", async () => {
