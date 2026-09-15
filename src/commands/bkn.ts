@@ -123,13 +123,20 @@ export function bknCommand(): Command {
 
   bkn
     .command("get <kn-id>")
-    .description("Get a knowledge network (use --stats or --export)")
+    .description("Read a knowledge network's details and schema pointers")
     .option("--stats", "include statistics")
     .option("--export", "return the full export payload")
+    .option("--branch <b>", "read this branch (default: main)")
+    .option("--detail-level <level>", "full | summary (default: full)")
     .action(async (knId: string, opts, cmd: Command) => {
+      if (opts.detailLevel && !["full", "summary"].includes(opts.detailLevel)) {
+        throw new InputError("--detail-level must be full or summary");
+      }
       const data = await clientFrom(cmd).kn.get(knId, {
         stats: opts.stats,
         exportMode: opts.export,
+        branch: opts.branch,
+        detailLevel: opts.detailLevel,
       });
       printJson(data, outputOptions(cmd));
     });

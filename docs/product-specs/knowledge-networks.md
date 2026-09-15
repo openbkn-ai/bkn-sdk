@@ -13,7 +13,11 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
 ## User-visible behavior
 
 - `openbkn bkn list` — networks (default limit 30).
-- `openbkn bkn get <id>` — one network, summary + schema pointers.
+- `openbkn bkn get <id>` — one network, summary + schema pointers. `--branch`
+  selects a branch and `--detail-level summary` requests the smaller progressive
+  view; `--export` and `--stats` retain their existing behavior.
+- `bkn action-type query <kn-id> <action-type-id>` sends a JSON query body over
+  POST with `X-HTTP-Method-Override: GET`, as required by ontology-query.
 - `openbkn bkn query <id> ...` — query object types / instances (default limit 50).
 - `openbkn bkn push <dir>` / `openbkn bkn pull <id>` — upload/download a BKN package; optional encoding detection (`--no-detect-encoding`, `--source-encoding`).
 - An object type's `### Data Properties` table may include an optional `Mask Rule`
@@ -28,6 +32,12 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
   sends `new` without a conversation ID or `continue` with one. If that
   handshake fails, the SDK surfaces the lifecycle error and does not send an
   uncontexted business request.
+- `context search-schema --scope object,relation,action,metric` selects which
+  concept types appear in the response. The CLI converts the selected names to
+  `search_scope.include_*` booleans and accepts `--concept-groups <ids>` for the
+  documented group filter. Programmatic `context.searchSchema` accepts an
+  object scope with concept groups and include flags; legacy category arrays
+  are normalized to the object shape before the MCP call.
 
 ## Index building (via Catalog BuildTask — no KN-level build)
 

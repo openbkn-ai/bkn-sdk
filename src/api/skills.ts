@@ -16,6 +16,7 @@ import { tlsFetch } from "./tls.js";
 import { ensureCompatible } from "./version-check.js";
 
 const BASE = "/api/agent-operator-integration/v1";
+const SKILL_JSON_RESPONSE = { responseParser: parseBigIntJSON } as const;
 
 /** Register a skill from a zip archive (multipart `file_type=zip`). */
 export async function registerSkillZip(
@@ -113,7 +114,7 @@ export interface SkillExecutionResult {
   exit_code?: number;
   stdout?: string;
   stderr?: string;
-  execution_time?: number;
+  execution_time?: number | bigint;
   /** True when the sandbox stubbed the run instead of executing it. */
   mocked?: boolean;
 }
@@ -129,6 +130,7 @@ export function executeSkill(
   opts: ExecuteSkillOptions,
 ): Promise<SkillExecutionResult> {
   return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}/execute`, {
+    ...SKILL_JSON_RESPONSE,
     method: "POST",
     body: {
       entry_shell: opts.entryShell,
@@ -148,7 +150,11 @@ export function executeSkill(
 
 /** Resolve skill ids to names in one call. Unknown ids are skipped by the backend. */
 export function getSkillNames(ctx: RequestContext, ids: string[]): Promise<unknown> {
-  return request(ctx, `${BASE}/skills/names`, { method: "POST", body: { ids } });
+  return request(ctx, `${BASE}/skills/names`, {
+    ...SKILL_JSON_RESPONSE,
+    method: "POST",
+    body: { ids },
+  });
 }
 
 /** Update a skill's editable metadata (JSON PUT). */
@@ -158,6 +164,7 @@ export function updateSkillMetadata(
   body: unknown,
 ): Promise<unknown> {
   return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}/metadata`, {
+    ...SKILL_JSON_RESPONSE,
     method: "PUT",
     body,
   });
@@ -170,6 +177,7 @@ export function republishSkillVersion(
   version: string,
 ): Promise<unknown> {
   return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}/history/republish`, {
+    ...SKILL_JSON_RESPONSE,
     method: "POST",
     body: { version },
   });
@@ -182,6 +190,7 @@ export function publishSkillVersion(
   version: string,
 ): Promise<unknown> {
   return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}/history/publish`, {
+    ...SKILL_JSON_RESPONSE,
     method: "POST",
     body: { version },
   });
@@ -208,26 +217,29 @@ function listQuery(opts: ListSkillsOptions) {
 }
 
 export function listSkills(ctx: RequestContext, opts: ListSkillsOptions = {}): Promise<unknown> {
-  return request(ctx, `${BASE}/skills`, { query: listQuery(opts) });
+  return request(ctx, `${BASE}/skills`, { ...SKILL_JSON_RESPONSE, query: listQuery(opts) });
 }
 
 export function listSkillMarket(
   ctx: RequestContext,
   opts: ListSkillsOptions = {},
 ): Promise<unknown> {
-  return request(ctx, `${BASE}/skills/market`, { query: listQuery(opts) });
+  return request(ctx, `${BASE}/skills/market`, { ...SKILL_JSON_RESPONSE, query: listQuery(opts) });
 }
 
 export function getSkill(ctx: RequestContext, skillId: string): Promise<unknown> {
-  return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}`);
+  return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}`, SKILL_JSON_RESPONSE);
 }
 
 export function getSkillMarket(ctx: RequestContext, skillId: string): Promise<unknown> {
-  return request(ctx, `${BASE}/skills/market/${encodeURIComponent(skillId)}`);
+  return request(ctx, `${BASE}/skills/market/${encodeURIComponent(skillId)}`, SKILL_JSON_RESPONSE);
 }
 
 export function deleteSkill(ctx: RequestContext, skillId: string): Promise<unknown> {
-  return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}`, { method: "DELETE" });
+  return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}`, {
+    ...SKILL_JSON_RESPONSE,
+    method: "DELETE",
+  });
 }
 
 /**
@@ -269,6 +281,7 @@ export function getSkillContent(
   opts: { view?: SkillView; responseMode?: SkillResponseMode } = {},
 ): Promise<SkillContentResponse> {
   return request(ctx, skillPath(skillId, opts.view ?? "published", "content"), {
+    ...SKILL_JSON_RESPONSE,
     query: { response_mode: opts.responseMode },
   }) as Promise<SkillContentResponse>;
 }
@@ -281,6 +294,7 @@ export function readSkillFile(
   opts: { view?: SkillView; responseMode?: SkillResponseMode } = {},
 ): Promise<SkillReadFileResponse> {
   return request(ctx, skillPath(skillId, opts.view ?? "published", "files/read"), {
+    ...SKILL_JSON_RESPONSE,
     method: "POST",
     query: { response_mode: opts.responseMode },
     body: { rel_path: relPath },
@@ -289,7 +303,7 @@ export function readSkillFile(
 
 /** Version history for a skill. */
 export function getSkillHistory(ctx: RequestContext, skillId: string): Promise<unknown> {
-  return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}/history`);
+  return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}/history`, SKILL_JSON_RESPONSE);
 }
 
 export type SkillStatus = "unpublish" | "published" | "offline";
@@ -301,6 +315,7 @@ export function setSkillStatus(
   status: SkillStatus,
 ): Promise<unknown> {
   return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}/status`, {
+    ...SKILL_JSON_RESPONSE,
     method: "PUT",
     body: { status },
   });

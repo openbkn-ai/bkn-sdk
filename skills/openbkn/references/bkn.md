@@ -2,7 +2,7 @@
 
 | Area | Commands |
 |------|----------|
-| KN | `list`, `get <kn> [--stats] [--export]`, `search <kn> <query> [--object-types ids] [--max-instances n] [--rerank]`（自然语言召回实例，附带命中对象类的定义）, `stats <kn>`, `export <kn>`, `create`/`update`/`delete`, `subgraph <kn> --body`. |
+| KN | `list`, `get <kn> [--stats] [--export] [--branch b] [--detail-level full\|summary]`, `search <kn> <query> [--object-types ids] [--max-instances n] [--rerank]`（自然语言召回实例，附带命中对象类的定义）, `stats <kn>`, `export <kn>`, `create`/`update`/`delete`, `subgraph <kn> --body`. |
 | Schema | `object-type|relation-type|action-type list/get/create/update/delete` (create/update take `--body`/`--body-file`); `action-type query/execute`. |
 | Metric / concept-group / schedules | `metric …`, `concept-group …`, `action-log …`, `action-schedule …`. (No KN-level build jobs — index builds are Vega build tasks, see [vega.md](vega.md).) |
 | Capabilities | `capability list <kn> [--type skill\|function\|mcp_tool] [--box id] [--with-detail]`, `capability attach <kn> --skill ids \| --box id (--tool ids \| --all-tools) \| --mcp id (--tool names \| --all-tools)`, `capability detach <kn> <binding-ids>`. Bindings are what Context Loader recalls skills and tools from; a network with nothing bound recalls none. Binding is per tool: `--box` alone is refused, `--all-tools` binds the tools the box holds now (later additions show as `boxes[].unmounted_tools` in `list`). All take `--branch`. |

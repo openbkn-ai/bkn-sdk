@@ -11,6 +11,7 @@ import {
   getObjectTypes,
   getRelationTypes,
   runCypher,
+  searchSchema,
 } from "../../src/api/context-loader.js";
 import { resetLifecycleCaches } from "../../src/api/lifecycle.js";
 import type { RequestContext } from "../../src/types.js";
@@ -85,6 +86,52 @@ afterEach(() => {
   resetLifecycleCaches();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+describe("search_schema scope", () => {
+  it("sends concept groups and include flags as one object", async () => {
+    const f = mockMcp();
+    await searchSchema(ctx, "kn-scope-object", "退款", {
+      searchScope: {
+        conceptGroups: ["sales"],
+        includeActionTypes: true,
+        includeObjectTypes: false,
+      },
+    });
+    const call = toolCallBody(f);
+    expect(call.name).toBe("search_schema");
+    expect(call.arguments.search_scope).toEqual({
+      concept_groups: ["sales"],
+      include_action_types: true,
+      include_object_types: false,
+    });
+  });
+
+  it("converts legacy category arrays to include flags", async () => {
+    const f = mockMcp();
+    await searchSchema(ctx, "kn-scope-array", "退款", { searchScope: ["object", "action"] });
+    expect(toolCallBody(f).arguments.search_scope).toEqual({
+      include_object_types: true,
+      include_relation_types: false,
+      include_action_types: true,
+      include_metric_types: false,
+    });
+  });
+
+  it("rejects an all-disabled scope without contacting MCP", async () => {
+    const f = mockMcp();
+    expect(() =>
+      searchSchema(ctx, "kn-scope-disabled", "退款", {
+        searchScope: {
+          includeObjectTypes: false,
+          includeRelationTypes: false,
+          includeActionTypes: false,
+          includeMetricTypes: false,
+        },
+      }),
+    ).toThrow(/at least one concept type/i);
+    expect(f).not.toHaveBeenCalled();
+  });
 });
 
 describe("progressive KN detail (get_kn_detail)", () => {

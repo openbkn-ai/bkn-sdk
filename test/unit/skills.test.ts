@@ -58,6 +58,35 @@ describe("skill endpoints (agent-operator-integration)", () => {
     await deleteSkill(ctx, "s2");
     expect(firstCall(f2)[1].method).toBe("DELETE");
   });
+
+  it("preserves nanosecond timestamps on list and detail reads", async () => {
+    const body =
+      '{"data":[{"skill_id":"s1","create_time":1789268780255696824,"update_time":1789268781834562743}],"total":1}';
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(body, { status: 200 })),
+    );
+    await expect(listSkills(ctx, { pageSize: 1 })).resolves.toEqual({
+      data: [
+        {
+          skill_id: "s1",
+          create_time: 1789268780255696824n,
+          update_time: 1789268781834562743n,
+        },
+      ],
+      total: 1,
+    });
+    await expect(getSkill(ctx, "s1")).resolves.toEqual({
+      data: [
+        {
+          skill_id: "s1",
+          create_time: 1789268780255696824n,
+          update_time: 1789268781834562743n,
+        },
+      ],
+      total: 1,
+    });
+  });
 });
 
 describe("published vs draft reads", () => {

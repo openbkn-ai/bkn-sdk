@@ -586,9 +586,53 @@ export async function callMethod(
 
 // ---- typed tool wrappers ---------------------------------------------------
 
+export interface SearchSchemaScope {
+  conceptGroups?: string[];
+  includeObjectTypes?: boolean;
+  includeRelationTypes?: boolean;
+  includeActionTypes?: boolean;
+  includeMetricTypes?: boolean;
+}
+
 export interface SearchSchemaOptions {
-  searchScope?: string[];
+  /** Object scope is canonical; category arrays remain accepted for existing callers. */
+  searchScope?: SearchSchemaScope | string[];
   maxConcepts?: number;
+}
+
+function schemaScopeWire(scope: SearchSchemaScope | string[]): Record<string, unknown> {
+  if (Array.isArray(scope)) {
+    const kinds = scope.map((kind) => kind.trim());
+    const allowed = ["object", "relation", "action", "metric"];
+    const unknown = kinds.filter((kind) => !allowed.includes(kind));
+    if (unknown.length > 0) {
+      throw new InputError(`Unknown schema scope category: ${unknown.join(", ")}.`);
+    }
+    if (kinds.length === 0)
+      throw new InputError("Schema scope must include at least one concept type.");
+    return {
+      include_object_types: kinds.includes("object"),
+      include_relation_types: kinds.includes("relation"),
+      include_action_types: kinds.includes("action"),
+      include_metric_types: kinds.includes("metric"),
+    };
+  }
+
+  if (
+    scope.includeObjectTypes === false &&
+    scope.includeRelationTypes === false &&
+    scope.includeActionTypes === false &&
+    scope.includeMetricTypes === false
+  ) {
+    throw new InputError("Schema scope must include at least one concept type.");
+  }
+  return {
+    concept_groups: scope.conceptGroups,
+    include_object_types: scope.includeObjectTypes,
+    include_relation_types: scope.includeRelationTypes,
+    include_action_types: scope.includeActionTypes,
+    include_metric_types: scope.includeMetricTypes,
+  };
 }
 
 export function searchSchema(
@@ -598,7 +642,7 @@ export function searchSchema(
   opts: SearchSchemaOptions = {},
 ): Promise<unknown> {
   const args: Record<string, unknown> = { query, response_format: "json" };
-  if (opts.searchScope) args.search_scope = opts.searchScope;
+  if (opts.searchScope) args.search_scope = schemaScopeWire(opts.searchScope);
   if (opts.maxConcepts !== undefined) args.max_concepts = opts.maxConcepts;
   return callTool(ctx, knId, "search_schema", args);
 }

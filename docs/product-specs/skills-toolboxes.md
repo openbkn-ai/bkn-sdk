@@ -19,5 +19,8 @@ Manage the skill registry and the toolbox/tool execution surface (the "execution
 ## Edge cases
 
 - Skill install is progressive — fetch manifest before pulling the full package.
+- Skill API `*_time` values are nanosecond integers. JSON reads preserve unsafe
+  integers as native `bigint` rather than rounding them to JavaScript numbers;
+  use `stringifyBigIntJSON()` when serializing an SDK result.
 - Tool calls are **not idempotent** — never auto-retry.
 - Validate OpenAPI uploads at the boundary; reject malformed specs with a clear message.

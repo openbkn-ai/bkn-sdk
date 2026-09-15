@@ -14,3 +14,19 @@ Phase 2 toolchain landed. Each criterion cites a concrete repo signal; write **T
 | CI | lint + test on PR | ✅ `.github/workflows/ci.yml` on push to `main` + all PRs: `check:deps` (own step, legible failure), `lint`, `test`, `build`. Release via `.github/workflows/release.yml` (OIDC Trusted Publishing + provenance) |
 
 Update this table as each signal changes (e.g. live-parity count as commands are filled in).
+
+## Live API contract parity
+
+- `test/unit/knowledge-networks.test.ts` checks the action query's canonical
+  path and GET override header, and KN branch/detail-level query parameters.
+- `test/unit/skills.test.ts` checks that nanosecond Skill timestamps stay exact
+  on list and detail reads.
+- `test/unit/context-loader.test.ts` and `test/unit/context-command.test.ts`
+  check MCP object-shaped scope arguments, legacy category arrays, and CLI
+  category/concept-group mapping before a request is sent.
+- The rebuilt SDK's Skill list timestamp was compared to raw platform JSON
+  and matched exactly, as did the CLI output. Action query no longer failed the
+  override-header gate and matched a direct documented request; both received
+  the downstream proxy's 503. The deployed MCP catalog advertises object-shaped
+  schema scope, but valid REST and MCP requests both returned the same external
+  dependency 503. The dedicated Trace test session was closed.

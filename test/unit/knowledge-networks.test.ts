@@ -91,6 +91,14 @@ describe("getKnowledgeNetwork", () => {
     expect(url.searchParams.get("mode")).toBe("export");
     expect(url.searchParams.get("include_statistics")).toBe("true");
   });
+
+  it("sends the requested branch and detail level", async () => {
+    const fetchMock = mockFetch();
+    await getKnowledgeNetwork(ctx, "kn-1", { branch: "review", detailLevel: "summary" });
+    const url = new URL(firstCall(fetchMock)[0]);
+    expect(url.searchParams.get("branch")).toBe("review");
+    expect(url.searchParams.get("detail_level")).toBe("summary");
+  });
 });
 
 describe("create + delete", () => {
@@ -157,6 +165,18 @@ describe("reads tunnelled over POST", () => {
       "/api/ontology-query/v1/knowledge-networks/kn-1/object-types/ot-1",
     );
     expect(header(init, "X-HTTP-Method-Override")).toBe("GET");
+  });
+
+  it("action-type query uses the canonical path and GET override", async () => {
+    const f = mockFetch();
+    await queryActionType(ctx, "kn-1", "at-1", { dynamic_params: {} });
+    const [url, init] = firstCall(f);
+    expect(new URL(url).pathname).toBe(
+      "/api/ontology-query/v1/knowledge-networks/kn-1/action-types/at-1",
+    );
+    expect(init.method).toBe("POST");
+    expect(header(init, "X-HTTP-Method-Override")).toBe("GET");
+    expect(JSON.parse(init.body as string)).toEqual({ dynamic_params: {} });
   });
 
   it("preserves object-query integer boundaries in responses", async () => {

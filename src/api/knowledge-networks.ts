@@ -51,6 +51,10 @@ export interface GetKnOptions {
   exportMode?: boolean;
   /** Include statistics in the response. */
   stats?: boolean;
+  /** Read a specific branch; backend defaults to main. */
+  branch?: string;
+  /** Full definitions or the smaller progressive summary. */
+  detailLevel?: "full" | "summary";
 }
 
 export function getKnowledgeNetwork(
@@ -62,6 +66,8 @@ export function getKnowledgeNetwork(
     query: {
       mode: opts.exportMode ? "export" : undefined,
       include_statistics: opts.stats ? "true" : undefined,
+      branch: opts.branch,
+      detail_level: opts.detailLevel,
     },
   });
 }
@@ -184,8 +190,8 @@ export function queryActionType(
 ): Promise<unknown> {
   return request(
     ctx,
-    `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-types/${encodeURIComponent(atId)}/`,
-    { method: "POST", body, responseParser: parseBigIntJSON },
+    `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-types/${encodeURIComponent(atId)}`,
+    { method: "POST", headers: QUERY_OVER_POST, body, responseParser: parseBigIntJSON },
   );
 }
 

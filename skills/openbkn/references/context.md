@@ -222,12 +222,13 @@ openbkn context relation-types worldcup_vega_catalog_bkn rel_award_winners_award
 ### Schema discovery
 
 ```bash
-openbkn context search-schema <kn> "customer churn" --scope object,relation --max 10
+openbkn context search-schema <kn> "customer churn" --scope object,relation --concept-groups sales --max 10
 ```
 
-Flag mapping → MCP `search_schema`: `<query>` → `query`, `--scope a,b` →
-`search_scope: ["a","b"]`, `--max n` → `max_concepts`. Always sends
-`response_format: "json"`.
+Flag mapping → MCP `search_schema`: `<query>` → `query`; `--scope object,relation`
+→ `search_scope` with object/relation enabled and action/metric disabled;
+`--concept-groups sales` → `search_scope.concept_groups: ["sales"]`;
+`--max n` → `max_concepts`. Always sends `response_format: "json"`.
 
 ### Instance query — `--args <json>`
 

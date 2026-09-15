@@ -102,10 +102,34 @@ export function contextCommand(): Command {
       "Search object/relation/action/metric schemas → {object_types, relation_types, action_types, metric_types}",
     )
     .option("--scope <list>", "comma-separated scopes (object,relation,action,metric)")
+    .option("--concept-groups <ids>", "limit recall to these concept group IDs (comma-separated)")
     .option("--max <n>", "max concepts", int)
     .action(async (knId: string, query: string, opts, cmd: Command) => {
+      const kinds = opts.scope !== undefined ? list(String(opts.scope)) : undefined;
+      if (kinds) {
+        const unknown = kinds.filter(
+          (kind) => !["object", "relation", "action", "metric"].includes(kind),
+        );
+        if (unknown.length > 0) {
+          throw new InputError(`Unknown schema scope category: ${unknown.join(", ")}.`);
+        }
+        if (kinds.length === 0) {
+          throw new InputError("Schema scope must include at least one concept type.");
+        }
+      }
+      const scope = {
+        ...(opts.conceptGroups ? { conceptGroups: list(String(opts.conceptGroups)) } : {}),
+        ...(kinds
+          ? {
+              includeObjectTypes: kinds.includes("object"),
+              includeRelationTypes: kinds.includes("relation"),
+              includeActionTypes: kinds.includes("action"),
+              includeMetricTypes: kinds.includes("metric"),
+            }
+          : {}),
+      };
       const data = await clientFrom(cmd).context.searchSchema(knId, query, {
-        searchScope: opts.scope ? String(opts.scope).split(",") : undefined,
+        searchScope: Object.keys(scope).length > 0 ? scope : undefined,
         maxConcepts: opts.max,
       });
       printJson(data, outputOptions(cmd));
