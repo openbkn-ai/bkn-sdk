@@ -136,6 +136,9 @@ export function bknCommand(): Command {
 
   bkn
     .command("search <kn-id> <query>")
+    // A search question may begin with a minus sign (for example, "-40℃").
+    // Commander otherwise treats that second positional argument as an option.
+    .allowUnknownOption()
     .description(
       "Recall instances from a plain sentence — no object type or field names needed → {nodes, object_types}",
     )
