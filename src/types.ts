@@ -67,6 +67,11 @@ export interface RequestContext {
   baseUrl: string;
   token: string;
   insecure: boolean;
+  /**
+   * The token came from `BKN_TOKEN`, shadowing any `auth login` session. A 401
+   * then says so — otherwise a fresh login looks broken for no visible reason.
+   */
+  tokenFromEnv?: boolean;
   /** Dedicated producer credential; never sent to read or non-Trace endpoints. */
   evidenceIngestToken?: string;
   /** Stable per-client BKN Trace context propagated on outbound requests. */

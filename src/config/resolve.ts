@@ -81,6 +81,7 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
     baseUrl: normalized,
     token,
     insecure,
+    ...(opts.token === undefined && process.env.BKN_TOKEN ? { tokenFromEnv: true } : {}),
     ...((opts.evidenceIngestToken ?? process.env.BKN_TRACE_EVIDENCE_INGEST_TOKEN)
       ? {
           evidenceIngestToken:

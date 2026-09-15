@@ -1,6 +1,62 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OperationReceipt } from "../../src/api/trace-lifecycle.js";
+import { buildProgram } from "../../src/cli-program.js";
 import { renderTechnicalTraceDetail, traceCommand } from "../../src/commands/trace.js";
+import { writeVersionCheckCache } from "../../src/config/store.js";
+
+describe("trace search filters through the complete CLI", () => {
+  const base = "https://trace-filter.example.com";
+
+  beforeEach(() => {
+    writeVersionCheckCache(base, { serverVersion: "0.1.5", checkedAt: new Date().toISOString() });
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  for (const position of ["before", "after"]) {
+    it.each([
+      [["--conversation-id", "conv-1"], { conversation_id: "conv-1" }],
+      [["--interaction-id", "int-1"], { interaction_id: "int-1" }],
+      [
+        ["--conversation-id", "conv-1", "--interaction-id", "int-1"],
+        { conversation_id: "conv-1", interaction_id: "int-1" },
+      ],
+    ])(`forwards %j ${position} trace search into the request query`, async (flags, expected) => {
+      const fetch = vi.fn(async (_url: string | URL) =>
+        Response.json({ entries: [], total: 0, next_cursor: null }),
+      );
+      vi.stubGlobal("fetch", fetch);
+      const args =
+        position === "before" ? [...flags, "trace", "search"] : ["trace", "search", ...flags];
+      await buildProgram().parseAsync(
+        ["--base-url", base, "--token", "t", ...args, "--limit", "7", "--status", "failed"],
+        { from: "user" },
+      );
+
+      expect(fetch).toHaveBeenCalledOnce();
+      const query = new URL(String(fetch.mock.calls[0]?.[0])).searchParams;
+      expect(Object.fromEntries(query)).toEqual({ ...expected, limit: "7", status: "failed" });
+    });
+  }
+
+  it("does not turn ambient trace context into search filters", async () => {
+    process.env.BKN_CONVERSATION_ID = "ambient-conversation";
+    process.env.BKN_INTERACTION_ID = "ambient-interaction";
+    const fetch = vi.fn(async (_url: string | URL) => Response.json({ entries: [], total: 0 }));
+    vi.stubGlobal("fetch", fetch);
+    await buildProgram().parseAsync(["--base-url", base, "--token", "t", "trace", "search"], {
+      from: "user",
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+    const query = new URL(String(fetch.mock.calls[0]?.[0])).searchParams;
+    expect(query.has("conversation_id")).toBe(false);
+    expect(query.has("interaction_id")).toBe(false);
+  });
+});
 
 function receipt(status: "completed" | "failed"): OperationReceipt {
   return {

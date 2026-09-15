@@ -659,7 +659,11 @@ not bound until you attach it (\`capability list\` counts it under boxes[].unmou
     .option("--branch <name>", "target branch", "main")
     .action(async (dir: string, opts, cmd: Command) => {
       const declared = validateBknDirectory(dir).capabilities;
-      const result = await clientFrom(cmd).kn.push(dir, { branch: opts.branch });
+      const result = await clientFrom(cmd).kn.push(dir, {
+        branch: opts.branch,
+        verifyIntegrity: true,
+        onIntegrityWarning: (warning) => process.stderr.write(`warning: ${warning}\n`),
+      });
       warnUnboundCapabilities(result, declared);
       printJson(result, outputOptions(cmd));
     });

@@ -291,7 +291,9 @@ export function traceCommand(): Command {
     .option("--error-keyword <text>", "case-insensitive error text")
     .option("--conversation-id <id>", "exact conversation ID")
     .option("--interaction-id <id>", "exact interaction ID")
-    .action(async (opts, cmd: Command) => {
+    .action(async (_opts, cmd: Command) => {
+      // The root also declares both ID flags, so Commander may store them there.
+      const opts = cmd.optsWithGlobals();
       printJson(
         await clientFrom(cmd).trace.search({
           limit: opts.limit,

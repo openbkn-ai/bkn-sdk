@@ -611,6 +611,13 @@ THE SAME ID, FOUR NAMES
   get_object_types, \`ot_id\` in query-object-instance arguments, and \`object_type_id\` on
   an instance row. Same value throughout — carry it across, do not look it up again.
 
+QUERY ARGUMENTS
+  query-object-instance rejects unknown argument keys before calling the platform. Combine
+  conditions with condition.sub_conditions, not condition.conditions; vector search belongs in
+  condition.operation=knn, not a top-level knn argument. For properties and condition.field,
+  run object-types <kn-id> <ot-id> first to see the valid field names. --schema shows the
+  argument shape advertised by this deploy.
+
 RAW MCP
   tools <kn-id> lists what this deploy advertises, with each tool's input schema.
   tool-call / call-method reach anything the named commands above do not cover.`,

@@ -34,6 +34,30 @@ async function resolveAccount(
   }
 }
 
+/**
+ * Warn (stderr) when env vars outrank the saved session for every other command.
+ * `resolveContext` prefers BKN_TOKEN / BKN_BASE_URL over the store, but `login`
+ * writes and `whoami` reads only the store — so a stale export makes a fresh
+ * login answer 401 while `whoami` shows a healthy identity.
+ */
+function warnEnvShadow(baseUrl: string | undefined): void {
+  const notes: string[] = [];
+  const vars: string[] = [];
+  if (process.env.BKN_TOKEN) {
+    notes.push("BKN_TOKEN is set — other commands send it instead of this session's token.");
+    vars.push("BKN_TOKEN");
+  }
+  const envBase = process.env.BKN_BASE_URL;
+  if (envBase && baseUrl && trimTrailingSlashes(envBase) !== trimTrailingSlashes(baseUrl)) {
+    notes.push(`BKN_BASE_URL is set to ${envBase} — other commands go there, not ${baseUrl}.`);
+    vars.push("BKN_BASE_URL");
+  }
+  if (vars.length === 0) return;
+  process.stderr.write(
+    `warning: ${notes.join(" ")} To use the saved session: \`unset ${vars.join(" ")}\`\n`,
+  );
+}
+
 /** Render saved sessions as a tree: platform → users, `*` marks the active one. */
 function renderSessions(items: auth.PlatformListItem[]): string {
   const byPlatform = new Map<string, auth.PlatformListItem[]>();
@@ -77,6 +101,7 @@ export function registerAuthLeaves(cmd: Command): void {
         } else {
           process.stdout.write(`Logged in to ${r.baseUrl ?? url} as ${r.username ?? r.userId}\n`);
         }
+        warnEnvShadow(r.baseUrl ?? url);
       };
       const token = opts.token ?? g.token;
       if (token) {
@@ -200,6 +225,7 @@ export function registerAuthLeaves(cmd: Command): void {
           /* not an admin / offline — fall back to token claims */
         }
       }
+      warnEnvShadow(me.baseUrl);
       const out = outputOptions(cmd);
       // --json/--compact/--full → the complete claim set. Default → a trimmed,
       // human summary of the key identity fields (the raw JWT is mostly noise).

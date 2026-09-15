@@ -24,10 +24,40 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
 - `bkn push` validates mask-rule JSON, required parameters, bounds, property-type
   compatibility, and kind-specific fields before packaging or making a network
   request. `bkn pull` preserves the `.bkn` payload unchanged.
+- The CLI `bkn push` reads the target branch's visible object-type list before and
+  after import. It warns on stderr, naming an object type and property, when a
+  `data_source` binding disappears/changes or `condition_operations` are lost.
+  The list is filtered by the current user's `view_detail` permission, so this
+  check cannot cover object types the user cannot see.
+  The raw import response gains `integrity_warnings` only when warnings exist;
+  scripts using `--json` can check the same result. A 404 before upload means
+  there is no previous branch to compare. Other pre-upload read failures stop
+  the push; a post-upload read failure is reported explicitly because the import
+  may already have succeeded. Programmatic `kn.push` callers can opt into this
+  check with `verifyIntegrity: true`.
+- `bkn validate` checks the physical Markdown rows in structured table sections
+  that the backend imports (including `metrics/`), reporting the relative file
+  path and line for missing leading pipes, misaligned columns, or a row continued
+  on the next line. Description sections, `network.bkn`, and `risk_types/` tables
+  remain prose. `bkn push` rejects these errors before packaging.
+  The backend treats even `\|` as a column separator, so table cell text must
+  use a different character in place of a pipe and stay on one physical line.
+  Structured table rows must stay contiguous. `Logic Properties` must use either
+  a flat table or `####` property subsections; mixing them drops the flat rows.
 - When the lifecycle catalog requires `conversation_mode`, managed retrieval
   sends `new` without a conversation ID or `continue` with one. If that
   handshake fails, the SDK surfaces the lifecycle error and does not send an
   uncontexted business request.
+- The dedicated `context query-object-instance` command and SDK wrapper reject
+  unknown top-level argument keys, extra `filters[]` / `sort[]` keys, and
+  misspelled nested condition keys before opening an MCP session. Each filter
+  requires `field`, `op`, and `value`; each sort item requires `field` and an
+  `asc` or `desc` direction. A composite condition uses `sub_conditions`; vector
+  search uses `condition.operation=knn`. `properties` must be an array of field
+  names. To check whether a field actually belongs to the object type, callers
+  inspect `context object-types <kn-id> <ot-id>` first; that schema is not
+  fetched implicitly during the query. The generic `context tool-call` remains
+  a raw MCP path.
 
 ## Index building (via Catalog BuildTask — no KN-level build)
 

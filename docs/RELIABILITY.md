@@ -20,6 +20,10 @@ Runtime expectations for the SDK and CLI as a client of the BKN backend.
 
 - `api/` maps HTTP/network failures to typed errors; `utils/errors` maps those to user messages + non-zero exit codes.
 - Auth failures (401/403) tell the user to re-login, not just "request failed".
+- Stored refresh credentials allow one refresh and one retry after a 401. The retry
+  rebuilds Authorization from the refreshed token and preserves the request body
+  and custom headers. A failed refresh or second 401 remains an error; explicit
+  tokens without refresh credentials are not refreshed.
 
 ## Observability
 

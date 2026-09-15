@@ -38,6 +38,8 @@ export interface CapabilityCheck {
 export interface ValidationResult {
   valid: boolean;
   dir: string;
+  /** `network.bkn` frontmatter id, or an empty string when none can be read. */
+  networkId: string;
   counts: { objectTypes: number; relationTypes: number; conceptGroups: number };
   /** network.bkn's `capabilities:` section: how many entries it declares, and which cannot bind. */
   capabilities: CapabilityCheck;
@@ -86,6 +88,190 @@ function bknFiles(dir: string): string[] {
   return readdirSync(dir)
     .filter((f) => f.endsWith(".bkn"))
     .map((f) => join(dir, f));
+}
+
+const STRUCTURED_TABLE_SECTIONS = {
+  object_types: new Set(["Data Source", "Data Properties", "Logic Properties"]),
+  relation_types: new Set([
+    "Endpoint",
+    "Mapping Rules",
+    "Backing Resource",
+    "Source Mapping",
+    "Target Mapping",
+  ]),
+  action_types: new Set([
+    "Bound Object",
+    "Affect Object",
+    "Action Source",
+    "Tool Configuration",
+    "Parameter Binding",
+    "Schedule",
+  ]),
+  concept_groups: new Set(["Object Types"]),
+  metrics: new Set(["Metric attributes", "Scope", "Time Dimension", "Analysis Dimensions"]),
+  // Risk types have only frontmatter and prose; the backend parses no tables.
+  risk_types: new Set<string>(),
+} as const;
+type BknTableKind = keyof typeof STRUCTURED_TABLE_SECTIONS;
+const LOGIC_PROPERTY_TABLE_LABELS = new Set([
+  "Meta",
+  "Source",
+  "Parameters",
+  "Analysis Dimensions",
+]);
+const TABLE_DIVIDER = /^\|?[\s:*-]+(?:\|[\s:*-]+)*\|?$/;
+
+/** Match the backend's first pipe-prefixed table in a structured section. */
+function validateTableSection(
+  lines: string[],
+  rel: string,
+  start: number,
+  end: number,
+  nested = false,
+): string[] {
+  const errors: string[] = [];
+  const cells = (line: string): string[] =>
+    line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|");
+
+  const first = lines.findIndex(
+    (line, index) => index >= start && index < end && line.trim().startsWith("|"),
+  );
+  // An unprefixed header before the first backend-visible row is invisible to parseTable.
+  for (let i = start; i + 1 < (first < 0 ? end : first); i++) {
+    const header = lines[i]?.trim() ?? "";
+    const divider = lines[i + 1]?.trim() ?? "";
+    if (
+      header.includes("|") &&
+      !header.startsWith("|") &&
+      divider.includes("|") &&
+      TABLE_DIVIDER.test(divider)
+    ) {
+      errors.push(`${rel}:${i + 1}: table header must start with '|'; the BKN parser skips it.`);
+      return errors;
+    }
+  }
+
+  if (first < 0) return errors;
+  let blockEnd = first;
+  while (blockEnd < end && lines[blockEnd]?.trim().startsWith("|")) blockEnd++;
+  const next = lines[blockEnd]?.trim() ?? "";
+  const separator = lines[first + 1]?.trim() ?? "";
+  if (blockEnd === first + 1) {
+    if (next.includes("|") && TABLE_DIVIDER.test(next)) {
+      errors.push(
+        `${rel}:${first + 2}: table separator must start with '|'; the BKN parser stops before its rows.`,
+      );
+    } else if (next.includes("|")) {
+      errors.push(`${rel}:${first + 2}: table row must start with '|'; the BKN parser skips it.`);
+    } else {
+      errors.push(
+        `${rel}:${first + 1}: first table block has only one line; the BKN parser ignores it.`,
+      );
+    }
+    return errors;
+  }
+
+  const expected = cells(lines[first] ?? "").length;
+  const dataStart = TABLE_DIVIDER.test(separator) ? first + 2 : first + 1;
+  for (let row = dataStart; row < blockEnd; row++) {
+    const line = lines[row] ?? "";
+    if (line.includes("\\|")) {
+      errors.push(
+        `${rel}:${row + 1}: escaped pipe '\\|' is still a column separator to the BKN parser; replace the pipe in this cell.`,
+      );
+    } else if (cells(line).length !== expected) {
+      errors.push(
+        `${rel}:${row + 1}: table row has ${cells(line).length} columns; expected ${expected}. Check for a pipe or newline inside a cell.`,
+      );
+    }
+  }
+  if (!nested && next && blockEnd === dataStart && !/^#{1,6}\s/.test(next)) {
+    errors.push(`${rel}:${blockEnd + 1}: table row must start with '|'; the BKN parser skips it.`);
+  } else if (!nested && next && blockEnd > dataStart && !/^#{1,6}\s/.test(next)) {
+    errors.push(
+      `${rel}:${blockEnd + 1}: text continues immediately after a table row; a newline inside a cell ends the table. Keep each row on one line.`,
+    );
+  }
+  if (!nested) {
+    const resumed = lines.findIndex(
+      (line, index) => index > blockEnd && index < end && line.trim().startsWith("|"),
+    );
+    if (resumed >= 0) {
+      errors.push(
+        `${rel}:${resumed + 1}: pipe row resumes after a table break; the BKN parser ignores rows after the first block. Keep table rows contiguous.`,
+      );
+    }
+  }
+  return errors;
+}
+
+/**
+ * The backend only parses tables in named `###` sections after the entity's `##`
+ * heading. Unknown sections and risk-type tables are retained as description.
+ */
+function validateMarkdownTables(text: string, rel: string, kind: BknTableKind): string[] {
+  const lines = text.split(/\r?\n/);
+  const errors: string[] = [];
+  const bodyStart = lines.findIndex((line) => /^##\s+/.test(line));
+  if (bodyStart < 0) return errors;
+
+  const validateSection = (name: string, start: number, end: number) => {
+    if (!STRUCTURED_TABLE_SECTIONS[kind].has(name)) return;
+    if (kind !== "object_types" || name !== "Logic Properties") {
+      errors.push(...validateTableSection(lines, rel, start, end));
+      return;
+    }
+
+    // Logic Properties use either one flat table or `#### property` subsections.
+    const nested = lines.findIndex(
+      (line, index) => index >= start && index < end && /^####\s+/.test(line),
+    );
+    if (nested < 0) {
+      errors.push(...validateTableSection(lines, rel, start, end));
+      return;
+    }
+    const flatTable = lines.findIndex(
+      (line, index) => index >= start && index < nested && line.trim().startsWith("|"),
+    );
+    if (flatTable >= 0) {
+      errors.push(
+        `${rel}:${flatTable + 1}: flat Logic Properties table appears before a '####' subsection; the BKN parser ignores flat rows when subsections exist.`,
+      );
+    }
+    let label = "";
+    let labelStart = nested + 1;
+    for (let i = nested + 1; i <= end; i++) {
+      const nextLabel = i < end ? /^\*\*(.+?)\*\*$/.exec(lines[i]?.trim() ?? "") : null;
+      if (i < end && !nextLabel && !/^####\s+/.test(lines[i] ?? "")) continue;
+      if (LOGIC_PROPERTY_TABLE_LABELS.has(label)) {
+        errors.push(...validateTableSection(lines, rel, labelStart, i, true));
+        let lastPipe = -1;
+        for (let row = labelStart; row < i; row++) {
+          if (!lines[row]?.trim().startsWith("|")) continue;
+          if (lastPipe >= 0 && row > lastPipe + 1) {
+            errors.push(
+              `${rel}:${row + 1}: pipe row resumes after text in Logic Properties '${label}'; the BKN parser merges it with the previous table.`,
+            );
+            break;
+          }
+          lastPipe = row;
+        }
+      }
+      label = nextLabel?.[1] ?? "";
+      labelStart = i + 1;
+    }
+  };
+
+  let name = "";
+  let sectionStart = bodyStart + 1;
+  for (let i = bodyStart + 1; i <= lines.length; i++) {
+    const heading = i < lines.length ? /^###\s+(.+)$/.exec(lines[i] ?? "") : null;
+    if (i < lines.length && !heading) continue;
+    if (name) validateSection(name, sectionStart, i);
+    name = heading?.[1]?.trim() ?? "";
+    sectionStart = i + 1;
+  }
+  return errors;
 }
 
 function markdownSection(text: string, heading: string): string | undefined {
@@ -369,6 +555,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
     return {
       valid: false,
       dir,
+      networkId: "",
       counts: { objectTypes: 0, relationTypes: 0, conceptGroups: 0 },
       capabilities: { declared: 0, skipped: [] },
       errors: [`Not a directory: ${dir}`],
@@ -378,6 +565,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
 
   // network.bkn — required, must declare a knowledge_network.
   const networkPath = join(dir, "network.bkn");
+  let networkId = "";
   let capabilities: CapabilityCheck = { declared: 0, skipped: [] };
   if (!existsSync(networkPath)) {
     errors.push("Missing network.bkn at the BKN root.");
@@ -386,6 +574,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
     const fm = parseFrontmatter(networkText);
     if (!fm) errors.push("network.bkn has no frontmatter block.");
     else {
+      networkId = fm.id ?? "";
       if (fm.type !== "knowledge_network")
         errors.push(`network.bkn type must be 'knowledge_network', got '${fm.type ?? ""}'.`);
       if (!fm.id) errors.push("network.bkn is missing 'id'.");
@@ -401,6 +590,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
     const text = readFileSync(file, "utf8");
     const fm = parseFrontmatter(text);
     const rel = file.slice(dir.length + 1);
+    errors.push(...validateMarkdownTables(text, rel, "object_types"));
     if (!fm || fm.type !== "object_type") {
       errors.push(`${rel}: not a valid object_type (missing/wrong frontmatter type).`);
       continue;
@@ -425,6 +615,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
     const text = readFileSync(file, "utf8");
     const fm = parseFrontmatter(text);
     const rel = file.slice(dir.length + 1);
+    errors.push(...validateMarkdownTables(text, rel, "relation_types"));
     if (!fm || fm.type !== "relation_type") {
       errors.push(`${rel}: not a valid relation_type (missing/wrong frontmatter type).`);
       continue;
@@ -439,10 +630,17 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
   }
 
   const cgFiles = bknFiles(join(dir, "concept_groups"));
+  for (const kind of ["action_types", "concept_groups", "metrics", "risk_types"] as const) {
+    for (const file of kind === "concept_groups" ? cgFiles : bknFiles(join(dir, kind))) {
+      const text = readFileSync(file, "utf8");
+      errors.push(...validateMarkdownTables(text, file.slice(dir.length + 1), kind));
+    }
+  }
 
   return {
     valid: errors.length === 0,
     dir,
+    networkId,
     counts: {
       objectTypes: otFiles.length,
       relationTypes: rtFiles.length,

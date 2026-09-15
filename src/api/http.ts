@@ -180,22 +180,36 @@ function hintFor(
   body: string,
   renewal: Renewal,
 ): string | undefined {
+  const envHint =
+    status === 401 && ctx.tokenFromEnv
+      ? "The token came from the BKN_TOKEN environment variable, which overrides any `openbkn auth login` session — `unset BKN_TOKEN` to use the login instead."
+      : undefined;
+  const withEnv = (hint?: string): string | undefined =>
+    [envHint, hint].filter(Boolean).join(" ") || undefined;
   if (status === 401 && ctx.token.startsWith("bak_")) {
-    return "AppKey invalid / expired / revoked / owner disabled — re-issue with `openbkn appkey create` (or `appkey regenerate <id>`). Do not auto-retry.";
+    return withEnv(
+      "AppKey invalid / expired / revoked / owner disabled — re-issue with `openbkn appkey create` (or `appkey regenerate <id>`). Do not auto-retry.",
+    );
   }
   if (status === 401) {
     switch (renewal) {
       case "failed":
-        return `The access token expired and could not be renewed: the refresh token was rejected (expired or revoked). Run \`openbkn auth login ${ctx.baseUrl}\` again. ${APPKEY_TIP}`;
+        return withEnv(
+          `The access token expired and could not be renewed: the refresh token was rejected (expired or revoked). Run \`openbkn auth login ${ctx.baseUrl}\` again. ${APPKEY_TIP}`,
+        );
       case "renewed":
-        return `The access token was renewed, and the platform still rejects it — the session was revoked or the account disabled. Run \`openbkn auth login ${ctx.baseUrl}\` again.`;
+        return withEnv(
+          `The access token was renewed, and the platform still rejects it — the session was revoked or the account disabled. Run \`openbkn auth login ${ctx.baseUrl}\` again.`,
+        );
       case "unavailable":
-        return `The token is expired or invalid, and no refresh token is saved for it (a \`--token\` / BKN_TOKEN value is never renewed). Run \`openbkn auth login ${ctx.baseUrl}\`. ${APPKEY_TIP}`;
+        return withEnv(
+          `The token is expired or invalid, and no refresh token is saved for it (a \`--token\` / BKN_TOKEN value is never renewed). Run \`openbkn auth login ${ctx.baseUrl}\`. ${APPKEY_TIP}`,
+        );
       default:
         break;
     }
   }
-  return lifecycleHint(body);
+  return withEnv(lifecycleHint(body));
 }
 
 const LIFECYCLE_ACTIONS = new Set([
