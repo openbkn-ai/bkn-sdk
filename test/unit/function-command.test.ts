@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { collectDep, parseJsonOption, readCode } from "../../src/commands/function.js";
+import {
+  collectDep,
+  generationRequestFrom,
+  generationType,
+  parseJsonOption,
+  readCode,
+} from "../../src/commands/function.js";
 import { InputError } from "../../src/utils/errors.js";
 
 describe("--dep", () => {
@@ -33,5 +39,31 @@ describe("JSON options", () => {
 describe("reading code", () => {
   it("says which file it could not read instead of a bare ENOENT", () => {
     expect(() => readCode("/nope/missing.py")).toThrow(/Cannot read \/nope\/missing.py/);
+  });
+});
+
+describe("Function AI generation flags", () => {
+  it("maps a Python generation request and optional parameter constraints", () => {
+    const type = generationType("python_function_generator");
+    expect(
+      generationRequestFrom(type, {
+        query: "add two numbers",
+        inputs: '[{"name":"left","type":"number"}]',
+      }),
+    ).toEqual({
+      query: "add two numbers",
+      inputs: [{ name: "left", type: "number" }],
+      outputs: undefined,
+    });
+  });
+
+  it("rejects invalid type-specific inputs before sending a request", () => {
+    expect(() => generationType("typescript")).toThrow(/type must be one of/);
+    expect(() => generationRequestFrom(generationType("python_function_generator"), {})).toThrow(
+      /--query is required/,
+    );
+    expect(() =>
+      generationRequestFrom(generationType("metadata_param_generator"), { query: "wrong mode" }),
+    ).toThrow(/--query only applies/);
   });
 });

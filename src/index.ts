@@ -95,6 +95,8 @@ export { functions } from "./resources/functions.js";
 export type {
   DependencyInfo,
   ExecuteFunctionOptions,
+  FunctionAiGenerationRequest,
+  FunctionAiGenerationType,
   FunctionDefinition,
   FunctionExecuteResult,
   ParameterDef,

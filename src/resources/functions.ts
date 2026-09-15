@@ -4,13 +4,36 @@
 /** Sandbox function surface: run code without registering it as anything. */
 import {
   type ExecuteFunctionOptions,
+  type FunctionAiGenerationRequest,
+  type FunctionAiGenerationType,
   executeFunction,
   functionTemplate,
+  generateFunction,
+  getFunctionPromptTemplate,
   inferFunctionSchema,
   listDependencyVersions,
   listFunctionDependencies,
 } from "../api/functions.js";
 import type { RequestContext } from "../types.js";
+import { InputError } from "../utils/errors.js";
+
+function checkedGenerationRequest(
+  type: FunctionAiGenerationType,
+  request: FunctionAiGenerationRequest,
+): FunctionAiGenerationRequest {
+  if (request.stream) {
+    throw new InputError(
+      "Function AI generation streaming returns SSE and is not supported by client.functions.generate; use `openbkn call` for the raw stream.",
+    );
+  }
+  if (type === "python_function_generator" && !request.query?.trim()) {
+    throw new InputError("python_function_generator requires a non-empty query.");
+  }
+  if (type === "metadata_param_generator" && !request.code?.trim()) {
+    throw new InputError("metadata_param_generator requires non-empty code.");
+  }
+  return request;
+}
 
 export function functions(ctx: RequestContext) {
   return {
@@ -22,5 +45,8 @@ export function functions(ctx: RequestContext) {
       opts?: { pypiRepoUrl?: string; pythonVersion?: string },
     ) => listDependencyVersions(ctx, packageName, opts),
     template: (templateType?: string) => functionTemplate(ctx, templateType),
+    generate: (type: FunctionAiGenerationType, request: FunctionAiGenerationRequest) =>
+      generateFunction(ctx, type, checkedGenerationRequest(type, request)),
+    promptTemplate: (type: FunctionAiGenerationType) => getFunctionPromptTemplate(ctx, type),
   };
 }

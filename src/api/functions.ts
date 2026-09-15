@@ -34,6 +34,28 @@ export interface ParameterDef {
   sub_parameters?: ParameterDef[];
 }
 
+/** The two documented AI-assisted function-generation directions. */
+export const FunctionAiGenerationType = [
+  "python_function_generator",
+  "metadata_param_generator",
+] as const;
+export type FunctionAiGenerationType = (typeof FunctionAiGenerationType)[number];
+
+/**
+ * The JSON-only request shape for Function AI generation.
+ * `query` is required for `python_function_generator`; `code` is required for
+ * `metadata_param_generator`. The resource and CLI enforce those per-type
+ * requirements before sending the request.
+ */
+export interface FunctionAiGenerationRequest {
+  query?: string;
+  code?: string;
+  inputs?: ParameterDef[];
+  outputs?: ParameterDef[];
+  /** `true` changes the response into SSE, which this JSON API does not expose. */
+  stream?: boolean;
+}
+
 /**
  * A function with a contract around it — the shape that creates a function tool
  * inside a toolbox.
@@ -168,4 +190,24 @@ export function listDependencyVersions(
 /** The fill-in-the-blanks skeleton for a language. Only `python` today. */
 export function functionTemplate(ctx: RequestContext, templateType = "python"): Promise<unknown> {
   return request(ctx, `${PATH}/template/${encodeURIComponent(templateType)}`);
+}
+
+/** Generate function code or parameter metadata through the platform's default LLM. */
+export function generateFunction(
+  ctx: RequestContext,
+  type: FunctionAiGenerationType,
+  body: FunctionAiGenerationRequest,
+): Promise<unknown> {
+  return request(ctx, `${PATH}/ai_generate/function/${encodeURIComponent(type)}`, {
+    method: "POST",
+    body,
+  });
+}
+
+/** Read the prompt template used by one AI-generation direction. */
+export function getFunctionPromptTemplate(
+  ctx: RequestContext,
+  type: FunctionAiGenerationType,
+): Promise<unknown> {
+  return request(ctx, `${PATH}/ai_generate/prompt/${encodeURIComponent(type)}`);
 }
