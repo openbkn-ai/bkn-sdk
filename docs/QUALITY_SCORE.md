@@ -21,8 +21,11 @@ Update this table as each signal changes (e.g. live-parity count as commands are
   outgoing query for conversation/interaction filters before and after the
   command. Ambient Trace context does not become an implicit search filter.
 - `test/unit/http.test.ts` checks Authorization on the wire after refresh, request
-  preservation, the one-refresh limit on failure, and BKN_TOKEN-origin 401 hints.
-  The retry implementation was incorporated in upstream #110 before this PR.
+  preservation, the one-refresh limit on failure, BKN_TOKEN-origin 401 hints, and
+  bounded recovery of retryable reads after network or 5xx failures. It also
+  checks that ordinary POST writes are never replayed. `knowledge-networks.test.ts`
+  verifies that only the four body-carrying ontology query helpers opt in; an
+  action execution remains a single send.
 - `test/unit/build-wait.test.ts` uses fake time to check short wait deadlines and
   a task completing during the final poll interval, alongside task failure and
   unlimited-wait cases. Status requests still use the normal HTTP timeout.

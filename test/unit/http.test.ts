@@ -106,6 +106,56 @@ describe("request 401 recovery", () => {
   });
 });
 
+describe("read retries", () => {
+  it("recovers a GET after transient 5xx responses", async () => {
+    const fetch = vi
+      .fn<() => Promise<Response>>()
+      .mockResolvedValueOnce(Response.json({ error: "temporary" }, { status: 503 }))
+      .mockResolvedValueOnce(Response.json({ error: "temporary" }, { status: 502 }))
+      .mockResolvedValueOnce(Response.json({ entries: ["recovered"] }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(request(ctx, "/api/example")).resolves.toEqual({ entries: ["recovered"] });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("recovers a GET after a transient network failure", async () => {
+    const fetch = vi
+      .fn<() => Promise<Response>>()
+      .mockRejectedValueOnce(new TypeError("fetch failed"))
+      .mockResolvedValueOnce(Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(request(ctx, "/api/example")).resolves.toEqual({ ok: true });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops after the bounded number of GET retries", async () => {
+    const fetch = vi.fn(async () => Response.json({ error: "temporary" }, { status: 503 }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(request(ctx, "/api/example")).rejects.toMatchObject({ status: 503 });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("retries an API-marked POST query but not an ordinary POST", async () => {
+    const fetch = vi
+      .fn<() => Promise<Response>>()
+      .mockResolvedValueOnce(Response.json({ error: "temporary" }, { status: 503 }))
+      .mockResolvedValueOnce(Response.json({ entries: [] }))
+      .mockResolvedValueOnce(Response.json({ error: "temporary" }, { status: 503 }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(
+      request(ctx, "/api/example/query", { method: "POST", body: {}, retryable: true }),
+    ).resolves.toEqual({ entries: [] });
+    await expect(
+      request(ctx, "/api/example/create", { method: "POST", body: {} }),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+});
+
 describe("non-JSON responses", () => {
   it("hints that an HTML error page never reached the service", async () => {
     respond("<html><body><center>404 Not Found</center></body></html>", {
