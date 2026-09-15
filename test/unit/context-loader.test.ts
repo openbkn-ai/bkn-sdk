@@ -4,9 +4,9 @@ import { ToolError } from "../../src/utils/errors.js";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  ManagedToolError,
   callManagedTool,
   callMethod,
-  ManagedToolError,
   callTool,
   getKnDetail,
   getObjectTypes,
@@ -434,7 +434,8 @@ describe("managed MCP tool calls", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(
-        async () => new Response(body, { status: 200, headers: { "mcp-session-id": `${status}-s1` } }),
+        async () =>
+          new Response(body, { status: 200, headers: { "mcp-session-id": `${status}-s1` } }),
       ),
     );
 
