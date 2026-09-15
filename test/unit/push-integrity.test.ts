@@ -5,6 +5,7 @@ import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { bknCommand } from "../../src/commands/bkn.js";
 import { writeVersionCheckCache } from "../../src/config/store.js";
+import { HttpError, toExitCode } from "../../src/utils/errors.js";
 import { lostIndexWarnings, snapshotObjectTypes } from "../../src/utils/push-integrity.js";
 
 const BASE = "https://push-integrity.example.com";
@@ -161,14 +162,54 @@ describe("bkn push integrity verification", () => {
     });
   });
 
+  it("reports an incomplete post-upload snapshot instead of claiming verification", async () => {
+    server(Response.json(before), Response.json({ entries: [{ id: "ot" }] }));
+    const stdout: string[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation((part) => {
+      stdout.push(String(part));
+      return true;
+    });
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    await cli(packageDir());
+
+    expect(stderr.mock.calls.join(" ")).toContain(
+      "Could not verify object-type bindings/index operators",
+    );
+    expect(JSON.parse(stdout.join(""))).toMatchObject({
+      integrity_warnings: [expect.stringContaining("Could not verify")],
+    });
+  });
+
   it.each([
     Response.json({ error: "offline" }, { status: 503 }),
     Response.json({ wrong: "shape" }),
     Response.json({ entries: [{ id: "ot", data_source: {} }] }),
+    Response.json({ entries: [{ id: "ot", data_source: null }] }),
   ])("refuses to upload when the before-snapshot is unreadable", async (response) => {
     const fetch = server(response);
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-    await expect(cli(packageDir())).rejects.toThrow("the upload was not sent");
+    await expect(cli(packageDir())).rejects.toThrow();
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it("rejects an undefined binding in a snapshot", () => {
+    expect(() =>
+      snapshotObjectTypes({
+        entries: [{ id: "ot", data_source: undefined, data_properties: [] }],
+      }),
+    ).toThrow("invalid data_source");
+  });
+
+  it("preserves an authorization failure before the upload", async () => {
+    const fetch = server(Response.json({ message: "missing view_detail" }, { status: 403 }));
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    const error = await cli(packageDir()).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(HttpError);
+    expect(error).toMatchObject({ status: 403 });
+    expect(toExitCode(error)).toBe(3);
     expect(fetch).toHaveBeenCalledOnce();
   });
 

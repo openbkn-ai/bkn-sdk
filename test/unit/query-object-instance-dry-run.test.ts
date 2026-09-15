@@ -5,7 +5,7 @@ import { expect, it, vi } from "vitest";
 import { context } from "../../src/resources/context-loader.js";
 import { DryRunSignal, enableDryRun } from "../../src/utils/dry-run.js";
 
-it("previews the query arguments without reading schema or opening an MCP session", async () => {
+it("previews the direct MCP query arguments without reading schema or opening an MCP session", async () => {
   const fetch = vi.fn();
   vi.stubGlobal("fetch", fetch);
   enableDryRun();
@@ -27,7 +27,7 @@ it("previews the query arguments without reading schema or opening an MCP sessio
       method: "tools/call",
       params: {
         name: "query_object_instance",
-        arguments: { ot_id: "ot-1", kn_id: "kn-1", properties: ["name"] },
+        arguments: { ot_id: "ot-1", properties: ["name"] },
       },
     },
   });

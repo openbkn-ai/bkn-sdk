@@ -118,7 +118,7 @@ export function contextCommand(): Command {
     )
     .option(
       "--args <json>",
-      "tool arguments as JSON; kn_id is filled from <kn-id>; --schema prints the shape",
+      "tool arguments as JSON; <kn-id> is sent as x-kn-id; --schema prints the shape",
     )
     .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
     .action(async (knId: string, opts, cmd: Command) => {

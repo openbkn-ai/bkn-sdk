@@ -13,7 +13,7 @@ import {
   describeBuildProgress,
   formatDuration,
 } from "../../src/utils/build-progress.js";
-import { WaitTimeoutError } from "../../src/utils/errors.js";
+import { InputError, WaitTimeoutError } from "../../src/utils/errors.js";
 import { verifiedContext } from "../setup/verified-context.js";
 
 const BASE = "https://demo.example.com";
@@ -106,6 +106,24 @@ describe("waitForBuild", () => {
     const fetch = tasks({ status: "running" }, { status: "running" }, { status: "completed" });
     await vega(ctx).waitForBuild("t-1", { timeoutMs: 0, intervalMs: 0 });
     expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([
+    ["timeoutMs", -1],
+    ["timeoutMs", Number.NaN],
+    ["timeoutMs", Number.POSITIVE_INFINITY],
+    ["intervalMs", -1],
+    ["intervalMs", Number.NaN],
+    ["intervalMs", Number.POSITIVE_INFINITY],
+  ] as const)("rejects an invalid SDK %s before any request", async (key, value) => {
+    const fetch = tasks({ status: "completed" });
+
+    const error = await vega(ctx)
+      .waitForBuild("t-1", { [key]: value })
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(InputError);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
 

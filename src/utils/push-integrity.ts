@@ -32,12 +32,12 @@ export function snapshotObjectTypes(value: unknown): Map<string, ObjectTypeSnaps
       );
     }
     const properties = new Map<string, Set<string>>();
-    if (entry.data_properties !== undefined && !Array.isArray(entry.data_properties)) {
+    if (!Object.hasOwn(entry, "data_properties") || !Array.isArray(entry.data_properties)) {
       throw new InputError(
         `Cannot verify BKN push integrity: object type '${entry.id}' has invalid data_properties.`,
       );
     }
-    for (const property of (entry.data_properties as unknown[] | undefined) ?? []) {
+    for (const property of entry.data_properties) {
       if (!record(property) || typeof property.name !== "string" || !property.name) {
         throw new InputError(
           `Cannot verify BKN push integrity: object type '${entry.id}' has an invalid property.`,
@@ -57,12 +57,13 @@ export function snapshotObjectTypes(value: unknown): Map<string, ObjectTypeSnaps
         new Set((property.condition_operations as string[] | undefined) ?? []),
       );
     }
+    if (!Object.hasOwn(entry, "data_source")) {
+      throw new InputError(
+        `Cannot verify BKN push integrity: object type '${entry.id}' has invalid data_source.`,
+      );
+    }
     const source = entry.data_source;
-    if (
-      source !== undefined &&
-      source !== null &&
-      (!record(source) || typeof source.id !== "string" || !source.id)
-    ) {
+    if (source !== null && (!record(source) || typeof source.id !== "string" || !source.id)) {
       throw new InputError(
         `Cannot verify BKN push integrity: object type '${entry.id}' has invalid data_source.`,
       );

@@ -186,9 +186,7 @@ export function kn(ctx: RequestContext) {
           );
         } catch (error) {
           if (!(error instanceof HttpError && error.status === 404 && !error.gateway)) {
-            throw new InputError(
-              `Cannot read object types on branch '${branch}' before push; the upload was not sent.`,
-            );
+            throw error;
           }
         }
       }

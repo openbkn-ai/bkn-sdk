@@ -73,7 +73,7 @@ import {
  * Knows nothing about argv or stdout; pure typed functions over `api/vega`.
  */
 import type { RequestContext } from "../types.js";
-import { WaitTimeoutError } from "../utils/errors.js";
+import { InputError, WaitTimeoutError } from "../utils/errors.js";
 
 const TERMINAL_STATES = new Set([
   "completed",
@@ -198,8 +198,14 @@ async function waitForBuildTask(
   opts: BuildWaitOptions,
 ): Promise<BuildTask> {
   const timeoutMs = opts.timeoutMs ?? 300_000;
-  const deadline = timeoutMs > 0 ? Date.now() + timeoutMs : Number.POSITIVE_INFINITY;
   const intervalMs = opts.intervalMs ?? 2_000;
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 0) {
+    throw new InputError("timeoutMs must be a finite, non-negative number");
+  }
+  if (!Number.isFinite(intervalMs) || intervalMs < 0) {
+    throw new InputError("intervalMs must be a finite, non-negative number");
+  }
+  const deadline = timeoutMs > 0 ? Date.now() + timeoutMs : Number.POSITIVE_INFINITY;
   let last = await getBuildTask(ctx, taskId);
   opts.onProgress?.(last);
   while (!isBuildTaskDone(last)) {

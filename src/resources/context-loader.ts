@@ -57,7 +57,7 @@ export function context(ctx: RequestContext) {
             method: "tools/call",
             params: {
               name: "query_object_instance",
-              arguments: { ...args, kn_id: knId },
+              arguments: args,
             },
           },
         });
