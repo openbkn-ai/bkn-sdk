@@ -272,6 +272,109 @@ describe("managed MCP tool calls", () => {
     });
   });
 
+  it("reopens an automatic MCP interaction once after an unreceipted terminal error", async () => {
+    const calls: Array<{ name: string; arguments: Record<string, unknown> }> = [];
+    let starts = 0;
+    let businessCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL, init?: RequestInit) => {
+        if (String(input).endsWith("/mcp/info")) {
+          return new Response(JSON.stringify({ tools: [{ name: "bkn_start_interaction" }] }));
+        }
+        const rpc = JSON.parse(init?.body as string) as {
+          method?: string;
+          params?: { name: string; arguments: Record<string, unknown> };
+        };
+        const headers = { "mcp-session-id": "retry-auto-session" };
+        if (rpc.method !== "tools/call" || !rpc.params) {
+          return new Response(JSON.stringify({ jsonrpc: "2.0", result: {} }), { headers });
+        }
+        calls.push(rpc.params);
+        if (rpc.params.name === "bkn_start_interaction") {
+          starts += 1;
+          return new Response(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              result: {
+                content: [{ type: "text", text: "started" }],
+                structuredContent: {
+                  conversation_id: `conv-retry-${starts}`,
+                  interaction_id: `int-retry-${starts}`,
+                },
+              },
+            }),
+            { headers },
+          );
+        }
+        businessCalls += 1;
+        if (businessCalls === 1) {
+          return new Response(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              result: {
+                isError: true,
+                content: [{ type: "text", text: "interaction_terminal: session expired" }],
+                structuredContent: { error: { code: "interaction_terminal" } },
+              },
+            }),
+            { headers },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            result: {
+              content: [{ type: "text", text: JSON.stringify({ concepts: ["forecast"] }) }],
+              structuredContent: {
+                bkn_receipt: {
+                  receipt_id: "receipt-retry-auto",
+                  conversation_id: "conv-retry-2",
+                  interaction_id: "int-retry-2",
+                  operation_id: "op-retry-auto",
+                  receipt_status: "completed",
+                },
+              },
+            },
+          }),
+          { headers },
+        );
+      }),
+    );
+
+    await expect(
+      callManagedTool(
+        verifiedContext({
+          baseUrl: "https://managed-retry-auto.example.com",
+          token: "receipt-token",
+          insecure: false,
+        }),
+        "kn-retry-auto",
+        "search_schema",
+        { query: "forecast" },
+      ),
+    ).resolves.toMatchObject({
+      value: { concepts: ["forecast"] },
+      receipt: { receipt_id: "receipt-retry-auto", interaction_id: "int-retry-2" },
+    });
+    expect(starts).toBe(2);
+    expect(businessCalls).toBe(2);
+    expect(calls.map((call) => call.name)).toEqual([
+      "bkn_start_interaction",
+      "search_schema",
+      "bkn_start_interaction",
+      "search_schema",
+    ]);
+    expect(calls[1]?.arguments.bkn_context).toEqual({
+      conversation_id: "conv-retry-1",
+      interaction_id: "int-retry-1",
+    });
+    expect(calls[3]?.arguments.bkn_context).toEqual({
+      conversation_id: "conv-retry-2",
+      interaction_id: "int-retry-2",
+    });
+  });
+
   it("accepts a replay receipt without a business value as null", async () => {
     const receipt = {
       receipt_id: "receipt-replay",
