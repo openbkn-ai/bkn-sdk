@@ -14,6 +14,7 @@ import {
   cypherParams,
   outputOptions,
   platformOf,
+  readJsonArgs,
 } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
@@ -34,15 +35,11 @@ const collectArg = (v: string, prev: string[]): string[] => {
  * This is the generic path: any MCP tool — current or future — is callable
  * without a hand-written wrapper.
  */
-function buildArgs(opts: { args?: string; arg?: string[] }): Record<string, unknown> {
-  let out: Record<string, unknown> = {};
-  if (opts.args) {
-    try {
-      out = parseBigIntJSON(opts.args) as Record<string, unknown>;
-    } catch {
-      throw new InputError("--args must be valid JSON");
-    }
-  }
+function buildArgs(opts: { args?: string; argsFile?: string; arg?: string[] }): Record<
+  string,
+  unknown
+> {
+  const out: Record<string, unknown> = readJsonArgs(opts) ?? {};
   for (const pair of opts.arg ?? []) {
     const idx = pair.indexOf("=");
     if (idx <= 0) throw new InputError(`--arg must be key=value (got: ${pair})`);
@@ -88,14 +85,8 @@ export function contextCommand(): Command {
     "Ask a network questions (the MCP interface agents use)",
   );
 
-  const jsonArgs = (raw: string | undefined): Record<string, unknown> => {
-    if (!raw) throw new InputError("--args is required (run with --schema to see its shape)");
-    try {
-      return parseBigIntJSON(raw) as Record<string, unknown>;
-    } catch {
-      throw new InputError("--args must be valid JSON");
-    }
-  };
+  const jsonArgs = (opts: { args?: string; argsFile?: string }): Record<string, unknown> =>
+    readJsonArgs(opts, true) as Record<string, unknown>;
   cmd
     .command("search-schema <kn-id> <query>")
     .description(
@@ -116,14 +107,12 @@ export function contextCommand(): Command {
     .description(
       'Query one object type\'s instances — `--args \'{"ot_id":"<id>","limit":10}\'` → {datas, total_count}',
     )
-    .option(
-      "--args <json>",
-      "tool arguments as JSON; <kn-id> is sent as x-kn-id; --schema prints the shape",
-    )
+    .option("--args <json>", "tool arguments as JSON; use - for stdin; <kn-id> is sent as x-kn-id")
+    .option("--args-file <path>", "read tool arguments as JSON from a file (or - for stdin)")
     .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
     .action(async (knId: string, opts, cmd: Command) => {
       if (opts.schema) return printToolSchema(cmd, knId, "query_object_instance");
-      const args = jsonArgs(opts.args);
+      const args = jsonArgs(opts);
       printJson(await clientFrom(cmd).context.queryObjectInstance(knId, args), outputOptions(cmd));
     });
 
@@ -353,7 +342,11 @@ through \`openbkn bkn cypher\`.`,
     .option("--limit <n>", "instances of the STARTING type, not paths or total objects", (v) =>
       Number.parseInt(v, 10),
     )
-    .option("--args <json>", "extra tool arguments merged in (condition, sort, offset …)")
+    .option(
+      "--args <json>",
+      "extra tool arguments merged in (condition, sort, offset …; - for stdin)",
+    )
+    .option("--args-file <path>", "read extra tool arguments as JSON from a file (or - for stdin)")
     .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
     .addHelpText(
       "after",
@@ -368,7 +361,7 @@ Paths multiply with each hop, so start at 1 or 2.`,
         throw new InputError("--hops is required (or use --schema to see the shape)");
       }
       const args: Record<string, unknown> = {
-        ...(opts.args ? jsonArgs(opts.args) : {}),
+        ...(readJsonArgs(opts) ?? {}),
         source_object_type_id: objectTypeId,
         direction: opts.direction,
         path_length: opts.hops,
@@ -385,8 +378,9 @@ Paths multiply with each hop, so start at 1 or 2.`,
     .description("Read a modelled metric through its own definition — do not restate it in SQL")
     .option(
       "--args <json>",
-      "tool arguments: analysis_dimensions, time, condition, having, order_by",
+      "tool arguments: analysis_dimensions, time, condition, having, order_by; - for stdin",
     )
+    .option("--args-file <path>", "read tool arguments as JSON from a file (or - for stdin)")
     .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
     .addHelpText(
       "after",
@@ -397,7 +391,7 @@ rewriting it with \`run-sql\` produces a number the platform will not agree with
     )
     .action(async (knId: string, metricId: string, opts, cmd: Command) => {
       if (opts.schema) return printToolSchema(cmd, knId, "query_metric");
-      const args = { ...(opts.args ? jsonArgs(opts.args) : {}), metric_id: metricId };
+      const args = { ...(readJsonArgs(opts) ?? {}), metric_id: metricId };
       printJson(
         await clientFrom(cmd).context.toolCall(knId, "query_metric", args),
         outputOptions(cmd),
@@ -414,10 +408,8 @@ rewriting it with \`run-sql\` produces a number the platform will not agree with
   cmd
     .command("tool-call <kn-id> <name>")
     .description("Call any MCP tool by name — current or future (use `tools` to discover)")
-    .option(
-      "--args <json>",
-      "tool arguments as JSON; kn_id is filled from <kn-id> — input schema comes from `context tools <kn-id>`",
-    )
+    .option("--args <json>", "tool arguments as JSON; use - for stdin; <kn-id> is sent as x-kn-id")
+    .option("--args-file <path>", "read tool arguments as JSON from a file (or - for stdin)")
     .option(
       "--arg <key=value>",
       "one argument (repeatable; value parsed as JSON, else string)",
@@ -457,7 +449,8 @@ rewriting it with \`run-sql\` produces a number the platform will not agree with
     .description(
       "Call any MCP method by name (e.g. tools/list, resources/read) — current or future",
     )
-    .option("--args <json>", "method params as JSON — see `context call-method <kn-id> tools/list`")
+    .option("--args <json>", "method params as JSON; use - for stdin")
+    .option("--args-file <path>", "read method params as JSON from a file (or - for stdin)")
     .option(
       "--arg <key=value>",
       "one param (repeatable; value parsed as JSON, else string)",
@@ -498,66 +491,48 @@ rewriting it with \`run-sql\` produces a number the platform will not agree with
   cmd
     .command("prompt <kn-id> <name>")
     .description("Get one MCP prompt (--args JSON for prompt arguments)")
-    .option(
-      "--args <json>",
-      "prompt arguments as JSON — argument names come from `context prompts <kn-id>`",
-    )
+    .option("--args <json>", "prompt arguments as JSON; use - for stdin")
+    .option("--args-file <path>", "read prompt arguments as JSON from a file (or - for stdin)")
     .action(async (knId: string, name: string, opts, cmd: Command) => {
-      let args: Record<string, unknown> | undefined;
-      if (opts.args) {
-        try {
-          args = parseBigIntJSON(opts.args) as Record<string, unknown>;
-        } catch {
-          throw new InputError("--args must be valid JSON");
-        }
-      }
+      const args = readJsonArgs(opts);
       printJson(await clientFrom(cmd).context.prompt(knId, name, args), outputOptions(cmd));
     });
 
   cmd
     .command("query-instance-subgraph <kn-id>")
     .description("Query an instance subgraph across relation-type paths")
-    .option(
-      "--args <json>",
-      "tool arguments as JSON; kn_id is filled from <kn-id>; --schema prints the shape",
-    )
+    .option("--args <json>", "tool arguments as JSON; use - for stdin; --schema prints the shape")
+    .option("--args-file <path>", "read tool arguments as JSON from a file (or - for stdin)")
     .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
     .action(async (knId: string, opts, cmd: Command) => {
       if (opts.schema) return printToolSchema(cmd, knId, "query_instance_subgraph");
       printJson(
-        await clientFrom(cmd).context.queryInstanceSubgraph(knId, jsonArgs(opts.args)),
+        await clientFrom(cmd).context.queryInstanceSubgraph(knId, jsonArgs(opts)),
         outputOptions(cmd),
       );
     });
   cmd
     .command("get-logic-properties <kn-id>")
     .description("Compute logic-property values for instances")
-    .option(
-      "--args <json>",
-      "tool arguments as JSON; kn_id is filled from <kn-id>; --schema prints the shape",
-    )
+    .option("--args <json>", "tool arguments as JSON; use - for stdin; --schema prints the shape")
+    .option("--args-file <path>", "read tool arguments as JSON from a file (or - for stdin)")
     .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
     .action(async (knId: string, opts, cmd: Command) => {
       if (opts.schema) return printToolSchema(cmd, knId, "get_logic_properties_values");
       printJson(
-        await clientFrom(cmd).context.logicProperties(knId, jsonArgs(opts.args)),
+        await clientFrom(cmd).context.logicProperties(knId, jsonArgs(opts)),
         outputOptions(cmd),
       );
     });
   cmd
     .command("get-action-info <kn-id>")
     .description("Fetch action info / dynamic tools for an instance")
-    .option(
-      "--args <json>",
-      "tool arguments as JSON; kn_id is filled from <kn-id>; --schema prints the shape",
-    )
+    .option("--args <json>", "tool arguments as JSON; use - for stdin; --schema prints the shape")
+    .option("--args-file <path>", "read tool arguments as JSON from a file (or - for stdin)")
     .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
     .action(async (knId: string, opts, cmd: Command) => {
       if (opts.schema) return printToolSchema(cmd, knId, "get_action_info");
-      printJson(
-        await clientFrom(cmd).context.actionInfo(knId, jsonArgs(opts.args)),
-        outputOptions(cmd),
-      );
+      printJson(await clientFrom(cmd).context.actionInfo(knId, jsonArgs(opts)), outputOptions(cmd));
     });
 
   groupChildren(cmd, {
@@ -619,7 +594,8 @@ QUERY ARGUMENTS
   any kn_id in --args must match <kn-id>. For properties and condition.field,
   run object-types <kn-id> <ot-id> first to see the valid field names. Specifying properties
   also reads the object-type schema once and rejects unknown names before the query. --schema shows the
-  argument shape advertised by this deploy.
+  argument shape advertised by this deploy. Every --args option also accepts --args-file <path>,
+  while --args - reads JSON from stdin.
 
 RAW MCP
   tools <kn-id> lists what this deploy advertises, with each tool's input schema.

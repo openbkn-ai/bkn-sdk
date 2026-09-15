@@ -1,7 +1,7 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -111,6 +111,36 @@ describe("query_object_instance argument validation", () => {
       ),
     ).rejects.toThrow(hint);
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("runs file arguments through the same static validation before any request", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "bkn-query-args-"));
+    const path = join(dir, "args.json");
+    writeFileSync(path, '{"ot_id":"ot-1","knn":{"field":"embedding"}}');
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+
+    try {
+      await expect(
+        buildProgram().parseAsync(
+          [
+            "--base-url",
+            ctx.baseUrl,
+            "--token",
+            ctx.token,
+            "context",
+            "query-object-instance",
+            "kn-1",
+            "--args-file",
+            path,
+          ],
+          { from: "user" },
+        ),
+      ).rejects.toThrow("condition.operation=knn");
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("requires a JSON object, an object type id, and an array of property names", () => {
