@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   callManagedTool,
   callMethod,
+  ManagedToolError,
   callTool,
   getKnDetail,
   getObjectTypes,
@@ -408,6 +409,44 @@ describe("managed MCP tool calls", () => {
         },
       }),
     ).rejects.toMatchObject({ code: "receipt_failed" });
+  });
+
+  it.each([
+    ["completed terminal replay", "completed", "receipt_terminal"],
+    ["failed terminal replay", "failed", "receipt_failed"],
+  ])("retains a replay receipt on a managed tool error: %s", async (_, status, code) => {
+    const receipt = {
+      receipt_id: `receipt-${status}`,
+      conversation_id: "conversation_supply_chain",
+      interaction_id: "interaction_june_forecast",
+      operation_id: `operation-${status}`,
+      receipt_status: status,
+    };
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        isError: true,
+        content: [{ type: "text", text: JSON.stringify({ error: { code } }) }],
+        structuredContent: { bkn_receipt: receipt, error: { code } },
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () => new Response(body, { status: 200, headers: { "mcp-session-id": `${status}-s1` } }),
+      ),
+    );
+
+    const error = await callManagedTool(ctx, `kn-${status}-replay`, "execute_tool", {
+      bkn_context: {
+        conversation_id: "conversation_supply_chain",
+        interaction_id: "interaction_june_forecast",
+      },
+    }).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(ManagedToolError);
+    expect(error).toMatchObject({ code, receipt });
   });
 
   it("rejects a receipt whose business context differs from the call", async () => {

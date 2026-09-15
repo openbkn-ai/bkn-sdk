@@ -178,6 +178,21 @@ export interface ManagedToolResult<T = unknown> {
   receipt: ToolReceipt;
 }
 
+/**
+ * A managed MCP call was refused after ContextLoader had produced a trusted
+ * receipt. The error keeps that receipt so callers can read its authoritative
+ * terminal state without treating a replay as a successful tool result.
+ */
+export class ManagedToolError extends ToolError {
+  readonly receipt: ToolReceipt;
+
+  constructor(message: string, code: string | undefined, receipt: ToolReceipt) {
+    super(message, code);
+    this.name = "ManagedToolError";
+    this.receipt = receipt;
+  }
+}
+
 /** Adapter-owned MCP metadata for lifecycle-safe host retries. */
 export interface ToolCallOptions {
   hostConversationKey?: string;
@@ -285,7 +300,11 @@ function unwrapToolResult(parsed: unknown, extractBusinessReceipt = true): Unwra
   const structuredContent = result.structuredContent;
   const receipt = extractBusinessReceipt ? receiptFrom(structuredContent) : undefined;
   if (receipt?.receipt_status === "failed") {
-    throw new ToolError("Context-loader operation receipt is failed.", "receipt_failed");
+    throw new ManagedToolError(
+      "Context-loader operation receipt is failed.",
+      "receipt_failed",
+      receipt,
+    );
   }
   if (receipt?.receipt_status === "pending") return { value: null, receipt };
   const content = result.content;
@@ -300,10 +319,11 @@ function unwrapToolResult(parsed: unknown, extractBusinessReceipt = true): Unwra
     // The structured error code, not the prose, is what tells a caller whether
     // the failure is retryable — a dead lifecycle session is reopenable, a bad
     // argument is not.
-    throw new ToolError(
-      `Context-loader error: ${message}`,
-      toolErrorCode(structuredContent) ?? lifecycleCodeInText(message),
-    );
+    const code = toolErrorCode(structuredContent) ?? lifecycleCodeInText(message);
+    if (receipt) {
+      throw new ManagedToolError(`Context-loader error: ${message}`, code, receipt);
+    }
+    throw new ToolError(`Context-loader error: ${message}`, code);
   }
   if (Array.isArray(content) && content[0] && typeof content[0].text === "string") {
     try {
