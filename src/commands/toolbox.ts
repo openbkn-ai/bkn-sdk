@@ -188,7 +188,7 @@ export function toolCommand(): Command {
       .option("--timeout <s>", "per-call timeout seconds", int);
 
   const parseJson = (s: string | undefined, label: string): Record<string, unknown> | undefined => {
-    if (!s) return undefined;
+    if (s === undefined) return undefined;
     let parsed: unknown;
     try {
       parsed = parseBigIntJSON(s);

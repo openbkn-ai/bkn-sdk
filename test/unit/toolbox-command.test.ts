@@ -8,6 +8,7 @@ it.each([
   ["--header", "[]"],
   ["--query", "null"],
   ["--path", "1"],
+  ["--header", ""],
 ])("refuses non-object %s JSON before invoking a tool", async (flag, value) => {
   const error = await buildProgram()
     .parseAsync(
@@ -29,5 +30,7 @@ it.each([
     .catch((caught: unknown) => caught);
 
   expect(error).toBeInstanceOf(Error);
-  expect((error as Error).message).toBe(`${flag} must be a JSON object`);
+  expect((error as Error).message).toMatch(
+    new RegExp(`^${flag} must be (valid JSON|a JSON object)$`),
+  );
 });
