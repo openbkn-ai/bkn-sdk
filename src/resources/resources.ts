@@ -14,6 +14,7 @@ import {
   deleteResource,
   deleteResourceDocuments,
   deleteResourceDocumentsByFilter,
+  deleteResourceDocumentsBySelector,
   disableResource,
   enableResource,
   findResource,
@@ -54,5 +55,7 @@ export function resources(ctx: RequestContext) {
     ) => deleteResourceDocuments(ctx, id, documentIds, opts),
     deleteDocumentsByFilter: (id: string, filterCondition: Record<string, unknown>) =>
       deleteResourceDocumentsByFilter(ctx, id, filterCondition),
+    deleteDocumentsBySelector: (id: string, selector: Record<string, unknown>) =>
+      deleteResourceDocumentsBySelector(ctx, id, selector),
   };
 }

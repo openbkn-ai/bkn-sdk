@@ -97,6 +97,92 @@ describe("vega resource document input", () => {
 
     expect(fetchMock.mock.calls[0]?.[1]?.body).toContain("110101199001152345");
   });
+
+  it("converts document-delete-filter equality selectors to Vega conditions", async () => {
+    const fetchMock = mockFetch({});
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "resource",
+        "document-delete-filter",
+        "r-1",
+        "--filter",
+        '{"kind":"remove"}',
+      ],
+      { from: "user" },
+    );
+
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      filter_condition: { field: "kind", operation: "eq", value: "remove", value_from: "const" },
+    });
+  });
+
+  it("passes a Vega filter condition only through --filter-condition", async () => {
+    const fetchMock = mockFetch({});
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "resource",
+        "document-delete-filter",
+        "r-1",
+        "--filter-condition",
+        '{"field":"kind","operation":"eq","value":"remove","value_from":"const"}',
+      ],
+      { from: "user" },
+    );
+
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      filter_condition: { field: "kind", operation: "eq", value: "remove", value_from: "const" },
+    });
+  });
+
+  it.each([
+    ["neither filter option", [], "exactly one of --filter or --filter-condition is required"],
+    [
+      "both filter options",
+      [
+        "--filter",
+        '{"kind":"remove"}',
+        "--filter-condition",
+        '{"field":"kind","operation":"eq","value":"remove","value_from":"const"}',
+      ],
+      "exactly one of --filter or --filter-condition is required",
+    ],
+  ])("rejects %s before making a request", async (_case, options, message) => {
+    const fetchMock = mockFetch({});
+    suppressOutput();
+
+    await expect(
+      cli().parseAsync(
+        [
+          "--base-url",
+          "https://demo.example.com",
+          "--token",
+          "t",
+          "vega",
+          "resource",
+          "document-delete-filter",
+          "r-1",
+          ...options,
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow(message);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("vega resource discovery commands", () => {
