@@ -112,7 +112,7 @@ describe("vega resource document input", () => {
         "resource",
         "document-delete-filter",
         "r-1",
-        "--filter",
+        "--selector",
         '{"kind":"remove"}',
       ],
       { from: "user" },
@@ -123,7 +123,7 @@ describe("vega resource document input", () => {
     });
   });
 
-  it("passes a Vega filter condition only through --filter-condition", async () => {
+  it("preserves a Vega filter condition passed through --filter", async () => {
     const fetchMock = mockFetch({});
     suppressOutput();
 
@@ -137,7 +137,7 @@ describe("vega resource document input", () => {
         "resource",
         "document-delete-filter",
         "r-1",
-        "--filter-condition",
+        "--filter",
         '{"field":"kind","operation":"eq","value":"remove","value_from":"const"}',
       ],
       { from: "user" },
@@ -149,16 +149,16 @@ describe("vega resource document input", () => {
   });
 
   it.each([
-    ["neither filter option", [], "exactly one of --filter or --filter-condition is required"],
+    ["neither filter option", [], "exactly one of --filter or --selector is required"],
     [
       "both filter options",
       [
         "--filter",
-        '{"kind":"remove"}',
-        "--filter-condition",
         '{"field":"kind","operation":"eq","value":"remove","value_from":"const"}',
+        "--selector",
+        '{"kind":"remove"}',
       ],
-      "exactly one of --filter or --filter-condition is required",
+      "exactly one of --filter or --selector is required",
     ],
   ])("rejects %s before making a request", async (_case, options, message) => {
     const fetchMock = mockFetch({});

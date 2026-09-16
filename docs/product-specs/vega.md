@@ -18,7 +18,7 @@ Browse the Vega catalog — data sources, views, atomic views, connector types �
 - `openbkn vega discover-schedule …` — create/list/get/update/delete discovery schedules and enable or disable them explicitly. Full updates require the current `catalog_id`, `enabled`, `strategy`, both time-window bounds, and `--expected-update-time` for optimistic locking.
 - `openbkn vega discover-task list|get|delete` — inspect and clean up discovery-task history; list accepts `--resource-id`. Tasks expose a read-only `queue_priority` and cannot be sorted by it.
 - `openbkn vega semantic-task create|list|get|delete` — manage semantic-understanding task lifecycles for a Catalog or Resource.
-- `openbkn vega resource document-*` — create and upsert one dataset document at a time; reads and deletes accept one or more document IDs, with optional `--ignore-missing`. `document-delete-filter <resource-id>` accepts exactly one of `--filter '<json>'` (an equality selector) or `--filter-condition '<json>'` (a native Vega `filter_condition`).
+- `openbkn vega resource document-*` — create and upsert one dataset document at a time; reads and deletes accept one or more document IDs, with optional `--ignore-missing`. `document-delete-filter <resource-id>` accepts exactly one of `--filter '<json>'` (a native Vega `filter_condition`) or `--selector '<json>'` (an equality selector).
 - Health / inspection: connector-type listing and health checks across catalog resources.
 - Index build → see **Index build (BuildTask)** below. This is the platform's build task; it replaces the removed KN-level `bkn build` (see [knowledge-networks.md](knowledge-networks.md)).
 
@@ -82,7 +82,7 @@ determines what is indexed; the BuildTask uses its snapshot.
 - Health-check schedules exist only for physical Catalogs. The Catalog list/get responses do not embed them.
 - DiscoverSchedule PUT is a strict replacement. Callers must send the unchanged `catalogId`, current `enabled`, `strategy`, and both time-window bounds (`0` means unbounded); enable/disable transitions use the action methods.
 - Pending or running discovery/semantic tasks cannot be deleted. Batch task deletion is transactional and supports `ignoreMissing`; dataset document deletion by ID is best-effort instead.
-- ResourceData write/delete/single-document operations apply only to `category=dataset`. Delete-by-filter requires a non-empty selector or Vega filter condition; the CLI requires exactly one of `--filter` and `--filter-condition`.
+- ResourceData write/delete/single-document operations apply only to `category=dataset`. Delete-by-filter requires a non-empty selector or Vega filter condition; the CLI requires exactly one of `--filter` and `--selector`.
 - Custom health-check Cron expressions must not run more frequently than hourly; the backend remains the authority for validating the expression.
 - Build is **not** freely re-runnable — it kicks a task and returns a `task-id`; never auto-retry, surface the id through `build-task get`.
 - BuildTask statuses are `pending`, `running`, `stopping`, `stopped`,
