@@ -6,10 +6,7 @@
  * `openbkn` — unified CLI for the BKN platform.
  * Thin shell: parse argv → call a resource → print. No business logic here.
  */
-import { releaseLifecycleSessions } from "./api/lifecycle.js";
-import { buildProgram } from "./cli-program.js";
-import { DryRunSignal, enableDryRun } from "./utils/dry-run.js";
-import { formatError, toExitCode } from "./utils/errors.js";
+import { runCli } from "./cli-run.js";
 
 // `openbkn describe | head` closes the pipe while we are still writing. Node
 // turns that into an unhandled EPIPE and a stack trace; for a CLI it just means
@@ -19,26 +16,4 @@ process.stdout.on("error", (err: NodeJS.ErrnoException) => {
   throw err;
 });
 
-const program = buildProgram();
-
-// The flag has to be read before commander parses, because the switch must be
-// on by the time a resource builds its first request.
-if (process.argv.includes("--dry-run")) enableDryRun();
-
-try {
-  await program.parseAsync(process.argv);
-} catch (err) {
-  if (err instanceof DryRunSignal) {
-    process.stdout.write(`${JSON.stringify(err.request, null, 2)}\n`);
-    await releaseLifecycleSessions();
-    process.exit(0);
-  }
-  console.error(formatError(err));
-  await releaseLifecycleSessions();
-  process.exit(toExitCode(err));
-}
-
-// A deploy that manages lifecycle state opened an interaction for this command,
-// and a conversation permits only one at a time. Hand it back on the way out
-// instead of leaving it for the server's sweeper. Best-effort, never fatal.
-await releaseLifecycleSessions();
+await runCli();
