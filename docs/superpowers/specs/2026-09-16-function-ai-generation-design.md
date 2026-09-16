@@ -1,40 +1,83 @@
-# Function AI Generation API Design
+# Execution Capability Command Model and Function AI Generation Design
 
-## Scope
+## Goal
 
-Complete the two public Function endpoints that the SDK does not yet expose:
+Make the CLI distinguish a temporary code workspace from a registered capability that can be managed and executed through a Toolbox. The command name must tell an operator whether it is dealing with sandbox code, a persisted Function Tool, or a persisted OpenAPI Tool.
 
-- `POST /api/agent-operator-integration/v1/ai_generate/function/{type}`
-- `GET /api/agent-operator-integration/v1/ai_generate/prompt/{type}`
+This design also retains the Function AI-generation endpoints added in this change set, but moves their CLI entry from `function` to `sandbox` so the command hierarchy matches that distinction.
 
-The existing sandbox execution, schema inference, dependency, and template APIs remain unchanged. Sandbox administration, Operator, BKN Agent, and Ontology Query are out of scope.
+## Command model
 
-## API surface
+| Command group | Meaning | Backing surface |
+| --- | --- | --- |
+| `sandbox` | Temporary code and its generated artifacts. | Existing Function sandbox and AI-generation APIs. |
+| `function` | A registered Function Tool in a Toolbox. | Existing Toolbox/Tool API with `metadata_type=function`. |
+| `api` | A registered OpenAPI Tool in a Toolbox. | Existing Toolbox/Tool API with `metadata_type=openapi`. |
+| `toolbox` | The container and its publication lifecycle. | Existing Toolbox API. |
+| `tool` | Advanced, type-neutral Toolbox/Tool access retained for compatibility. | Existing Toolbox/Tool API. |
 
-`api/functions.ts` adds two transport functions:
+`mcp` remains a separate future read-only command group. MCP Market, Operator, Sandbox administration, BKN Agent, and Ontology Query remain out of scope.
 
-- `generateFunction(ctx, type, request)` posts the documented request body. `type` is `python_function_generator` or `metadata_param_generator`; the body remains a forward-compatible object because each type requires a different field and the platform may add generation options.
-- `getFunctionPromptTemplate(ctx, type)` reads the prompt template used for the same generation type.
+## Sandbox commands
 
-The generation request accepts `stream`; this initial API exposes the documented non-streaming JSON response. A streaming request is rejected at the SDK boundary with an `InputError` directing callers to the raw `call` command until an SSE result contract is specified. This avoids returning an unread stream as `unknown` and falsely presenting it as a completed generation result.
+`openbkn sandbox` owns the current temporary-code workflow:
 
-`resources/functions.ts` exposes both operations through `client.functions.generate` and `client.functions.promptTemplate`.
+- `run`, `infer-schema`, `deps`, `versions`, and `template` keep their current behavior.
+- `generate <type>` and `prompt <type>` move here from the temporary `function` CLI group.
 
-## CLI
+The AI transport surface remains `POST /api/agent-operator-integration/v1/ai_generate/function/{type}` and `GET /api/agent-operator-integration/v1/ai_generate/prompt/{type}`. `client.functions.generate` and `client.functions.promptTemplate` remain available programmatically; the change is a CLI naming correction, not a removal of the SDK API.
 
-`openbkn function generate <type>` accepts exactly one input mode:
+`generate` accepts exactly one type-specific input mode: `--query` for `python_function_generator`, or `--code <file>` for `metadata_param_generator`, plus optional JSON `--inputs` and `--outputs`. Streaming generation remains rejected by the SDK until an SSE result contract is implemented.
 
-- `--query <text>` for `python_function_generator`.
-- `--code <file>` for `metadata_param_generator`; the file contents become the wire `code` field.
+## Registered capability facades
 
-It accepts optional JSON `--inputs` and `--outputs`, mapped to the documented parameter definitions. `openbkn function prompt <type>` reads the corresponding template. The commands are classified as RUN: generation invokes the platform model but stores no component configuration.
+`openbkn function` provides a Function Tool-oriented facade over the generic Toolbox API. Its commands use `--toolbox <id>` wherever the target container is required and always set or validate `metadata_type=function`:
 
-## Validation and errors
+```text
+openbkn function create <file> --toolbox <id>
+openbkn function list --toolbox <id>
+openbkn function get <tool-id> --toolbox <id>
+openbkn function update <tool-id> --toolbox <id> ...
+openbkn function delete <tool-id> --toolbox <id>
+openbkn function enable|disable <tool-id> --toolbox <id>
+openbkn function execute|debug <tool-id> --toolbox <id> ...
+```
 
-The CLI validates type-specific required input before opening a network request. The resource rejects `stream: true` for the initial non-streaming API. Server errors, including upstream model authentication, rate-limit, and availability failures, propagate as the existing HTTP error type without being recast as user input errors.
+`openbkn api` provides the equivalent OpenAPI Tool facade. It uses `metadata_type=openapi` and names its file-based onboarding command `import` to describe what the user supplies:
+
+```text
+openbkn api import <file> --toolbox <id>
+openbkn api list --toolbox <id>
+openbkn api get <tool-id> --toolbox <id>
+openbkn api update <tool-id> --toolbox <id> ...
+openbkn api delete <tool-id> --toolbox <id>
+openbkn api enable|disable <tool-id> --toolbox <id>
+openbkn api execute|debug <tool-id> --toolbox <id> ...
+```
+
+The facades reuse the validated file parsing, request mapping, resource methods, output formatting, dry-run handling, and errors already implemented by `tool`. They do not add a second HTTP client or a different persisted object model. `tool` stays available for mixed-type or low-level workflows, so existing automation remains valid.
+
+The programmatic persistent-tool surface remains `client.toolboxes`, whose generic methods intentionally expose both tool types. Typed CLI groups improve discoverability without duplicating that SDK API.
+
+## Help and documentation
+
+Root help, grouped-help classification, `openbkn describe`, ID-source metadata, the Toolbox/Tool product specification, and the OpenBKN skill reference will explain the ownership boundary and point users to the right workflow:
+
+1. use `sandbox` to test or generate code;
+2. create or select a `toolbox`;
+3. import a persistent `function` or `api` capability into that toolbox;
+4. enable and execute it.
+
+Each command description names the user-facing capability it manages rather than the generic backend Tool resource. The new facade commands preserve the existing READ/RUN/WRITE help sections and probe service mapping.
+
+## Compatibility and migration
+
+The root `function` name is reassigned from temporary sandbox operations to registered Function Tools. Documentation will direct users of `function run`, `function generate`, and the other former temporary-code commands to `sandbox`. No silent command alias is added because it would leave the ambiguous hierarchy in place.
+
+`tool` and `toolbox` retain their public behavior and scripts using them continue to work. This change does not alter persisted Toolbox or Tool data, endpoint contracts, or metadata schemas.
 
 ## Verification
 
-- Unit tests assert the URL encoding, GET/POST method, request-body mapping, streaming guard, CLI file-to-code conversion, invalid type/input combinations, and help classification.
-- Run lint, build, the focused tests, and the full unit suite.
-- On 14.103.77.23, read the prompt template. A generation request would invoke an external model and is not sent unless explicitly authorized; transport behavior is covered by unit tests.
+- Unit tests cover the sandbox command relocation, Function/OpenAPI type enforcement, delegated request mapping, help classification, describe metadata, and migration-facing help text.
+- Run lint, build, focused tests, and the full unit suite.
+- On 14.103.77.23, perform read-only checks of sandbox prompt retrieval and Toolbox/Tool listing and detail requests for both types. Do not invoke AI generation or alter existing Toolbox/Tool data.
