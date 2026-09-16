@@ -1,7 +1,7 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
-/** `openbkn function …` — run code in the platform sandbox, before it is anything. */
+/** Sandbox code helpers and `openbkn sandbox …` commands. */
 import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import {
@@ -64,15 +64,15 @@ export interface CodeFlags {
   indexUrl?: string;
 }
 
-export function definitionFlags(c: Command): Command {
-  return c
+export function definitionFlags(c: Command, includeType = true): Command {
+  const flags = c
     .option("--name <n>", "name; required when the definition is a function")
     .option("--description <d>", "what it does — the model reads this to decide when to call it")
-    .option("--type <t>", "function | openapi", "function")
     .option("--inputs <json>", "input parameters: [{name,type,required,description}]")
     .option("--outputs <json>", "output parameters, same shape as --inputs")
     .option("--dep <name@version>", "package to install before running (repeatable)", collectDep)
     .option("--index-url <url>", "package index to install from");
+  return includeType ? flags.option("--type <t>", "function | openapi", "function") : flags;
 }
 
 /** `--inputs` / `--outputs`, parsed and checked for shape. */
@@ -139,8 +139,8 @@ export function generationRequestFrom(
   return { code: readCode(opts.code), inputs, outputs };
 }
 
-export function functionCommand(): Command {
-  const cmd = new Command("function").description(
+export function sandboxCommand(): Command {
+  const cmd = new Command("sandbox").description(
     "Sandbox functions: run Python on the platform without registering anything",
   );
 
@@ -254,7 +254,7 @@ export function functionCommand(): Command {
           return {"sum": event.get("a", 0) + event.get("b", 0)}
 
   \`--event\` is that argument, the return value comes back as \`result\`, and
-  \`print\` output as \`stdout\`. \`function template\` prints the skeleton.
+  \`print\` output as \`stdout\`. \`sandbox template\` prints the skeleton.
 
   READING THE ANSWER
   Code that raises still answers HTTP 200 — \`exit_code\` is the verdict and the
@@ -267,13 +267,14 @@ export function functionCommand(): Command {
   --pass-token puts it in BKN_TOKEN so that code runs as you.
 
   ORDER OF WORK
-  function deps                      what is already importable
-  function run ./add.py --event ...  iterate here; nothing is kept
-  function generate python_function_generator --query "..."
+  sandbox deps                       what is already importable
+  sandbox run ./add.py --event ...   iterate here; nothing is kept
+  sandbox generate python_function_generator --query "..."
                                      draft a handler with the platform model
   toolbox create --type function     a box to keep it in
-  tool create ./add.py --toolbox     the same code, now a tool
-  tool enable <tool-id> --toolbox    a tool is off until enabled, then agents
+  function create ./add.py --toolbox the same code, now a registered Function Tool
+  function enable <tool-id> --toolbox
+                                     a tool is off until enabled, then agents
                                      can call it`,
   );
 

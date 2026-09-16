@@ -23,7 +23,7 @@ describe("--dry-run preview", () => {
   });
 
   it("redacts a credential carried as a body field, not only as a header", () => {
-    // `function run --pass-token` puts one in `bkn_token`, and a preview is
+    // `sandbox run --pass-token` puts one in `bkn_token`, and a preview is
     // something a caller pastes into a terminal, an issue, or a log.
     const req = preview({
       method: "POST",

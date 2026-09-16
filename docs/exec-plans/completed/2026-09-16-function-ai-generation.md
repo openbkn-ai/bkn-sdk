@@ -2,7 +2,7 @@
 
 - [x] Add typed Function AI generation and prompt-template API requests.
 - [x] Expose both operations from `client.functions`.
-- [x] Add `function generate` and `function prompt` CLI commands with local validation.
+- [x] Add `sandbox generate` and `sandbox prompt` CLI commands with local validation.
 - [x] Add focused API, resource, CLI, and help-contract tests.
 - [x] Run lint, build, focused and full unit tests.
 - [x] Verify a read-only prompt-template request on 14.103.77.23.

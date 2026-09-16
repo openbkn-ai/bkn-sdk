@@ -4,6 +4,7 @@
 /** `openbkn toolbox …` and `openbkn tool …` — agent toolboxes + tools. */
 import { Command } from "commander";
 import yaml from "js-yaml";
+import type { ToolMetadataType } from "../api/toolboxes.js";
 import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
@@ -130,14 +131,50 @@ export function toolboxCommand(): Command {
   return group(cmd, "TOOLS & SKILLS");
 }
 
+interface ToolCommandOptions {
+  name: string;
+  metadataType?: ToolMetadataType;
+  createCommand: "create" | "import";
+  includeUpload: boolean;
+}
+
 export function toolCommand(): Command {
-  const cmd = new Command("tool").description(
-    "Tools in a box: add one from code or a spec, enable it, call it",
+  return buildToolCommand({ name: "tool", createCommand: "create", includeUpload: true });
+}
+
+/** Persistent Function Tools, presented without the generic backend noun. */
+export function functionToolCommand(): Command {
+  return buildToolCommand({
+    name: "function",
+    metadataType: "function",
+    createCommand: "create",
+    includeUpload: false,
+  });
+}
+
+/** Persistent OpenAPI Tools, presented as APIs an operator can import and run. */
+export function apiToolCommand(): Command {
+  return buildToolCommand({
+    name: "api",
+    metadataType: "openapi",
+    createCommand: "import",
+    includeUpload: false,
+  });
+}
+
+function buildToolCommand(config: ToolCommandOptions): Command {
+  const kind = config.metadataType;
+  const kindName =
+    kind === "function" ? "Function Tools" : kind === "openapi" ? "OpenAPI Tools" : "Tools";
+  const cmd = new Command(config.name).description(
+    kind
+      ? `${kindName} in a toolbox: add one, enable it, and call it`
+      : "Advanced tools in a box: add one from code or a spec, enable it, call it",
   );
 
   cmd
     .command("list")
-    .description("List tools in a toolbox")
+    .description(kind ? `List ${kindName.toLowerCase()} in a toolbox` : "List tools in a toolbox")
     .requiredOption("--toolbox <box-id>", "toolbox id")
     .option("--limit <n>", "page size (backend default 10, max 100)", int)
     .option("--page <n>", "page (1-based; backend default 1)", int)
@@ -155,7 +192,7 @@ export function toolCommand(): Command {
 
   cmd
     .command("enable <tool-ids...>")
-    .description("Enable one or more tools")
+    .description(kind ? `Enable one or more ${kindName.toLowerCase()}` : "Enable one or more tools")
     .requiredOption("--toolbox <box-id>", "toolbox id")
     .action(async (toolIds: string[], opts, cmd: Command) => {
       printJson(
@@ -166,7 +203,9 @@ export function toolCommand(): Command {
 
   cmd
     .command("disable <tool-ids...>")
-    .description("Disable one or more tools")
+    .description(
+      kind ? `Disable one or more ${kindName.toLowerCase()}` : "Disable one or more tools",
+    )
     .requiredOption("--toolbox <box-id>", "toolbox id")
     .action(async (toolIds: string[], opts, cmd: Command) => {
       printJson(
@@ -204,16 +243,24 @@ export function toolCommand(): Command {
     timeout: opts.timeout ? Number(opts.timeout) : undefined,
   });
 
-  invokeOpts(cmd.command("execute <tool-id>").description("Invoke an enabled tool")).action(
-    async (toolId: string, opts, cmd: Command) => {
-      printJson(
-        await clientFrom(cmd).toolboxes.execute(opts.toolbox, toolId, buildEnvelope(opts)),
-        outputOptions(cmd),
-      );
-    },
-  );
   invokeOpts(
-    cmd.command("debug <tool-id>").description("Invoke a tool that is not enabled yet"),
+    cmd
+      .command("execute <tool-id>")
+      .description(kind ? `Invoke an enabled ${kindName.slice(0, -1)}` : "Invoke an enabled tool"),
+  ).action(async (toolId: string, opts, cmd: Command) => {
+    printJson(
+      await clientFrom(cmd).toolboxes.execute(opts.toolbox, toolId, buildEnvelope(opts)),
+      outputOptions(cmd),
+    );
+  });
+  invokeOpts(
+    cmd
+      .command("debug <tool-id>")
+      .description(
+        kind
+          ? `Invoke a ${kindName.slice(0, -1)} that is not enabled yet`
+          : "Invoke a tool that is not enabled yet",
+      ),
   ).action(async (toolId: string, opts, cmd: Command) => {
     printJson(
       await clientFrom(cmd).toolboxes.debug(opts.toolbox, toolId, buildEnvelope(opts)),
@@ -228,7 +275,8 @@ export function toolCommand(): Command {
 
   /** What goes into a tool, from a code file or a spec file plus the shared flags. */
   const toolFrom = (file: string, opts: ToolFlags) => {
-    if (opts.type === "openapi") {
+    const metadataType = kind ?? opts.type;
+    if (metadataType === "openapi") {
       // Parsed, not raw: this endpoint wants the document itself. `js-yaml`
       // reads JSON too, so one call covers both spellings of a spec.
       let data: unknown;
@@ -241,7 +289,7 @@ export function toolCommand(): Command {
       }
       return { metadataType: "openapi" as const, data, useRule: opts.useRule };
     }
-    if (opts.type !== "function") throw new InputError("--type must be function or openapi");
+    if (metadataType !== "function") throw new InputError("--type must be function or openapi");
     return {
       metadataType: "function" as const,
       function: functionDefinitionFrom(file, opts),
@@ -251,12 +299,17 @@ export function toolCommand(): Command {
 
   definitionFlags(
     cmd
-      .command("create <file>")
+      .command(`${config.createCommand} <file>`)
       .description(
-        "Create a tool from code (or a spec) — the only way to add a function tool to a box",
+        kind === "function"
+          ? "Register a Function Tool from code"
+          : kind === "openapi"
+            ? "Import OpenAPI Tools from a JSON or YAML specification"
+            : "Create a tool from code (or a spec)",
       )
       .requiredOption("--toolbox <box-id>", "target toolbox id")
       .option("--use-rule <s>", "usage rule carried onto the tool"),
+    !kind,
   ).action(async (file: string, opts: ToolFlags, cmd: Command) => {
     const result = (await clientFrom(cmd).toolboxes.createTool(
       opts.toolbox,
@@ -270,7 +323,11 @@ export function toolCommand(): Command {
 
   cmd
     .command("get <tool-id>")
-    .description("One tool in full: metadata, parameters, usage rule")
+    .description(
+      kind
+        ? `One ${kindName.slice(0, -1)} in full: metadata, parameters, usage rule`
+        : "One tool in full: metadata, parameters, usage rule",
+    )
     .requiredOption("--toolbox <box-id>", "toolbox id")
     .action(async (toolId: string, opts, cmd: Command) => {
       printJson(await clientFrom(cmd).toolboxes.getTool(opts.toolbox, toolId), outputOptions(cmd));
@@ -279,9 +336,14 @@ export function toolCommand(): Command {
   definitionFlags(
     cmd
       .command("update <tool-id> <file>")
-      .description("Replace a tool's definition; the id survives and an enabled tool stays enabled")
+      .description(
+        kind
+          ? `Replace a ${kindName.slice(0, -1)} definition; the id survives and an enabled tool stays enabled`
+          : "Replace a tool's definition; the id survives and an enabled tool stays enabled",
+      )
       .requiredOption("--toolbox <box-id>", "toolbox id")
       .option("--use-rule <s>", "usage rule carried onto the tool"),
+    !kind,
   ).action(async (toolId: string, file: string, opts: ToolFlags, cmd: Command) => {
     if (!opts.name || !opts.description) {
       throw new InputError(
@@ -300,7 +362,9 @@ export function toolCommand(): Command {
 
   cmd
     .command("delete <tool-ids...>")
-    .description("Delete tools from a toolbox")
+    .description(
+      kind ? `Delete ${kindName.toLowerCase()} from a toolbox` : "Delete tools from a toolbox",
+    )
     .requiredOption("--toolbox <box-id>", "toolbox id")
     .option("-y, --yes", "skip confirmation")
     .action(async (toolIds: string[], opts, cmd: Command) => {
@@ -310,23 +374,50 @@ export function toolCommand(): Command {
       );
     });
 
-  cmd
-    .command("upload <file>")
-    .description("Add tools from an OpenAPI file — `tool create` is the same endpoint, as JSON")
-    .requiredOption("--toolbox <id>", "target toolbox id")
-    .option("--metadata-type <t>", "metadata type", "openapi")
-    .action(async (file: string, opts, cmd: Command) => {
-      printJson(
-        await clientFrom(cmd).toolboxes.upload(opts.toolbox, file, opts.metadataType),
-        outputOptions(cmd),
-      );
-    });
+  if (config.includeUpload) {
+    cmd
+      .command("upload <file>")
+      .description("Add tools from an OpenAPI file — `tool create` is the same endpoint, as JSON")
+      .requiredOption("--toolbox <id>", "target toolbox id")
+      .option("--metadata-type <t>", "metadata type", "openapi")
+      .action(async (file: string, opts, cmd: Command) => {
+        printJson(
+          await clientFrom(cmd).toolboxes.upload(opts.toolbox, file, opts.metadataType),
+          outputOptions(cmd),
+        );
+      });
+  }
 
   groupChildren(cmd, {
     READ: ["list", "get"],
     RUN: ["execute", "debug"],
-    WRITE: ["create", "update", "delete", "enable", "disable", "upload"],
+    WRITE: [
+      config.createCommand,
+      "update",
+      "delete",
+      "enable",
+      "disable",
+      ...(config.includeUpload ? ["upload"] : []),
+    ],
   });
+
+  if (kind) {
+    guide(
+      cmd,
+      `WHAT THIS GROUP MANAGES
+  ${kind === "function" ? "Function Tools keep Python handler code in a Toolbox." : "OpenAPI Tools keep operations imported from a JSON or YAML specification."}
+  \`--toolbox\` is always the container id; create it with \`toolbox create\`.
+
+  ORDER OF WORK
+  toolbox create --name "<n>"${kind === "openapi" ? " --service-url <url>" : " --type function"}
+  ${config.name} ${config.createCommand} <file> --toolbox <box-id>
+  ${config.name} enable <tool-id> --toolbox <box-id>
+  ${config.name} execute <tool-id> --toolbox <box-id>
+
+  \`debug\` invokes a tool before it is enabled. Publishing the toolbox controls
+  market visibility; enabling the tool controls normal execution.`,
+    );
+  }
 
   return group(cmd, "TOOLS & SKILLS");
 }

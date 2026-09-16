@@ -83,7 +83,7 @@ const SECRET_FIELD = /^(bkn_token|token|access_token|refresh_token|password|secr
 
 /**
  * The same rule as headers, applied to the body: a credential can travel as a
- * field too — `function run --pass-token` puts one in `bkn_token` so the
+ * field too — `sandbox run --pass-token` puts one in `bkn_token` so the
  * sandbox can call BKN as the caller — and a preview is something a caller
  * pastes into a terminal, an issue, or a log.
  */

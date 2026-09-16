@@ -97,6 +97,8 @@ const GROUP_ID_SOURCES: Array<[RegExp, string]> = [
   [/^resource\b/, "openbkn resource list"],
   [/^skill\b/, "openbkn skill list"],
   [/^toolbox\b/, "openbkn toolbox list"],
+  [/^function\b/, "openbkn function list --toolbox <box-id>"],
+  [/^api\b/, "openbkn api list --toolbox <box-id>"],
   [/^tool\b/, "openbkn tool list --toolbox <box-id>"],
   [/^appkey\b/, "openbkn appkey list"],
   [/^admin org\b/, "openbkn admin org list"],
@@ -125,6 +127,11 @@ const GROUP_ID_SOURCES: Array<[RegExp, string]> = [
 function sourceOf(argName: string, path: string[], isLast: boolean): string | undefined {
   const override = ARGUMENT_OVERRIDES[`${path.join(" ")}|${argName}`];
   if (override !== undefined) return override ?? undefined;
+  const parent = path.slice(0, -1).join(" ");
+  const groupSource = GROUP_ID_SOURCES.find(([re]) => re.test(parent))?.[1];
+  // Function and API are typed facades over tools. Their ids must lead a caller
+  // back to the matching typed list instead of the generic advanced command.
+  if (/^tool-ids?$/i.test(argName) && groupSource) return groupSource;
   const byName = ID_SOURCES[argName];
   if (byName) return byName;
   // The group answers for the thing the command acts on, which is the last
@@ -133,8 +140,7 @@ function sourceOf(argName: string, path: string[], isLast: boolean): string | un
   const generic =
     /^(id|ids|cg-id|modelid|role|user|schedule-id|schedule-ids|task-id|log-id)$/i.test(argName);
   if (!generic) return undefined;
-  const parent = path.slice(0, -1).join(" ");
-  return GROUP_ID_SOURCES.find(([re]) => re.test(parent))?.[1];
+  return groupSource;
 }
 
 interface DescribedOption {
