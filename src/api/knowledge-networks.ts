@@ -9,6 +9,7 @@
  * (shapes vary by backend version — validate at higher layers as needed).
  */
 import type { RequestContext } from "../types.js";
+import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { request } from "./http.js";
 import {
@@ -419,9 +420,9 @@ export interface SearchInstanceOptions {
   objectTypes?: string[];
   /** Drop these object-type ids from recall; wins over `objectTypes` on overlap. */
   excludeObjectTypes?: string[];
-  /** How many object types may take part. Each one costs a downstream query. */
+  /** Positive whole count of object types that may take part. Each costs a downstream query. */
   maxObjectTypes?: number;
-  /** How many instances to return per object type. */
+  /** Positive whole count of instances to return per object type. */
   maxInstancesPerType?: number;
   /** Re-rank hits with a cross-encoder; silently skipped if no rerank model is deployed. */
   rerank?: boolean;
@@ -470,12 +471,13 @@ function searchBody(knId: string, query: string, opts: SearchInstanceOptions) {
  * {@link withManagedLifecycle} opens the session that supplies one, and deploys
  * without the contract get the request unchanged.
  */
-export function searchInstance(
+export async function searchInstance(
   ctx: RequestContext,
   knId: string,
   query: string,
   opts: SearchInstanceOptions = {},
 ): Promise<unknown> {
+  validateSearchBudget(opts);
   if (opts.bknContext) {
     return request(
       requestContextForBusinessContext(ctx, opts.bknContext),
@@ -495,4 +497,16 @@ export function searchInstance(
       },
     }),
   );
+}
+
+function validateSearchBudget(opts: SearchInstanceOptions): void {
+  assertPositiveWholeNumber(opts.maxObjectTypes, "maxObjectTypes");
+  assertPositiveWholeNumber(opts.maxInstancesPerType, "maxInstancesPerType");
+}
+
+function assertPositiveWholeNumber(value: number | undefined, name: string): void {
+  if (value === undefined) return;
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new InputError(`${name} must be a positive integer.`);
+  }
 }

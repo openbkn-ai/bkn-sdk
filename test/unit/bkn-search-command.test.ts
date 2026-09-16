@@ -41,3 +41,29 @@ it("still parses known search options after a minus-prefixed query", async () =>
     max_object_types: 40,
   });
 });
+
+it.each(["0", "-1", "1.5", "3x"])(
+  "rejects invalid search budget %s before sending",
+  async (value) => {
+    const error = await buildProgram()
+      .parseAsync(
+        [
+          "--base-url",
+          "https://search.example.com",
+          "--token",
+          "t",
+          "bkn",
+          "search",
+          "kn-1",
+          "question",
+          "--max-object-types",
+          value,
+        ],
+        { from: "user" },
+      )
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("must be a positive integer");
+  },
+);

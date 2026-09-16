@@ -14,6 +14,13 @@ import { clientFrom, csv, cypherParams, outputOptions, readBody } from "./_share
 
 const int = (v: string) => Number.parseInt(v, 10);
 
+function positiveInt(v: string): number {
+  if (!/^[1-9]\d*$/.test(v)) throw new InputError("must be a positive integer");
+  const value = Number(v);
+  if (!Number.isSafeInteger(value)) throw new InputError("must be a positive integer");
+  return value;
+}
+
 const CAPABILITY_TYPES = ["skill", "function", "mcp_tool"];
 
 /**
@@ -145,8 +152,12 @@ export function bknCommand(): Command {
     .option("--object-types <ids>", "pin recall to these object-type ids (comma-separated)")
     .option("--exclude-object-types <ids>", "drop these object-type ids (comma-separated)")
     .option("--concept-groups <names>", "limit recall to these concept groups (comma-separated)")
-    .option("--max-object-types <n>", "how many object types may take part", int)
-    .option("--max-instances <n>", "instances per object type", int)
+    .option(
+      "--max-object-types <n>",
+      "positive count of object types that may take part",
+      positiveInt,
+    )
+    .option("--max-instances <n>", "positive count of instances per object type", positiveInt)
     .option("--rerank", "re-rank hits with a cross-encoder (needs a rerank model deployed)")
     .option("--no-object-types-detail", "omit the object-type definitions that come with hits")
     .action(async (knId: string, query: string, opts, cmd: Command) => {
