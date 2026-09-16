@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { collectDep, parseJsonOption, readCode } from "../../src/commands/function.js";
+import {
+  collectDep,
+  parseJsonObjectOption,
+  parseJsonOption,
+  readCode,
+} from "../../src/commands/function.js";
 import { InputError } from "../../src/utils/errors.js";
 
 describe("--dep", () => {
@@ -27,6 +32,10 @@ describe("JSON options", () => {
 
   it("names the flag it could not parse", () => {
     expect(() => parseJsonOption("{oops", "event")).toThrow(/--event must be valid JSON/);
+  });
+
+  it.each(["[]", "null", "1"])("refuses a non-object function event %s", (raw) => {
+    expect(() => parseJsonObjectOption(raw, "event")).toThrow(/--event must be a JSON object/);
   });
 });
 
