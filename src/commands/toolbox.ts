@@ -189,11 +189,16 @@ export function toolCommand(): Command {
 
   const parseJson = (s: string | undefined, label: string): Record<string, unknown> | undefined => {
     if (!s) return undefined;
+    let parsed: unknown;
     try {
-      return parseBigIntJSON(s) as Record<string, unknown>;
+      parsed = parseBigIntJSON(s);
     } catch {
       throw new InputError(`--${label} must be valid JSON`);
     }
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new InputError(`--${label} must be a JSON object`);
+    }
+    return parsed as Record<string, unknown>;
   };
 
   const buildEnvelope = (opts: Record<string, string | undefined>) => ({
