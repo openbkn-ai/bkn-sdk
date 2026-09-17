@@ -10,6 +10,11 @@ Browse the Vega catalog — data sources, views, atomic views, connector types �
 - `openbkn vega catalog test-connection-config --connector-type <type> --connector-config <json>` — test an unsaved physical Catalog configuration without creating or updating a Catalog.
 - `openbkn vega catalog test-connection <id>` — synchronously test the persisted configuration and inspect the returned `success` business result.
 - `openbkn vega catalog health <id>` — read the latest typed health status for one Catalog.
+- `openbkn vega catalog create --internal` — create a logical Catalog; it takes no `--connector-type`/`--connector-config`. `enabled` is always sent (`false` unless `--enabled`).
+- `openbkn vega catalog update <id> [fields]` — reads the Catalog and sends the full PUT with only the given fields changed; `--expected-update-time` defaults to the `update_time` just read.
+- `openbkn vega index-capabilities` — local-index analyzers. An undocumented deploy extension outside the vega-backend contract; a deployment without it answers 404 with an explanatory hint.
+- `openbkn vega resource query <id>` / `openbkn resource query <id>` — identical flags: `--filter`, `--sort field[:asc|desc],…`, `--output-fields`, `--limit`, `--offset`, `--paging-mode`, `--keep-alive-sec` (60–3600), `--need-total`, `--binary-mode metadata|content`, `--ignore-local-index`; `--cursor` alone for a continuation.
+- Enum, boolean and range flags (`catalog list --type/--enabled/--health-check-status/--sort/--direction`, `resource list --category/--status/--sort/--direction`, `build-task list --mode`, `--keep-alive-sec`, `--input-dialect`, discover-schedule `--start-time/--end-time ≥ 0`) are validated before any request.
 - `openbkn vega catalog health-check-schedule <id>` / `set-health-check-schedule <id>` — read or fully update a physical Catalog's independent schedule.
 - `openbkn vega catalog delete <id> --dry-run` — preview the resources, pending
   tasks, running blockers, and schedules affected by deletion. Omit `--dry-run`
@@ -58,12 +63,15 @@ determines what is indexed; the BuildTask uses its snapshot.
 - `resources/vega.ts` over `api/vega.ts`. BuildTask create/status map to `POST /build-tasks` and `GET /build-tasks/{id}`. The create response contains only `id`; obtain task state and its persisted `execute_type` through the status endpoint.
 - `vega.testCatalogConnectionConfig(request)` calls `POST /catalogs/test-connection`; it never persists a Catalog or health state.
 - `vega.testCatalogConnection(id)` calls the persisted-Catalog endpoint. Both connection-test methods return `{ success, message? }`; `success: false` is a completed probe, not an HTTP failure.
-- `vega.createCatalog(request, { allowUnhealthy })` accepts an optional `healthCheckSchedule`. `vega.updateCatalog(id, request, { allowUnhealthy })` follows the backend's full PUT contract, always injects the path ID into the body, and requires `expectedUpdateTime`, mapped to `expected_update_time` for optimistic locking.
+- `vega.createCatalog(request, { allowUnhealthy })` accepts an optional `healthCheckSchedule`, always sends `enabled`, and for `internal: true` omits `connector_type`/`connector_config` (rejecting them client-side). `vega.updateCatalog(id, patch, { allowUnhealthy })` reads the Catalog, overlays the patch, and issues the backend's full PUT with the path ID injected; `expectedUpdateTime` defaults to the read `update_time`. `connector_config` is sent only when the patch carries it.
 - `vega.catalogHealthCheckSchedule(id)` and `vega.updateCatalogHealthCheckSchedule(id, request)` use the dedicated GET/PUT endpoint. Modes are `inherit`, `enabled`, and `disabled`; only `enabled` accepts `cronExpr`. Schedule updates require `expectedUpdateTime` from the latest response.
 - `resource.update` reads the current Resource before issuing the backend's full PUT and automatically sends its `update_time` as `expected_update_time`. An explicit `expectedUpdateTime` overrides the freshly read value. `indexConfig` and `schemaDefinition` are updated only through this method.
 - Catalog and Resource list/get/create responses are typed at the HTTP boundary. List responses use summary types and omit detail-only JSON fields; detail GETs preserve the backend batch envelope (`{ entries }`), and their `update_time` values can be passed directly to optimistic updates.
 - `vega.discoverSchedules`, `get/create/update/deleteDiscoverSchedule`, and the enable/disable actions cover the full DiscoverSchedule contract. Schedule updates require `catalogId`, `enabled`, `startTime`, `endTime`, `strategy`, and `expectedUpdateTime`, mapped to the backend's strict replacement fields.
 - `vega.discoverCatalog`, `discoverResource`, `discoverTasks`, `getDiscoverTask`, and `deleteDiscoverTasks` cover asynchronous manual triggering plus task history. Catalog discovery accepts an optional strategy; resource discovery has no request body. Resource-level tasks include `resource_id` and a read-only `queue_priority`; list filtering accepts `resourceId` but priority is not a sort input. `vega.create/semanticUnderstandingTasks/get/deleteSemanticUnderstandingTask(s)` cover semantic task lifecycles.
+- `resource.query` accepts `binaryMode` and `ignoreLocalIndex` on the initial request only (never with `cursor`); responses may carry `query_source` (`local_index` | `source`). `resource.createDocument` rejects a document carrying `_id`.
+- `resource.update` strips the server-written `config.dimension` from vector features before the PUT.
+- `vega.getIndexCapabilities` calls `GET /index-capabilities`, which the published contract does not document.
 - `resource.create` is the typed creation API for user-creatable `dataset` and `logicview` resources. `resource.query`, `createDocument`, `upsertDocument`, `getDocuments`, `deleteDocuments`, `deleteDocumentsBySelector`, and `deleteDocumentsByFilter` cover ResourceData. `deleteDocumentsBySelector` turns each selector field into an equality condition; `deleteDocumentsByFilter` accepts a native Vega `filter_condition`. Dynamic document reads retain unsafe integers as native `bigint`; CLI document JSON and filter input preserve them on the request path too.
 - Resource list filtering uses the protocol field `schema` and `catalogId`, mapped to `catalog_id` on the wire. A Resource's `enabled` state is independent of its `active`, `deprecated`, or `stale` discovery status; use `resource.enable` or `resource.disable` to change it. Resource updates preserve the current `enabled` value while catalog/category are read for the strict PUT precondition, and discovery-owned metadata is not sent as mutable input.
 - `vega.deleteCatalog(id, { dryRun: true })` returns a typed
@@ -88,7 +96,16 @@ determines what is indexed; the BuildTask uses its snapshot.
 - Build is **not** freely re-runnable — it kicks a task and returns a `task-id`; never auto-retry (the transport resends only when the connection was never established — [RELIABILITY](../RELIABILITY.md#retries)), surface the id through `build-task get`.
 - BuildTask statuses are `pending`, `running`, `stopping`, `stopped`,
   `completed`, `failed`, and `cancelled`. Start accepts only `stopped` or
-  `failed`; stop accepts only `pending` or `running`.
+  `failed`; stop accepts only `pending` or `running`. Waits end on `completed`,
+  `failed`, `stopped`, or `cancelled` and read only `status`; responses type
+  `status`/`mode`/`execute_type` as strings so an unknown value keeps polling
+  instead of failing the parse.
+- `bkn create-from-catalog` reads table columns from each Resource's
+  `schema_definition` (`name`, `original_type` then `type`), falling back to
+  `source_metadata.columns` only when that is empty; primary keys come from
+  `index_config.primary_key_fields`, falling back to legacy key flags and then
+  row sampling. It pages `/resources` by offset until `total_count`, since that
+  endpoint documents no `-1`.
 - Streaming BuildTasks are not currently supported. A failed batch task resumes by default; use `--reset` only when a full task must rebuild from the beginning.
 - A deletion preflight is advisory. A later real deletion can still return a
   conflict if task or resource state changes between the two requests.
