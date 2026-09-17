@@ -24,6 +24,19 @@ const oneOf =
 
 const SYSTEM_PROPERTIES = ["_instance_id", "_instance_identity", "_display"] as const;
 
+/** Sort enums, per endpoint, as the bkn-backend OpenAPI spec declares them. */
+const DIRECTIONS = ["asc", "desc"] as const;
+const NAME_OR_UPDATE_TIME = ["update_time", "name"] as const;
+const SCHEDULE_SORTS = [
+  "create_time",
+  "update_time",
+  "next_run_time",
+  "last_run_time",
+  "name",
+] as const;
+const CAPABILITY_SORTS = ["create_time", "update_time"] as const;
+const sortDirection = oneOf("--direction", DIRECTIONS);
+
 /** `--exclude-system-properties a,b` → the validated list. */
 function systemProperties(value: string | undefined) {
   const list = csv(value);
@@ -126,8 +139,13 @@ export function bknCommand(): Command {
     .option("--offset <n>", "page offset", int, 0)
     .option("--name-pattern <s>", "filter by name pattern")
     .option("--tag <s>", "filter by tag")
-    .option("--sort <field>", "sort field", "update_time")
-    .option("--direction <dir>", "asc | desc", "desc")
+    .option(
+      "--sort <field>",
+      "update_time | name",
+      oneOf("--sort", NAME_OR_UPDATE_TIME),
+      "update_time",
+    )
+    .option("--direction <dir>", "asc | desc", sortDirection, "desc")
     .action(async (_opts, cmd: Command) => {
       const o = cmd.optsWithGlobals();
       const data = await clientFrom(cmd).kn.list({
@@ -648,8 +666,8 @@ An older deploy answers without paging — resend the query with "offset" instea
     .option("--branch <b>", "branch (default: main)")
     .option("--name-pattern <s>", "fuzzy name filter")
     .option("--tag <s>", "exact tag filter")
-    .option("--sort <field>", "update_time | name")
-    .option("--direction <dir>", "asc | desc")
+    .option("--sort <field>", "update_time | name", oneOf("--sort", NAME_OR_UPDATE_TIME))
+    .option("--direction <dir>", "asc | desc", sortDirection)
     .option("--offset <n>", "page offset", int)
     .option("--limit <n>", "page size (default: -1, all)", int)
     .action(async (knId: string, opts, cmd: Command) => {
@@ -742,8 +760,8 @@ An older deploy answers without paging — resend the query with "offset" instea
     .option("--name-pattern <s>", "fuzzy name filter")
     .option("--action-type-id <id>", "filter by bound action type")
     .option("--status <s>", "active | inactive", oneOf("--status", ["active", "inactive"]))
-    .option("--sort <field>", "create_time | update_time | next_run_time | last_run_time | name")
-    .option("--direction <dir>", "asc | desc")
+    .option("--sort <field>", SCHEDULE_SORTS.join(" | "), oneOf("--sort", SCHEDULE_SORTS))
+    .option("--direction <dir>", "asc | desc", sortDirection)
     .option("--offset <n>", "page offset", int)
     .option("--limit <n>", "page size (default: -1, all)", int)
     .action(async (knId: string, opts, cmd: Command) => {
@@ -829,8 +847,8 @@ An older deploy answers without paging — resend the query with "offset" instea
     .option("--branch <name>", "knowledge network branch (default: main)")
     .option("--limit <n>", "page size", int)
     .option("--offset <n>", "page offset", int)
-    .option("--sort <field>", "create_time | update_time")
-    .option("--direction <dir>", "asc | desc")
+    .option("--sort <field>", "create_time | update_time", oneOf("--sort", CAPABILITY_SORTS))
+    .option("--direction <dir>", "asc | desc", sortDirection)
     .action(async (knId: string, opts, cmd: Command) => {
       if (opts.type && !CAPABILITY_TYPES.includes(opts.type)) {
         throw new InputError(`--type must be one of ${CAPABILITY_TYPES.join(", ")}.`);
@@ -995,7 +1013,7 @@ should be able to account for.
     .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
     .option("--offset <n>", "page offset", int, 0)
     .option("--sort <field>", "sort field (default: name)")
-    .option("--direction <dir>", "asc | desc", oneOf("--direction", ["asc", "desc"]))
+    .option("--direction <dir>", "asc | desc", sortDirection)
     .action(async (opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).kn.bknResources({

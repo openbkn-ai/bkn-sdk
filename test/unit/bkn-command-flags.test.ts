@@ -21,6 +21,8 @@ const kn = vi.hoisted(() => {
     conceptGroups: ok(),
     actionSchedules: ok(),
     actionTypeQuery: ok(),
+    capabilityList: ok(),
+    list: ok(),
     get: ok(),
   };
 });
@@ -181,6 +183,65 @@ describe("openbkn bkn flags", () => {
       "kn-1",
       expect.objectContaining({ status: "inactive", limit: undefined }),
     );
+  });
+
+  it.each([
+    [["list"], "name"],
+    [["concept-group", "list", "kn-1"], "name"],
+    [["action-schedule", "list", "kn-1"], "next_run_time"],
+    [["capability", "list", "kn-1"], "create_time"],
+  ])("%j forwards --sort %s and --direction inside the spec enums", async (argv, sort) => {
+    await run(...argv, "--sort", sort, "--direction", "asc");
+    const method = {
+      list: kn.list,
+      "concept-group": kn.conceptGroups,
+      "action-schedule": kn.actionSchedules,
+      capability: kn.capabilityList,
+    }[argv[0] as string];
+    expect(method).toHaveBeenCalledTimes(1);
+    const opts = method?.mock.calls[0]?.at(-1);
+    expect(opts).toEqual(expect.objectContaining({ sort, direction: "asc" }));
+  });
+
+  it("action-schedule list accepts every schedule sort field", async () => {
+    for (const sort of ["create_time", "update_time", "next_run_time", "last_run_time", "name"]) {
+      await run("action-schedule", "list", "kn-1", "--sort", sort);
+    }
+    expect(kn.actionSchedules.mock.calls.map((c) => (c.at(-1) as { sort: string }).sort)).toEqual([
+      "create_time",
+      "update_time",
+      "next_run_time",
+      "last_run_time",
+      "name",
+    ]);
+  });
+
+  it.each([
+    [["list"], "--sort", "create_time"],
+    [["list"], "--direction", "desce"],
+    [["concept-group", "list", "kn-1"], "--sort", "create_time"],
+    [["concept-group", "list", "kn-1"], "--direction", "up"],
+    [["action-schedule", "list", "kn-1"], "--sort", "run_time"],
+    [["action-schedule", "list", "kn-1"], "--direction", "DESC"],
+    [["capability", "list", "kn-1"], "--sort", "name"],
+    [["capability", "list", "kn-1"], "--direction", "desce"],
+    [["resources"], "--direction", "desce"],
+  ])("%j refuses %s %s before calling the deploy", async (argv, flag, value) => {
+    await expect(run(...argv, flag, value)).rejects.toThrow(`${flag} must be one of`);
+    for (const fn of [
+      kn.list,
+      kn.conceptGroups,
+      kn.actionSchedules,
+      kn.capabilityList,
+      kn.bknResources,
+    ]) {
+      expect(fn).not.toHaveBeenCalled();
+    }
+  });
+
+  it("resources --sort stays free-form: the spec declares no enum for it", async () => {
+    await run("resources", "--sort", "update_time");
+    expect(kn.bknResources).toHaveBeenCalledWith(expect.objectContaining({ sort: "update_time" }));
   });
 
   it("get passes --detail-level and --branch", async () => {
