@@ -48,17 +48,29 @@ def search(
     max_concepts: int | None = None,
     search_scope: dict[str, Any] | None = None,
     include_columns: bool | None = None,
+    schema_brief: bool | None = None,
+    enable_rerank: bool | None = None,
+    rerank_model: str | None = None,
     context: Context | None = None,
 ) -> Any:
-    """Search one network, returning the platform's result verbatim."""
+    """Search one network, returning the platform's result verbatim.
+
+    `schema_brief` defaults to true on the platform — a compact schema that is
+    enough to write a query; pass False for property comments, primary keys and
+    tags. `enable_rerank` and `rerank_model` control the rerank pass.
+    """
     ctx = context or resolve_context()
-    arguments: dict[str, Any] = {"query": query, "response_format": "json"}
-    if max_concepts is not None:
-        arguments["max_concepts"] = max_concepts
-    if search_scope is not None:
-        arguments["search_scope"] = search_scope
-    if include_columns is not None:
-        arguments["include_columns"] = include_columns
+    arguments: dict[str, Any] = {"kn_id": kn_id, "query": query, "response_format": "json"}
+    for name, value in (
+        ("max_concepts", max_concepts),
+        ("search_scope", search_scope),
+        ("include_columns", include_columns),
+        ("schema_brief", schema_brief),
+        ("enable_rerank", enable_rerank),
+        ("rerank_model", rerank_model),
+    ):
+        if value is not None:
+            arguments[name] = value
     return _call(ctx, kn_id, SEARCH_TOOL, arguments)
 
 

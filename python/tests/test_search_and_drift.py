@@ -117,14 +117,30 @@ def sent(monkeypatch: pytest.MonkeyPatch) -> Sent:
 
 
 def test_search_calls_the_same_tool_the_typescript_sdk_calls(sent: Sent) -> None:
-    """One contract for both clients — and the network rides in the header, not the body."""
+    """One contract for both clients — the network rides in the arguments as well as
+    the header, as the TypeScript SDK sends it and the tool catalog requires."""
     search(KN, "who owns supply chain", context=CONTEXT)
 
     assert sent.tools[0][0] == "search_schema"
     assert sent.arguments["query"] == "who owns supply chain"
     assert sent.arguments["response_format"] == "json"
-    assert "kn_id" not in sent.arguments  # the network rides in the header
+    assert sent.arguments["kn_id"] == KN
     assert sent.paths[-1] == "/api/agent-retrieval/v1/mcp"
+
+
+def test_search_sends_the_brief_and_rerank_options(sent: Sent) -> None:
+    search(
+        KN,
+        "q",
+        schema_brief=False,
+        enable_rerank=True,
+        rerank_model="bge-reranker",
+        context=CONTEXT,
+    )
+
+    assert sent.arguments["schema_brief"] is False
+    assert sent.arguments["enable_rerank"] is True
+    assert sent.arguments["rerank_model"] == "bge-reranker"
 
 
 def test_only_the_options_that_were_given_are_sent(sent: Sent) -> None:
@@ -134,6 +150,8 @@ def test_only_the_options_that_were_given_are_sent(sent: Sent) -> None:
     assert sent.arguments["max_concepts"] == 3
     assert sent.arguments["search_scope"] == {"include_action_types": False}
     assert "include_columns" not in sent.arguments
+    assert "schema_brief" not in sent.arguments
+    assert "enable_rerank" not in sent.arguments
 
 
 def test_search_returns_the_platform_result_unchanged(sent: Sent) -> None:
