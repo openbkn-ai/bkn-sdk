@@ -15,12 +15,17 @@ import { callCommand } from "./commands/call.js";
 import { configCommand } from "./commands/config.js";
 import { contextCommand } from "./commands/context.js";
 import { describeCommand } from "./commands/describe.js";
-import { functionCommand } from "./commands/function.js";
+import { sandboxCommand } from "./commands/function.js";
 import { mcpCommand } from "./commands/mcp.js";
 import { modelCommand } from "./commands/model.js";
 import { resourceCommand } from "./commands/resource.js";
 import { skillCommand } from "./commands/skill.js";
-import { toolCommand, toolboxCommand } from "./commands/toolbox.js";
+import {
+  apiToolCommand,
+  functionToolCommand,
+  toolCommand,
+  toolboxCommand,
+} from "./commands/toolbox.js";
 import { traceCommand } from "./commands/trace.js";
 import { vegaCommand } from "./commands/vega.js";
 import { guide, installGroupedHelp } from "./help/grouped-help.js";
@@ -64,9 +69,11 @@ export function buildProgram(): Command {
   program.addCommand(modelCommand());
   program.addCommand(skillCommand());
   program.addCommand(mcpCommand());
+  program.addCommand(sandboxCommand());
   program.addCommand(toolboxCommand());
+  program.addCommand(functionToolCommand());
+  program.addCommand(apiToolCommand());
   program.addCommand(toolCommand());
-  program.addCommand(functionCommand());
   program.addCommand(traceCommand());
   program.addCommand(adminCommand());
   program.addCommand(callCommand());
@@ -90,11 +97,14 @@ export function buildProgram(): Command {
     Build from a catalog bkn create-from-catalog <catalog-id> --name "<n>"  ->
                          vega resource build <resource-id>
     Edit as files        bkn pull <kn-id> ./kn  ->  bkn validate ./kn  ->  bkn push ./kn
-    Ship a capability    skill register ./my-skill; toolbox create --name "<n>"  ->
-                         tool upload ./api.yaml --toolbox <id>  ->  toolbox publish <id>
-    Ship some code       function run ./add.py  ->  toolbox create --name "<n>" --type function
-                         ->  tool create ./add.py --toolbox <box-id> --name add  ->
-                         tool enable <tool-id> --toolbox <box-id>
+    Ship an API          toolbox create --name "<n>" --service-url <url>  ->
+                         api import ./api.yaml --toolbox <box-id>  ->
+                         api enable <tool-id> --toolbox <box-id>  ->  toolbox publish <box-id>
+                         ->  api execute <tool-id> --toolbox <box-id>
+    Ship some code       sandbox run ./add.py  ->  toolbox create --name "<n>" --type function
+                         ->  function create ./add.py --toolbox <box-id> --name add  ->
+                         function enable <tool-id> --toolbox <box-id>  ->
+                         toolbox publish <box-id>  ->  function execute <tool-id> --toolbox <box-id>
     Debug an answer      trace conversations list  ->  trace diagnose <conversation-id> --llm
 
   GOOD TO KNOW

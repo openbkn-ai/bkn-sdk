@@ -20,7 +20,7 @@ code is involved: the agent already has `get_skill_content`, `search_capabilitie
 ## Works with the openbkn skill
 
 **create-skill** writes the files; the **openbkn** skill runs `openbkn skill register`,
-`openbkn skill set-status`, `openbkn function run`, `openbkn tool create` once they exist.
+`openbkn skill set-status`, `openbkn sandbox run`, `openbkn function create` once they exist.
 [create-bkn](../create-bkn/SKILL.md) models the network itself — a Skill assumes the network,
 its metrics and its actions already exist.
 
@@ -140,13 +140,13 @@ Example: [references/examples/functions/call_l1_check.py](references/examples/fu
 ### Code → tool (openbkn CLI 0.1.5+)
 
 ```bash
-openbkn function run ./fn.py --event '{"kn_id":"<kn>","product":"P1","qty":50}' --pass-token
+openbkn sandbox run ./fn.py --event '{"kn_id":"<kn>","product":"P1","qty":50}' --pass-token
 openbkn toolbox create --name my_functions --type function     # name: letters, digits, _, CJK
-openbkn tool create ./fn.py --toolbox <box-id> --name fn \
+openbkn function create ./fn.py --toolbox <box-id> --name fn \
     --description "..." \
     --inputs '[{"name":"kn_id","type":"string","required":true}]' \
     --outputs '[{"name":"kitting_ok","type":"boolean"}]'
-openbkn tool enable <tool-id> --toolbox <box-id>              # tools start disabled
+openbkn function enable <tool-id> --toolbox <box-id>          # tools start disabled
 openbkn toolbox publish <box-id>
 ```
 

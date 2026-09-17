@@ -37,7 +37,7 @@ const COMMAND_SERVICE: Array<[RegExp, string]> = [
   [/^resource\b/, "vega-backend"],
   [/^context\b/, "agent-retrieval"],
   [/^trace\b/, "agent-observability"],
-  [/^(skill|mcp|toolbox|tool|function)\b/, "agent-operator-integration"],
+  [/^(skill|mcp|sandbox|toolbox|tool|function|api)\b/, "agent-operator-integration"],
   [/^model\b/, "mf-model-manager"],
   [/^(auth|appkey)\b/, "safe"],
   [/^admin (llm|small-model)\b/, "mf-model-manager"],

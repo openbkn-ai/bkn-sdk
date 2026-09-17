@@ -1,15 +1,22 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
-/** `openbkn function …` — run code in the platform sandbox, before it is anything. */
+/** Sandbox code helpers and `openbkn sandbox …` commands. */
 import { readFileSync } from "node:fs";
 import { Command } from "commander";
-import type { DependencyInfo, FunctionDefinition, ParameterDef } from "../api/functions.js";
+import {
+  type DependencyInfo,
+  FunctionAiGenerationType as FUNCTION_AI_GENERATION_TYPES,
+  type FunctionAiGenerationRequest,
+  type FunctionAiGenerationType,
+  type FunctionDefinition,
+  type ParameterDef,
+} from "../api/functions.js";
 import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
-import { clientFrom, outputOptions } from "./_shared.js";
+import { clientFrom, oneOf, outputOptions, positiveInt } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 
@@ -70,15 +77,32 @@ export interface CodeFlags {
   indexUrl?: string;
 }
 
-export function definitionFlags(c: Command): Command {
-  return c
+/**
+ * Which definition flags a command shows. A spec-backed OpenAPI command has no
+ * code to describe: `import` takes everything from the spec, and `update` only
+ * needs the name and description the service insists on for a replacement.
+ */
+export type DefinitionFlagSet = "all" | "openapi-import" | "openapi-update";
+
+export function definitionFlags(
+  c: Command,
+  includeType = true,
+  flagSet: DefinitionFlagSet = "all",
+): Command {
+  if (flagSet === "openapi-import") return c;
+  if (flagSet === "openapi-update") {
+    return c
+      .option("--name <n>", "tool name; required, update replaces the tool")
+      .option("--description <d>", "what it does; required, update replaces the tool");
+  }
+  const flags = c
     .option("--name <n>", "name; required when the definition is a function")
     .option("--description <d>", "what it does — the model reads this to decide when to call it")
-    .option("--type <t>", "function | openapi", "function")
     .option("--inputs <json>", "input parameters: [{name,type,required,description}]")
     .option("--outputs <json>", "output parameters, same shape as --inputs")
     .option("--dep <name@version>", "package to install before running (repeatable)", collectDep)
     .option("--index-url <url>", "package index to install from");
+  return includeType ? flags.option("--type <t>", "function | openapi", "function") : flags;
 }
 
 /** `--inputs` / `--outputs`, parsed and checked for shape. */
@@ -103,8 +127,45 @@ export function functionDefinitionFrom(file: string, opts: CodeFlags): FunctionD
   };
 }
 
-export function functionCommand(): Command {
-  const cmd = new Command("function").description(
+/** Validate a Function generation direction before a request is opened. */
+export function generationType(value: string): FunctionAiGenerationType {
+  return oneOf("type", FUNCTION_AI_GENERATION_TYPES)(value);
+}
+
+export interface GenerationFlags {
+  query?: string;
+  code?: string;
+  inputs?: string;
+  outputs?: string;
+}
+
+/** Convert the type-specific CLI flags to the documented JSON request body. */
+export function generationRequestFrom(
+  type: FunctionAiGenerationType,
+  opts: GenerationFlags,
+): FunctionAiGenerationRequest {
+  const inputs = parameterList(opts.inputs, "inputs");
+  const outputs = parameterList(opts.outputs, "outputs");
+  if (type === "python_function_generator") {
+    if (!opts.query?.trim()) {
+      throw new InputError("--query is required for python_function_generator");
+    }
+    if (opts.code !== undefined) {
+      throw new InputError("--code only applies to metadata_param_generator");
+    }
+    return { query: opts.query, inputs, outputs };
+  }
+  if (opts.query !== undefined) {
+    throw new InputError("--query only applies to python_function_generator");
+  }
+  if (!opts.code) {
+    throw new InputError("--code <file> is required for metadata_param_generator");
+  }
+  return { code: readCode(opts.code), inputs, outputs };
+}
+
+export function sandboxCommand(): Command {
+  const cmd = new Command("sandbox").description(
     "Sandbox functions: run Python on the platform without registering anything",
   );
 
@@ -179,9 +240,43 @@ export function functionCommand(): Command {
       printJson(await clientFrom(cmd).functions.template(opts.type), outputOptions(cmd));
     });
 
+  cmd
+    .command("generate <type>")
+    .description("Generate function code or parameter metadata with the platform's default LLM")
+    .option("--query <text>", "natural-language request (python_function_generator)")
+    .option("--code <file>", "existing code to analyse (metadata_param_generator; `-` reads stdin)")
+    .option("--inputs <json>", "known input parameters to constrain generation")
+    .option("--outputs <json>", "known output parameters to constrain generation")
+    .option(
+      "--timeout <s>",
+      "seconds to wait for the model (default 300; a default ingress answers 504 at 60)",
+      positiveInt("--timeout"),
+    )
+    .action(async (type: string, opts: GenerationFlags & { timeout?: number }, cmd: Command) => {
+      const direction = generationType(type);
+      printJson(
+        await clientFrom(cmd).functions.generate(
+          direction,
+          generationRequestFrom(direction, opts),
+          opts.timeout === undefined ? {} : { timeoutMs: opts.timeout * 1000 },
+        ),
+        outputOptions(cmd),
+      );
+    });
+
+  cmd
+    .command("prompt <type>")
+    .description("Read the prompt template used for one Function AI generation direction")
+    .action(async (type: string, _opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).functions.promptTemplate(generationType(type)),
+        outputOptions(cmd),
+      );
+    });
+
   groupChildren(cmd, {
-    READ: ["deps", "versions", "template"],
-    RUN: ["run", "infer-schema"],
+    READ: ["deps", "versions", "template", "prompt"],
+    RUN: ["run", "infer-schema", "generate"],
   });
 
   guide(
@@ -193,7 +288,7 @@ export function functionCommand(): Command {
           return {"sum": event.get("a", 0) + event.get("b", 0)}
 
   \`--event\` is that argument, the return value comes back as \`result\`, and
-  \`print\` output as \`stdout\`. \`function template\` prints the skeleton.
+  \`print\` output as \`stdout\`. \`sandbox template\` prints the skeleton.
 
   READING THE ANSWER
   Code that raises still answers HTTP 200 — \`exit_code\` is the verdict and the
@@ -206,12 +301,25 @@ export function functionCommand(): Command {
   --pass-token puts it in BKN_TOKEN so that code runs as you.
 
   ORDER OF WORK
-  function deps                      what is already importable
-  function run ./add.py --event ...  iterate here; nothing is kept
+  sandbox deps                       what is already importable
+  sandbox run ./add.py --event ...   iterate here; nothing is kept
+  sandbox generate python_function_generator --query "..."
+                                     draft a handler with the platform model
   toolbox create --type function     a box to keep it in
-  tool create ./add.py --toolbox     the same code, now a tool
-  tool enable <tool-id> --toolbox    a tool is off until enabled, then agents
-                                     can call it`,
+  function create ./add.py --toolbox the same code, now a registered Function Tool
+  function debug <tool-id> --toolbox try it before enabling or publishing
+  function enable <tool-id> --toolbox
+                                     a tool is off until enabled
+  toolbox publish <box-id>           execute needs a published box
+  function execute <tool-id> --toolbox
+                                     the call agents make
+
+  LONG JOBS
+  A registered function called through the toolbox is cut at about 30s whatever
+  its --timeout, and answers 200 with result: null. Keep long work on
+  \`sandbox run\`, which waits for the sandbox's own limit. The ingress still
+  answers 504 when its read timeout passes: 60s by default, unless the deploy
+  raises proxy-read-timeout.`,
   );
 
   return group(cmd, "TOOLS & SKILLS");
