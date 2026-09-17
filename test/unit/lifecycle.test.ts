@@ -747,7 +747,8 @@ describe("managed lifecycle on semantic search", () => {
 
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-05T00:00:00.000Z"));
-    const ctx = freshCtx();
+    // The blip must reach the probe, not be absorbed by the transport's retry.
+    const ctx = freshCtx({ retry: false });
 
     await searchInstance(ctx, "kn-1", "物料");
     // Inside the failure window the probe is not repeated: a durably missing

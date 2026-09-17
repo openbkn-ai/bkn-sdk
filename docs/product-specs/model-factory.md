@@ -19,5 +19,5 @@ Manage and invoke models: large models (LLM) and small models (embedding/rerank/
 ## Edge cases
 
 - Distinguish management endpoints (admin) from invocation endpoints (user) by token; a user token on a management call → clear 403.
-- `test`/`chat` honor timeouts; do not auto-retry generation.
+- `test`/`chat` honor timeouts; do not auto-retry generation. The transport resends only a request whose connection was never established ([RELIABILITY](../RELIABILITY.md#retries)).
 - Never log API keys configured on a model.

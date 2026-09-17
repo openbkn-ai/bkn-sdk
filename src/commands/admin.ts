@@ -20,7 +20,7 @@ import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { renderOrgTree } from "../utils/org-tree.js";
 import { printJson } from "../utils/output.js";
 import { promptLine } from "../utils/prompt.js";
-import { clientFrom, csv, outputOptions, readBody } from "./_shared.js";
+import { clientFrom, csv, outputOptions, readBody, retryOptionsFrom } from "./_shared.js";
 import { registerAuthLeaves } from "./auth.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
@@ -674,6 +674,7 @@ export function adminCommand(): Command {
           user: g.user,
           insecure: g.insecure,
           versionCheckMode: "cli",
+          ...retryOptionsFrom(g),
         }),
         url,
         { method: opts.request, header: opts.header, data: opts.data },

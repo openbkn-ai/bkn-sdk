@@ -65,7 +65,7 @@ export async function request<T = unknown>(
   // retry replaces `ctx.token`, and the retry must carry the new one.
   const send = () =>
     tlsFetch(
-      ctx.insecure,
+      ctx,
       url,
       {
         method,

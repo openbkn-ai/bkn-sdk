@@ -45,8 +45,10 @@ function cli(dir: string, extra: string[] = []): Promise<Command> {
     .exitOverride()
     .option("--base-url <url>")
     .option("--token <token>")
-    .option("--json");
+    .option("--json")
+    .option("--no-retry");
   root.addCommand(bknCommand());
+  // Failures here stand for state that stays unreadable, not a blip to retry.
   return root.parseAsync(
     [
       "--base-url",
@@ -54,6 +56,7 @@ function cli(dir: string, extra: string[] = []): Promise<Command> {
       "--token",
       "t",
       "--json",
+      "--no-retry",
       "bkn",
       "push",
       dir,

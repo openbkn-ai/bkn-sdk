@@ -25,7 +25,7 @@ Manage the skill registry and the Toolbox execution surface that agents call. Th
 ## Edge cases
 
 - Skill install is progressive — fetch manifest before pulling the full package.
-- Tool calls are **not idempotent** — never auto-retry.
+- Tool calls are **not idempotent** — a call is resent only when its connection was never established (see [RELIABILITY](../RELIABILITY.md#retries)); a dropped connection or a 5xx surfaces instead.
 - `execute` requires the tool to be enabled **and** its toolbox published; an unpublished or offline box answers 400 `ToolNotAvailable`. `debug` works before either gate. Order: create box → import/create tool → enable → publish → execute.
 - `execute` and `debug` (on `tool`, `function`, and `api`) exit non-zero when the platform reports the tool call itself failed, even though the HTTP response is 200.
 - Toolbox proxy and debug calls to function tools are cut by the platform at ~30 s regardless of `timeout`, answering 200 with `result: null`; long jobs belong on `sandbox run`.

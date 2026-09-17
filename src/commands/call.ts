@@ -9,7 +9,7 @@ import { resolveContext } from "../config/resolve.js";
 import { group, guide } from "../help/grouped-help.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
-import { outputOptions, traceOptionsFrom } from "./_shared.js";
+import { outputOptions, retryOptionsFrom, traceOptionsFrom } from "./_shared.js";
 
 function collect(value: string, prev: string[]): string[] {
   prev.push(value);
@@ -41,6 +41,7 @@ export function callCommand(): Command {
         user: g.user,
         insecure: g.insecure,
         versionCheckMode: "cli",
+        ...retryOptionsFrom(g),
         ...(trace ? { trace } : {}),
       });
       const res = await rawCall(ctx, url, {

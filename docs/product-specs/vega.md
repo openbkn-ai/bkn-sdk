@@ -85,7 +85,7 @@ determines what is indexed; the BuildTask uses its snapshot.
 - Pending or running discovery/semantic tasks cannot be deleted. Batch task deletion is transactional and supports `ignoreMissing`; dataset document deletion by ID is best-effort instead.
 - ResourceData write/delete/single-document operations apply only to `category=dataset`. Delete-by-filter requires a non-empty selector or Vega filter condition; the CLI requires exactly one of `--filter` and `--selector`.
 - Custom health-check Cron expressions must not run more frequently than hourly; the backend remains the authority for validating the expression.
-- Build is **not** freely re-runnable — it kicks a task and returns a `task-id`; never auto-retry, surface the id through `build-task get`.
+- Build is **not** freely re-runnable — it kicks a task and returns a `task-id`; never auto-retry (the transport resends only when the connection was never established — [RELIABILITY](../RELIABILITY.md#retries)), surface the id through `build-task get`.
 - BuildTask statuses are `pending`, `running`, `stopping`, `stopped`,
   `completed`, `failed`, and `cancelled`. Start accepts only `stopped` or
   `failed`; stop accepts only `pending` or `running`.

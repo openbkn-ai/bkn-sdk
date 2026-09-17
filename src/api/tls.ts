@@ -94,12 +94,17 @@ function toUndiciBody(body: RequestInit["body"]): UndiciInit["body"] {
  * `AbortController` deadline the caller set, so a longer client budget is not
  * enough on its own.
  */
-export function tlsFetch(
-  insecure: boolean | undefined,
+export async function tlsFetch(
+  transport: boolean | undefined | Transport,
   url: string | URL,
   init?: RequestInit,
   headersTimeoutMs?: number,
 ): Promise<Response> {
+  const {
+    insecure,
+    retry = true,
+    onRetry,
+  } = typeof transport === "object" ? transport : { insecure: transport };
   // Every outbound request funnels through here — `request()`, the MCP fetch,
   // `call`, and the multipart uploads that build their own — so this is the one
   // place where `--dry-run` can promise it sent nothing.
@@ -115,10 +120,150 @@ export function tlsFetch(
   // on the global keeps it interceptable — a consumer who stubs `fetch` should
   // not lose that because a caller asked for a deadline it was already meeting.
   const needsAgent = headersTimeoutMs !== undefined && headersTimeoutMs > UNDICI_HEADERS_TIMEOUT_MS;
-  if (!insecure && !needsAgent) return fetch(url, init);
-  return undiciFetch(url, {
-    ...(init as UndiciInit | undefined),
-    ...(init?.body === undefined || init?.body === null ? {} : { body: toUndiciBody(init.body) }),
-    dispatcher: dispatcherFor(insecure === true, needsAgent ? headersTimeoutMs : undefined),
-  }) as unknown as Promise<Response>;
+  const send = (): Promise<Response> =>
+    !insecure && !needsAgent
+      ? fetch(url, init)
+      : (undiciFetch(url, {
+          ...(init as UndiciInit | undefined),
+          ...(init?.body === undefined || init?.body === null
+            ? {}
+            : { body: toUndiciBody(init.body) }),
+          dispatcher: dispatcherFor(insecure === true, needsAgent ? headersTimeoutMs : undefined),
+        }) as unknown as Promise<Response>);
+
+  const method = String(init?.method ?? "GET").toUpperCase();
+  const replayable = !(init?.body instanceof ReadableStream);
+  for (let attempt = 1; ; attempt++) {
+    let reason: string | undefined;
+    let retryAfterMs = 0;
+    try {
+      const res = await send();
+      if (!RETRY_STATUSES.has(res.status) || !IDEMPOTENT.has(method)) return res;
+      reason = `HTTP ${res.status}`;
+      retryAfterMs = parseRetryAfter(res.headers.get("retry-after"));
+      if (!canRetry(attempt) || retryAfterMs > RETRY_AFTER_CAP_MS) return res;
+      await res.body?.cancel().catch(() => {});
+    } catch (err) {
+      reason = retryableCode(err, method);
+      if (!reason || !canRetry(attempt)) throw err;
+    }
+    const delayMs = Math.max(RETRY_DELAYS_MS[attempt - 1] as number, retryAfterMs);
+    onRetry?.({
+      attempt,
+      retries: RETRY_DELAYS_MS.length,
+      delayMs,
+      method,
+      url: String(url),
+      reason,
+    });
+    await sleep(delayMs, init?.signal);
+  }
+
+  function canRetry(attempt: number): boolean {
+    return retry && replayable && attempt <= RETRY_DELAYS_MS.length && !init?.signal?.aborted;
+  }
+}
+
+/**
+ * Wait, but not past the caller's deadline: an abort ends the sleep, and the
+ * next send fails at once with the caller's own AbortError. Without this a
+ * 5 s preflight could spend 2 s asleep after its deadline had passed.
+ */
+function sleep(ms: number, signal: AbortSignal | null | undefined): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve();
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener("abort", done, { once: true });
+  });
+}
+
+/** Retry-After as milliseconds (delta-seconds or an HTTP date); 0 when absent or unreadable. */
+function parseRetryAfter(value: string | null): number {
+  if (!value) return 0;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  const at = Date.parse(value);
+  return Number.isFinite(at) ? Math.max(0, at - Date.now()) : 0;
+}
+
+/** How a caller's requests travel: TLS verification, and whether to ride out a blip. */
+export interface Transport {
+  insecure?: boolean;
+  /**
+   * Retry a failure that says nothing about the request itself — default true.
+   * See {@link tlsFetch} for exactly which failures qualify.
+   */
+  retry?: boolean;
+  /** Told before each retry sleep; the CLI prints it so a stalled command says why. */
+  onRetry?: (notice: RetryNotice) => void;
+}
+
+export interface RetryNotice {
+  /** 1-based number of the retry about to happen. */
+  attempt: number;
+  retries: number;
+  delayMs: number;
+  method: string;
+  url: string;
+  /** An error code such as `ECONNREFUSED`, or `HTTP 503`. */
+  reason: string;
+}
+
+/*
+ * Transient-failure retry. A POC gateway that restarts several times a day
+ * answers ECONNREFUSED for a few seconds each time, and every command running
+ * then used to die with it. Which failures are retried depends on whether the
+ * request could have reached a server:
+ *
+ * - the connection was never made — retry any method, nothing was received.
+ *   That includes an MCP `tools/call` carrying a managed `bkn_context`: the
+ *   server never saw it, so no operation or receipt can be duplicated;
+ * - it dropped or timed out, or the answer was 429/502/503 — retry only
+ *   GET/HEAD, since a write may already have landed upstream: neither a
+ *   gateway error nor a rate limiter in front of one proves the service never
+ *   ran it. A Retry-After lengthens the wait; one above 10 s is answered, not
+ *   waited for.
+ *
+ * Not retried: ENOTFOUND (a mistyped host only fails slower), TLS errors, 504
+ * (routed work that may still be running), and anything the caller aborted.
+ * The caller's own deadline still bounds every attempt together.
+ */
+const RETRY_DELAYS_MS = [500, 1000, 2000];
+const RETRY_AFTER_CAP_MS = 10_000;
+const RETRY_STATUSES = new Set([429, 502, 503]);
+const IDEMPOTENT = new Set(["GET", "HEAD"]);
+const NOT_CONNECTED = new Set([
+  "ECONNREFUSED",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "EAI_AGAIN",
+  "UND_ERR_CONNECT_TIMEOUT",
+]);
+// ETIMEDOUT belongs here: Node raises it for a stalled established socket as
+// well as for a connect, and the code alone cannot tell which.
+const DROPPED = new Set(["ECONNRESET", "EPIPE", "ETIMEDOUT", "UND_ERR_SOCKET", "UND_ERR_CLOSED"]);
+
+/** The error code that makes this failure worth retrying for `method`, if any. */
+function retryableCode(err: unknown, method: string): string | undefined {
+  for (const code of errorCodes(err)) {
+    if (NOT_CONNECTED.has(code)) return code;
+    if (DROPPED.has(code) && IDEMPOTENT.has(method)) return code;
+  }
+  return undefined;
+}
+
+/** Codes along a `fetch failed` cause chain, including happy-eyeballs AggregateErrors. */
+function errorCodes(err: unknown, depth = 0): string[] {
+  if (!err || typeof err !== "object" || depth > 4) return [];
+  const e = err as { code?: unknown; cause?: unknown; errors?: unknown };
+  return [
+    ...(typeof e.code === "string" ? [e.code] : []),
+    ...errorCodes(e.cause, depth + 1),
+    ...(Array.isArray(e.errors) ? e.errors.flatMap((x) => errorCodes(x, depth + 1)) : []),
+  ];
 }

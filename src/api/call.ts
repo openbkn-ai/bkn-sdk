@@ -92,7 +92,7 @@ export async function rawCall(
     // retries — matches the SDK request path so `call`/`curl` self-heals on an
     // expired token instead of surfacing "token is invalid".
     const res = await authFetch(ctx, () =>
-      tlsFetch(ctx.insecure, url, {
+      tlsFetch(ctx, url, {
         method,
         headers: headersFor(),
         body,

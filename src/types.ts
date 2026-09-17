@@ -3,6 +3,8 @@
 
 /** Shared types for the SDK surface. No runtime, no side effects. */
 
+import type { RetryNotice } from "./api/tls.js";
+
 /** Options a caller supplies; any field may be resolved from env/config store. */
 export interface ClientOptions {
   baseUrl?: string;
@@ -11,6 +13,13 @@ export interface ClientOptions {
   user?: string;
   /** Skip TLS verification (dev / self-signed only). */
   insecure?: boolean;
+  /**
+   * Retry transient transport failures — a connection that was never made, or
+   * a dropped one or a 429/502/503 on a read — up to three times. Default true.
+   */
+  retry?: boolean;
+  /** Called before each such retry; the CLI prints one line to stderr. */
+  onRetry?: (notice: RetryNotice) => void;
   /** Dedicated producer credential, sent only to BKN Trace evidence write endpoints. */
   evidenceIngestToken?: string;
   /** Optional BKN Trace phase-one context for request correlation. */
@@ -73,6 +82,10 @@ export interface RequestContext {
   baseUrl: string;
   token: string;
   insecure: boolean;
+  /** See {@link ClientOptions.retry}; absent means on. */
+  retry?: boolean;
+  /** See {@link ClientOptions.onRetry}. */
+  onRetry?: (notice: RetryNotice) => void;
   /**
    * The token came from `BKN_TOKEN`, shadowing any `auth login` session. A 401
    * then says so — otherwise a fresh login looks broken for no visible reason.

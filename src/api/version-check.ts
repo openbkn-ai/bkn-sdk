@@ -130,7 +130,7 @@ async function readServerVersion(ctx: RequestContext): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
   try {
-    const response = await tlsFetch(ctx.insecure, `${ctx.baseUrl}${VERSION_PATH}`, {
+    const response = await tlsFetch(ctx, `${ctx.baseUrl}${VERSION_PATH}`, {
       method: "GET",
       signal: controller.signal,
     });

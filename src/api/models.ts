@@ -198,7 +198,7 @@ export async function chatCompletionsStream(
 ): Promise<string> {
   await ensureCompatible(ctx, new URL(`${ctx.baseUrl}${API}/chat/completions`));
   const res = await authFetch(ctx, () =>
-    tlsFetch(ctx.insecure, `${ctx.baseUrl}${API}/chat/completions`, {
+    tlsFetch(ctx, `${ctx.baseUrl}${API}/chat/completions`, {
       method: "POST",
       headers: {
         ...buildHeaders(ctx),
