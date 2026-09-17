@@ -42,13 +42,15 @@ openbkn tool create ./add.py --toolbox <box-id> --name add \
                {"name":"b","type":"number","required":true}]' \
     --outputs '[{"name":"sum","type":"number"}]'                # -> success_ids
 openbkn tool enable <tool-id> --toolbox <box-id>                # 默认 disabled，这一步是硬门
+openbkn toolbox publish <box-id>                                # 箱子未发布时 execute 返回 400 ToolNotAvailable
 openbkn tool execute <tool-id> --toolbox <box-id> --body '{"a":1,"b":2}'
 ```
 
 三个实测出来的细节：
 
 - **参数 type 只收 `string` / `number` / `boolean` / `array` / `object`**，写 `integer` 直接 400（`FunctionInvalidParameterType`）。
-- **发布箱子只影响市场可见性**，不卡执行；卡执行的是 tool 的 `enabled`。
+- **执行有两道门**：tool 要 `enabled`，箱子要 `published`。箱子未发布或已 `offline` 时
+  `tool execute` 返回 400 `ToolNotAvailable`；发布前调试用 `tool debug`（见 [toolbox.md](toolbox.md)）。
 - **函数工具的返回套两层**：结果在 `body.result`。
 
 工具箱与工具本身见 [toolbox.md](toolbox.md)。
