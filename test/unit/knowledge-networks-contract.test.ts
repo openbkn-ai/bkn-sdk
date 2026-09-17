@@ -21,11 +21,13 @@ import {
   createMetric,
   createObjectTypes,
   createSchemaItem,
+  deleteMetric,
   deleteSchemaItem,
   dryRunMetric,
   executeActionType,
   getActionLog,
   getKnowledgeNetwork,
+  getMetric,
   getSchemaItem,
   listActionLogs,
   listActionTypes,
@@ -36,7 +38,9 @@ import {
   queryMetricData,
   queryObjectTypeInstances,
   querySubgraph,
+  updateMetric,
   updateSchemaItem,
+  validateMetric,
 } from "../../src/api/knowledge-networks.js";
 import type { RequestContext } from "../../src/types.js";
 import { InputError } from "../../src/utils/errors.js";
@@ -166,6 +170,25 @@ describe("schema creates carry the POST override", () => {
     expect(header(init, "X-HTTP-Method-Override")).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual({ entries: [{ name: "m" }] });
   });
+
+  it("metric get, update, delete and validate pass branch, and omit it by default", async () => {
+    const f = mockFetch();
+    const base = "/api/bkn-backend/v1/knowledge-networks/kn-1/metrics";
+    await getMetric(ctx, "kn-1", "m-1", { branch: "dev" });
+    expect(lastCall(f).url.pathname).toBe(`${base}/m-1`);
+    expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
+    await updateMetric(ctx, "kn-1", "m-1", { name: "m" }, { branch: "dev" });
+    expect(lastCall(f).init.method).toBe("PUT");
+    expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
+    await deleteMetric(ctx, "kn-1", "m-1", { branch: "dev" });
+    expect(lastCall(f).init.method).toBe("DELETE");
+    expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
+    await validateMetric(ctx, "kn-1", { entries: [] }, { branch: "dev" });
+    expect(lastCall(f).url.pathname).toBe(`${base}/validation`);
+    expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
+    await getMetric(ctx, "kn-1", "m-1");
+    expect(lastCall(f).url.searchParams.has("branch")).toBe(false);
+  });
 });
 
 describe("concept groups and action schedules", () => {
@@ -276,6 +299,18 @@ describe("action logs", () => {
     expect(q.get("need_total")).toBe("true");
     expect(q.get("trigger_type")).toBe("scheduled");
     expect(q.get("search_after")).toBe("1704067200000,cqq2g8h4d2fg00fvm8dg");
+  });
+
+  it("keeps an empty search_after component in its slot, and omits a blank cursor", async () => {
+    const f = mockFetch();
+    await listActionLogs(ctx, "kn-1", { searchAfter: ["", "id-1"] });
+    expect(lastCall(f).url.searchParams.get("search_after")).toBe(",id-1");
+    await listObjectTypes(ctx, "kn-1", { searchAfter: "1704067200000,,id-2" });
+    expect(lastCall(f).url.searchParams.get("search_after")).toBe("1704067200000,,id-2");
+    await listActionLogs(ctx, "kn-1", { searchAfter: "  " });
+    expect(lastCall(f).url.searchParams.has("search_after")).toBe(false);
+    await listActionLogs(ctx, "kn-1", { searchAfter: [] });
+    expect(lastCall(f).url.searchParams.has("search_after")).toBe(false);
   });
 
   it("get pages the embedded results", async () => {

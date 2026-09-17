@@ -125,6 +125,18 @@ function csvList(value: string | Array<string | number> | undefined): string[] {
   return list.map((v) => v.trim()).filter(Boolean);
 }
 
+/**
+ * A deep-paging cursor as the backend reads it: one comma-joined string of the
+ * previous page's sort values, in order. Positional, so a component is kept
+ * verbatim — an empty one (a sort field whose value was empty) still holds its
+ * slot; dropping it would shift the tuple. Only a wholly blank cursor is omitted.
+ */
+function searchAfterParam(value: string | Array<string | number> | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const joined = typeof value === "string" ? value : value.map(String).join(",");
+  return joined.trim() ? joined : undefined;
+}
+
 /** System fields an ontology-query read can leave out of each instance. */
 export type SystemProperty = "_instance_id" | "_instance_identity" | "_display";
 
@@ -207,7 +219,7 @@ export function listActionLogs(
       limit: opts.limit ?? 30,
       offset: opts.offset,
       need_total: opts.needTotal ? "true" : undefined,
-      search_after: csvList(opts.searchAfter).join(",") || undefined,
+      search_after: searchAfterParam(opts.searchAfter),
     },
     responseParser: parseBigIntJSON,
   });
@@ -454,7 +466,7 @@ export function listObjectTypes(
     query: {
       ...schemaListQuery(opts),
       need_total: opts.needTotal === undefined ? undefined : String(opts.needTotal),
-      search_after: csvList(opts.searchAfter).join(",") || undefined,
+      search_after: searchAfterParam(opts.searchAfter),
     },
   });
 }
@@ -613,10 +625,16 @@ export function listMetrics(
     },
   });
 }
-export function getMetric(ctx: RequestContext, knId: string, metricId: string): Promise<unknown> {
+export function getMetric(
+  ctx: RequestContext,
+  knId: string,
+  metricId: string,
+  opts: { branch?: string } = {},
+): Promise<unknown> {
   return request(
     ctx,
     `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/${encodeURIComponent(metricId)}`,
+    { query: { branch: opts.branch || undefined } },
   );
 }
 /** Create metrics: `{entries:[…]}` (a bare array is wrapped). */
@@ -638,12 +656,14 @@ export function updateMetric(
   knId: string,
   metricId: string,
   body: unknown,
+  opts: { branch?: string } = {},
 ): Promise<unknown> {
   return request(
     ctx,
     `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/${encodeURIComponent(metricId)}`,
     {
       method: "PUT",
+      query: { branch: opts.branch || undefined },
       body,
     },
   );
@@ -652,18 +672,26 @@ export function deleteMetric(
   ctx: RequestContext,
   knId: string,
   metricId: string,
+  opts: { branch?: string } = {},
 ): Promise<unknown> {
   return request(
     ctx,
     `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/${encodeURIComponent(metricId)}`,
     {
       method: "DELETE",
+      query: { branch: opts.branch || undefined },
     },
   );
 }
-export function validateMetric(ctx: RequestContext, knId: string, body: unknown): Promise<unknown> {
+export function validateMetric(
+  ctx: RequestContext,
+  knId: string,
+  body: unknown,
+  opts: { branch?: string } = {},
+): Promise<unknown> {
   return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/validation`, {
     method: "POST",
+    query: { branch: opts.branch || undefined },
     body,
   });
 }

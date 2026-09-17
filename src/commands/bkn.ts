@@ -610,8 +610,12 @@ An older deploy answers without paging — resend the query with "offset" instea
   metric
     .command("get <kn-id> <metric-id>")
     .description("Get a metric → {entries}, since the route takes a list of ids")
-    .action(async (knId: string, id: string, _o, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.metricGet(knId, id), outputOptions(cmd));
+    .option("--branch <b>", "branch (default: main)")
+    .action(async (knId: string, id: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.metricGet(knId, id, { branch: opts.branch }),
+        outputOptions(cmd),
+      );
     });
   metric
     .command("create <kn-id>")
@@ -636,17 +640,22 @@ An older deploy answers without paging — resend the query with "offset" instea
       "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
     )
     .option("--body-file <path>", "read body JSON from a file")
+    .option("--branch <b>", "branch (default: main)")
     .action(async (knId: string, id: string, opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).kn.metricUpdate(knId, id, readBody(opts)),
+        await clientFrom(cmd).kn.metricUpdate(knId, id, readBody(opts), { branch: opts.branch }),
         outputOptions(cmd),
       );
     });
   metric
     .command("delete <kn-id> <metric-id>")
     .description("Delete a metric")
-    .action(async (knId: string, id: string, _o, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.metricDelete(knId, id), outputOptions(cmd));
+    .option("--branch <b>", "branch (default: main)")
+    .action(async (knId: string, id: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.metricDelete(knId, id, { branch: opts.branch }),
+        outputOptions(cmd),
+      );
     });
   metric
     .command("validate <kn-id>")
@@ -656,8 +665,12 @@ An older deploy answers without paging — resend the query with "offset" instea
       "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
     )
     .option("--body-file <path>", "read body JSON from a file")
+    .option("--branch <b>", "branch (default: main)")
     .action(async (knId: string, opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.metricValidate(knId, readBody(opts)), outputOptions(cmd));
+      printJson(
+        await clientFrom(cmd).kn.metricValidate(knId, readBody(opts), { branch: opts.branch }),
+        outputOptions(cmd),
+      );
     });
 
   const cg = bkn.command("concept-group").description("Concept groups — list/get");

@@ -110,13 +110,16 @@ export function kn(ctx: RequestContext) {
     metricDryRun: (knId: string, body: unknown, opts?: MetricReadOptions) =>
       dryRunMetric(ctx, knId, body, opts),
     metricList: (knId: string, opts?: ListMetricsOptions) => listMetrics(ctx, knId, opts),
-    metricGet: (knId: string, metricId: string) => getMetric(ctx, knId, metricId),
+    metricGet: (knId: string, metricId: string, opts?: { branch?: string }) =>
+      getMetric(ctx, knId, metricId, opts),
     metricCreate: (knId: string, body: unknown, opts?: { branch?: string }) =>
       createMetric(ctx, knId, body, opts),
-    metricUpdate: (knId: string, metricId: string, body: unknown) =>
-      updateMetric(ctx, knId, metricId, body),
-    metricDelete: (knId: string, metricId: string) => deleteMetric(ctx, knId, metricId),
-    metricValidate: (knId: string, body: unknown) => validateMetric(ctx, knId, body),
+    metricUpdate: (knId: string, metricId: string, body: unknown, opts?: { branch?: string }) =>
+      updateMetric(ctx, knId, metricId, body, opts),
+    metricDelete: (knId: string, metricId: string, opts?: { branch?: string }) =>
+      deleteMetric(ctx, knId, metricId, opts),
+    metricValidate: (knId: string, body: unknown, opts?: { branch?: string }) =>
+      validateMetric(ctx, knId, body, opts),
     objectTypes: (knId: string, opts?: ListObjectTypesOptions) => listObjectTypes(ctx, knId, opts),
     objectTypeQuery: (knId: string, otId: string, body: unknown, opts?: ObjectQueryOptions) =>
       queryObjectTypeInstances(ctx, knId, otId, body, opts),
