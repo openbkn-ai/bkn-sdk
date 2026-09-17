@@ -5,8 +5,10 @@ import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { bknCommand } from "../../src/commands/bkn.js";
 import { writeVersionCheckCache } from "../../src/config/store.js";
-import { HttpError, toExitCode } from "../../src/utils/errors.js";
+import { kn } from "../../src/resources/knowledge-networks.js";
+import type { RequestContext } from "../../src/types.js";
 import { lostIndexWarnings, snapshotObjectTypes } from "../../src/utils/push-integrity.js";
+import { verifiedContext } from "../setup/verified-context.js";
 
 const BASE = "https://push-integrity.example.com";
 const listPath = "/api/bkn-backend/v1/knowledge-networks/kn1/object-types";
@@ -228,16 +230,47 @@ describe("bkn push integrity verification", () => {
     ).toThrow("invalid data_source");
   });
 
-  it("preserves an authorization failure before the upload", async () => {
+  it("warns and uploads when the pre-push read is forbidden", async () => {
     const fetch = server(Response.json({ message: "missing view_detail" }, { status: 403 }));
-    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation((part) => {
+      stdout.push(String(part));
+      return true;
+    });
+    vi.spyOn(process.stderr, "write").mockImplementation((part) => {
+      stderr.push(String(part));
+      return true;
+    });
 
-    const error = await cli(packageDir()).catch((caught: unknown) => caught);
+    await cli(packageDir());
 
-    expect(error).toBeInstanceOf(HttpError);
-    expect(error).toMatchObject({ status: 403 });
-    expect(toExitCode(error)).toBe(3);
-    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual([
+      listPath,
+      uploadPath,
+    ]);
+    expect(stderr.join("")).toContain("warning: integrity not verified: ");
+    expect(stderr.join("")).toContain("HTTP 403");
+    expect(JSON.parse(stdout.join(""))).toMatchObject({
+      id: "kn1",
+      integrity_warnings: [expect.stringMatching(/^integrity not verified: .*HTTP 403/)],
+    });
+  });
+
+  it("returns integrity_warnings from the SDK when the pre-push read is unauthorized", async () => {
+    const fetch = server(Response.json({ message: "token expired" }, { status: 401 }));
+    const seen: string[] = [];
+
+    const result = await kn(
+      verifiedContext<RequestContext>({ baseUrl: BASE, token: "t", insecure: false }),
+    ).push(packageDir(), { branch: "release", onIntegrityWarning: (w) => seen.push(w) });
+
+    expect(fetch.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual([
+      listPath,
+      uploadPath,
+    ]);
+    expect(seen).toEqual([expect.stringMatching(/^integrity not verified: .*HTTP 401/)]);
+    expect(result).toEqual({ id: "kn1", integrity_warnings: seen });
   });
 
   it("warns when an indexed object type disappears from the post-push list", () => {

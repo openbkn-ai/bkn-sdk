@@ -27,7 +27,8 @@ Update this table as each signal changes (e.g. live-parity count as commands are
   a task completing during the final poll interval, alongside task failure and
   unlimited-wait cases. Status requests still use the normal HTTP timeout.
 - `test/unit/push-integrity.test.ts` checks CLI request order, branch-scoped
-  snapshots, binding/operator loss warnings, unreadable reads, and new networks.
+  snapshots, binding/operator loss warnings, unreadable reads, new networks,
+  omitted `data_properties`, and 401/403 pre-push reads that warn and upload.
   Verified SDK calls use the same comparison. An isolated network was imported
   twice on the 14.103.77.23 test environment without false integrity warnings.
 - `test/unit/push-integrity-dry-run.test.ts` checks that `bkn push --dry-run`

@@ -7,12 +7,13 @@ preserve existing command names and SDK return types.
 
 ## Decisions
 
-- Treat an object-type snapshot as unreadable unless every entry has both
-  `data_source` (which may be `null`) and `data_properties` (which may be an
-  empty array). A missing field cannot prove an absent binding or index.
-- Keep every pre-push error except a non-gateway 404 intact. This preserves
-  authorization diagnostics and the CLI's auth exit code while still making it
-  clear that the upload was not sent.
+- Treat an object-type snapshot as unreadable unless every entry has
+  `data_source` (which may be `null`). A missing `data_properties` key is an
+  empty list: bkn-backend serializes that field with `omitempty`, so an object
+  type without data properties omits it. A present non-array value is refused.
+- A 401/403 on the pre-push read warns `integrity not verified: <reason>` and
+  the upload proceeds (superseding the earlier decision to abort). A non-gateway
+  404 is a new network; every other pre-push error still aborts before upload.
 - Validate public `BuildWaitOptions` before the first status request. Both
   numerical options must be finite, non-negative numbers; `timeoutMs: 0`
   retains its documented unlimited-wait meaning.
@@ -24,6 +25,6 @@ preserve existing command names and SDK return types.
 ## Verification
 
 Add focused tests for incomplete pre- and post-push snapshots, preservation of
-401/403 failures, invalid SDK wait options before network I/O, and the exact
+401/403 warnings that still upload, omitted `data_properties`, invalid SDK wait options before network I/O, and the exact
 dry-run request body. Run the focused tests, lint, the full unit suite, build,
 and a whitespace diff check.

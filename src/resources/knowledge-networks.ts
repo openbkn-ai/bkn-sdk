@@ -166,7 +166,10 @@ export function kn(ctx: RequestContext) {
         branch?: string;
         /** Read before/after object-type bindings and index operators. */
         verifyIntegrity?: boolean;
-        /** Called for each verified loss or an unreadable post-push check. */
+        /**
+         * Called for each verified loss, an unreadable post-push check, or a
+         * pre-push read refused with 401/403 (the upload still proceeds).
+         */
         onIntegrityWarning?: (warning: string) => void;
       },
     ) => {
@@ -179,21 +182,29 @@ export function kn(ctx: RequestContext) {
       const verify =
         !isDryRun() && (opts?.verifyIntegrity || opts?.onIntegrityWarning !== undefined);
       let before: ReturnType<typeof snapshotObjectTypes> | undefined;
+      let warnings: string[] = [];
       if (verify) {
         try {
           before = snapshotObjectTypes(
             await listObjectTypes(ctx, validation.networkId, { branch }),
           );
         } catch (error) {
-          if (!(error instanceof HttpError && error.status === 404 && !error.gateway)) {
+          if (error instanceof HttpError && (error.status === 401 || error.status === 403)) {
+            // The caller may be allowed to import without reading the schema.
+            // The check is a safeguard, not a gate: say it was skipped and upload.
+            warnings = [
+              `integrity not verified: cannot read object types on branch '${branch}' before push (${error.message.trim()})`,
+            ];
+          } else if (!(error instanceof HttpError && error.status === 404 && !error.gateway)) {
+            // 404 is a new network (nothing to lose); anything else is unreadable.
             throw error;
           }
         }
       }
+      for (const warning of warnings) opts?.onIntegrityWarning?.(warning);
       const result = await uploadBkn(ctx, packDirectoryToTar(dir), { branch });
-      if (!before) return result;
+      if (!before) return withIntegrityWarnings(result, warnings);
 
-      let warnings: string[];
       try {
         warnings = lostIndexWarnings(
           before,
@@ -205,10 +216,7 @@ export function kn(ctx: RequestContext) {
         ];
       }
       for (const warning of warnings) opts?.onIntegrityWarning?.(warning);
-      if (warnings.length === 0) return result;
-      return result && typeof result === "object" && !Array.isArray(result)
-        ? { ...result, integrity_warnings: warnings }
-        : { result, integrity_warnings: warnings };
+      return withIntegrityWarnings(result, warnings);
     },
     /** Download a knowledge network and extract it into a local directory. */
     pull: async (knId: string, dir: string, opts?: { branch?: string }) => {
@@ -218,4 +226,12 @@ export function kn(ctx: RequestContext) {
       return { knId, dir: resolve(dir), bytes: tar.length };
     },
   };
+}
+
+/** Attach integrity warnings to a push result; an empty list leaves it untouched. */
+function withIntegrityWarnings(result: unknown, warnings: string[]): unknown {
+  if (warnings.length === 0) return result;
+  return result && typeof result === "object" && !Array.isArray(result)
+    ? { ...result, integrity_warnings: warnings }
+    : { result, integrity_warnings: warnings };
 }

@@ -32,11 +32,14 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
   after import. It warns on stderr, naming an object type and property, when a
   `data_source` binding disappears/changes or `condition_operations` are lost.
   The list is filtered by the current user's `view_detail` permission, so this
-  check cannot cover object types the user cannot see.
+  check cannot cover object types the user cannot see. An entry without a
+  `data_properties` key (the backend omits an empty list) has no properties.
   The raw import response gains `integrity_warnings` only when warnings exist;
   scripts using `--json` can check the same result. A 404 before upload means
-  there is no previous branch to compare. Other pre-upload read failures stop
-  the push; a post-upload read failure is reported explicitly because the import
+  there is no previous branch to compare. A 401/403 before upload warns
+  `integrity not verified: <reason>` (stderr in the CLI, `integrity_warnings` in
+  the result) and the upload proceeds unverified. Other pre-upload read failures
+  (malformed list, 5xx) stop the push; a post-upload read failure is reported explicitly because the import
   may already have succeeded. Programmatic `kn.push` callers can opt into this
   check with `verifyIntegrity: true`.
 - `bkn validate` checks the physical Markdown rows in structured table sections

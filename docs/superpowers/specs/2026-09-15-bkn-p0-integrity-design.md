@@ -22,7 +22,10 @@ Use the existing `listObjectTypes` API with `limit=-1`, not per-item requests.
 The backend filters entries by `view_detail` permission before responding;
 this comparison cannot prove the state of object types hidden from the caller.
 A 404 before upload means the target network/branch does not exist and no
-baseline is available. Other unreadable or malformed pre-upload snapshots abort
+baseline is available. A 401/403 before upload means the caller cannot read the
+baseline: warn `integrity not verified: <reason>` and upload anyway, since the
+check is a safeguard rather than a permission gate. Other unreadable or
+malformed pre-upload snapshots abort
 before the write because they cannot establish a baseline safely. If the
 post-upload read fails, return the upload result with an explicit verification
 warning; do not claim the bindings survived. This does not retry the upload or
