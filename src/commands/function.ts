@@ -42,6 +42,19 @@ export function parseJsonOption(raw: string | undefined, label: string): unknown
   }
 }
 
+/** Parse a JSON map for an option whose API contract requires named fields. */
+export function parseJsonObjectOption(
+  raw: string | undefined,
+  label: string,
+): Record<string, unknown> | undefined {
+  const parsed = parseJsonOption(raw, label);
+  if (parsed === undefined) return undefined;
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new InputError(`--${label} must be a JSON object`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
 /**
  * The flags that describe a function, shared with `tool create` so a caller
  * learns them once: `openbkn function` iterates on the code, `tool create`
@@ -110,7 +123,7 @@ export function functionCommand(): Command {
       const client = clientFrom(cmd);
       const result = await client.functions.run({
         code: readCode(file),
-        event: (parseJsonOption(opts.event, "event") ?? {}) as Record<string, unknown>,
+        event: parseJsonObjectOption(opts.event, "event") ?? {},
         timeout: opts.timeout,
         dependencies: opts.dep,
         dependenciesUrl: opts.indexUrl,

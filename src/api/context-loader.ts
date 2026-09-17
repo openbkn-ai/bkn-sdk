@@ -13,6 +13,7 @@ import type { RequestContext } from "../types.js";
 import { withoutPreview } from "../utils/dry-run.js";
 import { HttpError, InputError, ToolError, readableServerError } from "../utils/errors.js";
 import { parseBigIntJSON, stringifyBigIntJSON } from "../utils/json-bigint.js";
+import { validateQueryObjectInstanceArgs } from "../utils/query-object-instance-args.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
@@ -580,7 +581,7 @@ const KN_SCOPED_TOOLS = new Set([
  * from the network the call is bound to, and `response_format: "json"` so the
  * result parses. A value the caller supplied always wins.
  */
-function withContractDefaults(
+export function withContractDefaults(
   knId: string,
   name: string,
   args: Record<string, unknown>,
@@ -835,6 +836,7 @@ export function queryObjectInstance(
   knId: string,
   args: Record<string, unknown>,
 ): Promise<unknown> {
+  validateQueryObjectInstanceArgs(args, knId);
   return callTool(ctx, knId, "query_object_instance", args);
 }
 

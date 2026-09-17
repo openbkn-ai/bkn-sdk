@@ -83,7 +83,9 @@ import {
 } from "../api/knowledge-networks.js";
 import type { RequestContext } from "../types.js";
 import { validateBknDirectory } from "../utils/bkn-validate.js";
-import { InputError } from "../utils/errors.js";
+import { isDryRun } from "../utils/dry-run.js";
+import { HttpError, InputError } from "../utils/errors.js";
+import { lostIndexWarnings, snapshotObjectTypes } from "../utils/push-integrity.js";
 import { extractTarToDirectory, packDirectoryToTar } from "../utils/tar.js";
 import { type CreateFromCatalogOptions, createFromCatalog } from "./bkn-create.js";
 
@@ -190,12 +192,69 @@ export function kn(ctx: RequestContext) {
     bknResources: (opts?: BknResourceListOptions) => listBknResources(ctx, opts),
     createFromCatalog: (opts: CreateFromCatalogOptions) => createFromCatalog(ctx, opts),
     /** Pack a local BKN directory and upload it as a knowledge network. */
-    push: async (dir: string, opts?: BknImportOptions) => {
+    push: async (
+      dir: string,
+      opts?: BknImportOptions & {
+        /** Read before/after object-type bindings and index operators. */
+        verifyIntegrity?: boolean;
+        /**
+         * Called for each verified loss, an unreadable post-push check, or a
+         * pre-push read refused with 401/403 (the upload still proceeds).
+         */
+        onIntegrityWarning?: (warning: string) => void;
+      },
+    ) => {
       const validation = validateBknDirectory(dir);
       if (!validation.valid) {
         throw new InputError(`BKN validation failed:\n${validation.errors.join("\n")}`);
       }
-      return uploadBkn(ctx, packDirectoryToTar(dir), opts);
+      const branch = opts?.branch ?? "main";
+      const importOptions: BknImportOptions = {
+        branch,
+        importMode: opts?.importMode,
+        strictMode: opts?.strictMode,
+        bindingPolicy: opts?.bindingPolicy,
+      };
+      // The request preview must reach the upload itself, without a read first.
+      const verify =
+        !isDryRun() && (opts?.verifyIntegrity || opts?.onIntegrityWarning !== undefined);
+      let before: ReturnType<typeof snapshotObjectTypes> | undefined;
+      let warnings: string[] = [];
+      if (verify) {
+        try {
+          before = snapshotObjectTypes(
+            await listObjectTypes(ctx, validation.networkId, { branch }),
+          );
+        } catch (error) {
+          if (error instanceof HttpError && (error.status === 401 || error.status === 403)) {
+            // The caller may be allowed to import without reading the schema.
+            // The check is a safeguard, not a gate: say it was skipped and upload.
+            warnings = [
+              `integrity not verified: cannot read object types on branch '${branch}' before push (${error.message.trim()})`,
+            ];
+          } else if (!(error instanceof HttpError && error.status === 404 && !error.gateway)) {
+            // 404 is a new network (nothing to lose); anything else is unreadable.
+            throw error;
+          }
+        }
+      }
+      for (const warning of warnings) opts?.onIntegrityWarning?.(warning);
+      const result = await uploadBkn(ctx, packDirectoryToTar(dir), importOptions);
+      if (!before) return withIntegrityWarnings(result, warnings);
+
+      try {
+        warnings = lostIndexWarnings(
+          before,
+          snapshotObjectTypes(await listObjectTypes(ctx, validation.networkId, { branch })),
+          { bindingPolicy: opts?.bindingPolicy },
+        );
+      } catch {
+        warnings = [
+          `Could not verify object-type bindings/index operators on branch '${branch}' after push; inspect them before relying on search.`,
+        ];
+      }
+      for (const warning of warnings) opts?.onIntegrityWarning?.(warning);
+      return withIntegrityWarnings(result, warnings);
     },
     /** Download a knowledge network and extract it into a local directory. */
     pull: async (knId: string, dir: string, opts?: { branch?: string }) => {
@@ -205,4 +264,12 @@ export function kn(ctx: RequestContext) {
       return { knId, dir: resolve(dir), bytes: tar.length };
     },
   };
+}
+
+/** Attach integrity warnings to a push result; an empty list leaves it untouched. */
+function withIntegrityWarnings(result: unknown, warnings: string[]): unknown {
+  if (warnings.length === 0) return result;
+  return result && typeof result === "object" && !Array.isArray(result)
+    ? { ...result, integrity_warnings: warnings }
+    : { result, integrity_warnings: warnings };
 }

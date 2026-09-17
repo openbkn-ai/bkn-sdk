@@ -31,6 +31,17 @@ describe("resolveContext", () => {
     expect(ctx.token).toBe("env-token");
   });
 
+  it("marks a token taken from BKN_TOKEN, and only that one", () => {
+    process.env.BKN_TOKEN = "env-token";
+    expect(resolveContext({ baseUrl: "https://x.example.com" }).tokenFromEnv).toBe(true);
+    expect(
+      resolveContext({ baseUrl: "https://x.example.com", token: "opt-token" }).tokenFromEnv,
+    ).toBeUndefined();
+    delete process.env.BKN_TOKEN;
+    attachToken("https://x.example.com", jwt({ sub: "u-1" }));
+    expect(resolveContext({ baseUrl: "https://x.example.com" }).tokenFromEnv).toBeUndefined();
+  });
+
   it("throws InputError without a base URL", () => {
     expect(() => resolveContext()).toThrow(InputError);
   });

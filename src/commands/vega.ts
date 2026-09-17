@@ -17,6 +17,7 @@ import {
   SemanticUnderstandingTaskSort,
 } from "../api/vega-semantic.js";
 import {
+  type BuildTask,
   BuildTaskExecuteType,
   BuildTaskSort,
   BuildTaskStatus,
@@ -27,8 +28,10 @@ import {
   SortDirection,
 } from "../api/vega.js";
 import { group, groupChildren, guide } from "../help/grouped-help.js";
+import { buildTaskState, isBuildTaskUnsuccessful } from "../resources/vega.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
-import { InputError } from "../utils/errors.js";
+import { buildProgressReporter } from "../utils/build-progress.js";
+import { InputError, WaitTimeoutError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, csv, outputOptions } from "./_shared.js";
@@ -40,17 +43,49 @@ const int = (value: string): number => {
   }
   return parsed;
 };
+const seconds = (value: string): number => {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new InputError(
+      `--timeout must be a whole number of seconds (0 = no limit), received "${value}"`,
+    );
+  }
+  return parsed;
+};
+
+/**
+ * Wait on a BuildTask with a progress line on stderr, then print where it
+ * ended. The command fails unless the task completed: a build that failed, was
+ * stopped, or outlived the wait must not exit 0, or a script reads it as built.
+ * The task is printed either way, so its id and state are there to act on.
+ */
+async function waitAndReport(
+  cmd: Command,
+  wait: (onProgress: (task: BuildTask) => void) => Promise<BuildTask>,
+): Promise<void> {
+  const progress = buildProgressReporter();
+  let task: BuildTask;
+  try {
+    task = await wait((t) => progress.update(t));
+  } catch (err) {
+    progress.end();
+    if (err instanceof WaitTimeoutError) printJson(err.last, outputOptions(cmd));
+    throw err;
+  }
+  progress.end();
+  printJson(task, outputOptions(cmd));
+  if (isBuildTaskUnsuccessful(task)) {
+    const reason = (task as { error_msg?: unknown }).error_msg;
+    throw new Error(
+      `BuildTask ${task.id} ended ${buildTaskState(task)}${typeof reason === "string" && reason ? `: ${reason}` : "."}`,
+    );
+  }
+}
+
 const expectedUpdateTime = (value: string): number => {
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) {
     throw new InputError("--expected-update-time must be a positive integer timestamp");
-  }
-  return parsed;
-};
-const positiveTimeout = (value: string): number => {
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
-    throw new InputError("--timeout must be a positive integer");
   }
   return parsed;
 };
@@ -1146,28 +1181,54 @@ export function vegaCommand(): Command {
     .command("build <resource-id>")
     .description("Create a batch BuildTask from the resource's saved index configuration")
     .option("--execute-type <type>", "batch execution type: incremental | full")
-    .option("--wait", "poll until the build reaches a terminal state")
-    .option("--timeout <s>", "wait timeout in seconds", positiveTimeout, 300)
+    .option(
+      "--wait",
+      "wait for the build to end, with progress on stderr; exits non-zero unless it completes",
+    )
+    .option(
+      "--timeout <s>",
+      "with --wait: give up after this many seconds (0 = no limit)",
+      seconds,
+      300,
+    )
     .action(async (resourceId: string, _opts, cmd: Command) => {
       const o = cmd.optsWithGlobals();
-      const task = await clientFrom(cmd).vega.build(
-        {
-          resource_id: resourceId,
-          mode: "batch",
-          execute_type: buildTaskExecuteType(o.executeType),
-        },
-        { wait: Boolean(o.wait), timeoutMs: o.timeout * 1000 },
+      const req = {
+        resource_id: resourceId,
+        mode: "batch" as const,
+        execute_type: buildTaskExecuteType(o.executeType),
+      };
+      if (!o.wait) {
+        printJson(await clientFrom(cmd).vega.build(req), outputOptions(cmd));
+        return;
+      }
+      await waitAndReport(cmd, (onProgress) =>
+        clientFrom(cmd).vega.build(req, { wait: true, timeoutMs: o.timeout * 1000, onProgress }),
       );
-      printJson(task, outputOptions(cmd));
     });
 
   const buildTask = vega.command("build-task").description("Resource index BuildTasks");
   buildTask
     .command("get <task-id>")
     .description("Show a BuildTask's state and progress")
-    .action(async (taskId: string, _opts, cmd: Command) => {
-      const task = await clientFrom(cmd).vega.buildStatus(taskId);
-      printJson(task, outputOptions(cmd));
+    .option(
+      "--wait",
+      "wait for the task to end, with progress on stderr; exits non-zero unless it completes",
+    )
+    .option(
+      "--timeout <s>",
+      "with --wait: give up after this many seconds (0 = no limit)",
+      seconds,
+      300,
+    )
+    .action(async (taskId: string, opts, cmd: Command) => {
+      if (!opts.wait) {
+        printJson(await clientFrom(cmd).vega.buildStatus(taskId), outputOptions(cmd));
+        return;
+      }
+      await waitAndReport(cmd, (onProgress) =>
+        clientFrom(cmd).vega.waitForBuild(taskId, { timeoutMs: opts.timeout * 1000, onProgress }),
+      );
     });
 
   buildTask
@@ -1287,7 +1348,9 @@ QUERYING DIRECTLY
 
 BUILDING AN INDEX
   resource update <resource-id> saves schema_definition and index_config. Then resource build
-  <resource-id> creates a BuildTask; build-task get / list follow it.`,
+  <resource-id> creates a BuildTask; build-task get / list follow it.
+  --wait (on resource build, or build-task get for an existing task) shows progress on stderr
+  and exits non-zero unless the task completes. --timeout 0 waits without a limit.`,
   );
   return group(vega, "DATA & KNOWLEDGE");
 }

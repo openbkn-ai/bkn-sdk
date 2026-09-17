@@ -9,7 +9,9 @@ Runtime expectations for the SDK and CLI as a client of the BKN backend.
 
 ## Retries
 
-- Retry **only idempotent** reads (GET, list, query) on transient network/5xx errors; small bounded backoff.
+- The SDK does not retry transient network/5xx failures today; the error surfaces to the caller.
+  Transport retry is designed separately (MCP reads, 429/`Retry-After`, a `--no-retry` switch) and
+  must stay limited to idempotent reads.
 - Never auto-retry writes (create/update/delete, chat turns) — surface the error instead.
 
 ## Idempotency
@@ -20,6 +22,10 @@ Runtime expectations for the SDK and CLI as a client of the BKN backend.
 
 - `api/` maps HTTP/network failures to typed errors; `utils/errors` maps those to user messages + non-zero exit codes.
 - Auth failures (401/403) tell the user to re-login, not just "request failed".
+- Stored refresh credentials allow one refresh and one retry after a 401. The retry
+  rebuilds Authorization from the refreshed token and preserves the request body
+  and custom headers. A failed refresh or second 401 remains an error; explicit
+  tokens without refresh credentials are not refreshed.
 
 ## Observability
 

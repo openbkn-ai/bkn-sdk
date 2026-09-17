@@ -10,9 +10,45 @@ import { type CapabilityCheck, validateBknDirectory } from "../utils/bkn-validat
 import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { parsePkMap } from "../utils/pk-detection.js";
-import { clientFrom, csv, cypherParams, oneOf, outputOptions, readBody } from "./_shared.js";
+import {
+  clientFrom,
+  csv,
+  cypherParams,
+  oneOf,
+  outputOptions,
+  positiveInt,
+  readBody,
+} from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
+
+/**
+ * `bkn search` lets unknown options through so a query may start with "-"
+ * ("-40℃"). Refuse what that lets in by mistake: an argument shaped like a long
+ * flag (`--rerankk`) that was not placed after a `--` separator, and any
+ * argument beyond <kn-id> <query>.
+ */
+function rejectUnknownSearchOptions(cmd: Command): void {
+  let root = cmd;
+  while (root.parent) root = root.parent;
+  // Commander drops `--` before the action sees the operands; only the root's
+  // untyped `rawArgs` still shows where the caller put it.
+  const raw = (root as Command & { rawArgs?: string[] }).rawArgs ?? [];
+  const separator = raw.indexOf("--");
+  const afterSeparator = separator < 0 ? [] : raw.slice(separator + 1);
+  for (const arg of cmd.args) {
+    if (/^--[A-Za-z]/.test(arg) && !afterSeparator.includes(arg)) {
+      throw new InputError(
+        `unknown option '${arg}' for bkn search (see --help); to search for text that starts with "--", put it after a -- separator`,
+      );
+    }
+  }
+  if (cmd.args.length > 2) {
+    throw new InputError(
+      `bkn search takes <kn-id> <query>, received ${cmd.args.length} arguments; quote a multi-word query`,
+    );
+  }
+}
 
 const SYSTEM_PROPERTIES = ["_instance_id", "_instance_identity", "_display"] as const;
 
@@ -174,17 +210,32 @@ export function bknCommand(): Command {
 
   bkn
     .command("search <kn-id> <query>")
+    // A search question may begin with a minus sign (for example, "-40℃").
+    // Commander otherwise treats that second positional argument as an option.
+    // The action still refuses a query shaped like a long flag (`--rerankk`),
+    // so a mistyped option errors instead of becoming the search text.
+    .allowUnknownOption()
+    .allowExcessArguments()
     .description(
       "Recall instances from a plain sentence — no object type or field names needed → {nodes, object_types}",
     )
     .option("--object-types <ids>", "pin recall to these object-type ids (comma-separated)")
     .option("--exclude-object-types <ids>", "drop these object-type ids (comma-separated)")
     .option("--concept-groups <names>", "limit recall to these concept groups (comma-separated)")
-    .option("--max-object-types <n>", "how many object types may take part", int)
-    .option("--max-instances <n>", "instances per object type", int)
+    .option(
+      "--max-object-types <n>",
+      "positive count of object types that may take part",
+      positiveInt("--max-object-types"),
+    )
+    .option(
+      "--max-instances <n>",
+      "positive count of instances per object type",
+      positiveInt("--max-instances"),
+    )
     .option("--rerank", "re-rank hits with a cross-encoder (needs a rerank model deployed)")
     .option("--no-object-types-detail", "omit the object-type definitions that come with hits")
     .action(async (knId: string, query: string, opts, cmd: Command) => {
+      rejectUnknownSearchOptions(cmd);
       const data = await clientFrom(cmd).kn.search(knId, query, {
         objectTypes: csv(opts.objectTypes),
         excludeObjectTypes: csv(opts.excludeObjectTypes),
@@ -944,6 +995,8 @@ not bound until you attach it (\`capability list\` counts it under boxes[].unmou
         importMode: opts.importMode,
         strictMode: opts.strictMode === false ? false : undefined,
         bindingPolicy: opts.bindingPolicy,
+        verifyIntegrity: true,
+        onIntegrityWarning: (warning) => process.stderr.write(`warning: ${warning}\n`),
       });
       warnUnboundCapabilities(result, declared);
       printJson(result, outputOptions(cmd));
