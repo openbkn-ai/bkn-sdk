@@ -351,6 +351,20 @@ describe("searchInstance", () => {
   // needs a `bkn_context`, so the retrieval POST is no longer the first call.
   beforeEach(() => resetLifecycleCaches());
 
+  it.each([
+    [{ maxObjectTypes: 0 }, "maxObjectTypes"],
+    [{ maxObjectTypes: -1 }, "maxObjectTypes"],
+    [{ maxObjectTypes: Number.NaN }, "maxObjectTypes"],
+    [{ maxInstancesPerType: 1.5 }, "maxInstancesPerType"],
+  ] as const)("refuses an invalid search budget before sending", async (opts, name) => {
+    const fetch = mockFetch();
+
+    await expect(searchInstance(ctx, "kn-1", "churn", opts)).rejects.toThrow(
+      `${name} must be a positive integer`,
+    );
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("POSTs only the sentence when nothing is narrowed", async () => {
     const fetchMock = mockFetch();
     await searchInstance(ctx, "kn-1", "churn");

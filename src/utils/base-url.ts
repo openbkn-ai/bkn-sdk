@@ -19,3 +19,17 @@ export function trimTrailingSlashes(value: string): string {
   while (end > 0 && value.charCodeAt(end - 1) === 47) end -= 1;
   return value.slice(0, end);
 }
+
+/** Keep URL credentials and query parameters out of diagnostics and command hints. */
+export function baseUrlForDisplay(value: string): string {
+  try {
+    const url = new URL(value);
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return trimTrailingSlashes(url.toString());
+  } catch {
+    return "(configured platform)";
+  }
+}

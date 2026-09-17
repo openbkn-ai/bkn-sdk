@@ -62,6 +62,10 @@ Community 制品不分发 2.x Evidence 写入 Session、Artifact 正文读写、
 
 `trace get <conversation-id>` 与 `trace spans <conversation-id>` 均读取会话 Span；`trace detail <trace-id>` 读取单条类型化技术 Trace，避免改变既有 `trace get` 的参数语义。
 
+`trace search --conversation-id <id> --interaction-id <id>` 将显式 ID 作为查询过滤条件。
+两项可独立或组合使用，放在 `trace search` 前后均生效。环境变量中的 Trace 上下文
+及本地记住的 Conversation 不会自动变成搜索过滤条件。
+
 Context Loader 的通用调用可在 JSON 输出模式下通过
 `openbkn --json context tool-call <kn> <tool> --receipt`（或将 `--json` 换为 `--compact`）
 返回 `{ value, bkn_receipt }`。这里的 receipt 是 SDK 已校验字段形状且与本次受管调用

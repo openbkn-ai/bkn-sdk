@@ -18,6 +18,10 @@ const kn = vi.hoisted(() => {
     objectTypeUpdate: ok(),
     objectTypes: ok(),
     metricList: ok(),
+    metricGet: ok(),
+    metricUpdate: ok(),
+    metricDelete: ok(),
+    metricValidate: ok(),
     conceptGroups: ok(),
     actionSchedules: ok(),
     actionTypeQuery: ok(),
@@ -242,6 +246,17 @@ describe("openbkn bkn flags", () => {
   it("resources --sort stays free-form: the spec declares no enum for it", async () => {
     await run("resources", "--sort", "update_time");
     expect(kn.bknResources).toHaveBeenCalledWith(expect.objectContaining({ sort: "update_time" }));
+  });
+
+  it("metric get, update, delete and validate forward --branch", async () => {
+    await run("metric", "get", "kn-1", "m-1", "--branch", "dev");
+    expect(kn.metricGet).toHaveBeenCalledWith("kn-1", "m-1", { branch: "dev" });
+    await run("metric", "update", "kn-1", "m-1", "--body", "{}", "--branch", "dev");
+    expect(kn.metricUpdate).toHaveBeenCalledWith("kn-1", "m-1", {}, { branch: "dev" });
+    await run("metric", "delete", "kn-1", "m-1", "--branch", "dev");
+    expect(kn.metricDelete).toHaveBeenCalledWith("kn-1", "m-1", { branch: "dev" });
+    await run("metric", "validate", "kn-1", "--body", "{}", "--branch", "dev");
+    expect(kn.metricValidate).toHaveBeenCalledWith("kn-1", {}, { branch: "dev" });
   });
 
   it("get passes --detail-level and --branch", async () => {

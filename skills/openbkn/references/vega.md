@@ -17,8 +17,8 @@
 | `sql --query "<sql>"` / `sql -d <json>` | Run SQL or OpenSearch DSL directly against a data source. SQL uses a `{{<resource-id>}}` table placeholder; DSL identifies its resource with top-level `resource_id`. See [§ vega sql](#vega-sql--run-sql--dsl-against-a-data-source). |
 | `resource list\|get\|create\|update\|delete` | Manage Vega-backend resources. Index configuration is saved with `resource update --schema-definition <json> --index-config <json>`. |
 | `vega resource document-create\|document-get\|document-upsert\|document-delete\|document-delete-filter` | Manage documents for a dataset resource. Delete-by-filter requires a non-empty filter. |
-| `resource build <resource-id> [--execute-type incremental\|full] [--wait] [--timeout <s>]` | Create a batch index BuildTask from the Resource's already-saved schema and index configuration. It does not update the Resource. |
-| `build-task get <task-id>` / `build-task list [--status pending,running]` | Read BuildTask status and progress. Multiple statuses are OR filters; valid states include `cancelled`. |
+| `resource build <resource-id> [--execute-type incremental\|full] [--wait] [--timeout <s>]` | Create a batch index BuildTask from the Resource's already-saved schema and index configuration. It does not update the Resource. With `--wait`, progress appears on stderr and failed/stopped/timed-out tasks exit non-zero. |
+| `build-task get <task-id> [--wait] [--timeout <s>]` / `build-task list [--status pending,running]` | Read BuildTask status and progress. `--wait` follows an existing task; `--timeout 0` waits without a polling deadline. Multiple statuses are OR filters; valid states include `cancelled`. |
 | `build-task start <task-id> [--reset]` / `build-task stop <task-id>` / `build-task delete <ids...>` | Manage the BuildTask lifecycle. |
 
 ## `vega sql` — run SQL / DSL against a data source

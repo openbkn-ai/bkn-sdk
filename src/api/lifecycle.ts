@@ -25,7 +25,9 @@
  * - `managed-v1` — `bkn_create_conversation` then `bkn_start_interaction`, and
  *   `bkn_context` carries a caller-chosen `operation_key`.
  * - `managed-v2` — one `bkn_start_interaction` mints both ids, and `bkn_context`
- *   accepts *only* the two ids; anything else is `invalid_business_context`.
+ *   is `BKNContext` (`additionalProperties: false`): the two ids plus the optional
+ *   causality fields; anything else, `operation_key` included, is
+ *   `invalid_business_context`.
  *
  * A deploy that predates the middleware has neither tool and needs no context;
  * sending none keeps working exactly as before. Once a managed contract is
@@ -93,16 +95,16 @@ type LifecycleCapability = "managed" | "unsupported" | "unknown";
  * What the catalog says about opening an interaction, beyond which tools exist.
  *
  * `bkn_start_interaction` gained a required `conversation_mode` in a later
- * platform build. A deploy that wants it refuses every handshake without it,
- * and the refusal surfaces as the server's own `conversation_required` on the
- * *business* call — so the whole `context` surface stops working with an error
- * that names neither the field nor the handshake.
+ * platform build. A deploy that wants it refuses every handshake without it, and the
+ * refusal surfaces as the server's own `conversation_required` on the *business*
+ * call — so the whole `context` surface stops working with an error that names
+ * neither the field nor the handshake.
  *
- * Read from the tool's own `input_schema` rather than assumed from the contract
- * name: both shapes advertise `managed-v2`, and only the schema separates them.
- * Sending the field where it is not declared is not the safe default either —
- * v2 validates `bkn_context` strictly, and a deploy is entitled to reject an
- * argument it never published.
+ * `managed-v2` always sends it: the context-loader contract (`mcp.yaml`) requires
+ * it on every start, and the version preflight only lets this SDK talk to a
+ * platform of its own base version, whose contract that is. `startWantsConversationMode`
+ * is still read from the tool's `input_schema` for legacy `managed-v1`, where the
+ * field is sent only when declared.
  */
 interface Lifecycle {
   contract: Contract;

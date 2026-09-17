@@ -9,6 +9,7 @@
  * (shapes vary by backend version — validate at higher layers as needed).
  */
 import type { RequestContext } from "../types.js";
+import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { request } from "./http.js";
 import {
@@ -125,6 +126,18 @@ function csvList(value: string | Array<string | number> | undefined): string[] {
   return list.map((v) => v.trim()).filter(Boolean);
 }
 
+/**
+ * A deep-paging cursor as the backend reads it: one comma-joined string of the
+ * previous page's sort values, in order. Positional, so a component is kept
+ * verbatim — an empty one (a sort field whose value was empty) still holds its
+ * slot; dropping it would shift the tuple. Only a wholly blank cursor is omitted.
+ */
+function searchAfterParam(value: string | Array<string | number> | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const joined = typeof value === "string" ? value : value.map(String).join(",");
+  return joined.trim() ? joined : undefined;
+}
+
 /** System fields an ontology-query read can leave out of each instance. */
 export type SystemProperty = "_instance_id" | "_instance_identity" | "_display";
 
@@ -207,7 +220,7 @@ export function listActionLogs(
       limit: opts.limit ?? 30,
       offset: opts.offset,
       need_total: opts.needTotal ? "true" : undefined,
-      search_after: csvList(opts.searchAfter).join(",") || undefined,
+      search_after: searchAfterParam(opts.searchAfter),
     },
     responseParser: parseBigIntJSON,
   });
@@ -454,7 +467,7 @@ export function listObjectTypes(
     query: {
       ...schemaListQuery(opts),
       need_total: opts.needTotal === undefined ? undefined : String(opts.needTotal),
-      search_after: csvList(opts.searchAfter).join(",") || undefined,
+      search_after: searchAfterParam(opts.searchAfter),
     },
   });
 }
@@ -613,10 +626,16 @@ export function listMetrics(
     },
   });
 }
-export function getMetric(ctx: RequestContext, knId: string, metricId: string): Promise<unknown> {
+export function getMetric(
+  ctx: RequestContext,
+  knId: string,
+  metricId: string,
+  opts: { branch?: string } = {},
+): Promise<unknown> {
   return request(
     ctx,
     `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/${encodeURIComponent(metricId)}`,
+    { query: { branch: opts.branch || undefined } },
   );
 }
 /** Create metrics: `{entries:[…]}` (a bare array is wrapped). */
@@ -638,12 +657,14 @@ export function updateMetric(
   knId: string,
   metricId: string,
   body: unknown,
+  opts: { branch?: string } = {},
 ): Promise<unknown> {
   return request(
     ctx,
     `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/${encodeURIComponent(metricId)}`,
     {
       method: "PUT",
+      query: { branch: opts.branch || undefined },
       body,
     },
   );
@@ -652,18 +673,26 @@ export function deleteMetric(
   ctx: RequestContext,
   knId: string,
   metricId: string,
+  opts: { branch?: string } = {},
 ): Promise<unknown> {
   return request(
     ctx,
     `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/${encodeURIComponent(metricId)}`,
     {
       method: "DELETE",
+      query: { branch: opts.branch || undefined },
     },
   );
 }
-export function validateMetric(ctx: RequestContext, knId: string, body: unknown): Promise<unknown> {
+export function validateMetric(
+  ctx: RequestContext,
+  knId: string,
+  body: unknown,
+  opts: { branch?: string } = {},
+): Promise<unknown> {
   return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/validation`, {
     method: "POST",
+    query: { branch: opts.branch || undefined },
     body,
   });
 }
@@ -675,9 +704,9 @@ export interface SearchInstanceOptions {
   objectTypes?: string[];
   /** Drop these object-type ids from recall; wins over `objectTypes` on overlap. */
   excludeObjectTypes?: string[];
-  /** How many object types may take part. Each one costs a downstream query. */
+  /** Positive whole count of object types that may take part. Each costs a downstream query. */
   maxObjectTypes?: number;
-  /** How many instances to return per object type. */
+  /** Positive whole count of instances to return per object type. */
   maxInstancesPerType?: number;
   /** Re-rank hits with a cross-encoder; silently skipped if no rerank model is deployed. */
   rerank?: boolean;
@@ -727,12 +756,13 @@ function searchBody(knId: string, query: string, opts: SearchInstanceOptions) {
  * {@link withManagedLifecycle} opens the session that supplies one, and deploys
  * without the contract get the request unchanged.
  */
-export function searchInstance(
+export async function searchInstance(
   ctx: RequestContext,
   knId: string,
   query: string,
   opts: SearchInstanceOptions = {},
 ): Promise<unknown> {
+  validateSearchBudget(opts);
   if (opts.bknContext) {
     const bknContext = toWireBknContext(opts.bknContext);
     return request(
@@ -753,4 +783,16 @@ export function searchInstance(
       },
     }),
   );
+}
+
+function validateSearchBudget(opts: SearchInstanceOptions): void {
+  assertPositiveWholeNumber(opts.maxObjectTypes, "maxObjectTypes");
+  assertPositiveWholeNumber(opts.maxInstancesPerType, "maxInstancesPerType");
+}
+
+function assertPositiveWholeNumber(value: number | undefined, name: string): void {
+  if (value === undefined) return;
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new InputError(`${name} must be a positive integer.`);
+  }
 }

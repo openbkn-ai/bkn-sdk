@@ -73,6 +73,7 @@ import {
  * Knows nothing about argv or stdout; pure typed functions over `api/vega`.
  */
 import type { RequestContext } from "../types.js";
+import { InputError, WaitTimeoutError } from "../utils/errors.js";
 
 const TERMINAL_STATES = new Set([
   "completed",
@@ -115,17 +116,24 @@ export function vega(ctx: RequestContext) {
     /** Run SQL / OpenSearch DSL directly against a data source. */
     sql: (body: RawQueryRequest) => runSql(ctx, body),
 
-    /** Build a resource's index. With `wait`, polls until terminal. */
+    /**
+     * Build a resource's index. With `wait`, polls until the task ends — see
+     * {@link BuildWaitOptions} — and returns it in whatever state it ended in:
+     * a `failed` task is returned, not thrown. Running out of time throws.
+     */
     build: async (
       req: CreateBuildTaskRequest,
-      opts: { wait?: boolean; timeoutMs?: number; intervalMs?: number } = {},
+      opts: BuildWaitOptions & { wait?: boolean } = {},
     ): Promise<BuildTask> => {
       const task = await createBuildTask(ctx, req);
       if (!opts.wait) return task;
-      return pollBuildTask(ctx, task.id, opts.timeoutMs ?? 300_000, opts.intervalMs ?? 2_000);
+      return waitForBuildTask(ctx, task.id, opts);
     },
 
     buildStatus: (taskId: string) => getBuildTask(ctx, taskId),
+    /** Wait for an existing BuildTask to end; same contract as `build({ wait })`. */
+    waitForBuild: (taskId: string, opts: BuildWaitOptions = {}) =>
+      waitForBuildTask(ctx, taskId, opts),
     buildTasks: (opts?: ListBuildTasksOptions) => listBuildTasks(ctx, opts),
     deleteBuildTasks: (ids: string[], opts?: DeleteBuildTasksOptions) =>
       deleteBuildTasks(ctx, ids, opts),
@@ -160,18 +168,61 @@ export function vega(ctx: RequestContext) {
   };
 }
 
-async function pollBuildTask(
+export interface BuildWaitOptions {
+  /** Give up after this long (default 300s). `0` waits without a limit. */
+  timeoutMs?: number;
+  /** Poll interval (default 2s). */
+  intervalMs?: number;
+  /** Called with every state polled, the first included — for a progress display. */
+  onProgress?: (task: BuildTask) => void;
+}
+
+/** A BuildTask's state, whichever of the two fields the response carried. */
+export function buildTaskState(task: BuildTask): string {
+  return (task.status ?? task.state ?? "").toLowerCase();
+}
+
+/** True once the task will change no further: succeeded, failed, or was stopped. */
+export function isBuildTaskDone(task: BuildTask): boolean {
+  return TERMINAL_STATES.has(buildTaskState(task));
+}
+
+/** True when the task ended without building the index. */
+export function isBuildTaskUnsuccessful(task: BuildTask): boolean {
+  return isBuildTaskDone(task) && !["completed", "success"].includes(buildTaskState(task));
+}
+
+async function waitForBuildTask(
   ctx: RequestContext,
   taskId: string,
-  timeoutMs: number,
-  intervalMs: number,
+  opts: BuildWaitOptions,
 ): Promise<BuildTask> {
-  const deadline = Date.now() + timeoutMs;
-  const terminal = (t: BuildTask) => TERMINAL_STATES.has((t.status ?? t.state ?? "").toLowerCase());
+  const timeoutMs = opts.timeoutMs ?? 300_000;
+  const intervalMs = opts.intervalMs ?? 2_000;
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 0) {
+    throw new InputError("timeoutMs must be a finite, non-negative number");
+  }
+  if (!Number.isFinite(intervalMs) || intervalMs < 0) {
+    throw new InputError("intervalMs must be a finite, non-negative number");
+  }
+  const deadline = timeoutMs > 0 ? Date.now() + timeoutMs : Number.POSITIVE_INFINITY;
   let last = await getBuildTask(ctx, taskId);
-  while (!terminal(last) && Date.now() < deadline) {
-    await sleep(intervalMs);
+  opts.onProgress?.(last);
+  while (!isBuildTaskDone(last)) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      // Returning the task here would read as "done" to anyone who does not
+      // re-check its status — which is how a timeout used to exit 0.
+      throw new WaitTimeoutError(
+        `BuildTask ${taskId} is still ${buildTaskState(last) || "in progress"} after ${Math.round(timeoutMs / 1000)}s. ` +
+          `It keeps running on the server: \`openbkn vega build-task get ${taskId} --wait\` to keep waiting.`,
+        last,
+      );
+    }
+    // Use the whole wait budget, including a final poll after a shorter sleep.
+    await sleep(Math.min(intervalMs, remainingMs));
     last = await getBuildTask(ctx, taskId);
+    opts.onProgress?.(last);
   }
   return last;
 }

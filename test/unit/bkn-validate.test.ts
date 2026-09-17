@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { markVersionCompatibleForTest } from "../../src/api/version-check.js";
+import { bknCommand } from "../../src/commands/bkn.js";
 import { kn } from "../../src/resources/knowledge-networks.js";
 import type { RequestContext } from "../../src/types.js";
 import { validateBknDirectory } from "../../src/utils/bkn-validate.js";
@@ -56,6 +57,7 @@ describe("bkn validate", () => {
     });
     const r = validateBknDirectory(dir);
     expect(r.valid).toBe(true);
+    expect(r.networkId).toBe("kn1");
     expect(r.counts).toEqual({ objectTypes: 2, relationTypes: 1, conceptGroups: 0 });
     expect(r.warnings).toEqual([]);
   });
@@ -63,6 +65,7 @@ describe("bkn validate", () => {
   it("flags missing network.bkn", () => {
     const r = validateBknDirectory(bkn({ "object_types/a.bkn": ot("a", "A") }));
     expect(r.valid).toBe(false);
+    expect(r.networkId).toBe("");
     expect(r.errors.join()).toContain("Missing network.bkn");
   });
 
@@ -152,6 +155,382 @@ describe("bkn validate", () => {
 
     await expect(kn(ctx).push(dir)).rejects.toBeInstanceOf(InputError);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("locates shifted table columns and a multiline description in each file", () => {
+    const propertyTable = (description: string) => `${ot("a", "Alpha")}
+## ObjectType: Alpha
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| id | ID | string | ${description} | id |
+`;
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": propertyTable("comment with | pipe"),
+      "object_types/b.bkn": propertyTable("first line\nsecond line"),
+    });
+
+    const result = validateBknDirectory(dir);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain(
+      "object_types/a.bkn:13: table row has 6 columns; expected 5. Check for a pipe or newline inside a cell.",
+    );
+    expect(result.errors).toContain(
+      "object_types/b.bkn:13: table row has 4 columns; expected 5. Check for a pipe or newline inside a cell.",
+    );
+  });
+
+  it("rejects Markdown escaped pipes because the backend still splits them", () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": `${ot("a", "Alpha")}
+## ObjectType: Alpha
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| id | ID | string | a\\|b | id |
+`,
+    });
+
+    expect(validateBknDirectory(dir).errors).toContain(
+      "object_types/a.bkn:13: escaped pipe '\\|' is still a column separator to the BKN parser; replace the pipe in this cell.",
+    );
+  });
+
+  it("rejects a malformed table before push packages or uploads it", async () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": `${ot("a", "Alpha")}
+## ObjectType: Alpha
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| id | ID | string | pipe | inside comment | id |
+`,
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const ctx: RequestContext = {
+      baseUrl: "https://demo.example.com",
+      token: "token",
+      insecure: false,
+    };
+
+    await expect(kn(ctx).push(dir)).rejects.toThrow(/object_types\/a\.bkn:13: table row/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("prints file and line diagnostics from the offline validate command", async () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": `${ot("a", "Alpha")}
+## ObjectType: Alpha
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| id | ID | string | a | b | id |
+`,
+    });
+    const originalExitCode = process.exitCode;
+    const output = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      await bknCommand().parseAsync(["node", "bkn", "validate", dir]);
+      const result = JSON.parse(output.mock.calls.map(([chunk]) => String(chunk)).join("")) as {
+        errors: string[];
+      };
+      expect(result.errors[0]).toMatch(/^object_types\/a\.bkn:13: table row/);
+      expect(process.exitCode).toBe(1);
+    } finally {
+      output.mockRestore();
+      process.exitCode = originalExitCode;
+    }
+  });
+
+  it("checks metric tables, while leaving unknown notes and risk-type prose alone", () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "metrics/count.bkn": `---
+type: metric
+id: count
+name: Count
+---
+
+## Metric: Count
+
+### Metric attributes
+
+| Metric Type | Unit Type | Unit |
+|-------------|-----------|------|
+| count | quantity | pieces | extra |
+
+### Business Notes
+
+| Sentence | Owner |
+|----------|-------|
+| prose | with | a pipe |
+`,
+      "risk_types/risk.bkn": `---
+type: risk_type
+id: risk
+name: Risk
+---
+
+## Risk: Risk
+
+### Business Notes
+
+| Sentence | Owner |
+|----------|-------|
+| prose | with | a pipe |
+`,
+    });
+
+    const result = validateBknDirectory(dir);
+    expect(result.errors).toEqual([
+      "metrics/count.bkn:13: table row has 4 columns; expected 3. Check for a pipe or newline inside a cell.",
+    ]);
+  });
+
+  it("accepts an unknown object-type section as description Markdown", () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": `${legacyOtWithoutMaskRule}
+### Business Notes
+
+| Sentence | Owner |
+|----------|-------|
+| prose | with | a pipe |
+`,
+    });
+
+    expect(validateBknDirectory(dir).errors).toEqual([]);
+  });
+
+  it("rejects tables without a leading pipe in a structured section", () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": `${ot("a", "Alpha")}
+## ObjectType: Alpha
+
+### Data Properties
+
+Name | Display Name | Type | Description | Mapped Field
+-----|--------------|------|-------------|-------------
+id | ID | string | comment | id
+`,
+      "metrics/m.bkn": `---
+type: metric
+id: m
+name: M
+---
+
+## Metric: M
+
+### Scope
+
+| Scope Type | Scope Ref |
+|------------|-----------|
+network | kn1
+`,
+    });
+
+    const result = validateBknDirectory(dir);
+    expect(result.errors).toEqual([
+      "object_types/a.bkn:11: table header must start with '|'; the BKN parser skips it.",
+      "metrics/m.bkn:13: table row must start with '|'; the BKN parser skips it.",
+    ]);
+  });
+
+  it("checks only the parsed labels in nested logic-property sections", () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": `${ot("a", "Alpha")}
+## ObjectType: Alpha
+
+### Logic Properties
+
+#### calculation
+
+**Notes**
+| Sentence | Owner |
+|----------|-------|
+| prose | with | a pipe |
+
+**Meta**
+| Display Name | Type | Description |
+|--------------|------|-------------|
+| Calculation | string | a | b |
+`,
+    });
+
+    expect(validateBknDirectory(dir).errors).toEqual([
+      "object_types/a.bkn:21: table row has 4 columns; expected 3. Check for a pipe or newline inside a cell.",
+    ]);
+  });
+
+  it("rejects a single-line first pipe block even when a later table looks complete", () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": `${ot("a", "Alpha")}
+## ObjectType: Alpha
+
+### Data Properties
+
+| partial header |
+ordinary explanation
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| id | ID | string | comment | id |
+`,
+    });
+
+    expect(validateBknDirectory(dir).errors).toEqual([
+      "object_types/a.bkn:11: first table block has only one line; the BKN parser ignores it.",
+    ]);
+  });
+
+  it("accepts prose immediately after a complete table, as the backend parser does", () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": `${ot("a", "Alpha")}
+## ObjectType: Alpha
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| id | ID | string | comment | id |
+Data comes from the catalog.
+`,
+    });
+
+    expect(validateBknDirectory(dir).errors).toEqual([]);
+  });
+
+  it("rejects later pipe rows that a structured section silently drops", () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": `${ot("a", "Alpha")}
+## ObjectType: Alpha
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| id | ID | string | first row | id |
+
+| title | Title | string | second row | title |
+`,
+    });
+
+    expect(validateBknDirectory(dir).errors).toEqual([
+      "object_types/a.bkn:15: pipe row resumes after a table break; the BKN parser ignores rows after the first block. Keep table rows contiguous.",
+    ]);
+  });
+
+  it("rejects resumed pipe rows that the nested logic parser merges", () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": `${ot("a", "Alpha")}
+## ObjectType: Alpha
+
+### Logic Properties
+
+#### calculation
+
+**Parameters**
+| Name | Type | Description |
+|------|------|-------------|
+| first | string | okay |
+
+Explanation between rows.
+| second | string | okay |
+`,
+    });
+
+    expect(validateBknDirectory(dir).errors).toEqual([
+      "object_types/a.bkn:19: pipe row resumes after text in Logic Properties 'Parameters'; the BKN parser merges it with the previous table.",
+    ]);
+  });
+
+  it("allows prose after a nested logic table when no pipe rows resume", () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": `${ot("a", "Alpha")}
+## ObjectType: Alpha
+
+### Logic Properties
+
+#### calculation
+
+**Meta**
+| Display Name | Type | Description |
+|--------------|------|-------------|
+| Calculation | string | derived field |
+Explanatory prose follows immediately.
+`,
+    });
+
+    expect(validateBknDirectory(dir).errors).toEqual([]);
+  });
+
+  it("rejects a flat logic table mixed with property subsections", () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": `${ot("a", "Alpha")}
+## ObjectType: Alpha
+
+### Logic Properties
+
+| Name | Type | Description |
+|------|------|-------------|
+| flat | string | ignored |
+
+#### calculation
+
+**Meta**
+| Display Name | Type | Description |
+|--------------|------|-------------|
+| Calculation | string | derived field |
+`,
+    });
+
+    expect(validateBknDirectory(dir).errors).toEqual([
+      "object_types/a.bkn:11: flat Logic Properties table appears before a '####' subsection; the BKN parser ignores flat rows when subsections exist.",
+    ]);
+  });
+
+  it("requires a leading pipe even on a one-column structured table row", () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "action_types/a.bkn": `---
+type: action_type
+id: a
+name: A
+---
+
+## ActionType: A
+
+### Bound Object
+
+| Bound Object |
+|--------------|
+node
+`,
+    });
+
+    expect(validateBknDirectory(dir).errors).toEqual([
+      "action_types/a.bkn:13: table row must start with '|'; the BKN parser skips it.",
+    ]);
   });
 
   it("allows a legacy package without a Mask Rule column to reach upload", async () => {
