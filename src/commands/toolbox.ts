@@ -2,33 +2,86 @@
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 /** `openbkn toolbox …` and `openbkn tool …` — agent toolboxes + tools. */
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import yaml from "js-yaml";
 import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
-import { clientFrom, outputOptions } from "./_shared.js";
+import { MAX_PAGE_SIZE, clientFrom, oneOf, outputOptions, positiveInt } from "./_shared.js";
 import { type CodeFlags, definitionFlags, functionDefinitionFrom, readCode } from "./function.js";
 
-const int = (v: string) => Number.parseInt(v, 10);
+const SORT_ORDERS = ["asc", "desc"] as const;
+/** A toolbox's lifecycle, per the service. There is no `draft`. */
+const TOOLBOX_STATUSES = ["unpublish", "published", "offline"] as const;
+
+/**
+ * The proxy answers HTTP 200 and reports the upstream failure in the envelope —
+ * `status_code` 500 with an `error` string when the function exec call timed
+ * out, for instance. Printing that and exiting 0 reads as success to a script.
+ */
+export function toolCallFailed(result: unknown): boolean {
+  if (!result || typeof result !== "object") return false;
+  const { status_code: status, error } = result as { status_code?: unknown; error?: unknown };
+  if (typeof status === "number" && status >= 400) return true;
+  return typeof error === "string" ? error.length > 0 : error !== undefined && error !== null;
+}
 
 export function toolboxCommand(): Command {
   const cmd = new Command("toolbox").description("Toolboxes: group tools into one publishable box");
 
   cmd
     .command("list")
-    .description("List toolboxes")
-    .option("--keyword <s>", "filter by keyword")
-    .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
-    .option("--offset <n>", "page offset", int, 0)
+    .description("List toolboxes → {data, total, page, page_size, has_next}; the id is `box_id`")
+    .option("--name <s>", "filter by toolbox name")
+    // The service never read `keyword`; kept as a hidden alias so old scripts filter.
+    .addOption(new Option("--keyword <s>", "deprecated: use --name").hideHelp())
+    .option("--status <s>", "unpublish | published | offline", oneOf("--status", TOOLBOX_STATUSES))
+    .option("--category <s>", "filter by category")
+    .option(
+      "--metadata-type <t>",
+      "openapi | function",
+      oneOf("--metadata-type", ["openapi", "function"] as const),
+    )
+    .option("--create-user <s>", "filter by creator")
+    .option("--release-user <s>", "filter by publisher")
+    .option(
+      "--sort-by <f>",
+      "create_time | update_time | name (service default update_time)",
+      oneOf("--sort-by", ["create_time", "update_time", "name"] as const),
+    )
+    .option("--sort-order <o>", "asc | desc", oneOf("--sort-order", SORT_ORDERS))
+    .option(
+      "--limit <n>",
+      `page size, 1-${MAX_PAGE_SIZE}`,
+      positiveInt("--limit", MAX_PAGE_SIZE),
+      DEFAULT_LIST_LIMIT,
+    )
+    .option("--page <n>", "page (1-based)", positiveInt("--page"), 1)
+    .option("--all", "return every toolbox, ignoring page size")
+    // The service has no offset; refuse it rather than silently return page 1.
+    .addOption(new Option("--offset <n>", "removed: use --page").hideHelp())
     .action(async (opts, cmd: Command) => {
+      if (opts.offset !== undefined) {
+        throw new InputError("--offset is not supported: the service pages by --page (1-based)");
+      }
+      if (opts.keyword !== undefined && opts.name !== undefined) {
+        throw new InputError("--keyword is a deprecated alias of --name; pass only --name");
+      }
       printJson(
         await clientFrom(cmd).toolboxes.list({
-          keyword: opts.keyword,
-          limit: opts.limit,
-          offset: opts.offset,
+          name: opts.name ?? opts.keyword,
+          status: opts.status,
+          category: opts.category,
+          metadataType: opts.metadataType,
+          createUser: opts.createUser,
+          releaseUser: opts.releaseUser,
+          sortBy: opts.sortBy,
+          sortOrder: opts.sortOrder,
+          pageSize: opts.limit,
+          page: opts.page,
+          all: opts.all,
         }),
         outputOptions(cmd),
       );
@@ -70,7 +123,7 @@ export function toolboxCommand(): Command {
 
   cmd
     .command("unpublish <box-id>")
-    .description("Unpublish a toolbox (status=draft)")
+    .description("Take a published toolbox down (status=offline)")
     .action(async (id: string, _opts, cmd: Command) => {
       printJson(await clientFrom(cmd).toolboxes.unpublish(id), outputOptions(cmd));
     });
@@ -98,8 +151,16 @@ export function toolboxCommand(): Command {
     .command("import <file>")
     .description("Import a toolbox config from a local .adp file")
     .option("--type <t>", "impex type: toolbox | mcp | operator", "toolbox")
+    .option(
+      "--mode <m>",
+      "create (fail if it exists; service default) | upsert (update if it exists)",
+      oneOf("--mode", ["create", "upsert"] as const),
+    )
     .action(async (file: string, opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).toolboxes.import(file, opts.type), outputOptions(cmd));
+      printJson(
+        await clientFrom(cmd).toolboxes.import(file, opts.type, opts.mode),
+        outputOptions(cmd),
+      );
     });
 
   groupChildren(cmd, {
@@ -121,8 +182,8 @@ export function toolboxCommand(): Command {
   tool execute <tool-id>             call an enabled tool
   tool debug <tool-id>               call one that is not, while building it
 
-  Publishing the box is about the market, not about calling: an enabled tool in
-  an unpublished box executes. \`tool enable\` is the gate.
+  An enabled tool executes only while its box is published: an offline box
+  answers 400 ToolNotAvailable. \`tool debug\` is how to call it before then.
 
   export / import move a whole box between deploys as an .adp file.`,
   );
@@ -139,15 +200,37 @@ export function toolCommand(): Command {
     .command("list")
     .description("List tools in a toolbox")
     .requiredOption("--toolbox <box-id>", "toolbox id")
-    .option("--limit <n>", "page size (backend default 10, max 100)", int)
-    .option("--page <n>", "page (1-based; backend default 1)", int)
+    .option(
+      "--limit <n>",
+      `page size, 1-${MAX_PAGE_SIZE} (backend default 10)`,
+      positiveInt("--limit", MAX_PAGE_SIZE),
+    )
+    .option("--page <n>", "page (1-based; backend default 1)", positiveInt("--page"))
     .option("--all", "return every tool, ignoring page size")
+    .option("--name <s>", "filter by tool name")
+    .option(
+      "--status <s>",
+      "enabled | disabled",
+      oneOf("--status", ["enabled", "disabled"] as const),
+    )
+    .option(
+      "--sort-by <f>",
+      "create_time | update_time | tool_name (service default create_time)",
+      oneOf("--sort-by", ["create_time", "update_time", "tool_name"] as const),
+    )
+    .option("--sort-order <o>", "asc | desc", oneOf("--sort-order", SORT_ORDERS))
+    .option("--user-id <id>", "filter by creator")
     .action(async (opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).toolboxes.tools(opts.toolbox, {
           page: opts.page,
           pageSize: opts.limit,
           all: opts.all,
+          name: opts.name,
+          status: opts.status,
+          sortBy: opts.sortBy,
+          sortOrder: opts.sortOrder,
+          userId: opts.userId,
         }),
         outputOptions(cmd),
       );
@@ -185,7 +268,11 @@ export function toolCommand(): Command {
       .option("--header <json>", "headers map JSON")
       .option("--query <json>", "query params JSON")
       .option("--path <json>", "path params JSON")
-      .option("--timeout <s>", "per-call timeout seconds", int);
+      .option(
+        "--timeout <s>",
+        "per-call timeout seconds; the client waits this long plus a margin (sandbox max when omitted)",
+        positiveInt("--timeout"),
+      );
 
   const parseJson = (s: string | undefined, label: string): Record<string, unknown> | undefined => {
     if (!s) return undefined;
@@ -206,19 +293,21 @@ export function toolCommand(): Command {
 
   invokeOpts(cmd.command("execute <tool-id>").description("Invoke an enabled tool")).action(
     async (toolId: string, opts, cmd: Command) => {
-      printJson(
-        await clientFrom(cmd).toolboxes.execute(opts.toolbox, toolId, buildEnvelope(opts)),
-        outputOptions(cmd),
+      const result = await clientFrom(cmd).toolboxes.execute(
+        opts.toolbox,
+        toolId,
+        buildEnvelope(opts),
       );
+      printJson(result, outputOptions(cmd));
+      if (toolCallFailed(result)) process.exitCode = 1;
     },
   );
   invokeOpts(
     cmd.command("debug <tool-id>").description("Invoke a tool that is not enabled yet"),
   ).action(async (toolId: string, opts, cmd: Command) => {
-    printJson(
-      await clientFrom(cmd).toolboxes.debug(opts.toolbox, toolId, buildEnvelope(opts)),
-      outputOptions(cmd),
-    );
+    const result = await clientFrom(cmd).toolboxes.debug(opts.toolbox, toolId, buildEnvelope(opts));
+    printJson(result, outputOptions(cmd));
+    if (toolCallFailed(result)) process.exitCode = 1;
   });
 
   interface ToolFlags extends CodeFlags {

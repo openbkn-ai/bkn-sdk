@@ -3,35 +3,21 @@
 
 /** `openbkn skill …` — skill registry and market. */
 import { Command } from "commander";
+import { SKILL_STATUSES, type SkillStatus } from "../api/skills.js";
 import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
 import { classifyPath, filesUnder, renderTree } from "../utils/skill-tree.js";
-import { clientFrom, outputOptions, readBody } from "./_shared.js";
-
-const int = (v: string) => Number.parseInt(v, 10);
-
-/**
- * A bare `parseInt` turns a typo into `NaN`, which is worse than an error:
- * `JSON.stringify` writes it to the wire as `null` (not "absent"), and Node
- * clamps a `NaN` setTimeout delay to 1ms, so the request aborts almost
- * immediately with a message about nothing the user typed.
- */
-const positiveInt = (flag: string) => (v: string) => {
-  // Digits only: `parseInt` stops at the first non-digit, so `1e3` would become
-  // 1 and `30abc` would become 30 — a silently different limit rather than an
-  // error, which is the failure this guard exists to prevent.
-  if (!/^\d+$/.test(v)) {
-    throw new InputError(`${flag} must be a positive integer (got '${v}')`);
-  }
-  const n = Number.parseInt(v, 10);
-  if (!Number.isSafeInteger(n) || n <= 0) {
-    throw new InputError(`${flag} must be a positive integer (got '${v}')`);
-  }
-  return n;
-};
+import {
+  MAX_PAGE_SIZE,
+  clientFrom,
+  oneOf,
+  outputOptions,
+  positiveInt,
+  readBody,
+} from "./_shared.js";
 
 /** A mocked run's own exit status, distinct from any the skill could return. */
 const MOCKED_EXIT_CODE = 125;
@@ -68,13 +54,38 @@ export function skillCommand(): Command {
     "Skill packages (SKILL.md + files) agents load on demand",
   );
 
+  // The market takes the same filters as the workspace list except `status`:
+  // everything in the market is published.
   const listOpts = (c: Command) =>
     c
       .option("--name <s>", "filter by name")
-      .option("--source <s>", "filter by source")
-      .option("--status <s>", "filter by status")
-      .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
-      .option("--page <n>", "page", int, 1);
+      .option("--category <s>", "filter by category")
+      .option("--create-user <s>", "filter by creator")
+      .option(
+        "--sort-by <f>",
+        "create_time | update_time | name (service default update_time)",
+        oneOf("--sort-by", ["create_time", "update_time", "name"] as const),
+      )
+      .option("--sort-order <o>", "asc | desc", oneOf("--sort-order", ["asc", "desc"] as const))
+      .option(
+        "--limit <n>",
+        `page size, 1-${MAX_PAGE_SIZE}`,
+        positiveInt("--limit", MAX_PAGE_SIZE),
+        DEFAULT_LIST_LIMIT,
+      )
+      .option("--page <n>", "page (1-based)", positiveInt("--page"), 1)
+      .option("--all", "return every skill, ignoring page size");
+
+  const listFilters = (opts: Record<string, unknown>) => ({
+    name: opts.name as string | undefined,
+    category: opts.category as string | undefined,
+    createUser: opts.createUser as string | undefined,
+    sortBy: opts.sortBy as "create_time" | "update_time" | "name" | undefined,
+    sortOrder: opts.sortOrder as "asc" | "desc" | undefined,
+    pageSize: opts.limit as number,
+    page: opts.page as number,
+    all: opts.all as boolean | undefined,
+  });
 
   listOpts(
     cmd
@@ -83,17 +94,14 @@ export function skillCommand(): Command {
         "List skills → {data, total, page, page_size, has_next}; the id to reuse is `skill_id`",
       ),
   )
-    .option("--create-user <s>", "filter by creator")
+    .option(
+      "--status <s>",
+      "unpublish | published | offline | editing",
+      oneOf("--status", ["unpublish", "published", "offline", "editing"] as const),
+    )
     .action(async (opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).skills.list({
-          name: opts.name,
-          source: opts.source,
-          status: opts.status,
-          createUser: opts.createUser,
-          pageSize: opts.limit,
-          page: opts.page,
-        }),
+        await clientFrom(cmd).skills.list({ ...listFilters(opts), status: opts.status }),
         outputOptions(cmd),
       );
     });
@@ -108,15 +116,7 @@ export function skillCommand(): Command {
   listOpts(
     cmd.command("market").description("Browse the skill market → {data, total, page, has_next}"),
   ).action(async (opts, cmd: Command) => {
-    printJson(
-      await clientFrom(cmd).skills.market({
-        name: opts.name,
-        source: opts.source,
-        pageSize: opts.limit,
-        page: opts.page,
-      }),
-      outputOptions(cmd),
-    );
+    printJson(await clientFrom(cmd).skills.market(listFilters(opts)), outputOptions(cmd));
   });
 
   cmd
@@ -267,24 +267,26 @@ export function skillCommand(): Command {
 
   cmd
     .command("set-status <skill-id> <status>")
-    .description("Change status: unpublish | published | offline")
+    .description(`Publish or take down a skill: ${SKILL_STATUSES.join(" | ")}`)
     .action(async (id: string, status: string, _opts, cmd: Command) => {
-      printJson(
-        await clientFrom(cmd).skills.setStatus(id, status as "unpublish" | "published" | "offline"),
-        outputOptions(cmd),
-      );
+      // The service refuses `unpublish` / `editing` here — those come from
+      // registering and editing — so say so before sending.
+      const target: SkillStatus = oneOf("<status>", SKILL_STATUSES)(status);
+      printJson(await clientFrom(cmd).skills.setStatus(id, target), outputOptions(cmd));
     });
 
   cmd
     .command("register <directory>")
     .description("Zip a local skill directory and register it")
     .option("--source <s>", `source tag: ${SKILL_SOURCES.join(" | ")}`, "custom")
+    .option("--category <s>", "category (service default other_category)")
     .option("--extend-info <json>", "extra metadata as JSON")
     .action(async (dir: string, opts, cmd: Command) => {
       const extendInfo = opts.extendInfo ? parseBigIntJSON(opts.extendInfo) : undefined;
       printJson(
         await clientFrom(cmd).skills.register(dir, {
           source: checkSource(opts.source),
+          category: opts.category,
           extendInfo,
         }),
         outputOptions(cmd),

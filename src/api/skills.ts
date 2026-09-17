@@ -21,13 +21,15 @@ const BASE = "/api/agent-operator-integration/v1";
 export async function registerSkillZip(
   ctx: RequestContext,
   bytes: Uint8Array,
-  opts: { filename?: string; source?: string; extendInfo?: unknown } = {},
+  opts: { filename?: string; source?: string; category?: string; extendInfo?: unknown } = {},
 ): Promise<unknown> {
   await ensureCompatible(ctx, new URL(`${ctx.baseUrl}${BASE}/skills`));
   const form = new FormData();
   form.set("file_type", "zip");
   form.set("file", new Blob([bytes]), opts.filename ?? "skill.zip");
   if (opts.source) form.set("source", opts.source);
+  // Omitted, the service files the skill under `other_category`.
+  if (opts.category) form.set("category", opts.category);
   if (opts.extendInfo) form.set("extend_info", stringifyBigIntJSON(opts.extendInfo));
   const res = await authFetch(ctx, () =>
     tlsFetch(ctx.insecure, `${ctx.baseUrl}${BASE}/skills`, {
@@ -141,7 +143,7 @@ export function executeSkill(
     // cover that rather than a number of ours.
     timeoutMs: sandboxBudgetMs(opts.timeout),
     // The abort deadline alone tops out at undici's 300s header deadline,
-    // because `execute-sync` blocks and sends no headers until the run is over.
+    // because `execute` blocks and sends no headers until the run is over.
     headersTimeoutMs: sandboxBudgetMs(opts.timeout),
   }) as Promise<SkillExecutionResult>;
 }
@@ -187,43 +189,68 @@ export function publishSkillVersion(
   });
 }
 
-export interface ListSkillsOptions {
+/** Filters shared by the workspace list and the market. */
+export interface ListSkillMarketOptions {
   page?: number;
+  /** 1–100. */
   pageSize?: number;
   name?: string;
-  source?: string;
-  status?: string;
+  category?: string;
   createUser?: string;
+  sortBy?: "create_time" | "update_time" | "name";
+  sortOrder?: "asc" | "desc";
+  /** Ignore paging and return every skill. */
+  all?: boolean;
 }
 
-function listQuery(opts: ListSkillsOptions) {
+/** The market lists only published skills, so only the workspace list filters by status. */
+export interface ListSkillsOptions extends ListSkillMarketOptions {
+  status?: "unpublish" | "published" | "offline" | "editing";
+}
+
+function listQuery(opts: ListSkillMarketOptions) {
   return {
     page: opts.page ?? 1,
     page_size: opts.pageSize ?? 30,
     name: opts.name || undefined,
-    source: opts.source || undefined,
-    status: opts.status || undefined,
+    category: opts.category || undefined,
     create_user: opts.createUser || undefined,
+    sort_by: opts.sortBy,
+    sort_order: opts.sortOrder,
+    all: opts.all ? "true" : undefined,
   };
 }
 
+// Every read below carries `*_time` fields in nanoseconds, which are past 2^53:
+// a plain `JSON.parse` rounds them to a different instant.
+
 export function listSkills(ctx: RequestContext, opts: ListSkillsOptions = {}): Promise<unknown> {
-  return request(ctx, `${BASE}/skills`, { query: listQuery(opts) });
+  return request(ctx, `${BASE}/skills`, {
+    query: { ...listQuery(opts), status: opts.status || undefined },
+    responseParser: parseBigIntJSON,
+  });
 }
 
 export function listSkillMarket(
   ctx: RequestContext,
-  opts: ListSkillsOptions = {},
+  opts: ListSkillMarketOptions = {},
 ): Promise<unknown> {
-  return request(ctx, `${BASE}/skills/market`, { query: listQuery(opts) });
+  return request(ctx, `${BASE}/skills/market`, {
+    query: listQuery(opts),
+    responseParser: parseBigIntJSON,
+  });
 }
 
 export function getSkill(ctx: RequestContext, skillId: string): Promise<unknown> {
-  return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}`);
+  return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}`, {
+    responseParser: parseBigIntJSON,
+  });
 }
 
 export function getSkillMarket(ctx: RequestContext, skillId: string): Promise<unknown> {
-  return request(ctx, `${BASE}/skills/market/${encodeURIComponent(skillId)}`);
+  return request(ctx, `${BASE}/skills/market/${encodeURIComponent(skillId)}`, {
+    responseParser: parseBigIntJSON,
+  });
 }
 
 export function deleteSkill(ctx: RequestContext, skillId: string): Promise<unknown> {
@@ -289,12 +316,21 @@ export function readSkillFile(
 
 /** Version history for a skill. */
 export function getSkillHistory(ctx: RequestContext, skillId: string): Promise<unknown> {
-  return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}/history`);
+  return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}/history`, {
+    responseParser: parseBigIntJSON,
+  });
 }
 
-export type SkillStatus = "unpublish" | "published" | "offline";
+/**
+ * The states `PUT /skills/:id/status` accepts. A skill can also be `unpublish`
+ * or `editing`, but only registering and editing produce those — this endpoint
+ * refuses them.
+ */
+export type SkillStatus = "published" | "offline";
 
-/** Change a skill's status. */
+export const SKILL_STATUSES: readonly SkillStatus[] = ["published", "offline"];
+
+/** Publish (`published`) or take down (`offline`) a skill. */
 export function setSkillStatus(
   ctx: RequestContext,
   skillId: string,

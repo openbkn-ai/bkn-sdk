@@ -5,20 +5,8 @@
 import { Command, Option } from "commander";
 import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
-import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
-import { clientFrom, outputOptions } from "./_shared.js";
-
-/** Digits only, within bounds: `parseInt` would turn `1e3` into 1 and a typo into `NaN`. */
-const boundedInt =
-  (flag: string, max = Number.MAX_SAFE_INTEGER) =>
-  (value: string) => {
-    const n = /^\d+$/.test(value) ? Number.parseInt(value, 10) : Number.NaN;
-    if (!Number.isSafeInteger(n) || n < 1 || n > max) {
-      throw new InputError(`${flag} must be an integer from 1 to ${max} (got '${value}')`);
-    }
-    return n;
-  };
+import { MAX_PAGE_SIZE, clientFrom, outputOptions, positiveInt } from "./_shared.js";
 
 const REDACTED = "<redacted>";
 /** Names ending in a credential word. Anchored so `max_tokens` or `token_count` survive. */
@@ -119,8 +107,13 @@ export function mcpCommand(): Command {
       new Option("--sort-by <field>", "sort field").choices(["update_time", "create_time", "name"]),
     )
     .addOption(new Option("--sort-order <order>", "sort direction").choices(["asc", "desc"]))
-    .option("--limit <n>", "page size (1-100)", boundedInt("--limit", 100), DEFAULT_LIST_LIMIT)
-    .option("--page <n>", "page (1-based)", boundedInt("--page"), 1)
+    .option(
+      "--limit <n>",
+      "page size (1-100)",
+      positiveInt("--limit", MAX_PAGE_SIZE),
+      DEFAULT_LIST_LIMIT,
+    )
+    .option("--page <n>", "page (1-based)", positiveInt("--page"), 1)
     .option("--all", "return every accessible server (ignores --limit/--page defaults)")
     .action(async (opts, command: Command) => {
       // `all` makes the server ignore paging, so with --all the defaults are not

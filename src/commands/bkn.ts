@@ -10,17 +10,9 @@ import { type CapabilityCheck, validateBknDirectory } from "../utils/bkn-validat
 import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { parsePkMap } from "../utils/pk-detection.js";
-import { clientFrom, csv, cypherParams, outputOptions, readBody } from "./_shared.js";
+import { clientFrom, csv, cypherParams, oneOf, outputOptions, readBody } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
-
-/** Option parser that refuses a value outside the backend's enum before any call. */
-const oneOf =
-  (flag: string, allowed: readonly string[]) =>
-  (v: string): string => {
-    if (!allowed.includes(v)) throw new InputError(`${flag} must be one of ${allowed.join(", ")}.`);
-    return v;
-  };
 
 const SYSTEM_PROPERTIES = ["_instance_id", "_instance_identity", "_display"] as const;
 

@@ -6,6 +6,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import {
   type ExecuteSkillOptions,
+  type ListSkillMarketOptions,
   type ListSkillsOptions,
   type SkillFileEntry,
   type SkillStatus,
@@ -150,7 +151,7 @@ export function skills(ctx: RequestContext) {
   return {
     list: (opts?: ListSkillsOptions) => listSkills(ctx, opts),
     get: (skillId: string) => getSkill(ctx, skillId),
-    market: (opts?: ListSkillsOptions) => listSkillMarket(ctx, opts),
+    market: (opts?: ListSkillMarketOptions) => listSkillMarket(ctx, opts),
     marketGet: (skillId: string) => getSkillMarket(ctx, skillId),
     delete: (skillId: string) => deleteSkill(ctx, skillId),
     content: (skillId: string, opts?: SkillViewOptions) =>
@@ -200,7 +201,10 @@ export function skills(ctx: RequestContext) {
     publishHistory: (skillId: string, version: string) =>
       publishSkillVersion(ctx, skillId, version),
     /** Zip a local skill directory and register it. */
-    register: async (dir: string, opts?: { source?: string; extendInfo?: unknown }) =>
+    register: async (
+      dir: string,
+      opts?: { source?: string; category?: string; extendInfo?: unknown },
+    ) =>
       registerSkillZip(ctx, await zipDirectory(dir), {
         filename: `${basename(resolve(dir))}.zip`,
         ...opts,

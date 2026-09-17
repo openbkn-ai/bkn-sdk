@@ -22,7 +22,7 @@ const SERVICE_PROBES: Array<{ service: string; path: string }> = [
   { service: "vega-backend", path: "/api/vega-backend/v1/catalogs?limit=1" },
   {
     service: "agent-operator-integration",
-    path: "/api/agent-operator-integration/v1/tool-box/list?page=1&size=1",
+    path: "/api/agent-operator-integration/v1/tool-box/list?page=1&page_size=1",
   },
   { service: "agent-observability", path: "/api/agent-observability/v1/conversations?limit=1" },
   { service: "mf-model-manager", path: "/api/mf-model-manager/v1/llm/list" },

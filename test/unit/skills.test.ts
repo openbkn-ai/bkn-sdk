@@ -4,10 +4,14 @@ import {
   executeSkill,
   getSkill,
   getSkillContent,
+  getSkillHistory,
+  getSkillMarket,
   getSkillNames,
   listSkillMarket,
   listSkills,
   readSkillFile,
+  registerSkillZip,
+  setSkillStatus,
 } from "../../src/api/skills.js";
 import type { RequestContext } from "../../src/types.js";
 import { verifiedContext } from "../setup/verified-context.js";
@@ -145,5 +149,87 @@ describe("executeSkill transport budget", () => {
     // 75s is well under the wall — detouring would cost interceptability for
     // nothing.
     expect(dispatcherOf(f)).toBeUndefined();
+  });
+});
+
+describe("skill list filters follow the contract", () => {
+  it("list sends category/sort/all/status and never `source`", async () => {
+    const f = mockFetch();
+    await listSkills(ctx, {
+      name: "demo",
+      category: "data",
+      createUser: "alice",
+      status: "published",
+      sortBy: "create_time",
+      sortOrder: "asc",
+      all: true,
+      // A caller on the old type: the service never had a `source` filter.
+      ...({ source: "custom" } as object),
+    });
+    const q = new URL(firstCall(f)[0]).searchParams;
+    expect(Object.fromEntries(q)).toEqual({
+      page: "1",
+      page_size: "30",
+      name: "demo",
+      category: "data",
+      create_user: "alice",
+      status: "published",
+      sort_by: "create_time",
+      sort_order: "asc",
+      all: "true",
+    });
+  });
+
+  it("market never sends status — everything there is published", async () => {
+    const f = mockFetch();
+    await listSkillMarket(ctx, { category: "data", ...({ status: "offline" } as object) });
+    const q = new URL(firstCall(f)[0]).searchParams;
+    expect(q.get("category")).toBe("data");
+    expect(q.has("status")).toBe(false);
+    expect(q.has("source")).toBe(false);
+  });
+});
+
+describe("skill reads keep nanosecond *_time values exact", () => {
+  const NANOS = "1784431697368964901";
+  const cases: Array<[string, () => Promise<unknown>]> = [
+    ["list", () => listSkills(ctx)],
+    ["market", () => listSkillMarket(ctx)],
+    ["get", () => getSkill(ctx, "s1")],
+    ["market-get", () => getSkillMarket(ctx, "s1")],
+    ["history", () => getSkillHistory(ctx, "s1")],
+  ];
+  it.each(cases)("%s", async (_name, call) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(`{"update_time":${NANOS}}`, { status: 200 })),
+    );
+    // `JSON.parse` would round this to 1784431697368964900.
+    expect(((await call()) as { update_time: unknown }).update_time).toBe(BigInt(NANOS));
+  });
+});
+
+describe("skill status and register", () => {
+  it("set-status PUTs the target status", async () => {
+    const f = mockFetch();
+    await setSkillStatus(ctx, "s1", "offline");
+    const [u, init] = firstCall(f);
+    expect(new URL(u).pathname).toBe("/api/agent-operator-integration/v1/skills/s1/status");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(String(init.body))).toEqual({ status: "offline" });
+  });
+
+  it("register sends category as a form field when given", async () => {
+    const f = mockFetch();
+    await registerSkillZip(ctx, new Uint8Array([1]), { category: "data" });
+    const form = firstCall(f)[1].body as FormData;
+    expect(form.get("category")).toBe("data");
+    expect(form.get("file_type")).toBe("zip");
+  });
+
+  it("register omits category otherwise, leaving the service default", async () => {
+    const f = mockFetch();
+    await registerSkillZip(ctx, new Uint8Array([1]));
+    expect((firstCall(f)[1].body as FormData).has("category")).toBe(false);
   });
 });
