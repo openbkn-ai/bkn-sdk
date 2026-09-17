@@ -73,13 +73,18 @@ class Replay:
 
     def __init__(self) -> None:
         self.sent: list[dict[str, Any]] = []
+        self.paths: list[str] = []
         self._queued: list[dict[str, Any]] = []
 
     def queue(self, *names: str) -> None:
         self._queued.extend(fixture(name)["response"] for name in names)
 
+    def queue_response(self, *responses: dict[str, Any]) -> None:
+        self._queued.extend(responses)
+
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.sent.append(json.loads(request.read()))
+        self.paths.append(request.url.raw_path.decode("ascii"))
         return httpx.Response(200, json=self._queued.pop(0) if self._queued else {"datas": []})
 
 
@@ -185,16 +190,28 @@ def test_the_read_posts_a_body_but_means_get(replay: Replay) -> None:
 
     orders().take(2)
 
-    assert replay.sent[0] == {"response_format": "json", "limit": 2}
+    assert replay.sent[0] == {"limit": 2}
 
 
-def test_json_is_always_asked_for(replay: Replay) -> None:
-    """`response_format` defaults to `toon`, a compact text format we cannot parse."""
+def test_the_rest_read_sends_no_response_format(replay: Replay) -> None:
+    """`FirstObjectQuery` defines no `response_format`; only the MCP tool takes one."""
     replay.queue("unfiltered_page")
 
     orders().take(2)
 
-    assert replay.sent[0]["response_format"] == "json"
+    assert "response_format" not in replay.sent[0]
+
+
+def test_network_and_object_type_ids_are_encoded_in_the_path(replay: Replay) -> None:
+    class Odd(ObjectType):
+        __kn_id__ = "kn/with space"
+        __bkn_id__ = "ot?x#y"
+
+    Odd.objects().with_context(CONTEXT).take(1)
+
+    assert replay.paths[0] == (
+        "/api/ontology-query/v1/knowledge-networks/kn%2Fwith%20space/object-types/ot%3Fx%23y"
+    )
 
 
 def test_a_filter_becomes_the_condition(replay: Replay) -> None:
@@ -256,6 +273,7 @@ def test_need_total_is_sent_only_for_count(replay: Replay) -> None:
 
 
 def test_offset_is_omitted_when_it_is_zero(replay: Replay) -> None:
+    """Deploys that predate cursor paging still honour `offset`, so it is sent."""
     replay.queue("unfiltered_page", "offset_paging")
 
     orders().page(limit=2)
@@ -263,6 +281,25 @@ def test_offset_is_omitted_when_it_is_zero(replay: Replay) -> None:
 
     assert "offset" not in replay.sent[0]
     assert replay.sent[1]["offset"] == 2
+
+
+def test_a_cursor_is_sent_back_with_the_same_query(replay: Replay) -> None:
+    replay.queue_response(
+        {"datas": [{"order_id": 1}], "paging": {"next_cursor": "c-2", "expires_at_sec": 1}},
+        {"datas": [{"order_id": 2}], "paging": {"next_cursor": None, "expires_at_sec": None}},
+    )
+    base = orders().where(Order.channel_id == 1)
+
+    first = base.page(limit=1)
+    base.page(limit=1, cursor=first.next_cursor)
+
+    assert "cursor" not in replay.sent[0]
+    assert replay.sent[1] == {**replay.sent[0], "cursor": "c-2"}
+
+
+def test_cursor_and_offset_together_are_refused() -> None:
+    with pytest.raises(InputError, match="not both"):
+        orders().page(limit=1, offset=1, cursor="c")
 
 
 @pytest.mark.parametrize("limit", [0, -1, MAX_LIMIT + 1])
@@ -311,24 +348,68 @@ def test_an_empty_result_is_an_empty_list(replay: Replay) -> None:
     assert orders().where(Order.order_status == "no_such_status").take(2) == []
 
 
-def test_the_index_hint_is_recorded_rather_than_discarded(replay: Replay) -> None:
-    """`search_after` is inert on this deploy and `search_from_index: false` is why —
-    a future cursor implementation switches on this, not on a version number."""
-    replay.queue("unfiltered_page")
+def test_the_next_cursor_comes_from_paging(replay: Replay) -> None:
+    replay.queue_response(
+        {"datas": [], "paging": {"next_cursor": "c-2", "expires_at_sec": 1}, "cursor": "stale"}
+    )
 
-    assert orders().page(limit=2).search_from_index is False
+    assert orders().page(limit=2).next_cursor == "c-2"
 
 
-def test_paging_walks_by_offset_until_a_short_page(replay: Replay) -> None:
+def test_the_compatibility_cursor_is_read_when_paging_is_absent(replay: Replay) -> None:
+    replay.queue_response({"datas": [], "cursor": "c-compat"})
+
+    assert orders().page(limit=2).next_cursor == "c-compat"
+
+
+def test_a_null_next_cursor_is_the_last_page(replay: Replay) -> None:
+    replay.queue_response(
+        {"datas": [], "paging": {"next_cursor": None, "expires_at_sec": None}, "cursor": ""}
+    )
+
+    page = orders().page(limit=2)
+
+    assert page.next_cursor is None
+    assert page.search_from_index is False  # absent from the current contract
+
+
+def test_the_legacy_index_hint_is_still_read(replay: Replay) -> None:
+    """Deploys built before cursor paging still return `search_from_index`."""
+    replay.queue_response({"datas": [], "search_from_index": True})
+
+    assert orders().page(limit=2).search_from_index is True
+
+
+def test_paging_follows_the_cursor_until_it_is_null(replay: Replay) -> None:
+    replay.queue_response(
+        {"datas": [{"order_id": 1}, {"order_id": 2}], "paging": {"next_cursor": "c-2"}},
+        # A short page that still names a cursor is not the end.
+        {"datas": [{"order_id": 3}], "paging": {"next_cursor": "c-3"}},
+        # A full page whose cursor is null is.
+        {"datas": [{"order_id": 4}, {"order_id": 5}], "paging": {"next_cursor": None}},
+    )
+
+    rows = list(orders().iterate(page_size=2))
+
+    assert [row.order_id for row in rows] == [1, 2, 3, 4, 5]
+    assert [body.get("cursor") for body in replay.sent] == [None, "c-2", "c-3"]
+    assert all("offset" not in body for body in replay.sent)
+    assert len(replay.sent) == 3
+
+
+def test_without_paging_the_walk_falls_back_to_offset(replay: Replay) -> None:
+    """A pre-cursor deploy answers with no `paging` and no `cursor` but honours
+    `offset` — recorded that way on a live 0.1.5 platform."""
     replay.queue("unfiltered_page", "offset_paging", "no_match")
 
     rows = list(orders().iterate(page_size=2))
 
     assert len(rows) == 4
     assert [body.get("offset") for body in replay.sent] == [None, 2, 4]
+    assert all("cursor" not in body for body in replay.sent)
 
 
-def test_paging_stops_on_the_first_short_page(replay: Replay) -> None:
+def test_the_offset_fallback_stops_on_the_first_short_page(replay: Replay) -> None:
     """A page shorter than asked for means the end — no extra round trip to prove it."""
     replay.queue("in_operator")
 
@@ -336,6 +417,29 @@ def test_paging_stops_on_the_first_short_page(replay: Replay) -> None:
 
     assert len(rows) == 3
     assert len(replay.sent) == 1
+
+
+def test_a_compatibility_cursor_alone_selects_cursor_paging(replay: Replay) -> None:
+    replay.queue_response(
+        {"datas": [{"order_id": 1}], "cursor": "c-2"},
+        {"datas": [{"order_id": 2}], "cursor": ""},
+    )
+
+    rows = list(orders().iterate(page_size=1))
+
+    assert [row.order_id for row in rows] == [1, 2]
+    assert [body.get("cursor") for body in replay.sent] == [None, "c-2"]
+    assert all("offset" not in body for body in replay.sent)
+
+
+def test_a_cursor_that_does_not_advance_stops_the_walk(replay: Replay) -> None:
+    replay.queue_response(
+        {"datas": [{"order_id": 1}], "paging": {"next_cursor": "c-2"}},
+        {"datas": [{"order_id": 2}], "paging": {"next_cursor": "c-2"}},
+    )
+
+    with pytest.raises(BknError, match="same cursor"):
+        list(orders().iterate(page_size=1))
 
 
 # ---- get --------------------------------------------------------------------
@@ -403,7 +507,6 @@ def test_raw_sends_the_argument_map_verbatim(replay: Replay) -> None:
     page = orders().raw({"limit": 1, "need_total": True, "some_new_field": "x"})
 
     assert replay.sent[0] == {
-        "response_format": "json",
         "limit": 1,
         "need_total": True,
         "some_new_field": "x",

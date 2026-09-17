@@ -24,6 +24,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from functools import reduce
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from urllib.parse import quote
 
 from .config import Context, resolve_context
 from .errors import BknError, InputError
@@ -238,7 +239,9 @@ DEFAULT_PAGE_SIZE = 500
 #: Keys the REST read understands and the MCP tool does not. `sort` and
 #: `need_total` are the capabilities the traced path gives up; sending them
 #: anyway would be ignored in silence, which is worse than dropping them here.
-_REST_ONLY_ARGUMENTS = frozenset({"sort", "need_total"})
+#: `cursor` is REST's paging token — the tool pages by `offset` / `search_after`
+#: instead, so a cursor handed to it would restart at the first page.
+_REST_ONLY_ARGUMENTS = frozenset({"sort", "need_total", "cursor"})
 
 OT = TypeVar("OT", bound="ObjectType")
 
@@ -251,13 +254,17 @@ class Page(Generic[OT]):
     #: `total_count`, present only when `need_total` was asked for — and absent
     #: even then when nothing matched, so `count()` reads `None` as zero.
     total: int | None = None
-    #: The backend's own hint that an index served the query. `search_after` is
-    #: accepted and then ignored on this deploy, and this flag is why: with no
-    #: built index there is no cursor to resume from. A future cursor
-    #: implementation should switch on this rather than on a version number.
+    #: Deprecated. The backend's hint that an index served the query, returned by
+    #: deploys that predate cursor paging and absent from the current contract,
+    #: where it reads False. Paging decisions follow `next_cursor`, not this.
     search_from_index: bool = False
     #: Present on a traced read: the evidence-chain entry for the operation.
     receipt: dict[str, Any] | None = None
+    #: The opaque cursor for the page after this one — `paging.next_cursor` on
+    #: the REST read, or its compatibility twin `cursor`. `None` means this is
+    #: the last page. Pass it back as `page(cursor=...)`. Always `None` on a
+    #: traced read, whose MCP tool pages by `offset` instead.
+    next_cursor: str | None = None
 
 
 @dataclass(frozen=True)
@@ -312,21 +319,43 @@ class ObjectSet(Generic[OT]):
         return self.page(limit=MIN_LIMIT, need_total=True).total or 0
 
     def iterate(self, page_size: int = DEFAULT_PAGE_SIZE) -> Iterator[OT]:
-        """Every match, paged with `limit`/`offset`.
+        """Every match, paged the way the deploy answering pages.
 
-        Not `search_after`: it is declared on both read paths and completely
-        inert — probed with a correct sort value, an instance id, a tuple, an
-        empty array, and outright garbage, every one returned the same first
-        page and none raised. Paging lives entirely inside the runtime, so
-        adopting a cursor later needs no regeneration.
+        The current ontology-query contract takes a first query, then `{cursor}`
+        turns of the same query, and answers `paging.next_cursor` — `null` on the
+        last page. Where the first response carries `paging` (or the compatibility
+        `cursor`), the walk follows that cursor until it is null: a short page is
+        then not proof of the end, nor a full one proof of more.
+
+        Deploys built before cursor paging (0.1.5 releases in the field) answer
+        with neither field but honour `offset`, and the traced MCP tool documents
+        `offset` too. There the walk falls back to `limit`/`offset`, advancing by
+        the page length and stopping on the first short page.
         """
-        offset = 0
-        while True:
-            rows = self.page(limit=page_size, offset=offset).rows
-            yield from rows
-            if len(rows) < page_size:
-                return
-            offset += len(rows)
+        context = self.context or resolve_context()
+        pinned = replace(self, context=context)
+
+        page, cursor_paged = pinned._fetch(limit=page_size)
+        yield from page.rows
+
+        if not cursor_paged:
+            offset = len(page.rows)
+            while len(page.rows) == page_size:
+                page, _ = pinned._fetch(limit=page_size, offset=offset)
+                yield from page.rows
+                offset += len(page.rows)
+            return
+
+        cursor: str | None = None
+        while page.next_cursor is not None:
+            if page.next_cursor == cursor:
+                raise BknError(
+                    "The platform returned the same cursor it was sent, so paging would "
+                    "never advance. Stopping rather than looping."
+                )
+            cursor = page.next_cursor
+            page, _ = pinned._fetch(limit=page_size, cursor=cursor)
+            yield from page.rows
 
     def get(self, *values: Any, **named: Any) -> OT | None:
         """One instance by primary key, or None.
@@ -342,23 +371,55 @@ class ObjectSet(Generic[OT]):
 
         A permanent escape hatch — not because the grammar is unknown, but
         because the backend can grow fields faster than this runtime models
-        them. Nothing here is merged in except the response format.
+        them. Over REST nothing is merged in; a traced read adds only
+        `response_format: "json"`, which the MCP tool needs and REST does not
+        define.
         """
         context = self.context or resolve_context()
-        return self._decode(self._send({"response_format": "json", **arguments}, context), context)
+        return self._decode(self._send(dict(arguments), context), context)
 
     def page(
-        self, *, limit: int = DEFAULT_TAKE, offset: int = 0, need_total: bool = False
+        self,
+        *,
+        limit: int = DEFAULT_TAKE,
+        offset: int = 0,
+        need_total: bool = False,
+        cursor: str | None = None,
     ) -> Page[OT]:
-        """One page. The single place a request body is assembled."""
+        """One page.
+
+        The first page takes no `cursor`; each later one takes the previous
+        page's `next_cursor`, with the same filter, ordering and limit.
+
+        `offset` is still sent as before: deploys that predate cursor paging
+        honour it, as does the traced MCP tool. The current contract pages by
+        `cursor` instead, so prefer `next_cursor` where a deploy returns one.
+        Passing both raises.
+        """
+        return self._fetch(limit=limit, offset=offset, need_total=need_total, cursor=cursor)[0]
+
+    def _fetch(
+        self,
+        *,
+        limit: int,
+        offset: int = 0,
+        need_total: bool = False,
+        cursor: str | None = None,
+    ) -> tuple[Page[OT], bool]:
+        """The page, and whether the response speaks cursor paging (`paging` or `cursor`).
+
+        The single place a request body is assembled.
+        """
         if not MIN_LIMIT <= limit <= MAX_LIMIT:
             raise InputError(f"limit must be between {MIN_LIMIT} and {MAX_LIMIT}, got {limit}.")
         if offset < 0:
             raise InputError(f"offset must not be negative, got {offset}.")
+        if offset and cursor is not None:
+            raise InputError("Pass `cursor` or `offset`, not both.")
 
-        body: dict[str, Any] = {"response_format": "json", "limit": limit}
-        if offset:
-            body["offset"] = offset
+        body: dict[str, Any] = {"limit": limit}
+        if cursor is not None:
+            body["cursor"] = cursor
         if self.filter is not None:
             body["condition"] = to_condition(self.filter)
         if self.sorts:
@@ -371,9 +432,19 @@ class ObjectSet(Generic[OT]):
         if need_total:
             body["need_total"] = True
         context = self.context or resolve_context()
-        return self._decode(self._send(body, context), context)
+        if offset:
+            body["offset"] = offset
+        sent = self._send(body, context)
+        response = sent[0]
+        paged = isinstance(response, dict) and ("paging" in response or "cursor" in response)
+        return self._decode(sent, context), paged
 
     # ---- internals ----
+
+    @staticmethod
+    def _via_tool(context: Context, keys: Any) -> bool:
+        """Whether a body with these keys goes to the traced MCP tool rather than REST."""
+        return context.traced and not _REST_ONLY_ARGUMENTS & set(keys)
 
     def _send(self, body: dict[str, Any], context: Context) -> Any:
         from .meta import ensure_schema_checked
@@ -381,7 +452,7 @@ class ObjectSet(Generic[OT]):
         # A no-op unless `configure(check_schema=True)` asked for it, and then
         # exactly once per network per process.
         ensure_schema_checked(context, self.object_type.__kn_id__)
-        if context.traced and not _REST_ONLY_ARGUMENTS & body.keys():
+        if self._via_tool(context, body.keys()):
             # The tool accepts `sort` and `need_total` and honours neither, so a
             # query needing either goes over REST even inside a traced scope —
             # carrying the scope's turn, so the read is still recorded. Handing
@@ -391,7 +462,8 @@ class ObjectSet(Generic[OT]):
         from .lifecycle import with_context_retry
 
         path = (
-            f"{QUERY_BASE}/{self.object_type.__kn_id__}/object-types/{self.object_type.__bkn_id__}"
+            f"{QUERY_BASE}/{quote(self.object_type.__kn_id__, safe='')}"
+            f"/object-types/{quote(self.object_type.__bkn_id__, safe='')}"
         )
 
         def send(bkn_context: dict[str, str] | None) -> Any:
@@ -421,6 +493,9 @@ class ObjectSet(Generic[OT]):
             self.object_type.__kn_id__,
             "query_object_instance",
             {
+                # The MCP tool answers `toon` unless told otherwise; the REST
+                # read defines no such field, so only this path asks for JSON.
+                "response_format": "json",
                 **{k: v for k, v in body.items() if k not in _REST_ONLY_ARGUMENTS},
                 "kn_id": self.object_type.__kn_id__,
                 "ot_id": self.object_type.__bkn_id__,
@@ -457,6 +532,7 @@ class ObjectSet(Generic[OT]):
             total=total if isinstance(total, int) else None,
             search_from_index=bool(payload.get("search_from_index")),
             receipt=receipt,
+            next_cursor=_next_cursor(payload),
         )
 
     def _primary_key_filter(self, *values: Any, **named: Any) -> Filter:
@@ -486,3 +562,17 @@ class ObjectSet(Generic[OT]):
             parts = values
         equalities = [Comparison("==", part, value) for part, value in zip(key, parts, strict=True)]
         return reduce(operator.and_, equalities)
+
+
+def _next_cursor(payload: dict[str, Any]) -> str | None:
+    """`paging.next_cursor`, falling back to the compatibility `cursor` field.
+
+    The contract makes `paging.next_cursor` authoritative — `null` at the end —
+    and `cursor` its deprecated copy, read only where `paging` is missing.
+    """
+    paging = payload.get("paging")
+    if isinstance(paging, dict) and "next_cursor" in paging:
+        cursor = paging.get("next_cursor")
+    else:
+        cursor = payload.get("cursor")
+    return cursor if isinstance(cursor, str) and cursor else None

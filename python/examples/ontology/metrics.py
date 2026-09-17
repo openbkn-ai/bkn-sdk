@@ -6,8 +6,8 @@
     BKN_KN_ID=ecommerce_ops_bkn_public python examples/ontology/metrics.py
 
 There is no `sum()` or `group_by()` on an object set because there is no
-endpoint for one — an instance query takes a condition, a limit, an offset and a
-property selection, and nothing else. Pulling every row back to add it up would
+endpoint for one — an instance query takes a condition, a sort, a limit, a cursor or offset
+and a property selection, and nothing else. Pulling every row back to add it up would
 be a lie dressed as an API.
 
 What the platform has instead is richer: a metric is a definition the network
@@ -46,7 +46,7 @@ def main() -> None:
 
     # 1. A point in time. `instant=True` is a different shape from a series, and
     #    the rule is checked before the round trip.
-    now = int(time.time())
+    now = int(time.time() * 1000)  # metric windows are unix milliseconds
     try:
         instant = metric.query(time={"time": now, "instant": True})
         print(f"  value now: {instant}")
@@ -56,7 +56,7 @@ def main() -> None:
     # 2. A series needs a step; a range needs both ends. Getting either wrong is
     #    an `InputError` here, not a 400 from the platform.
     try:
-        metric.query(time={"start": now - 86400 * 30, "end": now})
+        metric.query(time={"start": now - 30 * 86_400_000, "end": now})
     except InputError as error:
         print(f"  a series without a step: {error}")
 
@@ -65,7 +65,7 @@ def main() -> None:
         dimension = metric.__dimensions__[0]
         try:
             split = metric.query(
-                time={"start": now - 86400 * 30, "end": now, "step": "day"},
+                time={"start": now - 30 * 86_400_000, "end": now, "step": "day"},
                 analysis_dimensions=[dimension],
             )
             print(f"  split by {dimension}: {str(split)[:160]}")
