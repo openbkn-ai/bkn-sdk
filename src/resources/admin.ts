@@ -21,6 +21,7 @@ import {
   deleteDepartmentSafe,
   deleteRoleSafe,
   deleteUserSafe,
+  getAuditLogSafe,
   getDepartmentMembersSafe,
   getDepartmentSafe,
   getLicenseFingerprintSafe,
@@ -29,10 +30,10 @@ import {
   getUserRolesSafe,
   getUserSafe,
   importLicenseSafe,
+  listAuditLogsSafe,
   listDepartmentsSafe,
   listRolesSafe,
   listUsersSafe,
-  notOnSafe,
   removeLicenseSafe,
   removeRoleSafe,
   roleMembersSafe,
@@ -46,9 +47,7 @@ import type { RequestContext } from "../types.js";
 
 /**
  * Admin (operator) resource surface, on bkn-safe's token-gated
- * `/api/safe/v1/admin/*` API. Only `audit list` has no endpoint (login-log
- * retired by design) → `notOnSafe`. See
- * docs/exec-plans/admin-bkn-safe-migration.md.
+ * `/api/safe/v1/admin/*` API. See docs/exec-plans/admin-bkn-safe-migration.md.
  */
 const DEFAULT_NEW_USER_PASSWORD = "openbkn"; // platform initial password (forced-change on first login)
 
@@ -132,7 +131,9 @@ export function admin(ctx: RequestContext) {
       operations: string[],
     ) => setRolePermissionSafe(ctx, roleId, grant, { resourceType, resourceId, operations }),
 
-    auditList: (_opts?: AuditListOptions) => notOnSafe("audit list"),
+    // ── audit trail (management mutations and token-gate refusals) ──
+    auditList: (opts?: AuditListOptions) => listAuditLogsSafe(ctx, opts),
+    auditGet: (id: string) => getAuditLogSafe(ctx, id),
 
     // ── license (cluster license hub; weak judgements — display/ops only) ──
     licenseGet: () => getLicenseSafe(ctx),

@@ -31,16 +31,25 @@ export type LifecycleErrorCode =
   | "interaction_required"
   | "interaction_in_progress"
   | "interaction_terminal"
+  | "agent_name_conflict"
+  | "agent_name_invalid"
   | "operation_required"
   | "idempotency_conflict"
   | "event_payload_conflict"
+  | "producer_sequence_conflict"
+  | "invalid_evidence_event"
   | "receipt_pending"
   | "terminal_conflict"
   | "closure_manifest_invalid"
   | "feature_not_installed"
+  | "trace_core_unavailable"
+  | "authorization_unavailable"
+  | "evidence_capture_denied"
+  | "evidence_capture_failed"
   | "capability_not_licensed"
   | "permission_denied"
-  | "resource_not_disclosed";
+  | "resource_not_disclosed"
+  | "internal_error";
 
 export interface LifecycleError {
   code: LifecycleErrorCode;
@@ -48,6 +57,8 @@ export interface LifecycleError {
   retryable: boolean;
   retry_after_ms: number;
   current_status?: string;
+  /** The interaction that currently holds the conversation, when one does. */
+  current_interaction_id?: string;
   required_action?: string;
   request_id?: string;
 }
@@ -66,6 +77,10 @@ export interface LifecycleOwner {
 export interface ManagedConversation {
   conversation_id: string;
   agent_name?: string;
+  actor_name_snapshot?: string;
+  business_context?: string;
+  creation_auth_method?: string;
+  creation_request_id?: string;
   owner: LifecycleOwner;
   external_conversation_key: string;
   generation: number;
@@ -122,6 +137,10 @@ export interface ClaimSupport {
   reason?: string;
 }
 
+/**
+ * A claim as the assembler records it (`sessionvo.Claim`). Terminal requests
+ * do not send these: `InteractionCompletionInput.claims` carries claim ids.
+ */
 export interface ManagedClaim {
   claim_id: string;
   claim_type: string;
@@ -139,7 +158,8 @@ export interface InteractionCompletionInput {
   completion_manifest_version: string;
   completion_reason: string;
   answer_artifact_ref?: string;
-  claims?: ManagedClaim[];
+  /** Claim ids (`terminalInteractionRequest.claims` is `string[]`). */
+  claims?: string[];
   expected_operations?: ExpectedOperation[];
   expected_receipts?: ExpectedReceipt[];
   assembler_deadline?: string;
@@ -149,7 +169,8 @@ export interface InteractionClosureManifest {
   completion_manifest_version: string;
   completion_reason: string;
   answer_artifact_ref?: string;
-  claims?: ManagedClaim[];
+  /** Claim ids (`sessionvo.ClosureManifest.claims` is `string[]`). */
+  claims?: string[];
   expected_operations?: ExpectedOperation[];
   expected_receipts?: ExpectedReceipt[];
   assembler_deadline?: string;
@@ -243,6 +264,26 @@ export interface PayloadEnvelope {
   omitted_reason?: "payload_too_large" | "serialization_failed";
 }
 
+/** How a tool's evidence contract was resolved (`sessionvo.CapabilityProfile`). */
+export interface CapabilityProfile {
+  canonical_tool_name?: string;
+  child_evidence_policy?: string;
+  evidence_contract?: string;
+  execution_role?: string;
+  failure_policy?: string;
+  input_schema_digest?: string;
+  manifest_id?: string;
+  manifest_version?: string;
+  mapper_id?: string;
+  mapper_version?: string;
+  minimum_trace_schema?: string;
+  output_schema_digest?: string;
+  reason?: string;
+  required_trace_fields?: string[];
+  resolution?: string;
+  tool_version?: string;
+}
+
 export interface OperationCallFact {
   operation_id: string;
   attempt: number;
@@ -252,6 +293,7 @@ export interface OperationCallFact {
   tool_name: string;
   protocol: OperationProtocol;
   source_module: string;
+  capability_profile?: CapabilityProfile;
   parent_operation_id?: string;
   input: PayloadEnvelope;
   output?: PayloadEnvelope;
@@ -292,6 +334,7 @@ export interface StartInteractionInput {
   idempotency_key: string;
   agent_name?: string;
   lease_seconds?: number;
+  request_hash?: string;
 }
 
 export interface EnsureOperationInput {
@@ -300,6 +343,7 @@ export interface EnsureOperationInput {
   protocol: OperationProtocol;
   source_module: string;
   input: PayloadEnvelope;
+  capability_profile?: CapabilityProfile;
   parent_operation_id?: string;
   causation_event_ids?: string[];
   required?: boolean;

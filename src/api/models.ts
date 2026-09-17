@@ -34,20 +34,34 @@ function listQuery(opts: ListModelsOptions) {
   };
 }
 
+// `model_id` is a 19-digit snowflake; a numeric one parsed with JSON.parse loses
+// precision, so every management read keeps unsafe integers as bigint.
 export function listLlmModels(ctx: RequestContext, opts: ListModelsOptions = {}): Promise<unknown> {
-  return request(ctx, `${MANAGER}/llm/list`, { query: listQuery(opts) });
+  return request(ctx, `${MANAGER}/llm/list`, {
+    query: listQuery(opts),
+    responseParser: parseBigIntJSON,
+  });
 }
 export function getLlmModel(ctx: RequestContext, modelId: string): Promise<unknown> {
-  return request(ctx, `${MANAGER}/llm/get`, { query: { model_id: modelId } });
+  return request(ctx, `${MANAGER}/llm/get`, {
+    query: { model_id: modelId },
+    responseParser: parseBigIntJSON,
+  });
 }
 export function listSmallModels(
   ctx: RequestContext,
   opts: ListModelsOptions = {},
 ): Promise<unknown> {
-  return request(ctx, `${MANAGER}/small-model/list`, { query: listQuery(opts) });
+  return request(ctx, `${MANAGER}/small-model/list`, {
+    query: listQuery(opts),
+    responseParser: parseBigIntJSON,
+  });
 }
 export function getSmallModel(ctx: RequestContext, modelId: string): Promise<unknown> {
-  return request(ctx, `${MANAGER}/small-model/get`, { query: { model_id: modelId } });
+  return request(ctx, `${MANAGER}/small-model/get`, {
+    query: { model_id: modelId },
+    responseParser: parseBigIntJSON,
+  });
 }
 
 /**
@@ -134,8 +148,8 @@ async function smallModelIdByName(ctx: RequestContext, name: string): Promise<st
   const PAGE = 100;
   for (let page = 1; page <= 50; page++) {
     const listed = (await listSmallModels(ctx, { page, limit: PAGE })) as {
-      data?: Array<{ model_id?: string | number; model_name?: string }>;
-      entries?: Array<{ model_id?: string | number; model_name?: string }>;
+      data?: Array<{ model_id?: string | number | bigint; model_name?: string }>;
+      entries?: Array<{ model_id?: string | number | bigint; model_name?: string }>;
     };
     const rows = listed?.data ?? listed?.entries ?? [];
     const hit = rows.find((m) => m?.model_name === name);

@@ -195,22 +195,99 @@ function serverError(body: string): string {
  * stable code that identifies it, and the suggested fix when the server offers
  * one. Services nest an inner envelope inside `details` as a string, so follow
  * that one level down to the error that actually happened.
+ *
+ * Three shapes carry `error` as an object rather than a string: the BKN Trace
+ * lifecycle envelope (`{error: {code, message, required_action, …}}`), and the
+ * OpenAI-compatible model-call envelope (`{error: {message, type, param,
+ * code}}`); both are read through {@link describeErrorObject}.
  */
 function describeEnvelope(j: Record<string, unknown>, depth = 0): string {
-  const text = (v: unknown): string => (typeof v === "string" && v.trim() ? v.trim() : "");
+  if (isPlainObject(j.error)) {
+    const nested = describeErrorObject(j.error);
+    if (nested) return nested;
+  }
   const description = text(j.description) || text(j.error) || text(j.detail) || text(j.message);
   const code = text(j.error_code) || text(j.code);
   const solution = text(j.solution);
   const details = text(j.error_details) || text(j.details);
+  // `error_details` is service-typed: vega answers with objects such as
+  // `{active_ids: [...]}` that name exactly what blocked the call.
+  const structured = details
+    ? ""
+    : describeDetailsObject(j.error_details) || describeDetailsObject(j.details);
 
-  const inner = depth < 2 ? innerEnvelope(details) : "";
+  const inner = depth < 2 ? innerEnvelope(details, depth) : "";
   const parts = [
     description || code,
     description && code ? `[${code}]` : "",
     inner || (details && details !== description ? truncate(details, 200) : ""),
+    structured ? `(${structured})` : "",
     solution && solution !== description ? `— ${solution}` : "",
   ].filter(Boolean);
   return parts.join(" ");
+}
+
+/** An `error` object: lifecycle `{code, message, required_action, …}` or OpenAI `{message, type, param, code}`. */
+function describeErrorObject(e: Record<string, unknown>): string {
+  const message = text(e.message) || text(e.description);
+  const code = scalarText(e.code);
+  const type = text(e.type);
+  const tag = [code, type && type !== code ? type : ""].filter(Boolean).join("/");
+  if (!message && !tag) return "";
+  const facts = [
+    text(e.param) ? `param: ${text(e.param)}` : "",
+    text(e.current_status) ? `current_status: ${text(e.current_status)}` : "",
+    text(e.current_interaction_id)
+      ? `current_interaction_id: ${text(e.current_interaction_id)}`
+      : "",
+    e.retryable === true
+      ? typeof e.retry_after_ms === "number" && e.retry_after_ms > 0
+        ? `retryable after ${e.retry_after_ms}ms`
+        : "retryable"
+      : "",
+    text(e.request_id) ? `request_id: ${text(e.request_id)}` : "",
+  ].filter(Boolean);
+  const requiredAction = text(e.required_action);
+  return [
+    message || tag,
+    message && tag ? `[${tag}]` : "",
+    facts.length ? `(${facts.join("; ")})` : "",
+    requiredAction ? `— required_action: ${requiredAction}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+/** A compact one-line view of an object-valued `error_details` / `details`. */
+function describeDetailsObject(value: unknown): string {
+  if (!isPlainObject(value)) return "";
+  const MAX_ITEMS = 10;
+  const parts = Object.entries(value).flatMap(([key, v]) => {
+    if (v === null || v === undefined || v === "") return [];
+    if (Array.isArray(v) && v.every((x) => x === null || typeof x !== "object")) {
+      if (v.length === 0) return [];
+      const shown = v.slice(0, MAX_ITEMS).map(String).join(", ");
+      const more = v.length > MAX_ITEMS ? ` (+${v.length - MAX_ITEMS} more)` : "";
+      return [`${key}: ${shown}${more}`];
+    }
+    if (typeof v === "object") return [`${key}: ${JSON.stringify(v)}`];
+    return [`${key}: ${String(v)}`];
+  });
+  return truncate(parts.join("; "), 300);
+}
+
+function text(v: unknown): string {
+  return typeof v === "string" && v.trim() ? v.trim() : "";
+}
+
+/** OpenAI `error.code` may be a string or a number. */
+function scalarText(v: unknown): string {
+  if (typeof v === "number" && Number.isFinite(v)) return String(v);
+  return text(v);
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
 /** Some services embed the upstream envelope as JSON inside a prose `details`. */

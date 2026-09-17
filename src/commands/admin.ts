@@ -7,8 +7,9 @@
  * and live-verified; operator `auth` reuses the top-level `openbkn auth`.
  */
 import { readFileSync } from "node:fs";
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { rawCall } from "../api/call.js";
+import { AUDIT_LOG_MAX_LIMIT } from "../api/safe.js";
 import { resolveContext } from "../config/resolve.js";
 import { activePlatform, setActivePlatform } from "../config/store.js";
 import { group, groupChildren } from "../help/grouped-help.js";
@@ -396,7 +397,10 @@ export function adminCommand(): Command {
     role
       .command(`${verb} <role>`)
       .description(`${grant ? "Grant" : "Revoke"} a permission on a custom role (403 on built-in)`)
-      .requiredOption("--resource-type <t>", "resource type (e.g. catalog)")
+      .requiredOption(
+        "--resource-type <t>",
+        "resource type: knowledge_network|catalog|resource|tool_box|function|mcp|skill",
+      )
       .option("--resource-id <id>", "resource id ('*' = whole type)", "*")
       .requiredOption("--operations <list>", "comma-separated operations")
       .action(async (roleId: string, opts, cmd: Command) => {
@@ -444,10 +448,9 @@ export function adminCommand(): Command {
       .option("--name <s>", "filter by name")
       .option("--page <n>", "page", int, 1)
       .option("--size <n>", "page size", int, DEFAULT_LIST_LIMIT);
-    (isLlm
-      ? list.option("--series <s>", "model series")
-      : list.option("--type <t>", "model type")
-    ).action(async (opts, cmd: Command) => {
+    // No `--series` on llm list: mf-model-manager validates `series` but never
+    // filters by it, so the flag only looked like a filter.
+    (isLlm ? list : list.option("--type <t>", "model type")).action(async (opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).models[ns].list({
           name: opts.name,
@@ -579,27 +582,55 @@ export function adminCommand(): Command {
       printJson(await clientFrom(cmd).admin.licenseFingerprint(), outputOptions(cmd));
     });
 
-  admin
+  const audit = admin
     .command("audit")
-    .description("Audit log queries")
+    .description("Audit trail: management mutations and token-gate refusals (bkn-safe)");
+  audit
     .command("list")
-    .description("List login audit events")
-    .option("--user <name>", "filter by user")
-    .option("--start <time>", "start time")
-    .option("--end <time>", "end time")
-    .option("--page <n>", "page", int, 1)
-    .option("--size <n>", "page size", int, 30)
+    .description("List audit log entries, newest first → {logs, total}")
+    .option("--actor-id <id>", "token subject id of the actor")
+    .option("--request-id <id>", "all rows written for one mutating HTTP request")
+    .option("--resource <noun>", "route noun, e.g. users, role-bindings, policies")
+    .option("--action <verb>", "business verb, e.g. create, grant, revoke, reset_password")
+    .option("--target-id <id>", "target id")
+    .option("--failed-only", "only refused and failed attempts (HTTP 4xx/5xx)")
+    .option("--from <time>", "created at or after this RFC 3339 timestamp (inclusive)")
+    .option("--to <time>", "created before this RFC 3339 timestamp (exclusive)")
+    .option("--before-id <id>", "keyset tiebreaker for rows sharing the --to timestamp")
+    .option("--offset <n>", "rows to skip", int)
+    .option("--limit <n>", `page size, 0..${AUDIT_LOG_MAX_LIMIT}`, int, DEFAULT_LIST_LIMIT)
+    // Earlier spellings of the time bounds; hidden so help shows one name each.
+    .addOption(new Option("--start <time>", "alias of --from").hideHelp())
+    .addOption(new Option("--end <time>", "alias of --to").hideHelp())
     .action(async (opts, cmd: Command) => {
+      if (opts.start !== undefined && opts.from !== undefined) {
+        throw new InputError("--start is an alias of --from; pass only one.");
+      }
+      if (opts.end !== undefined && opts.to !== undefined) {
+        throw new InputError("--end is an alias of --to; pass only one.");
+      }
       printJson(
         await clientFrom(cmd).admin.auditList({
-          user: opts.user,
-          start: opts.start,
-          end: opts.end,
-          page: opts.page,
-          size: opts.size,
+          actorId: opts.actorId,
+          requestId: opts.requestId,
+          resource: opts.resource,
+          action: opts.action,
+          targetId: opts.targetId,
+          failedOnly: Boolean(opts.failedOnly),
+          from: opts.from ?? opts.start,
+          to: opts.to ?? opts.end,
+          beforeId: opts.beforeId,
+          offset: opts.offset,
+          limit: opts.limit,
         }),
         outputOptions(cmd),
       );
+    });
+  audit
+    .command("get <id>")
+    .description("Get one audit log entry")
+    .action(async (id: string, _opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).admin.auditGet(id), outputOptions(cmd));
     });
   const adminConfig = admin.command("config").description("Admin CLI config (active platform)");
   adminConfig

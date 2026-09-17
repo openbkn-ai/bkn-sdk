@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { Command } from "commander";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OperationReceipt } from "../../src/api/trace-lifecycle.js";
 import { renderTechnicalTraceDetail, traceCommand } from "../../src/commands/trace.js";
+import { writeVersionCheckCache } from "../../src/config/store.js";
 
 function receipt(status: "completed" | "failed"): OperationReceipt {
   return {
@@ -115,7 +117,9 @@ describe("trace lifecycle CLI contract", () => {
       "--status",
       "--service",
       "--tool",
+      "--agent-or-app",
       "--trace-id",
+      "--keyword",
       "--error-keyword",
       "--conversation-id",
       "--interaction-id",
@@ -186,5 +190,68 @@ describe("trace lifecycle CLI contract", () => {
     expect(text).toContain("Result: 返回 1 条记录。");
     expect(text).toContain("Service: context-loader");
     expect(text).not.toContain("业务依据");
+  });
+});
+
+describe("trace search CLI query mapping", () => {
+  function cli(): Command {
+    const root = new Command("openbkn")
+      .exitOverride()
+      .option("--base-url <url>")
+      .option("--token <t>");
+    root.addCommand(traceCommand());
+    return root;
+  }
+  const base = ["--base-url", "https://demo.example.com", "--token", "t", "trace", "search"];
+
+  beforeEach(() => {
+    writeVersionCheckCache("https://demo.example.com", {
+      serverVersion: "0.1.5",
+      checkedAt: new Date().toISOString(),
+    });
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+  function mockFetch(): ReturnType<typeof vi.fn> {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ entries: [], total: 0 }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+  const sent = (fetchMock: ReturnType<typeof vi.fn>) =>
+    Object.fromEntries(new URL(fetchMock.mock.calls[0]?.[0] as string).searchParams);
+
+  it("sends service, tool, agent_or_app, keyword and error_keyword as separate filters", async () => {
+    const fetchMock = mockFetch();
+    await cli().parseAsync(
+      [
+        ...base,
+        "--service",
+        "context-loader",
+        "--tool",
+        "run_sql",
+        "--agent-or-app",
+        "sales-agent",
+        "--keyword",
+        "cypher",
+        "--error-keyword",
+        "timeout",
+        "--limit",
+        "5",
+      ],
+      { from: "user" },
+    );
+    expect(sent(fetchMock)).toEqual({
+      limit: "5",
+      service: "context-loader",
+      tool: "run_sql",
+      agent_or_app: "sales-agent",
+      keyword: "cypher",
+      error_keyword: "timeout",
+    });
   });
 });
