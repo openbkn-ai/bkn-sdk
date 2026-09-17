@@ -119,9 +119,14 @@ Order.where((Order.total_amount > Decimal("10000")) & Order.paid_at.exists()).or
     Order.total_amount.desc()
 ).select(Order.order_no, Order.total_amount).take(20)
 
-for order in Order.iterate(page_size=500):  # 按 limit/offset 翻页
+for order in Order.iterate(page_size=500):  # 游标翻页；旧部署回退到 limit/offset
     ...
+
+page = Order.objects().page(limit=100)
+next_page = Order.objects().page(limit=100, cursor=page.next_cursor)  # 末页为 None
 ```
+
+当前 ontology-query 契约使用不透明游标翻页：把响应里的 `paging.next_cursor` 作为 `cursor` 连同同一查询回传，末页为 `null`。在此之前构建的部署（现网的 0.1.5）不返回 `paging`，但支持 `offset`，所以 `iterate()` 在首个响应带游标时沿游标翻页，否则回退到 `limit`/`offset`，遇到短页即停止。`page(offset=...)` 仍照常发送 `offset`；同时传 `offset` 和 `cursor` 会报错。
 
 `~` 在平台表达得了的地方对条件取反：比较运算符互相反转，`in` / `like` / `exist` 各有配对的否定式，`and` / `or` 按德摩根律取反。`match` 和 `knn` 在算子枚举里没有对立面，所以对它们用 `~` 会直接报错，而不是现编一个。
 
@@ -137,7 +142,7 @@ for order in Order.iterate(page_size=500):  # 按 limit/offset 翻页
 
 ## 聚合
 
-对象集上没有 `sum()` 或 `group_by()`，因为平台没有对应的端点：实例查询接受条件、limit、offset 和属性选择，`need_total` 给行数。把所有行拉回本地再聚合，是把谎言包装成 API。
+对象集上没有 `sum()` 或 `group_by()`，因为平台没有对应的端点：实例查询接受条件、排序、limit、cursor（或 offset）和属性选择，`need_total` 给行数。把所有行拉回本地再聚合，是把谎言包装成 API。
 
 平台的聚合面是**指标**，而且比前者更强 —— 维度、对聚合值的过滤、排序、时间窗：
 
@@ -145,7 +150,7 @@ for order in Order.iterate(page_size=500):  # 按 limit/offset 翻页
 from bkn.metrics import Gmv
 
 Gmv.query(
-    time={"start": 1751328000, "end": 1753920000, "step": "day"},  # unix 秒
+    time={"start": 1751328000000, "end": 1753920000000, "step": "day"},  # unix 毫秒
     analysis_dimensions=["channel_id"],
     condition=Order.order_status == "paid",
     having={"field": "gmv", "operation": ">", "value": 100},
@@ -153,7 +158,7 @@ Gmv.query(
 )
 ```
 
-指标是从它挂载的对象类进入生成包的，所以 `Gmv.__dimensions__` 记着该工具唯一接受的那些切分维度，传错的在发请求之前就被拒。时间规则也在本地检查：`instant=True` 取一个时间点，取序列必须给 `step`，`start` / `end` 必须成对。注意单位：`query_metric` 文档写的是 **unix 秒**，而同一指标的 logic-property 参数文档写的是毫秒 —— 不同的调用路径，不同的单位。
+指标是从它挂载的对象类进入生成包的，所以 `Gmv.__dimensions__` 记着该工具唯一接受的那些切分维度，传错的在发请求之前就被拒。时间规则也在本地检查：`instant=True` 取一个时间点，取序列必须给 `step`，`start` / `end` 必须成对。注意单位：`start` / `end` 是 **unix 毫秒**（端点自己的示例是 `1735689600000`）；小于 `1e12` 的值——也就是秒级时间戳的样子——会被直接拒绝，而不是悄悄查询 1970 年 1 月。
 
 传输是 `POST …/metrics/{metric_id}/data`，和其他所有读走同一层 REST。条件是**合并而不是覆盖**：平台把指标定义自带的条件、这里传的条件、时间范围三者 AND 起来。`metrics=` 参数把同比环比 / 占比那一块逐字透传。
 

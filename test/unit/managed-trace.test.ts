@@ -156,17 +156,7 @@ function completion(reason = "answer_completed") {
   return {
     completion_manifest_version: "3.0.0",
     completion_reason: reason,
-    claims: [
-      {
-        claim_id: "claim-1",
-        claim_type: "answer",
-        materiality: "material" as const,
-        claim_status: "asserted" as const,
-        content_artifact_ref: "artifact:answer-1",
-        required_support_roles: ["calculation_input"],
-        supports: [],
-      },
-    ],
+    claims: ["claim-1"],
   };
 }
 

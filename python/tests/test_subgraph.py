@@ -235,10 +235,30 @@ def test_the_path_length_is_the_number_of_hops(deploy: Deploy) -> None:
     assert deploy.bodies[0]["direction"] == "forward"
 
 
-def test_json_is_asked_for(deploy: Deploy) -> None:
+def test_the_rest_walk_sends_no_response_format(deploy: Deploy) -> None:
+    """`SubGraphQueryBaseOnSource` defines no `response_format`."""
     AwardWinners.team.then(Teams.confederation).of(seed())
 
-    assert deploy.bodies[0]["response_format"] == "json"
+    assert "response_format" not in deploy.bodies[0]
+
+
+def test_the_network_id_is_encoded_in_the_path(
+    deploy: Deploy, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raw: list[str] = []
+    original = deploy.handle
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        raw.append(request.url.raw_path.decode("ascii"))
+        return original(request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+    monkeypatch.setattr(http_module, "_client", lambda _ctx: client)
+    monkeypatch.setattr(AwardWinners, "__kn_id__", "kn/a b")
+
+    AwardWinners.team.then(Teams.confederation).of(seed())
+
+    assert raw[0] == "/api/ontology-query/v1/knowledge-networks/kn%2Fa%20b/subgraph"
 
 
 def test_no_managed_session_is_opened_for_a_walk(deploy: Deploy) -> None:

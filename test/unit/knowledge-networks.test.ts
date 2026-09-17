@@ -94,7 +94,7 @@ describe("getKnowledgeNetwork", () => {
 });
 
 describe("create + delete", () => {
-  it("create POSTs name + branch + base_branch", async () => {
+  it("create POSTs name + branch, and no base_branch the contract does not define", async () => {
     const { createKnowledgeNetwork } = await import("../../src/api/knowledge-networks.js");
     const f = mockFetch();
     await createKnowledgeNetwork(ctx, { name: "demo" });
@@ -103,7 +103,6 @@ describe("create + delete", () => {
     expect(JSON.parse(call[1].body as string)).toEqual({
       name: "demo",
       branch: "main",
-      base_branch: "",
     });
   });
   it("delete DELETEs by id", async () => {

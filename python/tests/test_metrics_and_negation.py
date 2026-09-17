@@ -64,7 +64,7 @@ def deploy(monkeypatch: pytest.MonkeyPatch) -> Deploy:
     return stub
 
 
-SERIES = {"start": 1751328000, "end": 1753920000, "step": "day"}
+SERIES = {"start": 1751328000000, "end": 1753920000000, "step": "day"}
 
 
 # ---- the request -------------------------------------------------------------
@@ -75,7 +75,8 @@ def test_the_network_and_metric_are_in_the_path_not_the_body(deploy: Deploy) -> 
 
     assert deploy.paths == [f"/api/ontology-query/v1/knowledge-networks/{KN}/metrics/m_gmv/data"]
     assert deploy.bodies[0]["time"] == SERIES
-    assert deploy.bodies[0]["response_format"] == "json"
+    # `MetricQueryRequestBody` defines no `response_format`.
+    assert "response_format" not in deploy.bodies[0]
 
 
 def test_dimensions_condition_having_and_ordering_all_travel(deploy: Deploy) -> None:
@@ -106,7 +107,7 @@ def test_plain_pairs_order_the_same_way(deploy: Deploy) -> None:
 def test_absent_arguments_are_omitted_rather_than_sent_empty(deploy: Deploy) -> None:
     Gmv.query(time=SERIES)
 
-    assert set(deploy.bodies[0]) == {"response_format", "time"}
+    assert set(deploy.bodies[0]) == {"time"}
 
 
 def test_a_metric_query_opens_no_session_of_its_own(deploy: Deploy) -> None:
@@ -169,6 +170,40 @@ def test_a_half_open_window_is_refused(deploy: Deploy) -> None:
 def test_an_unknown_step_is_refused(deploy: Deploy) -> None:
     with pytest.raises(InputError, match="`step` must be one of"):
         Gmv.query(time={"start": 1, "end": 2, "step": "fortnight"})
+
+
+@pytest.mark.parametrize(
+    "window",
+    [{"start": 1751328000, "end": 1753920000000}, {"start": 1751328000000, "end": 1753920000}],
+)
+def test_a_window_in_seconds_is_refused(deploy: Deploy, window: dict[str, int]) -> None:
+    """The endpoint takes milliseconds; seconds would silently query January 1970."""
+    with pytest.raises(InputError, match="milliseconds"):
+        Gmv.query(time={**window, "step": "day"})
+
+    assert deploy.bodies == []
+
+
+def test_metric_and_network_ids_are_encoded_in_the_path(
+    deploy: Deploy, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raw: list[str] = []
+    original = deploy.handle
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        raw.append(request.url.raw_path.decode("ascii"))
+        return original(request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+    monkeypatch.setattr(http_module, "_client", lambda _ctx: client)
+
+    class Odd(Metric):
+        __kn_id__ = "kn/a"
+        __bkn_id__ = "m?1"
+
+    Odd.query(time=SERIES)
+
+    assert raw[0] == "/api/ontology-query/v1/knowledge-networks/kn%2Fa/metrics/m%3F1/data"
 
 
 def test_a_metric_with_no_time_dimension_can_omit_the_window(deploy: Deploy) -> None:

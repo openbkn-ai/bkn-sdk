@@ -35,6 +35,25 @@ function firstCall(f: typeof fetch): CallArgs {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("model management (mf-model-manager)", () => {
+  it("keeps a 19-digit numeric model_id lossless on list and get", async () => {
+    const raw = '{"count":1,"data":[{"model_id":1234567890123456789,"model_name":"m"}]}';
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(raw, { status: 200 })),
+    );
+    const listed = (await listLlmModels(ctx)) as { data: Array<{ model_id: unknown }> };
+    expect(listed.data[0]?.model_id).toBe(1234567890123456789n);
+    const small = (await listSmallModels(ctx)) as { data: Array<{ model_id: unknown }> };
+    expect(small.data[0]?.model_id).toBe(1234567890123456789n);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response('{"model_id":1234567890123456789}', { status: 200 })),
+    );
+    expect(
+      ((await getLlmModel(ctx, "1234567890123456789")) as { model_id: unknown }).model_id,
+    ).toBe(1234567890123456789n);
+  });
+
   it("llm list hits /llm/list with paging", async () => {
     const f = mockFetch();
     await listLlmModels(ctx, { name: "gpt", limit: 5 });

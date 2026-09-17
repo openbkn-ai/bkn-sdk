@@ -28,7 +28,12 @@ import pytest
 import bkn_osdk
 from bkn_osdk import Context, HttpError, InputError, SchemaDriftError, call
 from bkn_osdk.codegen.emit import GenOptions, generate
-from bkn_osdk.lifecycle import _catalog, current_interaction, with_context_retry
+from bkn_osdk.lifecycle import (
+    _catalog,
+    current_interaction,
+    ensure_interaction,
+    with_context_retry,
+)
 from bkn_osdk.mcp import call_tool, tool_catalog
 from bkn_osdk.schema import KnSchema, fingerprint
 
@@ -397,25 +402,28 @@ def test_a_host_turn_in_the_environment_is_joined_rather_than_replaced(
 ) -> None:
     """How the sandbox propagates its turn: two environment variables, no argument
     passing. A read made under them lands on the caller's interaction."""
-    with bkn_osdk.session(traced=True) as scoped:
-        host = current_interaction(scoped, kn_id)
+    # The host turn must still be active while the inherited read runs — a
+    # finished interaction is refused as `interaction_terminal`. So it is opened
+    # outside any traced scope (the read below must not see one) and finished
+    # only after the read, as a real host would.
+    with ensure_interaction(bkn_osdk.resolve_context(), kn_id) as host:
         conversation_id, interaction_id = host.conversation_id, host.interaction_id
 
-    monkeypatch.setenv("BKN_CONVERSATION_ID", conversation_id)
-    monkeypatch.setenv("BKN_INTERACTION_ID", interaction_id)
-    context = bkn_osdk.resolve_context()
-    sent: dict[str, Any] = {}
+        monkeypatch.setenv("BKN_CONVERSATION_ID", conversation_id)
+        monkeypatch.setenv("BKN_INTERACTION_ID", interaction_id)
+        context = bkn_osdk.resolve_context()
+        sent: dict[str, Any] = {}
 
-    def send(bkn_context: dict[str, str] | None) -> Any:
-        sent["context"] = bkn_context
-        return call_tool(
-            context,
-            kn_id,
-            "get_kn_detail",
-            {"kn_id": kn_id, **({"bkn_context": bkn_context} if bkn_context else {})},
-        )
+        def send(bkn_context: dict[str, str] | None) -> Any:
+            sent["context"] = bkn_context
+            return call_tool(
+                context,
+                kn_id,
+                "get_kn_detail",
+                {"kn_id": kn_id, **({"bkn_context": bkn_context} if bkn_context else {})},
+            )
 
-    with_context_retry(context, kn_id, send)
+        with_context_retry(context, kn_id, send)
 
     assert context.traced is False  # nothing asked for a trace; the turn was inherited
     assert sent["context"] == {
@@ -425,12 +433,11 @@ def test_a_host_turn_in_the_environment_is_joined_rather_than_replaced(
 
 
 def test_the_catalog_says_which_lifecycle_contract_this_deploy_speaks(context: Context) -> None:
-    """`conversation_mode` is declared by one contract and absent in the other, so
-    it is read from the catalog rather than guessed."""
+    """The start tool is in the catalog; `conversation_mode` is sent regardless of
+    what its schema publishes, because the contract requires it on every start."""
     catalog = _catalog(context)
 
     assert "bkn_start_interaction" in catalog.tools
-    assert isinstance(catalog.declares_conversation_mode, bool)
 
 
 # ---- the drift gate ----------------------------------------------------------------

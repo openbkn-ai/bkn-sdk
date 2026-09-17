@@ -166,6 +166,19 @@ def test_instance_search_narrows_to_the_types_it_was_given(sent: Sent) -> None:
     assert "max_object_types" not in sent.arguments  # unset stays unsent
 
 
+def test_instance_search_narrows_to_concept_groups(sent: Sent) -> None:
+    """`SearchInstanceRequest.concept_groups` limits recall to those groups."""
+    search_instances(KN, "Messi", concept_groups=["cg_people"], context=CONTEXT)
+
+    assert sent.arguments["concept_groups"] == ["cg_people"]
+
+
+def test_concept_groups_are_unsent_when_not_given(sent: Sent) -> None:
+    search_instances(KN, "Messi", context=CONTEXT)
+
+    assert "concept_groups" not in sent.arguments
+
+
 # ---- the opt-in schema check -------------------------------------------------
 
 
