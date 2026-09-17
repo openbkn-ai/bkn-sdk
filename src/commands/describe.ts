@@ -44,6 +44,7 @@ const ID_SOURCES: Record<string, string> = {
   "at-id": "openbkn bkn action-type list <kn-id>",
   "metric-id": "openbkn bkn metric list <kn-id>",
   "skill-id": "openbkn skill list",
+  "mcp-id": "openbkn mcp list",
   "box-id": "openbkn toolbox list",
   "tool-id": "openbkn tool list --toolbox <box-id>",
   "conversation-id": "openbkn trace conversations list",
@@ -96,6 +97,7 @@ const GROUP_ID_SOURCES: Array<[RegExp, string]> = [
   [/^vega connector-type\b/, "openbkn vega connector-type list"],
   [/^resource\b/, "openbkn resource list"],
   [/^skill\b/, "openbkn skill list"],
+  [/^mcp\b/, "openbkn mcp list"],
   [/^toolbox\b/, "openbkn toolbox list"],
   [/^function\b/, "openbkn function list --toolbox <box-id>"],
   [/^api\b/, "openbkn api list --toolbox <box-id>"],
@@ -107,6 +109,7 @@ const GROUP_ID_SOURCES: Array<[RegExp, string]> = [
   [/^admin role\b/, "openbkn admin role list"],
   [/^admin llm\b/, "openbkn admin llm list"],
   [/^admin small-model\b/, "openbkn admin small-model list"],
+  [/^admin audit\b/, "openbkn admin audit list"],
   [/^model llm\b/, "openbkn model llm list"],
   [/^model small\b/, "openbkn model small list"],
   [/^bkn object-type\b/, "openbkn bkn object-type list <kn-id>"],
@@ -211,7 +214,9 @@ function describeNode(cmd: Command, parentPath: string[], depth: number): Descri
   if (depth <= 0) return children.length ? { ...skeleton, hasCommands: true } : skeleton;
 
   const aliases = cmd.aliases();
-  const options = cmd.options.filter((o) => o.long !== "--help");
+  // Hidden options are deprecated aliases or removed flags kept only to
+  // explain themselves; they are not part of the self-described surface.
+  const options = cmd.options.filter((o) => o.long !== "--help" && !o.hidden);
   return {
     ...skeleton,
     ...(aliases.length ? { aliases } : {}),

@@ -200,13 +200,13 @@ def execute_tool(
 ) -> Any:
     """执行一个已发布函数工具.
 
-    以调用者身份执行工具，返回工具的原始响应。 `toolbox_id` 与 `tool_id` 必须取自
-    `search_capabilities`（`owner_id` / `capability_id`）；`arguments` 按其返回的
-    `input_schema` 填，只放业务参数——令牌、会话 id 等传输信息由平台携带，写进 `arguments`
-    既不生效也会被记进调用参数。 **函数自身报错同样是
-    200**：调用成功不等于业务成功，需读响应体判断。
-    工具已停用、所属工具箱未发布，或当前账户无权访问时返回 400，`message` 说明原因，
-    请求不会打到执行代理。
+    以知识网络托管代理执行工具，返回工具的原始响应；真实调用者仍用于网络级鉴权和审计。
+    `toolbox_id` 与 `tool_id` 必须取自 `search_capabilities`（`owner_id` /
+    `capability_id`）；`arguments` 按其返回的 `input_schema` 填，只放业务参数——令牌、会话 id
+    等传输信息由平台携带，写进 `arguments` 既不生效也会被记进调用参数。 **函数自身报错同样是
+    200**：调用成功不等于业务成功，需读响应体判断。 工具未挂载、已停用、所属工具箱/MCP Server
+    未发布、代理未同步，或调用者没有知识网络 `execute` 权限时会拒绝，`message`
+    说明原因，请求不会执行目标工具。
 
     Args:
         kn_id: 知识网络 ID，须与 `search_capabilities` 所用一致。工具必须已挂载到该网络才可调用。
@@ -360,7 +360,12 @@ def get_action_info(
     `_dynamic_tools`。Agent 可以直接把它塞进自己的工具列表。 不传 `_instance_identities`
     时召回的是行动类级别的定义；传了则返回已就该批 实例实例化过的参数。
     工具声明了输出契约时，还会带上 `output_schema`——执行结果的形状，供 Agent 把
-    `get_action_execution` 拿到的 `result` 复述成自然语言。
+    `get_action_execution` 拿到的 `result` 复述成自然语言。 **权限**：调用方需具备该行动类的
+    `view_detail` 权限，以及绑定对象类的 `query_data` 权限；无需另行授予底层工具或 MCP
+    的权限。调用方无权直接读取绑定 工具时，服务先核验其行动类 `view_detail`
+    权限，再以知识网络托管代理账号读取该
+    行动当前发布绑定的工具定义，仅取名称、描述与参数和输出 schema，不包含源码与
+    服务地址，也不授予执行权限。读取绑定工具定义被拒绝时返回 403，而非依赖服务 不可用。
 
     Args:
         kn_id: 知识网络 ID。
@@ -787,21 +792,29 @@ def query_instance_subgraph(
     """按关系路径查询对象子图.
 
     `relation_type_paths` 可以放多条路径，每条独立查询、独立返回一个子图， 顺序与请求一致。
-    **路径的顺序和方向是硬约束，写错会静默查出错误结果**： - `object_types`
-    按节点出现顺序排列；n 跳路径长度为 n+1。即使某个节点没有 过滤条件，也必须占位保留其
-    `id`，否则顺序错位。 - `relation_types` 按边出现顺序排列，长度为 n；第 i 条边的
-    `source_object_type_id` 必须等于 `object_types[i].id`， `target_object_type_id` 必须等于
-    `object_types[i+1].id`。 -
-    边的方向由这组起终点与关系类自身定义的起终点是否一致决定：一致为正向， 相反为反向。
+    **路径按实际走过的顺序写**： - `object_types` 按节点出现顺序排列；n 跳路径长度为
+    n+1。即使某个节点没有 过滤条件，也必须占位保留其 `id`，否则顺序错位。 - `relation_types`
+    按边出现顺序排列，长度为 n；第 i 条边连接 `object_types[i]` 与
+    `object_types[i+1]`，每条边只需给 `relation_type_id`。 -
+    路径可以逆着关系类定义走。正向还是反向由服务端对照关系类定义判断：相邻
+    节点依次为关系类的起点、终点即正向，依次为终点、起点即反向；两者都不是则 返回 400。 -
+    `source_object_type_id` / `target_object_type_id` 可省略，表示**本次遍历**
+    从哪个节点走到哪个节点（即 `object_types[i].id` / `object_types[i+1].id`），
+    不是关系类定义的起终点：反向遍历时两者与关系类定义相反。填写时必须与 相邻节点一致。 -
+    `direction`（`forward` / `backward`）可省略。只有关系类的起点和终点是同一
+    个对象类（自引用）时，相邻节点区分不出方向，默认正向；要反向走须写 `backward`。
+    路径不合法时返回 400，`details` 为下游错误码加说明，指出第几条边（从 1
+    起）、哪个关系类、路径要求的起止节点与实际填写或关系类定义的起止节点，例如
+    `OntologyQuery.KnowledgeNetwork.InvalidParameter.TypePath: 第 2 条边 rel_order_user
+    与路径节点不一致：路径要求 user → order，当前填写 order → user。…`。
     **取主键**：子图对象的主键在 `_instance_identity` 里，与 `query_object_instance`
     同名同义。要把子图结果喂给 [action.yaml](action.yaml) 或
     [logic-property.yaml](logic-property.yaml) 时， 从这里取键值对，不要自己拼。
 
     Args:
         relation_type_paths: 关系路径集合。多条路径同时查询，各自返回独立子图。 元素字段: limit,
-            object_types{condition, id, limit, sort},
-            relation_types{relation_type_id, source_object_type_id,
-            target_object_type_id}。
+            object_types{condition, id, limit, sort}, relation_types{direction,
+            relation_type_id, source_object_type_id, target_object_type_id}。
 
     Returns the platform's own payload: entries.
     """
@@ -1075,11 +1088,14 @@ def run_sql(
     """对数据资源执行只读 SQL.
 
     以 MySQL 方言执行**只读** SQL。表名不写物理表名，写占位符
-    `{{.<resource_id>}}`，由服务端解析到真实数据源。 标识符需要引用时使用反引号（如 ``
-    `order_id` ``）；双引号在 MySQL 方言下是 字符串字面量，不能用于标识符。
-    **两条硬约束，违反直接 400，SQL 不会下发**： 1. **必须引用占位符**。SQL 里没有
-    `{{.resource_id}}` 时报 `sql must reference at least one data resource via the
-    {{.resource_id}} placeholder`
+    `{{.<resource_id>}}`，由服务端解析到真实数据源。 **权限**：调用者必须对 SQL
+    引用的每个数据资源都持有 Vega 资源的 `view_detail`
+    权限——与其他遵循知识网络授权的查询接口不同，通过对象类获得的授权不覆盖本接口，
+    仅通过对象类获得授权的调用方应改用 `/kn/query_object_instance` 或 `/kn/run_cypher`。
+    标识符需要引用时使用反引号（如 `` `order_id` ``）；双引号在 MySQL 方言下是
+    字符串字面量，不能用于标识符。 **两条硬约束，违反直接 400，SQL 不会下发**： 1.
+    **必须引用占位符**。SQL 里没有 `{{.resource_id}}` 时报 `sql must reference at least one
+    data resource via the {{.resource_id}} placeholder`
     ——这既是定位数据源的唯一途径，也挡住了绕开权限直接写物理表名。 2. **必须是单条只读
     `SELECT` 语句**。端到端兼容性以 vega 的只读策略为准； 虽然本服务的本地守卫可接受以 `WITH`
     开头的语句，但 vega 当前会拒绝 CTE， 因此调用方**不得使用 `WITH` / CTE 或 `UNION` /
@@ -1135,7 +1151,9 @@ def search_capabilities(
     """检索该知识网络已挂载的全部能力.
 
     在一个排序空间里返回该知识网络已挂载、且当前账户可见的能力：Skill、函数工具、 API 工具与
-    MCP 工具混排，按相关度给出，而不是每类一段。 每条带
+    MCP 工具混排，按相关度给出，而不是每类一段。 **需要该知识网络本身的 `view_detail`
+    权限**（#1550）。只有对象类等子资源权限，或对某个 Skill /
+    工具的单独授权，都会被拒绝（403，`message` 说明缺的是网络本身的查看权限）。 每条带
     `capability_type`，据此决定下一步：`function` 与 `mcp_tool` 用 `execute_tool`
     调用（命中带裁剪过的 `input_schema`，只保留业务入参，服务地址等 传输信息不下发），`skill`
     用 `get_skill_content` 读取、`execute_skill` 执行。 `types` 按能力类型收窄；函数工具还可用

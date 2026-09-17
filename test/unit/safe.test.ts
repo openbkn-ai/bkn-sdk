@@ -6,12 +6,14 @@ import {
   createRoleSafe,
   createUserSafe,
   deleteUserSafe,
+  getAuditLogSafe,
   getDepartmentMembersSafe,
   getLicenseFingerprintSafe,
   getLicenseSafe,
   getUserRolesSafe,
   getUserSafe,
   importLicenseSafe,
+  listAuditLogsSafe,
   listDepartmentsSafe,
   listRolesSafe,
   listUsersSafe,
@@ -153,6 +155,75 @@ describe("safe admin api → /api/safe/v1/admin", () => {
 
   it("notOnSafe throws an InputError-style message", () => {
     expect(() => notOnSafe("audit list")).toThrow(/not available on bkn-safe/);
+  });
+});
+
+describe("safe audit api → /api/safe/v1/admin/audit-logs", () => {
+  it("listAuditLogs: sends every audit.yaml filter under its wire name", async () => {
+    const f = mockFetch({ logs: [], total: 0 });
+    await listAuditLogsSafe(ctx, {
+      actorId: "u-1",
+      requestId: "req-1",
+      resource: "users",
+      action: "create",
+      targetId: "t-1",
+      failedOnly: true,
+      from: "2026-09-01T00:00:00Z",
+      to: "2026-09-02T00:00:00Z",
+      beforeId: "a-9",
+      offset: 0,
+      limit: 500,
+    });
+    const u = new URL(call(f)[0]);
+    expect(u.pathname).toBe("/api/safe/v1/admin/audit-logs");
+    expect(Object.fromEntries(u.searchParams)).toEqual({
+      actor_id: "u-1",
+      request_id: "req-1",
+      resource: "users",
+      action: "create",
+      target_id: "t-1",
+      failed_only: "true",
+      from: "2026-09-01T00:00:00Z",
+      to: "2026-09-02T00:00:00Z",
+      before_id: "a-9",
+      offset: "0",
+      limit: "500",
+    });
+  });
+
+  it("listAuditLogs: omits unset filters and failed_only=false", async () => {
+    const f = mockFetch({ logs: [], total: 0 });
+    await listAuditLogsSafe(ctx, { failedOnly: false });
+    expect(new URL(call(f)[0]).search).toBe("");
+  });
+
+  it("listAuditLogs: rejects a limit above 500 or a negative offset before sending", async () => {
+    const f = mockFetch({ logs: [], total: 0 });
+    await expect(listAuditLogsSafe(ctx, { limit: 501 })).rejects.toThrow(/between 0 and 500/);
+    await expect(listAuditLogsSafe(ctx, { offset: -1 })).rejects.toThrow(/non-negative/);
+    expect((f as unknown as { mock: { calls: Call[] } }).mock.calls).toHaveLength(0);
+  });
+
+  it("listAuditLogs: keeps int64 total and seq lossless", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            '{"logs":[{"id":"a-1","seq":9223372036854775807}],"total":9007199254740993}',
+            { status: 200 },
+          ),
+      ),
+    );
+    const page = await listAuditLogsSafe(ctx);
+    expect(page.total).toBe(9007199254740993n);
+    expect(page.logs[0]?.seq).toBe(9223372036854775807n);
+  });
+
+  it("getAuditLog: GET /admin/audit-logs/:id (encoded)", async () => {
+    const f = mockFetch({ id: "a/1" });
+    await getAuditLogSafe(ctx, "a/1");
+    expect(new URL(call(f)[0]).pathname).toBe("/api/safe/v1/admin/audit-logs/a%2F1");
   });
 });
 

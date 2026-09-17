@@ -287,7 +287,9 @@ export function traceCommand(): Command {
     .option("--status <status>", "execution status")
     .option("--service <service>", "exact producing service")
     .option("--tool <tool>", "exact root tool")
+    .option("--agent-or-app <name>", "agent or application")
     .option("--trace-id <id>", "exact Trace ID")
+    .option("--keyword <text>", "trace, request, operation, or error keyword")
     .option("--error-keyword <text>", "case-insensitive error text")
     .option("--conversation-id <id>", "exact conversation ID")
     .option("--interaction-id <id>", "exact interaction ID")
@@ -301,7 +303,9 @@ export function traceCommand(): Command {
           status: opts.status,
           service: opts.service,
           tool: opts.tool,
+          agentOrApp: opts.agentOrApp,
           traceId: opts.traceId,
+          keyword: opts.keyword,
           errorKeyword: opts.errorKeyword,
           conversationId: opts.conversationId,
           interactionId: opts.interactionId,

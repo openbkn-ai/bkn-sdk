@@ -13,7 +13,7 @@ and the subject must be an admin (super-admin today). `401` = no/invalid token,
 
 ## Status
 
-**Migrated (all but audit).** Response shapes: `{users|roles|departments, total}`;
+**Migrated (audit included since bkn-safe audit.yaml).** Response shapes: `{users|roles|departments, total}`;
 department `parent_id` (not ISF `parent_deps[]`); ids-only for role bindings/members.
 
 | group | commands | endpoint |
@@ -22,7 +22,7 @@ department `parent_id` (not ISF `parent_deps[]`); ids-only for role bindings/mem
 | org | list/get/tree/members/create/update/delete | `…/admin/departments[/:id[/members]]` |
 | role | list/get/members/add-member/remove-member | `…/admin/roles[/:id[/members]]`, `…/role-bindings` |
 | role (new) | create/update/delete | `POST/PUT/DELETE /admin/roles[/:id]` |
-| audit | list | **none** — login-log retired by design → `notOnSafe` (clear error, non-zero exit) |
+| audit | list, get | `GET /admin/audit-logs`, `GET /admin/audit-logs/{id}` (bkn-safe/audit.yaml; management audit trail, not the retired login-log). Was `notOnSafe` until the audit API shipped. |
 
 Lossy mappings (bkn-safe takes fewer fields): `user create` sends account + a
 default initial password (`openbkn`, forced-change on first login), drops

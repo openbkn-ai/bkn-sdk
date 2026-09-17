@@ -14,6 +14,7 @@ import { authFetch } from "./auth-fetch.js";
 import { type FunctionDefinition, functionInputBody } from "./functions.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
+import { sandboxBudgetMs } from "./sandbox-budget.js";
 import { tlsFetch } from "./tls.js";
 import { ensureCompatible } from "./version-check.js";
 
@@ -21,6 +22,11 @@ const PATH = "/api/agent-operator-integration/v1/tool-box";
 
 const IMPEX = "/api/agent-operator-integration/v1/impex";
 export type ImpexType = "toolbox" | "mcp" | "operator";
+/**
+ * What an import does with a component that already exists: `create` refuses
+ * it (400), `upsert` updates it. The service defaults to `create`.
+ */
+export type ImpexMode = "create" | "upsert";
 
 /** Export a toolbox/mcp/operator config as raw `.adp` bytes (GET impex/export). */
 export async function exportConfig(
@@ -46,16 +52,22 @@ export async function exportConfig(
   return buf;
 }
 
-/** Import a previously exported `.adp` config file (POST impex/import, multipart `data`). */
+/**
+ * Import a previously exported `.adp` config file (POST impex/import, multipart
+ * `data`). `mode` is sent only when given, so the service's own default
+ * (`create`) applies otherwise.
+ */
 export async function importConfig(
   ctx: RequestContext,
   filePath: string,
   type: ImpexType = "toolbox",
+  opts: { mode?: ImpexMode } = {},
 ): Promise<unknown> {
   const buf = await readFile(filePath);
   await ensureCompatible(ctx, new URL(`${ctx.baseUrl}${IMPEX}/import/${encodeURIComponent(type)}`));
   const form = new FormData();
   form.append("data", new Blob([new Uint8Array(buf)]), basename(filePath));
+  if (opts.mode) form.append("mode", opts.mode);
   const res = await authFetch(ctx, () =>
     tlsFetch(ctx.insecure, `${ctx.baseUrl}${IMPEX}/import/${encodeURIComponent(type)}`, {
       method: "POST",
@@ -143,7 +155,10 @@ export function createTool(
 
 /** One tool in full: metadata, global parameters, usage rule. */
 export function getTool(ctx: RequestContext, boxId: string, toolId: string): Promise<unknown> {
-  return request(ctx, `${PATH}/${encodeURIComponent(boxId)}/tool/${encodeURIComponent(toolId)}`);
+  return request(ctx, `${PATH}/${encodeURIComponent(boxId)}/tool/${encodeURIComponent(toolId)}`, {
+    // `*_time` fields are nanoseconds — past 2^53, so a plain parse rounds them.
+    responseParser: parseBigIntJSON,
+  });
 }
 
 export interface UpdateToolOptions extends CreateToolOptions {
@@ -181,18 +196,62 @@ export function deleteTools(
   });
 }
 
-export interface ListToolboxesOptions {
-  keyword?: string;
-  limit?: number;
-  offset?: number;
+/** A toolbox's lifecycle. Separate from a tool's own `enabled` / `disabled`. */
+export type ToolboxStatus = "unpublish" | "published" | "offline";
+
+export type SortOrder = "asc" | "desc";
+
+/** A page size the service accepts, or nothing — never `NaN` or `0` on the wire. */
+function pageSizeOf(n: number | undefined): number | undefined {
+  return Number.isFinite(n) && n! > 0 ? n : undefined;
 }
 
+export interface ListToolboxesOptions {
+  /** Filter by toolbox name. */
+  name?: string;
+  /** @deprecated The service never read `keyword`; sent as `name`. */
+  keyword?: string;
+  /** 1-based. */
+  page?: number;
+  /** 1–100; the service defaults to 10. */
+  pageSize?: number;
+  /** @deprecated Use `pageSize`. */
+  limit?: number;
+  sortBy?: "create_time" | "update_time" | "name";
+  sortOrder?: SortOrder;
+  status?: ToolboxStatus;
+  category?: string;
+  createUser?: string;
+  releaseUser?: string;
+  metadataType?: ToolMetadataType;
+  /** Ignore paging and return every toolbox. */
+  all?: boolean;
+}
+
+/**
+ * Toolboxes the caller can `view`. The service pages by `page` / `page_size` —
+ * it has no `offset`, and a `limit` or `keyword` is silently ignored, which is
+ * how a filter that "worked" used to return the first ten boxes unfiltered.
+ */
 export function listToolboxes(
   ctx: RequestContext,
   opts: ListToolboxesOptions = {},
 ): Promise<unknown> {
   return request(ctx, `${PATH}/list`, {
-    query: { keyword: opts.keyword || undefined, limit: opts.limit, offset: opts.offset ?? 0 },
+    query: {
+      page: opts.page,
+      page_size: pageSizeOf(opts.pageSize ?? opts.limit),
+      sort_by: opts.sortBy,
+      sort_order: opts.sortOrder,
+      name: opts.name || opts.keyword || undefined,
+      status: opts.status,
+      category: opts.category || undefined,
+      create_user: opts.createUser || undefined,
+      release_user: opts.releaseUser || undefined,
+      metadata_type: opts.metadataType,
+      all: opts.all ? "true" : undefined,
+    },
+    responseParser: parseBigIntJSON,
   });
 }
 
@@ -200,6 +259,14 @@ export interface ListToolsOptions {
   page?: number;
   pageSize?: number;
   all?: boolean;
+  /** Filter by tool name. */
+  name?: string;
+  status?: "enabled" | "disabled";
+  /** The service defaults to `create_time` here (the toolbox list defaults to `update_time`). */
+  sortBy?: "create_time" | "update_time" | "tool_name";
+  sortOrder?: SortOrder;
+  /** Filter by creator. */
+  userId?: string;
 }
 
 /** List tools inside a toolbox. Backend defaults to page_size=10 (max 100); pass
@@ -212,9 +279,15 @@ export function listTools(
   return request(ctx, `${PATH}/${encodeURIComponent(boxId)}/tools/list`, {
     query: {
       page: opts.page,
-      page_size: Number.isFinite(opts.pageSize) && opts.pageSize! > 0 ? opts.pageSize : undefined,
+      page_size: pageSizeOf(opts.pageSize),
       all: opts.all ? "true" : undefined,
+      name: opts.name || undefined,
+      status: opts.status,
+      sort_by: opts.sortBy,
+      sort_order: opts.sortOrder,
+      user_id: opts.userId || undefined,
     },
+    responseParser: parseBigIntJSON,
   });
 }
 
@@ -248,11 +321,16 @@ export function deleteToolbox(ctx: RequestContext, boxId: string): Promise<unkno
   return request(ctx, `${PATH}/${encodeURIComponent(boxId)}`, { method: "DELETE" });
 }
 
-/** Publish (status=published) or unpublish (status=draft) a toolbox. */
+/**
+ * Move a toolbox through its lifecycle: `published` publishes it, `offline`
+ * takes it down. There is no `draft` — the service knows only
+ * `unpublish` / `published` / `offline`, and `unpublish` is the state a box is
+ * born in rather than the one it is taken down to.
+ */
 export function setToolboxStatus(
   ctx: RequestContext,
   boxId: string,
-  status: "published" | "draft",
+  status: ToolboxStatus,
 ): Promise<unknown> {
   return request(ctx, `${PATH}/${encodeURIComponent(boxId)}/status`, {
     method: "POST",
@@ -278,6 +356,23 @@ function envelope(e: ToolInvokeEnvelope): Record<string, unknown> {
   };
 }
 
+/**
+ * Transport for one tool call. A function tool runs in the sandbox and the
+ * proxy sends nothing until it is over, so `timeout` has to move the client's
+ * abort budget and undici's header deadline too — otherwise the client's 30s
+ * default gives up on a call the service was told it may take longer over.
+ * The upstream body is passed through, so integers are parsed losslessly.
+ */
+function invokeInit(e: ToolInvokeEnvelope) {
+  return {
+    method: "POST",
+    body: envelope(e),
+    timeoutMs: sandboxBudgetMs(e.timeout),
+    headersTimeoutMs: sandboxBudgetMs(e.timeout),
+    responseParser: parseBigIntJSON,
+  } as const;
+}
+
 /** Execute a published+enabled tool through the toolbox proxy. */
 export function executeTool(
   ctx: RequestContext,
@@ -285,10 +380,11 @@ export function executeTool(
   toolId: string,
   e: ToolInvokeEnvelope = {},
 ): Promise<unknown> {
-  return request(ctx, `${PATH}/${encodeURIComponent(boxId)}/proxy/${encodeURIComponent(toolId)}`, {
-    method: "POST",
-    body: envelope(e),
-  });
+  return request(
+    ctx,
+    `${PATH}/${encodeURIComponent(boxId)}/proxy/${encodeURIComponent(toolId)}`,
+    invokeInit(e),
+  );
 }
 
 /** Debug a tool (works on draft/disabled tools too). */
@@ -301,10 +397,7 @@ export function debugTool(
   return request(
     ctx,
     `${PATH}/${encodeURIComponent(boxId)}/tool/${encodeURIComponent(toolId)}/debug`,
-    {
-      method: "POST",
-      body: envelope(e),
-    },
+    invokeInit(e),
   );
 }
 

@@ -156,9 +156,20 @@ Order.where((Order.total_amount > Decimal("10000")) & Order.paid_at.exists()).or
     Order.total_amount.desc()
 ).select(Order.order_no, Order.total_amount).take(20)
 
-for order in Order.iterate(page_size=500):  # pages with limit/offset
+for order in Order.iterate(page_size=500):  # cursor paging, or limit/offset on older deploys
     ...
+
+page = Order.objects().page(limit=100)
+next_page = Order.objects().page(limit=100, cursor=page.next_cursor)  # None on the last page
 ```
+
+The current ontology-query contract pages by an opaque cursor: the response's
+`paging.next_cursor` is sent back as `cursor` with the same query, and is `null`
+on the last page. Deploys built before that change (0.1.5 releases in the field)
+return no `paging` block but honour `offset`, so `iterate()` follows the cursor
+where the first response carries one and otherwise falls back to `limit`/`offset`,
+stopping on a short page. `page(offset=...)` still sends `offset`; passing both
+`offset` and `cursor` raises.
 
 `~` negates a filter where the platform can express it: comparison operators
 invert into each other, `in`/`like`/`exist` have paired negatives, and `and`/`or`
@@ -188,8 +199,8 @@ against a live deploy:
 ## Aggregate
 
 There is no `sum()` or `group_by()` over an object set, because there is no
-endpoint for one: an instance query takes a condition, a limit, an offset and a
-property selection, and `need_total` returns a row count. Pulling every row back
+endpoint for one: an instance query takes a condition, a sort, a limit, a cursor (or
+offset) and a property selection, and `need_total` returns a row count. Pulling every row back
 to aggregate client-side would be a lie dressed as an API.
 
 The platform's aggregation surface is **metrics**, and it is richer than that
@@ -200,7 +211,7 @@ window:
 from bkn.metrics import Gmv
 
 Gmv.query(
-    time={"start": 1751328000, "end": 1753920000, "step": "day"},  # unix seconds
+    time={"start": 1751328000000, "end": 1753920000000, "step": "day"},  # unix ms
     analysis_dimensions=["channel_id"],
     condition=Order.order_status == "paid",
     having={"field": "gmv", "operation": ">", "value": 100},
@@ -212,9 +223,9 @@ Metrics reach the generated package from the object types they are mounted on,
 so `Gmv.__dimensions__` records the only splits the tool accepts and a wrong one
 is refused before the round trip. The time rules are checked locally too:
 `instant=True` takes a point, a series needs a `step`, and `start`/`end` come as
-a pair. Note the unit: `query_metric` documents **unix seconds**, while the same
-metric's logic-property parameters document milliseconds — a different call path
-with a different unit.
+a pair. Note the unit: `start`/`end` are **unix milliseconds** (the endpoint's own
+example is `1735689600000`); a value below `1e12` — which is what a timestamp in
+seconds looks like — is refused rather than silently querying January 1970.
 
 The transport is `POST …/metrics/{metric_id}/data` — the same REST layer as every
 other read. Conditions **merge rather than override**: the platform ANDs the

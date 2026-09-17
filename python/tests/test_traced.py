@@ -223,8 +223,39 @@ def test_the_interaction_is_finished_on_the_way_out(deploy: Deploy) -> None:
     with session(traced=True):
         Tournaments.objects().page(limit=1)
 
+    # `completed` requires an answer and a scope has none, so the turn is
+    # closed as `cancelled` with a reason rather than left active by a refusal.
     assert tool_calls(deploy, "bkn_finish_interaction") == [
-        {"interaction_id": "int_1", "outcome": "completed"}
+        {
+            "interaction_id": "int_1",
+            "outcome": "cancelled",
+            "reason": lifecycle_module.NO_ANSWER_REASON,
+        }
+    ]
+
+
+def test_an_answer_lets_the_turn_close_as_completed(deploy: Deploy) -> None:
+    from bkn_osdk.lifecycle import Interaction, finish
+
+    finish(
+        Context(base_url=PLATFORM, token="t-1"),
+        Interaction(KN, "conv_1", "int_1"),
+        "completed",
+        "the answer",
+    )
+
+    assert tool_calls(deploy, "bkn_finish_interaction") == [
+        {"interaction_id": "int_1", "outcome": "completed", "answer": "the answer"}
+    ]
+
+
+def test_an_answer_is_not_sent_with_a_failure(deploy: Deploy) -> None:
+    from bkn_osdk.lifecycle import Interaction, finish
+
+    finish(Context(base_url=PLATFORM, token="t-1"), Interaction(KN, "c", "i"), "failed", "x")
+
+    assert tool_calls(deploy, "bkn_finish_interaction") == [
+        {"interaction_id": "i", "outcome": "failed"}
     ]
 
 
@@ -355,6 +386,103 @@ def test_the_older_two_step_contract_is_refused_rather_than_guessed_at(
         Tournaments.objects().page(limit=1)
 
 
+def test_a_json_rpc_error_with_a_string_code_is_a_tool_error() -> None:
+    """A gateway that refuses before dispatch answers at the JSON-RPC layer; it is
+    still the server refusing the call, so it keeps its code like `isError` does."""
+    with pytest.raises(ToolError) as excinfo:
+        mcp_module._unwrap(
+            {"jsonrpc": "2.0", "id": 1, "error": {"code": "conversation_required", "message": "x"}}
+        )
+
+    assert excinfo.value.code == "conversation_required"
+    assert lifecycle_module._needs_context(excinfo.value)
+
+
+def test_a_json_rpc_error_reads_its_structured_detail_from_data() -> None:
+    with pytest.raises(ToolError) as excinfo:
+        mcp_module._unwrap(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "error": {
+                    "code": -32000,
+                    "message": "refused",
+                    "data": {
+                        "error": {
+                            "code": "conversation_required",
+                            "required_action": "start_interaction",
+                            "retryable": False,
+                        }
+                    },
+                },
+            }
+        )
+
+    assert excinfo.value.code == "conversation_required"
+    assert excinfo.value.required_action == "start_interaction"
+    assert lifecycle_module._needs_context(excinfo.value)
+
+
+def test_a_json_rpc_error_with_only_a_numeric_code_is_still_a_tool_error() -> None:
+    with pytest.raises(ToolError) as excinfo:
+        mcp_module._unwrap({"jsonrpc": "2.0", "id": 1, "error": {"code": -32602, "message": "bad"}})
+
+    assert excinfo.value.code == "rpc_error"
+    assert "bad" in str(excinfo.value)
+    assert not lifecycle_module._needs_context(excinfo.value)
+
+
+def test_the_traced_tool_is_asked_for_json(deploy: Deploy) -> None:
+    """The MCP tool defaults to `toon`; only this path, not REST, asks for JSON."""
+    with session(traced=True):
+        Tournaments.objects().page(limit=1)
+
+    assert tool_calls(deploy, "query_object_instance")[0]["response_format"] == "json"
+
+
+def test_a_traced_read_may_still_page_by_offset(deploy: Deploy) -> None:
+    """The MCP tool documents `offset`, as REST deploys before cursor paging honour it."""
+    with session(traced=True):
+        Tournaments.objects().page(limit=1, offset=3)
+
+    assert tool_calls(deploy, "query_object_instance")[0]["offset"] == 3
+    assert deploy.rest_bodies == []
+
+
+def test_a_traced_iterate_pages_the_tool_by_offset(deploy: Deploy) -> None:
+    """The stub answers one row per call, so a one-row page never looks like the end —
+    two rows then an empty page stop the walk."""
+    answers = iter([[ROW], [ROW], []])
+    original = deploy._respond
+
+    def respond(name: str) -> httpx.Response:
+        if name != "query_object_instance":
+            return original(name)
+        return deploy._rpc({"datas": next(answers)}, receipt=RECEIPT)
+
+    deploy._respond = respond  # type: ignore[method-assign]
+
+    with session(traced=True):
+        rows = list(Tournaments.objects().iterate(page_size=1))
+
+    assert len(rows) == 2
+    assert [call.get("offset") for call in tool_calls(deploy, "query_object_instance")] == [
+        None,
+        1,
+        2,
+    ]
+
+
+def test_a_cursor_takes_the_rest_path_even_when_traced(deploy: Deploy) -> None:
+    """The tool has no `cursor`; handed one, it would restart at page one."""
+    with session(traced=True):
+        Tournaments.objects().page(limit=1, cursor="c-2")
+
+    assert tool_calls(deploy, "query_object_instance") == []
+    assert deploy.rest_bodies[-1]["cursor"] == "c-2"
+    assert "response_format" not in deploy.rest_bodies[-1]
+
+
 def test_a_tool_error_keeps_its_structured_code(monkeypatch: pytest.MonkeyPatch) -> None:
     """`conversation_required` is `retryable: false` — a runtime bug, not a retry."""
     stub = Deploy()
@@ -414,12 +542,10 @@ def test_a_caller_owned_turn_is_joined_rather_than_replaced(
     }
 
 
-def test_conversation_mode_is_sent_only_where_the_tool_declares_it(
+def test_a_new_conversation_is_started_with_mode_new(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Two builds advertise the same tool names and disagree on the arguments —
-    one declares the field required, the other never published it, and this
-    contract rejects an argument it does not know."""
+    """The lifecycle contract requires `conversation_mode` on every start."""
     declaring = Deploy(declares_conversation_mode=True)
     _serve(monkeypatch, declaring)
     monkeypatch.setenv("BKN_BASE_URL", PLATFORM)
@@ -446,11 +572,12 @@ def test_joining_a_conversation_continues_it_rather_than_starting_one(
     assert tool_calls(declaring, "bkn_start_interaction")[0]["conversation_mode"] == "continue"
 
 
-def test_a_deploy_that_never_published_the_field_is_not_sent_it(deploy: Deploy) -> None:
+def test_conversation_mode_is_sent_even_where_the_catalog_omits_it(deploy: Deploy) -> None:
+    """The contract, not the catalog's schema, decides: it is required on every start."""
     with session(traced=True):
         Tournaments.objects().page(limit=1)
 
-    assert "conversation_mode" not in tool_calls(deploy, "bkn_start_interaction")[0]
+    assert tool_calls(deploy, "bkn_start_interaction")[0]["conversation_mode"] == "new"
 
 
 def test_a_caller_owned_turn_is_never_finished(
@@ -615,15 +742,14 @@ def test_a_deploy_that_does_not_serve_the_catalog_can_still_open_a_turn(
         Tournaments.objects().take(1)
 
     started = tool_calls(stub, "bkn_start_interaction")[0]
-    assert "conversation_mode" not in started  # unknown means unsent, not guessed
+    assert started["conversation_mode"] == "new"  # required by the contract regardless
     assert stub.interactions == 1
 
 
 def test_an_unreadable_catalog_is_retried_rather_than_remembered(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A probe that fails once should not disable `conversation_mode` for the
-    life of the process."""
+    """A probe that fails once is not cached; `conversation_mode` goes out either way."""
     stub = Deploy(declares_conversation_mode=True)
     failures = [True]
 
@@ -644,8 +770,7 @@ def test_an_unreadable_catalog_is_retried_rather_than_remembered(
         Tournaments.objects().take(1)
 
     starts = tool_calls(stub, "bkn_start_interaction")
-    assert "conversation_mode" not in starts[0]
-    assert starts[1]["conversation_mode"] == "new"
+    assert [start["conversation_mode"] for start in starts] == ["new", "new"]
 
 
 def test_a_handshake_refused_at_its_own_notification_reads_as_a_deploy_problem(
@@ -807,14 +932,15 @@ def test_a_turn_opened_for_a_call_that_raised_is_closed_as_failed(deploy: Deploy
     assert finished[-1]["outcome"] == "failed"
 
 
-def test_a_turn_that_completed_is_closed_as_completed(deploy: Deploy) -> None:
+def test_a_turn_that_completed_without_an_answer_is_closed_as_cancelled(deploy: Deploy) -> None:
     from bkn_osdk.lifecycle import ensure_interaction
 
     with ensure_interaction(Context(base_url=PLATFORM, token="t-1"), KN):
         pass
 
     finished = [args for name, args in deploy.calls if name == "bkn_finish_interaction"]
-    assert finished[-1]["outcome"] == "completed"
+    # No answer to close over, so `cancelled` — `completed` without one is refused.
+    assert finished[-1]["outcome"] == "cancelled"
 
 
 def test_a_delay_the_platform_names_is_capped(monkeypatch: pytest.MonkeyPatch) -> None:

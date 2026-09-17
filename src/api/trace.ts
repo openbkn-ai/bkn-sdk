@@ -192,15 +192,29 @@ export interface SummaryPage<T> {
   partial_reasons?: string[];
 }
 
+/**
+ * Filters for `GET /traces`. The foundry spec lists limit (1..200), cursor,
+ * trace_id, conversation_id, interaction_id, from, to, status, agent_or_app and
+ * keyword; the live service also honours `service`, `tool` and `error_keyword`
+ * (not yet in the spec). `errorKeyword` is an error-text filter distinct from
+ * the broader `keyword`.
+ */
 export interface TechnicalTraceQuery {
   limit?: number;
   cursor?: string;
   from?: string;
   to?: string;
   status?: string;
+  /** Exact producing (root) service. Live, not yet in the foundry spec. */
   service?: string;
+  /** Exact root tool. Live, not yet in the foundry spec. */
   tool?: string;
+  /** Agent or application name. */
+  agentOrApp?: string;
   traceId?: string;
+  /** Trace, request, operation, or error keyword. */
+  keyword?: string;
+  /** Case-insensitive error text only. Live, not yet in the foundry spec. */
   errorKeyword?: string;
   conversationId?: string;
   interactionId?: string;
@@ -464,8 +478,12 @@ function evidenceWriteHeaders(ctx: RequestContext): Record<string, string> | und
 export function getEvidenceArtifact(
   ctx: RequestContext,
   artifactId: string,
+  opts: { interactionId?: string } = {},
 ): Promise<EvidenceArtifact> {
   return request<EvidenceArtifact>(ctx, `${EVIDENCE_ARTIFACTS}/${encodeURIComponent(artifactId)}`, {
+    // An authorized Interaction lets a reader reach the artifact through that
+    // Interaction's scope instead of the artifact's own record scope.
+    query: opts.interactionId ? { interaction_id: opts.interactionId } : undefined,
     responseParser: parseBigIntJSON,
   });
 }
@@ -714,7 +732,9 @@ function technicalTraceQuery(
     "status",
     "service",
     "tool",
+    "agentOrApp",
     "traceId",
+    "keyword",
     "errorKeyword",
     "conversationId",
     "interactionId",
@@ -729,7 +749,9 @@ function technicalTraceQuery(
   if (query.status) result.status = query.status;
   if (query.service) result.service = query.service;
   if (query.tool) result.tool = query.tool;
+  if (query.agentOrApp) result.agent_or_app = query.agentOrApp;
   if (query.traceId) result.trace_id = query.traceId;
+  if (query.keyword) result.keyword = query.keyword;
   if (query.errorKeyword) result.error_keyword = query.errorKeyword;
   if (query.conversationId) result.conversation_id = query.conversationId;
   if (query.interactionId) result.interaction_id = query.interactionId;

@@ -42,6 +42,7 @@ export {
   type SupportCandidate,
 } from "./managed-trace.js";
 export {
+  type CapabilityProfile,
   type ClaimSupport,
   type CloseConversationInput,
   type ConversationPage,
@@ -84,6 +85,9 @@ export { context } from "./resources/context-loader.js";
 export {
   ManagedToolError,
   type ManagedToolResult,
+  type SchemaConceptKind,
+  type SearchSchemaOptions,
+  type SearchSchemaScope,
   type ToolCallOptions,
   type ToolReceipt,
 } from "./api/context-loader.js";
@@ -92,6 +96,8 @@ export { models } from "./resources/models.js";
 export { resources } from "./resources/resources.js";
 export { skills } from "./resources/skills.js";
 export { functions } from "./resources/functions.js";
+export { mcp } from "./resources/mcp.js";
+export type { ListMcpServerToolsOptions, ListMcpServersOptions } from "./api/mcp.js";
 export type {
   DependencyInfo,
   ExecuteFunctionOptions,

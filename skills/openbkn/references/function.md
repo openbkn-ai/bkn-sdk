@@ -37,16 +37,16 @@
 | Command | Notes |
 |---------|-------|
 | `function create <file> --toolbox <id> --name <n> [--description] [--inputs/--outputs '<json>']` | 注册 Function Tool。 |
-| `function list --toolbox <id>` / `get <tool-id> --toolbox <id>` | 列表和详情。 |
+| `function list --toolbox <id> [--name] [--status enabled\|disabled] [--sort-by …] [--sort-order asc\|desc] [--user-id] [--limit n] [--page n] [--all]` / `get <tool-id> --toolbox <id>` | 列表和详情；过滤参数同 `tool list`。 |
 | `function update <tool-id> <file> --toolbox <id> --name <n> --description <d>` | 整体覆盖，工具 id 保持不变。 |
 | `function enable\|disable <tool-id> --toolbox <id>` | 执行前的启用开关。 |
-| `function execute\|debug <tool-id> --toolbox <id> --body '<json>'` | `execute` 要求工具已启用**且**箱子已 `toolbox publish`（否则 400 `ToolNotAvailable`）；`debug` 在启用、发布前都能调用。 |
+| `function execute\|debug <tool-id> --toolbox <id> --body '<json>' [--timeout <s>]` | `execute` 要求工具已启用**且**箱子已 `toolbox publish`（否则 400 `ToolNotAvailable`）；`debug` 在启用、发布前都能调用。 |
 
 ## 端到端
 
 ```bash
-openbkn sandbox run ./add.py --event '{"a":1,"b":2}'
-openbkn toolbox create --name my_funcs --type function
+openbkn sandbox run ./add.py --event '{"a":1,"b":2}'          # 先把代码跑通
+openbkn toolbox create --name my_funcs --type function          # 函数类工具箱不填 --service-url
 openbkn function create ./add.py --toolbox <box-id> --name add \
   --description "把两个数相加" \
   --inputs '[{"name":"a","type":"number","required":true},
@@ -54,15 +54,16 @@ openbkn function create ./add.py --toolbox <box-id> --name add \
   --outputs '[{"name":"sum","type":"number"}]'                  # -> success_ids
 openbkn function debug <tool-id> --toolbox <box-id> --body '{"a":1,"b":2}'   # 发布前试调
 openbkn function enable <tool-id> --toolbox <box-id>            # 默认 disabled
-openbkn toolbox publish <box-id>                                # execute 的硬门
+openbkn toolbox publish <box-id>                                # 箱子未发布时 execute 返回 400 ToolNotAvailable
 openbkn function execute <tool-id> --toolbox <box-id> --body '{"a":1,"b":2}'
 ```
 
 实测出来的细节：
 
 - **参数 type 只收 `string` / `number` / `boolean` / `array` / `object`**，写 `integer` 直接 400（`FunctionInvalidParameterType`）。
-- **顺序是 create → create 工具 → enable → publish → execute**：未发布/已下线的箱子 `execute` 返回 400 `ToolNotAvailable`；`debug` 发布前就能用。
+- **执行有两道门**：工具要 `enabled`，箱子要 `published`。顺序是 create 箱子 → create 工具 → enable → publish → execute；箱子未发布或已 `offline` 时 `execute` 返回 400 `ToolNotAvailable`；`debug` 发布前就能用（见 [toolbox.md](toolbox.md)）。
 - **工具箱代理约 30 秒切断**：`function execute` / `debug` 经工具箱代理调用，平台约 30 秒就断开，无论 `--timeout` 多大，返回 200 且 `result: null`。长任务用 `sandbox run`。
+- **失败以非零退出**：信封里 `status_code` ≥ 400 或带 `error` 时，`function execute` / `debug` 以非 0 退出。
 - **函数工具的返回套两层**：结果在 `body.result`。
 - `function list` 不检查箱子类型，`--toolbox` 必须是 `--type function` 的箱子。
 

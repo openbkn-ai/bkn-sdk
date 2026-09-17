@@ -35,6 +35,11 @@ export interface BknBusinessContext {
   bkn_context: {
     conversation_id: string;
     interaction_id: string;
+    /**
+     * Trace Core's registration key for the Operation this scope opened. It is
+     * not a `BKNContext` field: `context.toolCall` and `kn.search` drop it before
+     * the context reaches Context Loader, which derives its own.
+     */
     operation_key: string;
     parent_operation_id?: string;
     causation_event_ids?: string[];

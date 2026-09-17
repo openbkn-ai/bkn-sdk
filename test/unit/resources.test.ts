@@ -6,6 +6,7 @@ import {
   deleteResource,
   deleteResourceDocuments,
   deleteResourceDocumentsByFilter,
+  deleteResourceDocumentsBySelector,
   disableResource,
   enableResource,
   findResource,
@@ -313,19 +314,25 @@ describe("typed Resource and document APIs", () => {
     expect(url.searchParams.get("ignore_missing")).toBe("true");
   });
 
-  it("deletes documents by encoded ids or a filter override", async () => {
+  it("deletes documents by encoded ids or a filter", async () => {
     const idsFetch = mockFetch();
     await deleteResourceDocuments(ctx, "r-1", ["d/1", "d 2"], { ignoreMissing: true });
     expect(new URL(firstCall(idsFetch)[0]).pathname).toContain("/data/d%2F1,d%202");
     expect(new URL(firstCall(idsFetch)[0]).searchParams.get("ignore_missing")).toBe("true");
 
     const filterFetch = mockFetch();
-    await deleteResourceDocumentsByFilter(ctx, "r-1", { status: { eq: "stale" } });
+    await deleteResourceDocumentsBySelector(ctx, "r-1", { kind: "remove", state: "stale" });
     expect(new Headers(firstCall(filterFetch)[1].headers).get("X-HTTP-Method-Override")).toBe(
       "DELETE",
     );
     expect(JSON.parse(firstCall(filterFetch)[1].body as string)).toEqual({
-      filter_condition: { status: { eq: "stale" } },
+      filter_condition: {
+        operation: "and",
+        sub_conditions: [
+          { field: "kind", operation: "eq", value: "remove", value_from: "const" },
+          { field: "state", operation: "eq", value: "stale", value_from: "const" },
+        ],
+      },
     });
   });
 
@@ -343,6 +350,30 @@ describe("typed Resource and document APIs", () => {
     const filterFetch = mockFetch();
     await expect(deleteResourceDocumentsByFilter(ctx, "r-1", {})).rejects.toThrow(InputError);
     expect(filterFetch).not.toHaveBeenCalled();
+  });
+
+  it("preserves a valid Vega filter condition", async () => {
+    const filterFetch = mockFetch();
+    const condition = { field: "kind", operation: "eq", value: "remove", value_from: "const" };
+    await deleteResourceDocumentsByFilter(ctx, "r-1", condition);
+    expect(JSON.parse(firstCall(filterFetch)[1].body as string)).toEqual({
+      filter_condition: condition,
+    });
+  });
+
+  it("converts selector fields that overlap Vega filter keys", async () => {
+    const filterFetch = mockFetch();
+    await deleteResourceDocumentsBySelector(ctx, "r-1", { value: "remove", operation: "remove" });
+
+    expect(JSON.parse(firstCall(filterFetch)[1].body as string)).toEqual({
+      filter_condition: {
+        operation: "and",
+        sub_conditions: [
+          { field: "value", operation: "eq", value: "remove", value_from: "const" },
+          { field: "operation", operation: "eq", value: "remove", value_from: "const" },
+        ],
+      },
+    });
   });
 });
 

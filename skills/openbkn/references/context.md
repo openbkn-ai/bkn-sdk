@@ -17,12 +17,15 @@ having no `bkn_context`, so `openbkn context search-schema …` and
 `client.context.*` work without any of the steps below. That automatic session
 is a fallback, not a replacement: it has no answer to close over, so it is
 cancelled rather than completed, and its evidence is attributed to
-`openbkn-sdk`. An Agent with a genuine conversation should still run the
+`openbkn-sdk` (or the `agentName` given to `createClient`). An Agent with a genuine conversation should still run the
 lifecycle itself.
 
-A `bkn_context` you build yourself is always honoured — the SDK passes it
-through untouched and opens nothing, so a pre-registered `operation_key`,
-`parent_operation_id` and `causation_event_ids` survive. That holds for MCP
+A `bkn_context` you build yourself is always honoured — the SDK keeps its ids
+and opens nothing, so `parent_operation_id`, `causation_event_ids` and
+`business_refs` survive. Keys the contract's `BKNContext` does not accept are
+dropped before sending — in particular `operation_key` (for example one minted
+by `ManagedTrace`): callers must not submit it, because Context Loader derives
+the Operation identity on the server. That holds for MCP
 tool arguments (`client.context.*`, `openbkn context tool-call`) and for the
 HTTP retrieval path, where `client.kn.search(kn, q, { bknContext })` takes the
 same object. The same holds for
@@ -64,16 +67,20 @@ The SDK writes nothing on its own: persistence is the CLI passing
 `onConversationOpened` to `createClient`, and a conversation it may replace
 travels as `rememberedConversationId`, not as `trace.conversationId`.
 
+Every `bkn_start_interaction` requires `conversation_mode`, `question` and
+`agent_name`. `agent_name` is the Agent's stable name: send the same value on
+every call in one conversation.
+
 1. For the first business question in a chat, call `bkn_start_interaction` with
-   the complete `question`, optional display-only `agent_name`, and no
-   `conversation_id`. Context Loader creates or
-   resolves the managed Conversation internally and returns the authoritative
-   `conversation_id` and `interaction_id`. The name is fixed for that
-   Conversation; later turns omit it or repeat the same value.
+   `conversation_mode: "new"`, the complete `question`, your `agent_name`, and no
+   `conversation_id`. Context Loader creates the managed Conversation and returns
+   the authoritative `conversation_id` and `interaction_id`.
 2. For every later question in the same chat, call `bkn_start_interaction` with
-   the complete question and the previously returned `conversation_id`. Retain
-   both returned IDs exactly as provided. A Conversation may stay active across
-   turns, reconnects, and days.
+   `conversation_mode: "continue"`, the complete question, the same
+   `agent_name`, and the previously returned `conversation_id`. Retain both
+   returned IDs exactly as provided. A Conversation may stay active across
+   turns, reconnects, and days. Where a host adapter supplies a conversation
+   mapping, that mapping is authoritative.
 3. Call each business tool with:
 
    ```json
@@ -131,7 +138,10 @@ await client.context.toolCall(
   "bkn_start_interaction",
   {
     question,
-    ...(conversationId ? { conversation_id: conversationId } : { agent_name: agentName }),
+    agent_name: agentName, // the same value on every turn
+    ...(conversationId
+      ? { conversation_mode: "continue", conversation_id: conversationId }
+      : { conversation_mode: "new" }),
   },
   {
     hostConversationKey: hostChatId,
@@ -200,7 +210,7 @@ A KN's full schema is heavy (a 27-object / 37-relation KN is ~143 KB). Read the
 
 | Command | Notes |
 | --- | --- |
-| `kn-detail <kn> [--detail-level summary\|full]` | KN schema. **`summary` (default)** = skeleton + per-property `name/display_name/type/comment` only (drops field mappings, query operators, logic-property sources, relation `mapping_rules`; dedups concept groups). `full` = everything (still deduped). |
+| `kn-detail <kn> [--detail-level summary\|full]` | KN schema. **`summary` (default)** = skeleton + per-property `name/type` only (drops display_name, comment, field mappings, query operators, logic-property sources, relation `mapping_rules`; dedups concept groups). `full` = everything (still deduped). |
 | `object-types <kn> <ids...>` | Full definitions for the named object-type ids. Ids with no match come back under `missing`. |
 | `relation-types <kn> <ids...>` | Full definitions for the named relation-type ids (incl. `mapping_rules`); unmatched → `missing`. |
 
@@ -222,12 +232,26 @@ openbkn context relation-types worldcup_vega_catalog_bkn rel_award_winners_award
 ### Schema discovery
 
 ```bash
-openbkn context search-schema <kn> "customer churn" --scope object,relation --max 10
+openbkn context search-schema <kn> "customer churn" \
+  --concept-groups cg_sales,cg_service --only object,relation --max 10
 ```
 
-Flag mapping → MCP `search_schema`: `<query>` → `query`, `--scope a,b` →
-`search_scope: ["a","b"]`, `--max n` → `max_concepts`. Always sends
-`response_format: "json"`.
+Flag mapping → MCP `search_schema`:
+
+| Flag | Argument |
+| --- | --- |
+| `<query>` | `query` |
+| `--concept-groups a,b` | `search_scope.concept_groups: ["a","b"]` (group ids from `kn-detail`) |
+| `--only object,relation` | `search_scope.include_{object,relation,action,metric}_types` — listed kinds `true`, the rest `false` (`--scope` is a kept alias) |
+| `--max n` | `max_concepts` |
+| `--schema-brief` / `--no-schema-brief` | `schema_brief` |
+| `--include-columns` | `include_columns` (physical column names for `run-sql`) |
+| `--rerank` / `--no-rerank` | `enable_rerank` |
+| `--rerank-model <name>` | `rerank_model` (operators only) |
+
+Every named command and `tool-call` fills `kn_id` from `<kn>` for
+network-scoped tools and sends `response_format: "json"` for tools that take it,
+unless you pass your own value.
 
 ### Instance query — `--args <json>`
 
@@ -241,11 +265,21 @@ openbkn context query-object-instance <kn> --args '{
   "limit": 5
 }'
 
-# query-instance-subgraph: relation-type paths from a start object type
+# query-instance-subgraph: n-hop path = n+1 object_types and n relation_types, in path order.
+# Every object type needs `condition` and `limit`; `operation: "and"` with no
+# sub_conditions means no filter. `direction` (forward|backward) is only needed for
+# a self-referencing relation type; source/target ids are optional.
 openbkn context query-instance-subgraph <kn> --args '{
-  "relation_type_paths": [
-    {"start_ot_id": "ot-1", "paths": [{"rt_id": "rt-1", "direction": "positive"}]}
-  ]
+  "relation_type_paths": [{
+    "object_types": [
+      {"id": "ot-1", "condition": {"operation": "==", "field": "name", "value_from": "const", "value": "web-pod"}, "limit": 10},
+      {"id": "ot-2", "condition": {"operation": "and", "sub_conditions": []},
+       "sort": [{"field": "updated_at", "direction": "desc"}], "limit": 10}
+    ],
+    "relation_types": [
+      {"relation_type_id": "rt-1", "source_object_type_id": "ot-1", "target_object_type_id": "ot-2", "direction": "forward"}
+    ]
+  }]
 }'
 ```
 
@@ -293,7 +327,7 @@ openbkn context get-logic-properties <kn> --args '{
 }'
 
 # get-action-info: action metadata / dynamic tools for one instance
-openbkn context get-action-info <kn> --args '{"at_id": "at-1", "_instance_identity": {"id": "123"}}'
+openbkn context get-action-info <kn> --args '{"at_id": "at-1", "_instance_identities": [{"id": "123"}]}'
 ```
 
 ### Capability search
