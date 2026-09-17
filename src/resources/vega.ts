@@ -75,14 +75,8 @@ import {
 import type { RequestContext } from "../types.js";
 import { InputError, WaitTimeoutError } from "../utils/errors.js";
 
-const TERMINAL_STATES = new Set([
-  "completed",
-  "success",
-  "failed",
-  "stopped",
-  "cancelled",
-  "error",
-]);
+/** The documented BuildTask statuses a task never leaves. */
+const TERMINAL_STATES = new Set(["completed", "failed", "stopped", "cancelled"]);
 
 export function vega(ctx: RequestContext) {
   return {
@@ -177,9 +171,13 @@ export interface BuildWaitOptions {
   onProgress?: (task: BuildTask) => void;
 }
 
-/** A BuildTask's state, whichever of the two fields the response carried. */
+/**
+ * A BuildTask's `status`, lower-cased; empty when the response carried none
+ * (the create response). An unknown value is not terminal, so a wait keeps
+ * polling it rather than failing.
+ */
 export function buildTaskState(task: BuildTask): string {
-  return (task.status ?? task.state ?? "").toLowerCase();
+  return (task.status ?? "").toLowerCase();
 }
 
 /** True once the task will change no further: succeeded, failed, or was stopped. */
@@ -189,7 +187,7 @@ export function isBuildTaskDone(task: BuildTask): boolean {
 
 /** True when the task ended without building the index. */
 export function isBuildTaskUnsuccessful(task: BuildTask): boolean {
-  return isBuildTaskDone(task) && !["completed", "success"].includes(buildTaskState(task));
+  return isBuildTaskDone(task) && buildTaskState(task) !== "completed";
 }
 
 async function waitForBuildTask(

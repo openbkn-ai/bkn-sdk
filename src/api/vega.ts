@@ -8,7 +8,7 @@
  */
 import { z } from "zod";
 import { DEFAULT_LIST_LIMIT, type RequestContext } from "../types.js";
-import { InputError } from "../utils/errors.js";
+import { HttpError, InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { request } from "./http.js";
 import {
@@ -138,6 +138,11 @@ export const CatalogConnectorTypeStatsResponse = z
   .passthrough();
 export type CatalogConnectorTypeStatsResponse = z.infer<typeof CatalogConnectorTypeStatsResponse>;
 
+/**
+ * `GET /index-capabilities` response. Not part of the published vega-backend
+ * contract: a deploy extension some deployments register. Callers must be ready
+ * for a 404 on deployments that do not.
+ */
 export const IndexCapabilities = z
   .object({
     fulltext_analyzers: z
@@ -181,7 +186,9 @@ export const Catalog = z
       })
       .passthrough()
       .optional(),
-    update_time: z.number(),
+    // Optional in the contract (Catalog and CatalogSummary require only id, name,
+    // type, enabled and connector_type).
+    update_time: z.number().optional(),
     operations: z.array(z.string()).optional(),
   })
   .passthrough();
@@ -228,7 +235,7 @@ export const CatalogHealthCheckSchedule = z
     cron_expr: z.string().optional(),
     last_run: z.number(),
     next_run: z.number(),
-    update_time: z.number(),
+    update_time: z.number().optional(),
   })
   .passthrough();
 export type CatalogHealthCheckSchedule = z.infer<typeof CatalogHealthCheckSchedule>;
@@ -301,8 +308,10 @@ export const CreateBuildTaskRequest = z.object({
 });
 export type CreateBuildTaskRequest = z.infer<typeof CreateBuildTaskRequest>;
 
-// Lenient: create vs list vs status responses carry different subsets — `status`
-// is the live field (not `state`); the create response can omit `mode`.
+// Lenient: create vs status responses carry different subsets (the create
+// response carries only `id`). `status`, `mode` and `execute_type` are read as
+// plain strings so a value this SDK does not know yet never fails a poll —
+// {@link BuildTaskStatus} lists the documented statuses.
 export const BuildTask = z
   .object({
     id: z.string(),
@@ -310,10 +319,9 @@ export const BuildTask = z
     resource_name: z.string().optional(),
     catalog_id: z.string().optional(),
     catalog_name: z.string().optional(),
-    mode: BuildMode.optional(),
-    status: BuildTaskStatus.optional(),
-    state: z.string().optional(),
-    execute_type: BuildTaskExecuteType.optional(),
+    mode: z.string().optional(),
+    status: z.string().optional(),
+    execute_type: z.string().optional(),
     index_name: z.string().optional(),
     total_count: z.number().optional(),
     synced_count: z.number().optional(),
@@ -332,14 +340,6 @@ export const BuildTask = z
     last_progress_time: z.number().optional(),
     failure_detail: z.string().optional(),
     index_config: z.unknown().optional(),
-    index_health: z
-      .object({
-        embedding: z.string(),
-        fulltext: z.string(),
-        usable: z.boolean(),
-      })
-      .passthrough()
-      .optional(),
   })
   .passthrough();
 export type BuildTask = z.infer<typeof BuildTask>;
@@ -352,9 +352,11 @@ export const BuildTaskSummary = z
     resource_name: z.string().optional(),
     catalog_id: z.string(),
     catalog_name: z.string().optional(),
-    status: BuildTaskStatus,
-    mode: BuildMode,
-    execute_type: BuildTaskExecuteType.optional(),
+    // Plain strings in the contract: a status or mode added server-side must not
+    // fail the whole list parse.
+    status: z.string(),
+    mode: z.string(),
+    execute_type: z.string().optional(),
     index_name: z.string().optional(),
     total_count: z.number(),
     synced_count: z.number(),
@@ -369,14 +371,6 @@ export const BuildTaskSummary = z
     start_time: z.number().optional(),
     finish_time: z.number().optional(),
     last_progress_time: z.number().optional(),
-    index_health: z
-      .object({
-        embedding: z.string(),
-        fulltext: z.string(),
-        usable: z.boolean(),
-      })
-      .passthrough()
-      .optional(),
   })
   .passthrough();
 export type BuildTaskSummary = z.infer<typeof BuildTaskSummary>;
@@ -515,7 +509,7 @@ export interface SqlRawQueryRequest extends RawQueryInitialBase {
   query: string;
   query_format: "sql";
   /** SQL input dialect; defaults to postgres server-side. */
-  input_dialect?: "postgres" | "mysql" | "trino" | "duckdb";
+  input_dialect?: "postgres" | "mysql" | "trino" | "duckdb" | "tsql";
 }
 
 export interface DslRawQueryRequest extends RawQueryInitialBase {
@@ -600,34 +594,56 @@ export function firstCatalog(result: BatchCatalogsResponse): Catalog {
 /** POST /catalogs body. `connector_config` shape varies by connector (raw passthrough). */
 export interface CreateCatalogRequest {
   name: string;
-  connectorType: string;
-  connectorConfig: Record<string, unknown>;
+  /**
+   * Required for a physical catalog. Must be omitted with `internal: true`: the
+   * backend rejects an internal (logical) catalog that names a connector type.
+   */
+  connectorType?: string;
+  /** Connector configuration; not sent for an internal catalog. */
+  connectorConfig?: Record<string, unknown>;
   tags?: string[];
   description?: string;
+  /** Sent explicitly; the backend reads an omitted value as `false`. */
   enabled?: boolean;
   id?: string;
+  /** Create a logical catalog. Only valid without a connector type. */
   internal?: boolean;
   healthCheckSchedule?: CatalogHealthCheckScheduleConfig | null;
 }
 
-/** Full PUT /catalogs/{id} body; the path id is injected by the API client. */
+/**
+ * Patch for `PUT /catalogs/{id}`. The endpoint is a full replacement, so
+ * {@link updateCatalog} reads the catalog first and overlays these fields on it:
+ * a field left out keeps its current value instead of being cleared.
+ */
 export interface UpdateCatalogRequest {
-  name: string;
-  connectorType: string;
-  enabled: boolean;
+  name?: string;
+  connectorType?: string;
+  /** Must equal the current state; use enable/disable to change it. */
+  enabled?: boolean;
+  /** Sent only when given; omitted otherwise. */
   connectorConfig?: Record<string, unknown>;
   tags?: string[];
   description?: string;
-  /** Required optimistic-lock version from the latest Catalog `update_time`. */
-  expectedUpdateTime: number;
+  /** Optimistic-lock version; defaults to the `update_time` read just before the PUT. */
+  expectedUpdateTime?: number;
 }
 
 /** Create a Vega catalog (data source). Returns the created catalog (with its id). */
-export function createCatalog(
+export async function createCatalog(
   ctx: RequestContext,
   req: CreateCatalogRequest,
   opts: CatalogWriteOptions = {},
 ): Promise<CatalogRef> {
+  if (req.internal) {
+    if (req.connectorType || req.connectorConfig !== undefined) {
+      throw new InputError(
+        "an internal catalog is logical: omit connectorType and connectorConfig (the backend rejects them)",
+      );
+    }
+  } else if (!req.connectorType) {
+    throw new InputError("connectorType is required unless internal is true");
+  }
   return request<unknown>(ctx, `${VEGA_BASE}/catalogs`, {
     method: "POST",
     query: {
@@ -636,11 +652,13 @@ export function createCatalog(
     body: {
       ...(req.id ? { id: req.id } : {}),
       name: req.name,
-      connector_type: req.connectorType,
-      connector_config: req.connectorConfig,
+      ...(req.internal ? {} : { connector_type: req.connectorType }),
+      ...(!req.internal && req.connectorConfig !== undefined
+        ? { connector_config: req.connectorConfig }
+        : {}),
       ...(req.tags !== undefined ? { tags: req.tags } : {}),
       ...(req.description !== undefined ? { description: req.description } : {}),
-      ...(req.enabled !== undefined ? { enabled: req.enabled } : {}),
+      enabled: req.enabled ?? false,
       ...(req.internal !== undefined ? { internal: req.internal } : {}),
       ...(req.healthCheckSchedule !== undefined
         ? {
@@ -655,12 +673,28 @@ export function createCatalog(
   }).then((result) => CatalogRef.parse(result));
 }
 
-export function updateCatalog(
+/**
+ * Update a catalog. `PUT /catalogs/{id}` replaces the whole catalog, so the
+ * current catalog is read first and the patch laid over it — the same
+ * read-merge {@link updateResource} does — so a partial update never clears
+ * tags or a description it did not mention.
+ */
+export async function updateCatalog(
   ctx: RequestContext,
   id: string,
   req: UpdateCatalogRequest,
   opts: CatalogWriteOptions = {},
 ): Promise<unknown> {
+  const current = firstCatalog(await getCatalog(ctx, id));
+  const expectedUpdateTime = req.expectedUpdateTime ?? current.update_time;
+  if (expectedUpdateTime === undefined) {
+    throw new InputError(
+      "the catalog carries no update_time to lock on; pass expectedUpdateTime explicitly",
+    );
+  }
+  const tags = req.tags ?? current.tags;
+  const description = req.description ?? current.description;
+  const connectorType = req.connectorType ?? current.connector_type;
   return request(ctx, `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}`, {
     method: "PUT",
     query: {
@@ -668,13 +702,14 @@ export function updateCatalog(
     },
     body: {
       id,
-      name: req.name,
-      connector_type: req.connectorType,
-      enabled: req.enabled,
+      name: req.name ?? current.name,
+      // A logical catalog carries an empty connector type; keep it as read.
+      connector_type: connectorType,
+      enabled: req.enabled ?? current.enabled,
       ...(req.connectorConfig !== undefined ? { connector_config: req.connectorConfig } : {}),
-      ...(req.tags !== undefined ? { tags: req.tags } : {}),
-      ...(req.description !== undefined ? { description: req.description } : {}),
-      expected_update_time: req.expectedUpdateTime,
+      ...(tags !== undefined ? { tags } : {}),
+      ...(description !== undefined ? { description } : {}),
+      expected_update_time: expectedUpdateTime,
     },
     timeoutMs: 60_000,
   });
@@ -792,13 +827,15 @@ export function listCatalogResources(
 ): Promise<ListResourcesResult> {
   // The backend has no `/catalogs/:id/resources` route — resources are listed
   // via `/resources?catalog_id=…` (same endpoint as `resource list`). Without an
-  // explicit `limit` this client sends its list default (30; backend range [1,1000]);
-  // pass limit=-1 (NO_LIMIT) to fetch every resource.
+  // explicit `limit` this client sends its list default. The `/resources`
+  // contract documents neither a maximum nor `-1`; -1 is still forwarded for
+  // deployments that honour it, but page with `offset` against `total_count` to
+  // read everything portably.
   return request<unknown>(ctx, `${VEGA_BASE}/resources`, {
     query: {
       catalog_id: id,
       category: category || undefined,
-      // limit=-1 (NO_LIMIT) fetches all; invalid values use the SDK list default.
+      // Invalid values use the SDK list default.
       limit:
         limit === undefined
           ? DEFAULT_LIST_LIMIT
@@ -861,7 +898,26 @@ export async function getConnectorType(ctx: RequestContext, type: string): Promi
   return ConnectorType.parse(result);
 }
 
+/**
+ * Read the local index's fulltext analyzers. `GET /index-capabilities` is an
+ * undocumented deploy extension, absent from the vega-backend contract, so a
+ * deployment without it answers 404 — reported as such rather than as a
+ * missing record.
+ */
 export async function getIndexCapabilities(ctx: RequestContext): Promise<IndexCapabilities> {
-  const result = await request<unknown>(ctx, `${VEGA_BASE}/index-capabilities`);
+  let result: unknown;
+  try {
+    result = await request<unknown>(ctx, `${VEGA_BASE}/index-capabilities`);
+  } catch (err) {
+    if (err instanceof HttpError && err.status === 404 && !err.gateway) {
+      throw new HttpError(
+        err.status,
+        err.statusText,
+        err.body,
+        "This deployment does not expose GET /index-capabilities. It is an undocumented vega-backend extension, not part of the published contract; use the analyzers your deployment documents.",
+      );
+    }
+    throw err;
+  }
   return IndexCapabilities.parse(result);
 }

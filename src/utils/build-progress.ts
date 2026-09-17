@@ -29,7 +29,7 @@ export function formatDuration(ms: number): string {
 
 /** One line: state, rows synced of total, time spent, and time left at the rate seen so far. */
 export function describeBuildProgress(task: BuildTask, elapsedMs: number, etaMs?: number): string {
-  const state = task.status ?? task.state ?? "unknown";
+  const state = task.status ?? "unknown";
   const parts = [`BuildTask ${task.id}: ${state}`];
   const total = task.total_count;
   const synced = task.synced_count;
@@ -60,7 +60,7 @@ export function buildProgressReporter(
     const total = task.total_count;
     if (typeof synced !== "number" || typeof total !== "number" || total <= 0) return undefined;
     // Time left means nothing once the task is not running.
-    if ((task.status ?? task.state) !== "running") return undefined;
+    if (task.status !== "running") return undefined;
     // Measure the rate from the first poll that saw the task running, not from
     // the start: time spent pending would make a fast build look slow.
     if (!baseline) {
@@ -74,7 +74,7 @@ export function buildProgressReporter(
   return {
     update(task) {
       const at = now();
-      const state = task.status ?? task.state ?? "";
+      const state = task.status ?? "";
       const line = describeBuildProgress(task, at - start, eta(task, at));
       if (out.isTTY) {
         out.write(`\r\x1b[2K${line}`);

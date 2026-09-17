@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BuildTask } from "../../src/api/vega.js";
 import { vegaCommand } from "../../src/commands/vega.js";
 import { writeVersionCheckCache } from "../../src/config/store.js";
-import { vega } from "../../src/resources/vega.js";
+import { isBuildTaskDone, isBuildTaskUnsuccessful, vega } from "../../src/resources/vega.js";
 import type { RequestContext } from "../../src/types.js";
 import {
   buildProgressReporter,
@@ -82,6 +82,20 @@ describe("waitForBuild", () => {
     });
     expect(task.status).toBe("completed");
     expect(seen).toEqual(["pending", "running", "completed"]);
+  });
+
+  it("keeps polling through a status it does not know instead of failing the parse", async () => {
+    tasks({ status: "warming_up" }, { status: "completed" });
+    const task = await vega(ctx).waitForBuild("t-1", { intervalMs: 0 });
+    expect(task.status).toBe("completed");
+  });
+
+  it("reads only the documented status: a legacy state or success value ends nothing", () => {
+    expect(isBuildTaskDone({ id: "t-1", state: "completed" } as BuildTask)).toBe(false);
+    expect(isBuildTaskDone({ id: "t-1", status: "success" })).toBe(false);
+    expect(isBuildTaskDone({ id: "t-1", status: "cancelled" })).toBe(true);
+    expect(isBuildTaskUnsuccessful({ id: "t-1", status: "stopped" })).toBe(true);
+    expect(isBuildTaskUnsuccessful({ id: "t-1", status: "completed" })).toBe(false);
   });
 
   it("returns a failed task rather than throwing: it did end", async () => {

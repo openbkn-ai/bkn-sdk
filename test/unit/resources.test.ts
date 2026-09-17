@@ -208,6 +208,36 @@ describe("updateResource", () => {
     expect(body.expected_update_time).toBe(1720000000123);
   });
 
+  it("strips the server-written vector dimension from both the read schema and a patch", async () => {
+    const vector = (dimension: number) => ({
+      feature_type: "vector",
+      name: "emb",
+      config: { embedding_model: "m-1", dimension },
+    });
+    const keyword = { feature_type: "keyword", name: "kw", config: { ignore_above: 256 } };
+    const f = mockFetch({
+      entries: [
+        resourceFixture({
+          schema_definition: [{ name: "body", type: "text", features: [vector(768), keyword] }],
+        }),
+      ],
+    });
+    await updateResource(ctx, "r-1", { name: "renamed" });
+    await updateResource(ctx, "r-1", {
+      schemaDefinition: [{ name: "body", type: "text", features: [vector(1024)] }],
+    });
+    const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+    const echoed = JSON.parse(calls[1]?.[1].body as string);
+    expect(echoed.schema_definition[0].features).toEqual([
+      { feature_type: "vector", name: "emb", config: { embedding_model: "m-1" } },
+      keyword,
+    ]);
+    const patched = JSON.parse(calls[3]?.[1].body as string);
+    expect(patched.schema_definition[0].features).toEqual([
+      { feature_type: "vector", name: "emb", config: { embedding_model: "m-1" } },
+    ]);
+  });
+
   it("uses action endpoints for independent enabled state", async () => {
     const f = mockFetch();
     await enableResource(ctx, "r/1");
@@ -252,9 +282,22 @@ describe("queryResource", () => {
     });
   });
 
+  it("sends binary_mode and ignore_local_index on the initial request", async () => {
+    const f = mockFetch();
+    await queryResource(ctx, "r-1", { binaryMode: "content", ignoreLocalIndex: true });
+    expect(JSON.parse(firstCall(f)[1].body as string)).toMatchObject({
+      binary_mode: "content",
+      ignore_local_index: true,
+    });
+  });
+
   it("sends only the opaque cursor for a resource-data continuation", async () => {
     const f = mockFetch();
-    await queryResource(ctx, "r-1", { cursor: "cursor-1" });
+    await queryResource(ctx, "r-1", {
+      cursor: "cursor-1",
+      binaryMode: "content",
+      ignoreLocalIndex: true,
+    });
     expect(JSON.parse(firstCall(f)[1].body as string)).toEqual({
       paging: { cursor: "cursor-1" },
       need_total: false,
@@ -298,6 +341,12 @@ describe("typed Resource and document APIs", () => {
     expect(JSON.parse(firstCall(upsertFetch)[1].body as string)).toEqual({ title: "updated" });
 
     await expect(upsertResourceDocument(ctx, "r-1", "d-1,d-2", {})).rejects.toThrow(InputError);
+
+    const guarded = mockFetch({ id: "d-2" });
+    await expect(createResourceDocument(ctx, "r-1", { _id: "chosen", title: "x" })).rejects.toThrow(
+      /_id/,
+    );
+    expect((guarded as unknown as { mock: { calls: CallArgs[] } }).mock.calls).toHaveLength(0);
   });
 
   it("gets documents without rounding bigint values", async () => {
