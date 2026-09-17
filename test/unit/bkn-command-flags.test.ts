@@ -454,6 +454,10 @@ describe("openbkn bkn flags", () => {
     await expect(run("action-log", "list", "kn-1", "--keyword", "x".repeat(129))).rejects.toThrow(
       "--keyword must be at most 128 characters",
     );
+    // Length is measured on the string that is sent, untrimmed.
+    await expect(
+      run("action-log", "list", "kn-1", "--keyword", `  ${"x".repeat(128)}  `),
+    ).rejects.toThrow(/at most 128/);
     await expect(
       run("action-log", "get", "kn-1", "log-1", "--results-limit", "1001"),
     ).rejects.toThrow("--results-limit must be an integer from 1 to 1000");

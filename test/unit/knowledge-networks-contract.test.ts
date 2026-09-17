@@ -543,6 +543,9 @@ describe("write modes and branch on bkn-backend writes", () => {
     });
     await updateKnowledgeNetwork(ctx, "kn-1", {});
     expect(lastCall(f).url.search).toBe("");
+    // A body naming its branch without --branch must not update main.
+    await updateKnowledgeNetwork(ctx, "kn-1", { name: "n", branch: "dev" });
+    expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
     await deleteKnowledgeNetwork(ctx, "kn-1", { branch: "dev" });
     expect(lastCall(f).init.method).toBe("DELETE");
     expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");

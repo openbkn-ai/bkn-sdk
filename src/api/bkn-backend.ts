@@ -183,8 +183,9 @@ export function runCypherQuery(
  * `InvalidParameter.OverrideMethod` before it looks at the body. The published
  * spec does not declare that header on this route; the SDK keeps sending it.
  *
- * Body `direction`: the spec's enum says `forward | reverse | bidirectional` while
- * its description and example say `backward`; the SDK passes either through.
+ * Body `direction`: `forward | backward | bidirectional`. The spec's enum says
+ * `reverse`, but the backend answers 400 InvalidParameter.Direction for it
+ * (verified on 14.103.77.23); its description and example say `backward`.
  */
 export function relationTypePaths(
   ctx: RequestContext,

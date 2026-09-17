@@ -88,8 +88,9 @@ const nonNegativeInt = (flag: string) => (v: string) => {
 
 /** `--keyword` of `action-log list`: the backend refuses more than 128 characters. */
 function actionLogKeyword(v: string): string {
-  if (v.trim().length > 128) {
-    throw new InputError(`--keyword must be at most 128 characters (got ${v.trim().length})`);
+  // Measure what is sent: the value goes out untrimmed.
+  if (v.length > 128) {
+    throw new InputError(`--keyword must be at most 128 characters (got ${v.length})`);
   }
   return v;
 }
@@ -541,7 +542,7 @@ An older deploy answers without paging — resend the query with "offset" instea
         "update body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
       )
       .option("--body-file <path>", "read update body JSON from a file")
-      .option("--branch <b>", "branch (default: the body's)"),
+      .option("--branch <b>", "branch (default: the body's branch, else main)"),
     true,
   ).action(async (knId: string, opts, cmd: Command) => {
     printJson(
@@ -1166,9 +1167,9 @@ not bound until you attach it (\`capability list\` counts it under boxes[].unmou
     .addHelpText(
       "after",
       `
-The body needs source_object_type_id, direction and path_length (1–3). The contract's enum
-says forward | reverse | bidirectional while its description says backward; both spellings
-are passed through as given.
+The body needs source_object_type_id, direction (forward | backward | bidirectional) and
+path_length (1–3). The contract's enum spells the reverse direction \`reverse\`, but the
+backend refuses it with 400 InvalidParameter.Direction; use \`backward\`.
 
   openbkn bkn relation-type-paths <kn-id> \\
     --body '{"source_object_type_id": "<ot-id>", "direction": "bidirectional", "path_length": 2}'`,

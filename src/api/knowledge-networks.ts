@@ -162,9 +162,13 @@ export function updateKnowledgeNetwork(
   body: unknown,
   opts: ImportWriteOptions = {},
 ): Promise<unknown> {
+  // Like create: the backend reads the branch from the query (default main), so a
+  // body that names a branch without --branch must not quietly update main.
+  const declared = (body as { branch?: unknown } | null)?.branch;
+  const bodyBranch = typeof declared === "string" ? declared : undefined;
   return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}`, {
     method: "PUT",
-    query: writeQuery(opts),
+    query: writeQuery({ ...opts, branch: opts.branch || bodyBranch }),
     body,
   });
 }
