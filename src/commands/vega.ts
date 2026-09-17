@@ -408,7 +408,7 @@ export function vegaCommand(): Command {
     .option("--tags <t1,t2>", "comma-separated tags")
     .option("--description <s>", "description")
     .option("--enabled", "create enabled (default: disabled)")
-    .option("--internal", "create an internal catalog")
+    .option("--built-in", "create a platform-owned catalog")
     .option("--allow-unhealthy", "save the catalog when its connection test fails")
     .option("--health-check-mode <mode>", "health schedule: inherit | enabled | disabled")
     .option("--health-check-cron <expr>", "cron expression for enabled health checks")
@@ -429,7 +429,7 @@ export function vegaCommand(): Command {
               : undefined,
             description: opts.description,
             enabled: opts.enabled ? true : undefined,
-            internal: opts.internal ? true : undefined,
+            builtIn: opts.builtIn ? true : undefined,
             healthCheckSchedule: healthCheckSchedule(opts.healthCheckMode, opts.healthCheckCron),
           },
           { allowUnhealthy: opts.allowUnhealthy ? true : undefined },

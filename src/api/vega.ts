@@ -157,7 +157,7 @@ export const Catalog = z
     description: z.string().optional(),
     type: z.string(),
     enabled: z.boolean(),
-    internal: z.boolean().optional(),
+    built_in: z.boolean().optional(),
     connector_type: z.string(),
     connector_config: z.record(z.unknown()).optional(),
     metadata: z.record(z.unknown()).optional(),
@@ -606,7 +606,7 @@ export interface CreateCatalogRequest {
   description?: string;
   enabled?: boolean;
   id?: string;
-  internal?: boolean;
+  builtIn?: boolean;
   healthCheckSchedule?: CatalogHealthCheckScheduleConfig | null;
 }
 
@@ -641,7 +641,7 @@ export function createCatalog(
       ...(req.tags !== undefined ? { tags: req.tags } : {}),
       ...(req.description !== undefined ? { description: req.description } : {}),
       ...(req.enabled !== undefined ? { enabled: req.enabled } : {}),
-      ...(req.internal !== undefined ? { internal: req.internal } : {}),
+      ...(req.builtIn !== undefined ? { built_in: req.builtIn } : {}),
       ...(req.healthCheckSchedule !== undefined
         ? {
             health_check_schedule:
