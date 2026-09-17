@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
+from urllib.parse import quote
 
 from .config import Context, resolve_context
 from .errors import InputError
@@ -101,7 +102,7 @@ class RelationPath:
         ctx = context or resolve_context()
         kn_id = type(instance).__kn_id__
         target = self.steps[-1]._target_class()
-        path = f"{QUERY_BASE}/{kn_id}/subgraph"
+        path = f"{QUERY_BASE}/{quote(kn_id, safe='')}/subgraph"
 
         body: dict[str, Any] = {
             "source_object_type_id": type(instance).__bkn_id__,
@@ -111,7 +112,6 @@ class RelationPath:
             # One seed instance: the condition already pins it, and a larger cap
             # would only widen the walk.
             "limit": 1,
-            "response_format": "json",
         }
 
         def send(bkn_context: dict[str, str] | None) -> Any:
