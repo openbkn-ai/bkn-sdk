@@ -111,6 +111,10 @@ export interface SkillExecutionResult {
   skill_id?: string;
   session_id?: string;
   work_dir?: string;
+  /** The uploaded package's file name. */
+  file_name?: string;
+  /** Where the package landed inside the sandbox. */
+  uploaded_path?: string;
   command?: string;
   exit_code?: number;
   stdout?: string;
@@ -153,11 +157,28 @@ export function getSkillNames(ctx: RequestContext, ids: string[]): Promise<unkno
   return request(ctx, `${BASE}/skills/names`, { method: "POST", body: { ids } });
 }
 
-/** Update a skill's editable metadata (JSON PUT). */
+/** The sources `PUT /skills/:id/metadata` (and register) accept. */
+export const SKILL_SOURCES = ["custom", "internal"] as const;
+export type SkillSource = (typeof SKILL_SOURCES)[number];
+
+/**
+ * `PUT /skills/:id/metadata` body. A full overwrite, not a patch: `name`,
+ * `description` and `category` are required every time.
+ */
+export interface UpdateSkillMetadataRequest {
+  name: string;
+  description: string;
+  category: string;
+  source?: SkillSource;
+  extend_info?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+/** Update a skill's editable metadata (JSON PUT; replaces, does not patch). */
 export function updateSkillMetadata(
   ctx: RequestContext,
   skillId: string,
-  body: unknown,
+  body: UpdateSkillMetadataRequest,
 ): Promise<unknown> {
   return request(ctx, `${BASE}/skills/${encodeURIComponent(skillId)}/metadata`, {
     method: "PUT",
@@ -165,7 +186,11 @@ export function updateSkillMetadata(
   });
 }
 
-/** Republish a previous skill version (`POST /skills/:id/history/republish`). */
+/**
+ * Copy a historical version back into the skill's **draft**
+ * (`POST /skills/:id/history/republish`). Publishes nothing — use
+ * {@link publishSkillVersion} (`history/publish`) to publish a version directly.
+ */
 export function republishSkillVersion(
   ctx: RequestContext,
   skillId: string,
@@ -187,6 +212,35 @@ export function publishSkillVersion(
     method: "POST",
     body: { version },
   });
+}
+
+/** What the caller may do with one listed record. Absent means none. */
+export type ListItemOperation =
+  | "view"
+  | "modify"
+  | "publish"
+  | "unpublish"
+  | "delete"
+  | "authorize";
+
+/**
+ * One entry of `GET /skills` / `GET /skills/market`. Only the documented fields
+ * the SDK relies on are typed; the rest pass through.
+ */
+export interface SkillInfo {
+  /**
+   * The caller's effective operations on this skill, projected only on the
+   * management list. The service omits it when empty, so treat absent as `[]`.
+   */
+  operations?: ListItemOperation[];
+  skill_id?: string;
+  name?: string;
+  description?: string;
+  version?: string;
+  status?: string;
+  source?: string;
+  category?: string;
+  [key: string]: unknown;
 }
 
 /** Filters shared by the workspace list and the market. */
@@ -258,15 +312,31 @@ export function deleteSkill(ctx: RequestContext, skillId: string): Promise<unkno
 }
 
 /**
- * `url` hands back a pre-signed object-store link; `content` inlines the file
- * body. Only the management surface honours `content` today — the consumer
- * surface ignores it and answers with a URL either way.
+ * `url` hands back a pre-signed object-store link; `content` asks for the body
+ * inline. The contract documents `response_mode` only on
+ * `GET /skills/:id/management/content`; every other read may ignore it and
+ * answer with a URL, so a caller must handle a missing `content`.
  */
 export type SkillResponseMode = "url" | "content";
 
+/**
+ * `GET /skills/:id/content` (`SkillContent`) or, for the draft,
+ * `GET /skills/:id/management/content` (`ManagementSkillContent`, which adds
+ * the metadata fields marked management-only).
+ */
 export interface SkillContentResponse {
   skill_id?: string;
+  /** Management only: the current draft version. */
   version?: string;
+  status?: string;
+  /** Management only. */
+  name?: string;
+  /** Management only. */
+  description?: string;
+  /** Management only. */
+  source?: string;
+  /** Management only. */
+  file_type?: string;
   url?: string;
   /** Present only when the backend honoured `response_mode=content`. */
   content?: string;
@@ -284,6 +354,10 @@ export interface SkillReadFileResponse {
   skill_id?: string;
   rel_path?: string;
   url?: string;
+  /**
+   * Not in the contract (`SkillFileRef` carries only `url`). Read when a deploy
+   * inlines the body anyway; otherwise follow `url` or read the archive.
+   */
   content?: string;
   mime_type?: string;
   file_type?: string;
@@ -300,7 +374,11 @@ export function getSkillContent(
   }) as Promise<SkillContentResponse>;
 }
 
-/** Read a file inside a skill (progressive). */
+/**
+ * Read a file inside a skill (progressive). `responseMode` is sent as a query
+ * parameter the contract does not document for this endpoint; a deploy that
+ * ignores it answers with `url` only.
+ */
 export function readSkillFile(
   ctx: RequestContext,
   skillId: string,
