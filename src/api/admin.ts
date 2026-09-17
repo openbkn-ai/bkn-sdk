@@ -6,18 +6,18 @@
  * command group. `src/resources/admin.ts` maps each of these onto the bkn-safe
  * client in `./safe.ts`, which is where the requests live.
  *
- * The ISF clients that used to back these types (`/api/user-management/v1`,
- * `/api/authorization/v1`, `/isfweb/api/ShareMgnt`, `/api/eacp/v1`) were removed
- * once ISF was retired — see docs/exec-plans/admin-bkn-safe-migration.md. Some
- * fields here are wider than bkn-safe accepts and are dropped in the mapping;
- * that lossiness is documented in the migration plan.
+ * Every field here reaches bkn-safe `/api/safe/v1/admin/*`. The retired ISF
+ * fields that bkn-safe has no column for (org status, user code/position/
+ * remark/priority/confidentiality level) were removed rather than accepted and
+ * dropped.
  */
 
 export interface AdminListOptions {
-  role?: string;
   offset?: number;
   limit?: number;
+  /** Account/name substring. */
   name?: string;
+  /** Users only: direct members of this department. */
   orgId?: string;
 }
 
@@ -31,45 +31,42 @@ export interface ListRolesOptions {
 export interface CreateOrgInput {
   name: string;
   parentId?: string;
-  managerID?: string | null;
+  managerID?: string;
   code?: string;
   remark?: string;
-  status?: number;
   email?: string;
 }
 
 export interface UpdateOrgInput {
   name?: string;
-  managerID?: string | null;
+  managerID?: string;
   code?: string;
   remark?: string;
-  status?: number;
   email?: string;
 }
 
 export interface CreateUserInput {
   loginName: string;
+  /** Initial password; the user must change it on first login. Required. */
+  password: string;
   displayName?: string;
   email?: string;
-  departmentIds?: string[];
-  code?: string;
-  position?: string;
-  remark?: string;
   telNumber?: string;
-  priority?: number;
-  csfLevel?: number;
+  departmentIds?: string[];
 }
 
 export interface UpdateUserInput {
   displayName?: string;
-  code?: string;
-  position?: string;
-  remark?: string;
   email?: string;
   telNumber?: string;
-  managerID?: string;
-  priority?: number;
-  csfLevel?: number;
+  /** Replaces the user's department membership. */
+  departmentIds?: string[];
+}
+
+/** Direct members of a department, paged client-side (the route returns all of them). */
+export interface OrgMembersOptions {
+  offset?: number;
+  limit?: number;
 }
 
 /** Audit list filters — the bkn-safe `GET /admin/audit-logs` query. */

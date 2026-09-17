@@ -169,3 +169,195 @@ describe("admin llm list", () => {
     expect(list?.options.map((o) => o.long)).not.toContain("--series");
   });
 });
+
+function mockFetchByPath(
+  route: (url: URL, init: RequestInit) => unknown,
+): ReturnType<typeof vi.fn> {
+  const fetchMock = vi.fn(async (input: string, init: RequestInit = {}) => {
+    const body = route(new URL(input), init);
+    return new Response(JSON.stringify(body ?? {}), { status: 200 });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+const bodyAt = (fetchMock: ReturnType<typeof vi.fn>, index = 0) =>
+  JSON.parse(String((fetchMock.mock.calls[index]?.[1] as RequestInit).body));
+
+const optionsOf = (path: string[]) => {
+  let cmd = adminCommand();
+  for (const name of path) {
+    const next = cmd.commands.find((c) => c.name() === name);
+    if (!next) throw new Error(`no command ${name}`);
+    cmd = next;
+  }
+  return cmd.options.map((o) => o.long);
+};
+
+describe("admin org", () => {
+  it("no longer offers the role/fields qualifiers bkn-safe never took", () => {
+    expect(optionsOf(["org", "list"])).not.toContain("--role");
+    expect(optionsOf(["org", "tree"])).not.toContain("--role");
+    expect(optionsOf(["org", "members"])).not.toContain("--role");
+    expect(optionsOf(["org", "members"])).not.toContain("--fields");
+    expect(optionsOf(["org", "create"])).not.toContain("--status");
+    expect(optionsOf(["org", "update"])).not.toContain("--oss-id");
+  });
+
+  it("members pages the member list with --offset/--limit and keeps the full total", async () => {
+    mockFetch({ users: [{ id: "a" }, { id: "b" }, { id: "c" }], total: 3 });
+    const stdout = vi.mocked(process.stdout.write);
+    await run(["--json", "org", "members", "d1", "--offset", "1", "--limit", "1"]);
+    const printed = stdout.mock.calls.map(([c]) => String(c)).join("");
+    expect(JSON.parse(printed)).toEqual({ users: [{ id: "b" }], total: 3 });
+  });
+
+  it("create sends manager, code, remark and email, and no ISF '-1' parent", async () => {
+    const fetchMock = mockFetch({ id: "d2" });
+    await run([
+      "org",
+      "create",
+      "--name",
+      "Eng",
+      "--manager",
+      "u-1",
+      "--code",
+      "ENG",
+      "--remark",
+      "r",
+      "--email",
+      "eng@example.com",
+    ]);
+    expect(urlOf(fetchMock).pathname).toBe("/api/safe/v1/admin/departments");
+    expect(bodyAt(fetchMock)).toEqual({
+      name: "Eng",
+      manager_id: "u-1",
+      code: "ENG",
+      remark: "r",
+      email: "eng@example.com",
+    });
+  });
+
+  it("update sends only the provided fields", async () => {
+    const fetchMock = mockFetch({});
+    await run(["org", "update", "d1", "--manager", "u-2", "--code", "X"]);
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("PUT");
+    expect(bodyAt(fetchMock)).toEqual({ manager_id: "u-2", code: "X" });
+  });
+
+  it("tree reads every department page, not just the first 1000", async () => {
+    const fetchMock = mockFetchByPath((url) => {
+      const offset = Number(url.searchParams.get("offset") ?? 0);
+      if (offset === 0) {
+        return {
+          departments: Array.from({ length: 1000 }, (_, i) => ({ id: `d${i}`, name: `d${i}` })),
+          total: 1001,
+        };
+      }
+      return { departments: [{ id: "last", parent_id: "d0", name: "last" }], total: 1001 };
+    });
+    await run(["--json", "org", "tree"]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(urlOf(fetchMock, 1).searchParams.get("offset")).toBe("1000");
+    expect(urlOf(fetchMock, 1).searchParams.get("limit")).toBe("1000");
+  });
+});
+
+describe("admin user", () => {
+  it("list --org filters by department_id", async () => {
+    const fetchMock = mockFetch({ users: [], total: 0 });
+    await run(["user", "list", "--org", "d1"]);
+    expect(urlOf(fetchMock).searchParams.get("department_id")).toBe("d1");
+  });
+
+  it("create refuses without an explicit password and sends nothing", async () => {
+    const fetchMock = mockFetch({ id: "u1" });
+    await expect(run(["user", "create", "--login", "bob"])).rejects.toThrow(/--password/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("create sends the password, telephone and departments it was given", async () => {
+    const fetchMock = mockFetch({ id: "u1" });
+    await run([
+      "user",
+      "create",
+      "--login",
+      "bob",
+      "--password",
+      "S3cret!",
+      "--display-name",
+      "Bob",
+      "--tel",
+      "123",
+      "--department",
+      "d1",
+      "d2",
+    ]);
+    expect(bodyAt(fetchMock)).toEqual({
+      account: "bob",
+      password: "S3cret!",
+      name: "Bob",
+      telephone: "123",
+      department_ids: ["d1", "d2"],
+    });
+  });
+
+  it("create reads the password from BKN_NEW_USER_PASSWORD", async () => {
+    process.env.BKN_NEW_USER_PASSWORD = "from-env";
+    const fetchMock = mockFetch({ id: "u1" });
+    await run(["user", "create", "--login", "bob"]);
+    expect(bodyAt(fetchMock)).toEqual({ account: "bob", password: "from-env" });
+  });
+
+  it("update sends department_ids and drops the ISF-only flags", async () => {
+    expect(optionsOf(["user", "update"])).not.toContain("--csf-level");
+    expect(optionsOf(["user", "create"])).not.toContain("--priority");
+    const fetchMock = mockFetch({});
+    await run(["user", "update", "u1", "--department", "d3", "--tel", "9"]);
+    expect(bodyAt(fetchMock)).toEqual({ telephone: "9", department_ids: ["d3"] });
+  });
+});
+
+describe("admin role members", () => {
+  it("names members found past the first user page", async () => {
+    const fetchMock = mockFetchByPath((url) => {
+      if (url.pathname.endsWith("/roles/r1/members")) return { accessor_ids: ["u-far"] };
+      const offset = Number(url.searchParams.get("offset") ?? 0);
+      if (offset === 0) {
+        return {
+          users: Array.from({ length: 500 }, (_, i) => ({ id: `u${i}`, account: `a${i}` })),
+          total: 501,
+        };
+      }
+      return { users: [{ id: "u-far", account: "far" }], total: 501 };
+    });
+    await run(["--json", "role", "members", "r1"]);
+    const printed = vi
+      .mocked(process.stdout.write)
+      .mock.calls.map(([c]) => String(c))
+      .join("");
+    expect(JSON.parse(printed)).toEqual({ members: [{ account: "far", id: "u-far" }], total: 1 });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("admin llm list --type", () => {
+  it("sends model_type like model llm list does", async () => {
+    const fetchMock = mockFetch({ data: [], count: 0 });
+    await run(["llm", "list", "--type", "vu"]);
+    expect(urlOf(fetchMock).searchParams.get("model_type")).toBe("vu");
+    expect(urlOf(fetchMock).searchParams.has("name")).toBe(false);
+  });
+});
+
+describe("admin resource userCreate", () => {
+  it("refuses an empty password before sending", async () => {
+    const fetchMock = mockFetch({ id: "u1" });
+    const { admin } = await import("../../src/resources/admin.js");
+    const api = admin({ baseUrl: BASE, token: "t", insecure: false });
+    await expect(api.userCreate({ loginName: "bob", password: "" })).rejects.toThrow(
+      /initial password/,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
