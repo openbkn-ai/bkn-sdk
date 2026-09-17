@@ -3,7 +3,11 @@
 
 /** `openbkn vega …` — Catalog reads + index BuildTask. */
 import { Command } from "commander";
-import type { ResourceIndexConfig, ResourceProperty } from "../api/resources.js";
+import {
+  ResourceCategory,
+  type ResourceIndexConfig,
+  type ResourceProperty,
+} from "../api/resources.js";
 import {
   DiscoverScheduleSort,
   DiscoverStrategy,
@@ -17,11 +21,13 @@ import {
   SemanticUnderstandingTaskSort,
 } from "../api/vega-semantic.js";
 import {
+  BuildMode,
   type BuildTask,
   BuildTaskExecuteType,
   BuildTaskSort,
   BuildTaskStatus,
   type CatalogHealthCheckScheduleConfig,
+  CatalogHealthCheckStatus,
   ConnectorCategory,
   ConnectorMode,
   type RawQueryRequest,
@@ -29,12 +35,19 @@ import {
 } from "../api/vega.js";
 import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { buildTaskState, isBuildTaskUnsuccessful } from "../resources/vega.js";
-import { DEFAULT_LIST_LIMIT } from "../types.js";
+import { DEFAULT_LIST_LIMIT, DEFAULT_QUERY_LIMIT } from "../types.js";
 import { buildProgressReporter } from "../utils/build-progress.js";
 import { InputError, WaitTimeoutError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
-import { clientFrom, csv, outputOptions } from "./_shared.js";
+import { clientFrom, csv, oneOf, outputOptions } from "./_shared.js";
+import {
+  addResourceListOptions,
+  addResourceQueryOptions,
+  keepAliveSec,
+  resourceListOptionsFrom,
+  resourceQueryOptionsFrom,
+} from "./resource.js";
 
 const int = (value: string): number => {
   const parsed = Number(value);
@@ -43,6 +56,15 @@ const int = (value: string): number => {
   }
   return parsed;
 };
+const nonNegativeInt =
+  (flag: string) =>
+  (value: string): number => {
+    const parsed = Number(value);
+    if (!/^\d+$/.test(value) || !Number.isSafeInteger(parsed)) {
+      throw new InputError(`${flag} must be an integer 0 or greater (got '${value}')`);
+    }
+    return parsed;
+  };
 const seconds = (value: string): number => {
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed < 0) {
@@ -342,12 +364,28 @@ export function vegaCommand(): Command {
     .option("--offset <n>", "page offset", int, 0)
     .option("--name <s>", "filter by name")
     .option("--tag <s>", "filter by tag")
-    .option("--type <type>", "filter by catalog type: physical | logical")
+    .option(
+      "--type <type>",
+      "filter by catalog type: physical | logical",
+      oneOf("--type", ["physical", "logical"] as const),
+    )
     .option("--connector-type <type>", "filter by connector type")
-    .option("--enabled <bool>", "filter by enabled state")
-    .option("--health-check-status <s>", "filter by health status")
-    .option("--sort <field>", "sort field: name | create_time | update_time")
-    .option("--direction <dir>", "sort direction: asc | desc")
+    .option("--enabled <bool>", "filter by enabled state: true | false", bool)
+    .option(
+      "--health-check-status <s>",
+      `filter by health status: ${CatalogHealthCheckStatus.options.join(" | ")}`,
+      oneOf("--health-check-status", CatalogHealthCheckStatus.options),
+    )
+    .option(
+      "--sort <field>",
+      "sort field: name | create_time | update_time",
+      oneOf("--sort", ["name", "create_time", "update_time"] as const),
+    )
+    .option(
+      "--direction <dir>",
+      "sort direction: asc | desc",
+      oneOf("--direction", SortDirection.options),
+    )
     .action(async (_opts, cmd: Command) => {
       const o = cmd.optsWithGlobals();
       const data = await clientFrom(cmd).vega.catalogs({
@@ -357,7 +395,7 @@ export function vegaCommand(): Command {
         tag: o.tag,
         type: o.type,
         connectorType: o.connectorType,
-        enabled: o.enabled === undefined ? undefined : o.enabled === "true",
+        enabled: o.enabled,
         healthCheckStatus: o.healthCheckStatus,
         sort: o.sort,
         direction: o.direction,
@@ -383,9 +421,17 @@ export function vegaCommand(): Command {
   catalog
     .command("resources <id>")
     .description("List resources under a catalog")
-    .option("--category <c>", "filter by category (e.g. table)")
-    .option("--limit <n>", "page size (default 30, max 1000; -1 = all)", int)
-    .option("--offset <n>", "page offset", int, 0)
+    .option(
+      "--category <c>",
+      `filter by category: ${ResourceCategory.options.join(" | ")}`,
+      oneOf("--category", ResourceCategory.options),
+    )
+    .option(
+      "--limit <n>",
+      `page size (default ${DEFAULT_LIST_LIMIT}); page with --offset against total_count`,
+      int,
+    )
+    .option("--offset <n>", "page offset", nonNegativeInt("--offset"), 0)
     .action(async (id: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).vega.catalogResources(id, opts.category, opts.limit, opts.offset),
@@ -402,18 +448,29 @@ export function vegaCommand(): Command {
     .command("create")
     .description("Create a catalog (data source)")
     .requiredOption("--name <s>", "catalog name")
-    .requiredOption("--connector-type <s>", "connector type (e.g. mysql)")
-    .requiredOption("--connector-config <json>", "connector config JSON")
+    .option("--connector-type <s>", "connector type (e.g. mysql); required unless --internal")
+    .option("--connector-config <json>", "connector config JSON; not allowed with --internal")
     .option("--id <id>", "explicit catalog id")
     .option("--tags <t1,t2>", "comma-separated tags")
     .option("--description <s>", "description")
     .option("--enabled", "create enabled (default: disabled)")
-    .option("--internal", "create an internal catalog")
+    .option("--internal", "create an internal (logical) catalog, with no connector")
     .option("--allow-unhealthy", "save the catalog when its connection test fails")
     .option("--health-check-mode <mode>", "health schedule: inherit | enabled | disabled")
     .option("--health-check-cron <expr>", "cron expression for enabled health checks")
     .action(async (opts, cmd: Command) => {
-      const connectorConfig = parseJsonObject(opts.connectorConfig, "--connector-config");
+      if (opts.internal && (opts.connectorType || opts.connectorConfig)) {
+        throw new InputError(
+          "--internal creates a logical catalog: omit --connector-type and --connector-config",
+        );
+      }
+      if (!opts.internal && !opts.connectorType) {
+        throw new InputError("--connector-type is required unless --internal");
+      }
+      const connectorConfig =
+        opts.connectorConfig === undefined
+          ? undefined
+          : parseJsonObject(opts.connectorConfig, "--connector-config");
       printJson(
         await clientFrom(cmd).vega.createCatalog(
           {
@@ -428,7 +485,7 @@ export function vegaCommand(): Command {
                   .filter(Boolean)
               : undefined,
             description: opts.description,
-            enabled: opts.enabled ? true : undefined,
+            enabled: Boolean(opts.enabled),
             internal: opts.internal ? true : undefined,
             healthCheckSchedule: healthCheckSchedule(opts.healthCheckMode, opts.healthCheckCron),
           },
@@ -439,20 +496,31 @@ export function vegaCommand(): Command {
     });
   catalog
     .command("update <id>")
-    .description("Fully update a catalog")
-    .requiredOption("--name <s>", "catalog name")
-    .requiredOption("--connector-type <s>", "connector type")
-    .requiredOption("--enabled <bool>", "current enabled state", bool)
-    .option("--connector-config <json>", "connector config JSON")
+    .description(
+      "Update a catalog; fields you leave out keep their current values (read, then full PUT)",
+    )
+    .option("--name <s>", "catalog name")
+    .option("--connector-type <s>", "connector type")
+    .option("--enabled <bool>", "current enabled state (must match; use enable/disable)", bool)
+    .option("--connector-config <json>", "connector config JSON (sent only when given)")
     .option("--tags <t1,t2>", "comma-separated tags")
     .option("--description <s>", "description")
-    .requiredOption(
+    .option(
       "--expected-update-time <ms>",
-      "optimistic-lock update time",
+      "optimistic-lock update time (default: the update_time read before the PUT)",
       expectedUpdateTime,
     )
     .option("--allow-unhealthy", "save the update when its connection test fails")
     .action(async (id: string, opts, cmd: Command) => {
+      const hasPatch = [
+        opts.name,
+        opts.connectorType,
+        opts.enabled,
+        opts.connectorConfig,
+        opts.tags,
+        opts.description,
+      ].some((value) => value !== undefined);
+      if (!hasPatch) throw new InputError("provide at least one catalog field to update");
       const connectorConfig = opts.connectorConfig
         ? parseJsonObject(opts.connectorConfig, "--connector-config")
         : undefined;
@@ -599,8 +667,8 @@ export function vegaCommand(): Command {
     .requiredOption("--name <s>", "schedule name")
     .requiredOption("--catalog-id <id>", "catalog id")
     .requiredOption("--cron <expr>", "five-field cron expression")
-    .option("--start-time <ms>", "start time", int)
-    .option("--end-time <ms>", "end time", int)
+    .option("--start-time <ms>", "start time (0 = no lower bound)", nonNegativeInt("--start-time"))
+    .option("--end-time <ms>", "end time (0 = no upper bound)", nonNegativeInt("--end-time"))
     .option("--enabled", "create enabled")
     .option("--strategy <strategy>", `strategy: ${DiscoverStrategy.options.join(" | ")}`)
     .action(async (opts, cmd: Command) => {
@@ -624,8 +692,16 @@ export function vegaCommand(): Command {
     .requiredOption("--catalog-id <id>", "current catalog id")
     .requiredOption("--cron <expr>", "five-field cron expression")
     .requiredOption("--enabled <bool>", "current enabled state", bool)
-    .requiredOption("--start-time <ms>", "start time (0 = no lower bound)", int)
-    .requiredOption("--end-time <ms>", "end time (0 = no upper bound)", int)
+    .requiredOption(
+      "--start-time <ms>",
+      "start time (0 = no lower bound)",
+      nonNegativeInt("--start-time"),
+    )
+    .requiredOption(
+      "--end-time <ms>",
+      "end time (0 = no upper bound)",
+      nonNegativeInt("--end-time"),
+    )
     .requiredOption("--strategy <strategy>", `strategy: ${DiscoverStrategy.options.join(" | ")}`)
     .requiredOption(
       "--expected-update-time <ms>",
@@ -858,7 +934,9 @@ export function vegaCommand(): Command {
 
   vega
     .command("index-capabilities")
-    .description("List local-index analyzers and capability probe time")
+    .description(
+      "List local-index analyzers and probe time (undocumented deploy extension; 404 where absent)",
+    )
     .action(async (_opts, cmd: Command) => {
       printJson(await clientFrom(cmd).vega.indexCapabilities(), outputOptions(cmd));
     });
@@ -872,11 +950,19 @@ export function vegaCommand(): Command {
       "--query <sql>",
       "SQL string; reference a resource with a {{<resource-id>}} placeholder",
     )
-    .option("--input-dialect <dialect>", "SQL input dialect: postgres | mysql | trino | duckdb")
-    .option("--paging-mode <mode>", "paging mode: single | cursor")
+    .option(
+      "--input-dialect <dialect>",
+      "SQL input dialect: postgres | mysql | trino | duckdb | tsql",
+      oneOf("--input-dialect", ["postgres", "mysql", "trino", "duckdb", "tsql"] as const),
+    )
+    .option(
+      "--paging-mode <mode>",
+      "paging mode: single | cursor",
+      oneOf("--paging-mode", ["single", "cursor"] as const),
+    )
     .option("--limit <n>", "page size (cursor mode requires it)", int)
-    .option("--offset <n>", "first-page offset", int)
-    .option("--keep-alive-sec <s>", "cursor keep-alive in seconds (60–3600)", int)
+    .option("--offset <n>", "first-page offset", nonNegativeInt("--offset"))
+    .option("--keep-alive-sec <s>", "cursor keep-alive in seconds (60–3600)", keepAliveSec)
     .option("--cursor <cursor>", "opaque cursor returned by the previous page")
     .option("--need-total", "include the complete total count")
     .option("--query-timeout-sec <s>", "query timeout in seconds (1–3600)", int)
@@ -936,33 +1022,14 @@ export function vegaCommand(): Command {
     });
 
   const resource = vega.command("resource").description("Vega-backend resources");
-  resource
-    .command("list")
-    .description("List resources")
-    .option("--catalog-id <id>", "filter by catalog id")
-    .option("--type <category>", "resource category")
-    .option("--category <category>", "alias of --type")
-    .option("--status <status>", "filter by status")
-    .option("--schema <name>", "filter by source schema")
-    .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
-    .option("--offset <n>", "page offset", int, 0)
-    .option("--sort <field>", "sort field: name | create_time | update_time")
-    .option("--direction <dir>", "sort direction: asc | desc")
-    .action(async (opts, cmd: Command) => {
+  addResourceListOptions(resource.command("list").description("List resources"), "--type").action(
+    async (opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).resource.list({
-          catalogId: opts.catalogId,
-          category: opts.type ?? opts.category,
-          status: opts.status,
-          schema: opts.schema,
-          limit: opts.limit,
-          offset: opts.offset,
-          sort: opts.sort,
-          direction: opts.direction,
-        }),
+        await clientFrom(cmd).resource.list(resourceListOptionsFrom(opts)),
         outputOptions(cmd),
       );
-    });
+    },
+  );
   resource
     .command("get <id>")
     .description("Get a resource")
@@ -1085,17 +1152,16 @@ export function vegaCommand(): Command {
         printJson(result, outputOptions(cmd));
       });
   }
-  resource
-    .command("query <id>")
-    .description("Fetch data rows from a resource")
-    .option("--limit <n>", "row limit", int, 50)
-    .option("--offset <n>", "row offset", int, 0)
-    .action(async (id: string, opts, cmd: Command) => {
-      printJson(
-        await clientFrom(cmd).resource.query(id, { limit: opts.limit, offset: opts.offset }),
-        outputOptions(cmd),
-      );
-    });
+  addResourceQueryOptions(
+    resource
+      .command("query <id>")
+      .description(`Fetch data rows from a resource (default limit ${DEFAULT_QUERY_LIMIT})`),
+  ).action(async (id: string, opts, cmd: Command) => {
+    printJson(
+      await clientFrom(cmd).resource.query(id, resourceQueryOptionsFrom(opts, DEFAULT_QUERY_LIMIT)),
+      outputOptions(cmd),
+    );
+  });
   resource
     .command("document-get <resource-id> <document-ids...>")
     .description("Get dataset documents by id")
@@ -1239,7 +1305,11 @@ export function vegaCommand(): Command {
     .option("--resource-id <id>", "filter by resource id")
     .option("--catalog-id <id>", "filter by catalog id")
     .option("--status <status>", `comma-separated statuses: ${BuildTaskStatus.options.join(" | ")}`)
-    .option("--mode <mode>", "filter by mode: batch | streaming")
+    .option(
+      "--mode <mode>",
+      `filter by mode: ${BuildMode.options.join(" | ")}`,
+      oneOf("--mode", BuildMode.options),
+    )
     .option(
       "--execute-type <type>",
       `filter by execution type: ${BuildTaskExecuteType.options.join(" | ")}`,
@@ -1345,6 +1415,8 @@ export function vegaCommand(): Command {
 QUERYING DIRECTLY
   sql --query "<sql>" runs against the source itself. Name a resource with a
   {{<resource-id>}} placeholder rather than the physical table it happens to have.
+  resource query <id> reads rows through the resource: --filter, --sort, --output-fields,
+  cursor paging, and --ignore-local-index to bypass a table's local index.
 
 BUILDING AN INDEX
   resource update <resource-id> saves schema_definition and index_config. Then resource build
