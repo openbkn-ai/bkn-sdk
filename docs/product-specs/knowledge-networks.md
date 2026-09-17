@@ -12,7 +12,12 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
 
 ## User-visible behavior
 
-- `openbkn bkn list` — networks (default limit 30).
+- `openbkn bkn list` — networks (default limit 30; `--limit` takes 1–1000 or -1 for all, checked before sending).
+- `openbkn bkn create <name> [--branch b]` sends the branch in both the query and the body (the backend reads the query, default `main`); `--import-mode normal|overwrite|ignore`, `--no-strict-mode` and `--binding-policy preserve|detach` map to their query flags. `update` takes `--branch`, `--import-mode` and `--no-strict-mode`; `delete` takes `--branch`.
+- Write modes on the other bkn-backend writes, as the contract lists them: `object-type`/`relation-type`/`metric create`, `metric validate` and `concept-group create` take `--import-mode` and `--no-strict-mode`; `metric update`, `concept-group update` and `add-members` take `--no-strict-mode`. Every concept-group and action-schedule write and read, and `relation-type-paths`, take `--branch`. A flag left unset is not sent, so the backend default applies.
+- `action-log list` refuses `--limit` above 1000 and `--keyword` above 128 characters; `action-log get` refuses `--results-limit` above 1000 and `--results-offset + --results-limit` above 10000 (the backend's own limit default of 100 counts when omitted). `capability list --metadata-type` is `openapi | function`.
+- `relation-type-paths` passes the body `direction` through unchanged: the contract's enum says `forward | reverse | bidirectional` but its description and example say `backward`, so neither spelling is refused locally. It keeps sending `X-HTTP-Method-Override: GET`, which the backend requires though the spec does not declare it.
+- `bkn cypher` answers and action-schedule reads are parsed keeping integers past 2^53 exact (raw row values; instance identities a schedule writes back).
 - `openbkn bkn get <id> [--branch b] [--detail-level full|summary]` — one network; `detail_level` per the contract (`summary` = concept ids and names); on 0.1.5 deploys it only changes the answer together with `--export`, and even then summary still carries full definitions (openbkn-ai/bkn-foundry#1632).
 - `openbkn bkn resources [--keyword s]` — BKN-backend resources (knowledge networks); always sends `resource_type=knowledge_network`, which the backend requires (without it the answer is empty).
 - `openbkn bkn search <id> <query>` accepts a quoted query beginning with `-`
@@ -24,7 +29,7 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
 - `openbkn bkn push <dir>` / `openbkn bkn pull <id>` — upload/download a BKN package; optional encoding detection (`--no-detect-encoding`, `--source-encoding`). `push` passes `--import-mode normal|overwrite|ignore`, `--no-strict-mode` and `--binding-policy preserve|detach` to the import. Verified on 0.1.5 (14.103.77.23): `binding_policy` is validated, but `import_mode` and `strict_mode` are accepted and not applied — every mode re-applies same-id edits and refuses a new id reusing an existing name (403 `ObjectTypeNameExisted`).
 - Schema creates (`object-type`/`relation-type`/`action-type`/`metric create`) send `X-HTTP-Method-Override: POST` with an `{entries:[…]}` body; ontology-query reads tunnelled over POST (`object-type query`, `action-type query`, `subgraph`) send `X-HTTP-Method-Override: GET`.
 - `object-type query` pages by cursor (`paging.next_cursor` → body `cursor`) on deploys that include foundry #1623; older deploys return no `paging` and page with body `offset`; `action-log list` pages by `--search-after`. `concept-group list` and `action-schedule list` return every row unless `--limit` is given (the backend's own default of 10 would truncate silently).
-- Comma-joined ids in DELETE paths (`concept-group remove-members`, `action-schedule delete`) are encoded one by one; an empty list is refused before any request.
+- Comma-joined ids in list-valued paths (`object-type`/`relation-type`/`action-type get`, `object-type`/`relation-type delete`, `metric get`/`delete`, `concept-group remove-members`, `action-schedule delete`) are encoded one by one with the commas kept literal; an empty list is refused before any request.
 - An object type's `### Data Properties` table may include an optional `Mask Rule`
   column containing one compact JSON object. The supported discriminated rules
   are `fixed`, `partial`, and `email` for string-like properties; `round` for
@@ -41,7 +46,9 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
   that went with it, produce no warning (a binding changed to another resource,
   or an object type that disappeared, still warns).
   The list is filtered by the current user's `view_detail` permission, so this
-  check cannot cover object types the user cannot see. An entry without a
+  check cannot cover object types the user cannot see. A `data_source` with a
+  `type` but no `id` (the contract requires only `type`) reads as unbound rather
+  than stopping the push. An entry without a
   `data_properties` key (the backend omits an empty list) has no properties.
   The raw import response gains `integrity_warnings` only when warnings exist;
   scripts using `--json` can check the same result. A 404 before upload means
