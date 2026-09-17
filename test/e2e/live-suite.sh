@@ -174,7 +174,7 @@ else
   echo "SKIP  context query-object-instance/query-instance-subgraph/get-logic-properties (no object type)"
 fi
 if [ -n "$AT_ID" ]; then
-  chk "context get-action-info" context get-action-info "$BKN_KN_ID" --args "{\"action_type_id\":\"$AT_ID\"}"
+  chk "context get-action-info" context get-action-info "$BKN_KN_ID" --args "{\"at_id\":\"$AT_ID\"}"
 else
   echo "SKIP  context get-action-info (no action type in $BKN_KN_ID)"
 fi

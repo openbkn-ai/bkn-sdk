@@ -37,12 +37,52 @@ import { HttpError, ToolError } from "../utils/errors.js";
 import { callToolRaw, mcpInfo } from "./context-loader.js";
 import { inheritVersionCheck } from "./version-check.js";
 
-/** The body field the lifecycle middleware reads. Snake_case: it goes on the wire. */
+/**
+ * The body field the lifecycle middleware reads. Snake_case: it goes on the wire.
+ *
+ * Mirrors `BKNContext` in the context-loader contract (`_shared/common.yaml`),
+ * which is `additionalProperties: false`.
+ */
 export interface BknContext {
   conversation_id: string;
   interaction_id: string;
-  /** v1 only. v2 rejects the field outright, so it must stay absent there. */
+  parent_operation_id?: string;
+  causation_event_ids?: string[];
+  business_refs?: Array<{ ref_type: string; ref_id: string; version?: string }>;
+  /**
+   * Legacy `managed-v1` only, and only on a context this module opened itself.
+   * The contract says callers must not submit it: Context Loader derives the
+   * Operation identity server-side, so a caller-built context has it stripped
+   * by {@link toWireBknContext} before it is sent.
+   */
   operation_key?: string;
+}
+
+/** The keys `BKNContext` accepts. Anything else is rejected by a strict deploy. */
+const WIRE_BKN_CONTEXT_KEYS = [
+  "conversation_id",
+  "interaction_id",
+  "parent_operation_id",
+  "causation_event_ids",
+  "business_refs",
+] as const;
+
+/**
+ * Reduce a caller-built `bkn_context` to the fields the contract accepts.
+ *
+ * `ManagedTrace` scopes still mint an `operation_key` for Trace Core's own
+ * registration; that key stays on the Core side. Context Loader derives the
+ * Operation idempotency identity itself and `BKNContext` is
+ * `additionalProperties: false`, so forwarding it (or any other unknown key)
+ * would get the call refused.
+ */
+export function toWireBknContext(bknContext: object): BknContext {
+  const source = bknContext as Record<string, unknown>;
+  const wire: Record<string, unknown> = {};
+  for (const key of WIRE_BKN_CONTEXT_KEYS) {
+    if (source[key] !== undefined) wire[key] = source[key];
+  }
+  return wire as unknown as BknContext;
 }
 
 /** Which lifecycle contract a deploy speaks, decided from its tool catalog. */
@@ -89,9 +129,16 @@ const V2_MARKER = "bkn_start_interaction";
  */
 const STALE_SESSION_CODES = new Set([
   "conversation_required",
+  // Trace Core's lifecycleError enum (agent-observability.yaml): a conversation
+  // that was closed, swept, or never existed takes its interaction with it.
+  "conversation_not_found",
+  "conversation_closed",
+  "conversation_expired",
   "interaction_required",
   "interaction_terminal",
   "interaction_in_progress",
+  // Not in any current spec; kept because v1 deploys (#38) answered with them
+  // and nothing shows they no longer do.
   "lease_expired",
   "lease_invalid",
   "lease_superseded",
@@ -106,8 +153,16 @@ const STALE_SESSION_CODES = new Set([
 const PROCESS_ID = randomUUID();
 let generation = 0;
 
-/** Display-only attribution, so an SDK-opened conversation is identifiable in Trace. */
-const AGENT_NAME = "openbkn-sdk";
+/**
+ * Default attribution, so an SDK-opened conversation is identifiable in Trace.
+ * A caller overrides it with `ClientOptions.agentName`; the contract asks for the
+ * same name on every start within one conversation, so it is fixed per client.
+ */
+const DEFAULT_AGENT_NAME = "openbkn-sdk";
+
+function agentNameFor(ctx: RequestContext): string {
+  return ctx.agentName?.trim() || DEFAULT_AGENT_NAME;
+}
 
 /**
  * Releasing a session happens on the way out of a process, after the result is
@@ -347,21 +402,26 @@ async function openSession(
 ): Promise<Session> {
   const { contract } = lifecycle;
   generation += 1;
-  // Declared required by later builds, absent from the schema of earlier ones.
   // `continue` whenever a conversation is named — that is exactly what the
   // enum means — and `new` when one is being minted.
-  const mode = (joining: boolean) =>
-    lifecycle.startWantsConversationMode ? { conversation_mode: joining ? "continue" : "new" } : {};
+  const conversationMode = (joining: boolean) => (joining ? "continue" : "new");
+  // Legacy v1 builds predate the field; send it there only when the catalog
+  // declares it, since a deploy may reject an argument it never published.
+  const legacyMode = (joining: boolean) =>
+    lifecycle.startWantsConversationMode ? { conversation_mode: conversationMode(joining) } : {};
   const named = joinTarget(ctx, contract);
   if (contract === "managed-v2") {
     // Without a conversation_id the server mints a fresh conversation. Reusing
     // one of our own would be rejected whenever its interaction is still
     // active, which is exactly the state a reopen is trying to escape — so only
     // a caller-named conversation is passed back in.
+    //
+    // `conversation_mode`, `question` and `agent_name` are required on every
+    // start (context-loader mcp.yaml), whatever the catalog managed to say.
     const started = await callToolRaw(ctx, knId, V2_MARKER, {
       question,
-      ...mode(Boolean(named)),
-      agent_name: AGENT_NAME,
+      conversation_mode: conversationMode(Boolean(named)),
+      agent_name: agentNameFor(ctx),
       ...(named ? { conversation_id: named } : {}),
     });
     return {
@@ -387,7 +447,7 @@ async function openSession(
       conversation_id: named,
       idempotency_key: `start:${PROCESS_ID}:${generation}`,
       question,
-      ...mode(true),
+      ...legacyMode(true),
     });
     return {
       contract,
@@ -410,7 +470,7 @@ async function openSession(
     conversation_id: conversationId,
     idempotency_key: `start:${PROCESS_ID}:${generation}`,
     question,
-    ...mode(true),
+    ...legacyMode(true),
   });
   return {
     contract,
@@ -592,8 +652,12 @@ function serverErrorCode(err: unknown): string | undefined {
   if (err instanceof ToolError) return err.code;
   if (!(err instanceof HttpError)) return undefined;
   try {
-    const parsed = JSON.parse(err.body) as { error?: { code?: unknown } };
-    return typeof parsed.error?.code === "string" ? parsed.error.code : undefined;
+    // Context-loader REST errors are `ErrorCompact` and Core's lifecycle errors
+    // are `lifecycleError`, both with a top-level `code`; older deploys nested
+    // it under `error`.
+    const parsed = JSON.parse(err.body) as { code?: unknown; error?: { code?: unknown } };
+    if (typeof parsed.error?.code === "string") return parsed.error.code;
+    return typeof parsed.code === "string" ? parsed.code : undefined;
   } catch {
     return undefined;
   }

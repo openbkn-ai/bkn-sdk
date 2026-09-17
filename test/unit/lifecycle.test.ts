@@ -440,19 +440,61 @@ describe("managed lifecycle on semantic search", () => {
     },
   );
 
-  it("sends conversation_mode only where the catalog declares it required", async () => {
-    // Without it, a deploy that requires the field refuses every handshake, and
-    // the refusal surfaces as the server's `conversation_required` on the
-    // business call — naming neither the field nor the handshake.
+  it("sends conversation_mode on every v2 start, whatever the catalog declares", async () => {
+    // mcp.yaml requires it on every bkn_start_interaction. Gating it on the
+    // catalog left a deploy whose /mcp/info omitted the schema refusing every
+    // handshake with a `conversation_required` that named neither the field
+    // nor the handshake.
     const withMode = mockDeploy({ catalog: V2_CATALOG_WITH_MODE });
     await searchInstance(freshCtx(), "kn-managed", "物料");
     expect(withMode.toolCalls[0]?.arguments.conversation_mode).toBe("new");
 
-    // And not where it is absent: v2 validates strictly, and a deploy may
-    // reject an argument it never published.
     const without = mockDeploy({ catalog: V2_CATALOG });
     await searchInstance(freshCtx(), "kn-managed", "物料");
-    expect(without.toolCalls[0]?.arguments).not.toHaveProperty("conversation_mode");
+    expect(without.toolCalls[0]?.arguments).toMatchObject({
+      conversation_mode: "new",
+      question: "物料",
+      agent_name: "openbkn-sdk",
+    });
+  });
+
+  it("still gates conversation_mode on the catalog for a legacy v1 start", async () => {
+    const recorded = mockDeploy({ catalog: V1_CATALOG });
+    await searchInstance(freshCtx(), "kn-managed", "物料");
+    const start = recorded.toolCalls.find((c) => c.name === "bkn_start_interaction");
+    expect(start?.arguments).not.toHaveProperty("conversation_mode");
+  });
+
+  it("sends the caller's agentName instead of the default", async () => {
+    const recorded = mockDeploy({ catalog: V2_CATALOG });
+    await searchInstance(freshCtx({ agentName: "supply-chain-agent" }), "kn-managed", "物料");
+    expect(recorded.toolCalls[0]?.arguments.agent_name).toBe("supply-chain-agent");
+  });
+
+  it.each(["conversation_closed", "conversation_expired", "conversation_not_found"])(
+    "reopens once on Core's %s lifecycle error",
+    async (code) => {
+      const recorded = mockDeploy({
+        retrieval: [
+          { status: 409, body: { code, message: "gone" } },
+          { status: 200, body: { concepts: [] } },
+        ],
+      });
+      await searchInstance(freshCtx(), "kn-managed", "物料");
+      expect(recorded.retrievalBodies).toHaveLength(2);
+      expect(recorded.toolCalls.filter((c) => c.name === "bkn_start_interaction")).toHaveLength(2);
+    },
+  );
+
+  it("reads a stale-session code from a top-level ErrorCompact code", async () => {
+    const recorded = mockDeploy({
+      retrieval: [
+        { status: 400, body: { code: "interaction_terminal", description: "done" } },
+        { status: 200, body: { concepts: [] } },
+      ],
+    });
+    await searchInstance(freshCtx(), "kn-managed", "物料");
+    expect(recorded.retrievalBodies).toHaveLength(2);
   });
 
   it("joins with continue, not new", async () => {
@@ -529,6 +571,7 @@ describe("managed lifecycle on semantic search", () => {
     expect(recorded.toolCalls.map((c) => c.name)).toEqual(["bkn_start_interaction"]);
     expect(recorded.toolCalls[0]?.arguments).toEqual({
       question: "物料",
+      conversation_mode: "new",
       agent_name: "openbkn-sdk",
     });
 
@@ -788,19 +831,24 @@ describe("managed lifecycle on semantic search", () => {
     expect(probes).toBe(2);
   });
 
-  it("sends a caller-built bkn_context as-is and opens no session", async () => {
+  it("sends a caller-built bkn_context without operation_key and opens no session", async () => {
     const recorded = mockDeploy({ catalog: V1_CATALOG });
     const owned = {
       conversation_id: "conv_owned",
       interaction_id: "int_owned",
       operation_key: "op:pre-registered",
+      parent_operation_id: "op_parent",
     };
     await searchInstance(freshCtx(), "kn-managed", "物料", { bknContext: owned });
 
-    // The same escape hatch context.toolCall has: a pre-registered
-    // operation_key must reach the server unchanged.
+    // BKNContext is additionalProperties:false and callers must not submit
+    // operation_key; the ids and causality fields survive.
     expect(recorded.toolCalls).toHaveLength(0);
-    expect(recorded.retrievalBodies[0]?.bkn_context).toEqual(owned);
+    expect(recorded.retrievalBodies[0]?.bkn_context).toEqual({
+      conversation_id: "conv_owned",
+      interaction_id: "int_owned",
+      parent_operation_id: "op_parent",
+    });
   });
 
   it("does not forward an orphan interaction header beside a caller-built REST context", async () => {
@@ -827,7 +875,8 @@ describe("managed lifecycle on semantic search", () => {
       .calls;
     const retrieval = calls.find(([url]) => String(url).includes("/kn/search_instance"));
     expect(new Headers(retrieval?.[1].headers).get("bkn-interaction-id")).toBeNull();
-    expect(recorded.retrievalBodies[0]?.bkn_context).toEqual(owned);
+    const { operation_key: _stripped, ...wire } = owned;
+    expect(recorded.retrievalBodies[0]?.bkn_context).toEqual(wire);
     expect(recorded.toolCalls).toHaveLength(0);
   });
 
@@ -855,6 +904,7 @@ describe("managed lifecycle on semantic search", () => {
     // The reopen mints a fresh conversation rather than reusing the dead one.
     expect(recorded.toolCalls[1]?.arguments).toEqual({
       question: "物料",
+      conversation_mode: "new",
       agent_name: "openbkn-sdk",
     });
   });
@@ -950,7 +1000,7 @@ describe("managed lifecycle on MCP business tools", () => {
     expect(recorded.toolCalls[1]?.arguments.query).toBe("MATCH (o:order) RETURN count(*) AS n");
   });
 
-  it("passes a caller-built bkn_context through untouched and opens no session", async () => {
+  it("passes a caller-built bkn_context's contract fields through and opens no session", async () => {
     const recorded = mockDeploy({ catalog: V1_CATALOG });
     const owned = {
       conversation_id: "conv_owned",
@@ -958,16 +1008,24 @@ describe("managed lifecycle on MCP business tools", () => {
       operation_key: "op:pre-registered",
       parent_operation_id: "op_parent",
       causation_event_ids: ["ev_1"],
+      business_refs: [{ ref_type: "object_type", ref_id: "object:kn-managed:material" }],
+      lease_token: "not-a-context-field",
     };
     await callTool(freshCtx(), "kn-managed", "search_schema", {
       query: "物料",
       bkn_context: owned,
     });
 
-    // `ManagedTrace.runOperation` pre-registers an Operation under this exact
-    // key before the tool call; replacing it would orphan the registration.
+    // Only BKNContext's own fields reach Context Loader: operation_key is
+    // derived server-side and callers must not submit it.
     expect(recorded.toolCalls.map((c) => c.name)).toEqual(["search_schema"]);
-    expect(recorded.toolCalls[0]?.arguments.bkn_context).toEqual(owned);
+    expect(recorded.toolCalls[0]?.arguments.bkn_context).toEqual({
+      conversation_id: "conv_owned",
+      interaction_id: "int_owned",
+      parent_operation_id: "op_parent",
+      causation_event_ids: ["ev_1"],
+      business_refs: [{ ref_type: "object_type", ref_id: "object:kn-managed:material" }],
+    });
   });
 
   it("leaves a business tool untouched on a deploy without the contract", async () => {
