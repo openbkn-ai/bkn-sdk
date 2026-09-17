@@ -258,22 +258,26 @@ Three hops is its ceiling.
 
 Reads through `session(traced=True)` go over MCP inside one managed interaction —
 opened on the first read, reused, finished on exit — and come back with a
-receipt: the operation id, the normalised input hash, and the business refs
-resolved down to property granularity.
+receipt: its status, evidence durability, the evidence refs, and the business
+refs resolved down to property granularity. That is the slim receipt a
+completed call carries (foundry #1417); Core keeps the full record, read with
+`openbkn trace interactions operations <interaction-id>`. A receipt whose status
+is `failed` raises `ToolError("receipt_failed")`; a `pending` one comes back
+with no value.
 
 ```python
 with bkn_osdk.session(traced=True):
     page = Order.objects().page(limit=10)
-    page.receipt["operation_id"]
+    page.receipt["receipt_status"]
     page.rows[0].__receipt__  # the same receipt, on each row it accounts for
 ```
 
-The tool accepts neither `sort` nor `need_total` and honours neither, so a query
-wanting either takes the REST path even inside a traced scope — carrying the
-scope's turn, so it is still recorded, but answering without an in-band receipt.
-Dropping the keys instead would return an unsorted page, or a count of zero for
-a set with matches: a wrong answer bought with a receipt. Untraced reads take
-REST throughout, which is faster, and carry no receipt.
+`order_by` travels to the tool as `sort`. The tool takes no `need_total`, no
+REST cursor and none of the REST query flags (`options(...)`), so a query
+wanting one of those takes the REST path even inside a traced scope — carrying
+the scope's turn, so it is still recorded, but answering without an in-band
+receipt. Untraced reads take REST throughout, which is faster, and carry no
+receipt.
 
 Which calls need a turn is a matter of surface, not of tool. The capability
 surface — the MCP tools and their REST twins under `/kn/` — refuses a
