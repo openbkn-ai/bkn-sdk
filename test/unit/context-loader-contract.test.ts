@@ -87,6 +87,8 @@ describe("response_format defaults to json", () => {
     async (tool) => {
       const calls = mockDeploy("{}");
       await callTool(freshCtx(), "kn-1", tool, {});
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.name).toBe(tool);
       expect(calls[0]?.arguments).not.toHaveProperty("response_format");
     },
   );
@@ -112,6 +114,8 @@ describe("kn_id travels in the tool arguments", () => {
     async (tool) => {
       const calls = mockDeploy("{}");
       await callTool(freshCtx(), "kn-1", tool, {});
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.name).toBe(tool);
       expect(calls[0]?.arguments).not.toHaveProperty("kn_id");
     },
   );
