@@ -13,6 +13,7 @@ import {
   setDefaultSmallModel,
 } from "../../src/api/models.js";
 import type { RequestContext } from "../../src/types.js";
+import { InputError } from "../../src/utils/errors.js";
 import { verifiedContext } from "../setup/verified-context.js";
 
 const ctx = verifiedContext<RequestContext>({
@@ -150,6 +151,19 @@ describe("model invocation (mf-model-api)", () => {
     if (!init) throw new Error("fetch not called");
     const body = JSON.parse(init.body as string);
     expect(body.stream).toBe(true);
+  });
+});
+
+describe("small-model calls refuse empty input before sending", () => {
+  it.each([
+    ["embeddings input", () => embeddings(ctx, "1", []), "input must not be empty"],
+    ["rerank blank query", () => rerank(ctx, "1", "  ", ["doc"]), "query must not be empty"],
+    ["rerank query", () => rerank(ctx, "1", "", ["doc"]), "query must not be empty"],
+    ["rerank documents", () => rerank(ctx, "1", "q", []), "documents must not be empty"],
+  ])("%s", async (_name, call, message) => {
+    const f = mockFetch();
+    await expect(call()).rejects.toThrow(new InputError(message));
+    expect(f).not.toHaveBeenCalled();
   });
 });
 

@@ -301,14 +301,19 @@ export function adminCommand(): Command {
   const role = admin.command("role").description("Role management");
   role
     .command("list")
-    .description("List roles → {roles}")
+    .description("List roles → {roles, total}")
     .option("--keyword <s>", "filter by keyword")
     .option("--limit <n>", "page size", int, 100)
     .option("--offset <n>", "page offset", int, 0)
     .option("--source <s>", "role source filter (business | user)")
     .action(async (opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).admin.roleList({ keyword: opts.keyword, limit: opts.limit }),
+        await clientFrom(cmd).admin.roleList({
+          keyword: opts.keyword,
+          limit: opts.limit,
+          offset: opts.offset,
+          source: opts.source,
+        }),
         outputOptions(cmd),
       );
     });

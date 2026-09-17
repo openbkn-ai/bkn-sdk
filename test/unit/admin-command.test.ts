@@ -9,7 +9,8 @@ function cli(): Command {
   const root = new Command("openbkn")
     .exitOverride()
     .option("--base-url <url>")
-    .option("--token <t>");
+    .option("--token <t>")
+    .option("--json");
   root.addCommand(adminCommand());
   return root;
 }
@@ -122,6 +123,41 @@ describe("admin audit", () => {
     const fetchMock = mockFetch({ id: "a-1" });
     await run(["audit", "get", "a-1"]);
     expect(urlOf(fetchMock).pathname).toBe("/api/safe/v1/admin/audit-logs/a-1");
+  });
+});
+
+describe("admin role list", () => {
+  const roles = {
+    roles: [
+      { id: "super_admin", name: "Super Admin", source: "business" },
+      { id: "data_admin", name: "Data Admin", source: "business" },
+      { id: "custom-1", name: "Analyst", source: "user" },
+    ],
+  };
+  const printed = () =>
+    JSON.parse(
+      vi
+        .mocked(process.stdout.write)
+        .mock.calls.map((c) => String(c[0]))
+        .join(""),
+    ) as { roles: Array<{ id: string }>; total: number };
+
+  it("pages with --offset and --limit and reports the total before paging", async () => {
+    mockFetch(roles);
+    await run(["role", "list", "--json", "--offset", "1", "--limit", "1"]);
+    expect(printed()).toEqual({ roles: [roles.roles[1]], total: 3 });
+  });
+
+  it("filters by --keyword on id or name, case-insensitively", async () => {
+    mockFetch(roles);
+    await run(["role", "list", "--json", "--keyword", "ADMIN", "--limit", "1"]);
+    expect(printed()).toEqual({ roles: [roles.roles[0]], total: 2 });
+  });
+
+  it("sends --source to the server", async () => {
+    const fetchMock = mockFetch(roles);
+    await run(["role", "list", "--source", "user"]);
+    expect(urlOf(fetchMock).searchParams.get("source")).toBe("user");
   });
 });
 

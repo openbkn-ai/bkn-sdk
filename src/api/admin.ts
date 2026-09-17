@@ -25,6 +25,7 @@ export interface ListRolesOptions {
   offset?: number;
   limit?: number;
   keyword?: string;
+  source?: string;
 }
 
 export interface CreateOrgInput {

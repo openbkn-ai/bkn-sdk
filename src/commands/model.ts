@@ -48,6 +48,16 @@ function addManagementCommands(parent: Command, kind: "llm" | "small"): void {
     .action(async (opts, cmd: Command) => {
       printJson(await clientFrom(cmd).models[kind].edit(readBody(opts)), outputOptions(cmd));
     });
+  if (kind === "llm") {
+    parent.commands
+      .find((c) => c.name() === "edit")
+      ?.addHelpText(
+        "after",
+        `
+Send the full definition, including "quota" (true | false): some platform
+versions answer an edit without it with HTTP 500 ModelFactory.Mydb.DataBase.ParameterError.`,
+      );
+  }
   parent
     .command("delete <model-ids>")
     .description("Delete model(s) (comma-joined ids)")
