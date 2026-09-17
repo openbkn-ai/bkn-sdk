@@ -14,7 +14,10 @@ const QUERY_KEYS = new Set([
   "filters",
   "limit",
   "sort",
+  // The live MCP tool pages by `cursor`; the REST contract names the same thing
+  // `search_after` (object-instance.yaml). Both are accepted and passed through.
   "cursor",
+  "search_after",
   "offset",
   "properties",
   "bkn_context",
