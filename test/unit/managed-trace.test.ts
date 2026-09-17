@@ -243,7 +243,6 @@ describe("ManagedTrace interaction lifecycle", () => {
           bkn_context: {
             conversation_id: "conversation-1",
             interaction_id: "interaction-1",
-            operation_key: "operation-key-1",
           },
         });
         return completion();
@@ -335,6 +334,39 @@ describe("ManagedTrace interaction lifecycle", () => {
     expect(api.cancelInteraction).toHaveBeenCalledOnce();
     expect(api.handoffInteraction).not.toHaveBeenCalled();
     expect(api.completeInteraction).not.toHaveBeenCalled();
+  });
+
+  it("records a slim Context Loader receipt against the active interaction", async () => {
+    const api = lifecycleApi();
+    const managed = new ManagedTrace(api, { idFactory: () => "id-1" });
+
+    await managed.withInteraction(
+      { mode: "resume_by_id", conversationId: "conversation-1" },
+      async (scope) => {
+        // foundry #1417: a completed MCP call carries no identity fields.
+        scope.recordReceipt({
+          receipt_status: "completed",
+          evidence_durability: "durable",
+          observed_evidence_refs: ["event:slim-1"],
+        });
+        scope.recordReceipt({ receipt_status: "completed" });
+        scope.recordReceipt(receipt());
+        expect(scope.supportCandidates().map((c) => c.ref)).toEqual([
+          "event:slim-1",
+          "event:observed-1",
+        ]);
+        // A receipt that names another interaction is still refused.
+        expect(() =>
+          scope.recordReceipt({ receipt_status: "completed", interaction_id: "interaction-2" }),
+        ).toThrow("does not belong to the active managed interaction");
+        return completion();
+      },
+    );
+
+    // Slim receipts have no Core ids to enumerate; the manifest lists only the full one.
+    const body = api.completeInteraction.mock.calls[0]?.[1] as InteractionCompletionInput;
+    expect(body.expected_operations).toEqual([{ operation_id: "operation-1", required: true }]);
+    expect(body.expected_receipts).toEqual([{ receipt_id: "receipt-1", required: true }]);
   });
 
   it("does not auto-adopt observed evidence", async () => {

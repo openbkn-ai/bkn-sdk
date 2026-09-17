@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 import { randomUUID } from "node:crypto";
+import type { ToolReceipt } from "./api/context-loader.js";
 import type {
   InteractionCompletionInput,
   ManagedConversation,
@@ -35,12 +36,6 @@ export interface BknBusinessContext {
   bkn_context: {
     conversation_id: string;
     interaction_id: string;
-    /**
-     * Trace Core's registration key for the Operation this scope opened. It is
-     * not a `BKNContext` field: `context.toolCall` and `kn.search` drop it before
-     * the context reaches Context Loader, which derives its own.
-     */
-    operation_key: string;
     parent_operation_id?: string;
     causation_event_ids?: string[];
   };
@@ -55,12 +50,23 @@ export interface SupportCandidate {
 export interface ManagedInteractionScope {
   conversation: ManagedConversation;
   interaction: ManagedInteraction;
+  /**
+   * The `bkn_context` for a business call in this interaction. `operationKey` is
+   * Trace Core's registration key and stays on the Core side: `BKNContext` has no
+   * such field, and Context Loader derives the Operation identity itself.
+   */
   bknContext(
     operationKey: string,
     parentOperationId?: string,
     causationEventIds?: string[],
   ): BknBusinessContext;
-  recordReceipt(receipt: OperationReceipt): void;
+  /**
+   * Record a receipt against this interaction: a full Core `OperationReceipt`, or
+   * the slim receipt a completed Context Loader MCP call carries since foundry
+   * #1417, which has no identity fields. A missing `conversation_id` /
+   * `interaction_id` is taken as the active interaction's; a present one must match.
+   */
+  recordReceipt(receipt: OperationReceipt | ToolReceipt): void;
   supportCandidates(): SupportCandidate[];
   runOperation<T>(
     input: ManagedOperationInput,
@@ -130,7 +136,8 @@ export class ManagedTrace {
       const interaction = await this.api.startInteraction(conversation.conversation_id, {
         idempotency_key: this.idFactory(),
       });
-      const receipts = new Map<string, OperationReceipt>();
+      const receipts = new Map<string, RecordedReceipt>();
+      let slimReceipts = 0;
       let terminal: ManagedInteraction | undefined;
       let terminalAction: Promise<ManagedInteraction> | undefined;
 
@@ -148,27 +155,35 @@ export class ManagedTrace {
       const scope: ManagedInteractionScope = {
         conversation,
         interaction,
-        bknContext: (operationKey, parentOperationId, causationEventIds) => ({
+        bknContext: (_operationKey, parentOperationId, causationEventIds) => ({
           bkn_context: {
             conversation_id: conversation.conversation_id,
             interaction_id: interaction.interaction_id,
-            operation_key: operationKey,
             ...(parentOperationId ? { parent_operation_id: parentOperationId } : {}),
             ...(causationEventIds?.length ? { causation_event_ids: causationEventIds } : {}),
           },
         }),
         recordReceipt: (receipt) => {
+          const conversationId = receipt.conversation_id ?? conversation.conversation_id;
+          const interactionId = receipt.interaction_id ?? interaction.interaction_id;
           if (
-            receipt.conversation_id !== conversation.conversation_id ||
-            receipt.interaction_id !== interaction.interaction_id
+            conversationId !== conversation.conversation_id ||
+            interactionId !== interaction.interaction_id
           ) {
             throw new InputError("Receipt does not belong to the active managed interaction");
           }
-          receipts.set(receipt.receipt_id, receipt);
+          // A slim receipt has no receipt_id to deduplicate on; each one is its own entry.
+          const key =
+            typeof receipt.receipt_id === "string" ? receipt.receipt_id : `slim:${++slimReceipts}`;
+          receipts.set(key, {
+            ...receipt,
+            conversation_id: conversationId,
+            interaction_id: interactionId,
+          } as RecordedReceipt);
         },
         supportCandidates: () =>
           [...receipts.values()].flatMap((receipt) =>
-            receipt.observed_evidence_refs.map((ref) => ({
+            (receipt.observed_evidence_refs ?? []).map((ref) => ({
               ref,
               state: "observed" as const,
               adopted: false as const,
@@ -472,22 +487,35 @@ function assertSafeStrategy(strategy: ConversationStrategy): void {
   }
 }
 
-function expectedOperations(receipts: Iterable<OperationReceipt>) {
+/**
+ * A receipt as the scope keeps it. Identity is always filled from the active
+ * interaction; the Core ids a completion manifest enumerates may still be absent
+ * on a slim receipt, which then contributes evidence refs but no manifest entry.
+ */
+type RecordedReceipt = Partial<Omit<OperationReceipt, "receipt_status">> & {
+  receipt_status: OperationReceipt["receipt_status"];
+  conversation_id: string;
+  interaction_id: string;
+};
+
+function expectedOperations(receipts: Iterable<RecordedReceipt>) {
   const operations = new Map<string, boolean>();
   for (const receipt of receipts) {
+    if (!receipt.operation_id) continue;
     operations.set(
       receipt.operation_id,
-      (operations.get(receipt.operation_id) ?? false) || receipt.required,
+      (operations.get(receipt.operation_id) ?? false) || receipt.required === true,
     );
   }
   return [...operations].map(([operation_id, required]) => ({ operation_id, required }));
 }
 
-function expectedReceipts(receipts: Iterable<OperationReceipt>) {
-  return [...receipts].map((receipt) => ({
-    receipt_id: receipt.receipt_id,
-    required: receipt.required,
-  }));
+function expectedReceipts(receipts: Iterable<RecordedReceipt>) {
+  return [...receipts].flatMap((receipt) =>
+    receipt.receipt_id
+      ? [{ receipt_id: receipt.receipt_id, required: receipt.required === true }]
+      : [],
+  );
 }
 
 function isCompletedReceipt(receipt: OperationReceipt): boolean {
