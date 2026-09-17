@@ -99,7 +99,23 @@ export function admin(ctx: RequestContext) {
       setUserPasswordSafe(ctx, userId, newPassword),
 
     // ── roles ──
-    roleList: (_opts?: ListRolesOptions) => listRolesSafe(ctx),
+    roleList: async (opts: ListRolesOptions = {}) => {
+      // The endpoint filters only by source and returns every role; keyword and
+      // paging are applied here. `total` counts matches before paging.
+      const res = (await listRolesSafe(ctx, opts.source)) as {
+        roles?: Array<{ id?: string; name?: string }>;
+      };
+      const keyword = opts.keyword?.trim().toLowerCase();
+      const matched = (res.roles ?? []).filter(
+        (r) =>
+          !keyword ||
+          (r.id ?? "").toLowerCase().includes(keyword) ||
+          (r.name ?? "").toLowerCase().includes(keyword),
+      );
+      const offset = Math.max(0, opts.offset ?? 0);
+      const end = opts.limit === undefined ? undefined : offset + Math.max(0, opts.limit);
+      return { roles: matched.slice(offset, end), total: matched.length };
+    },
     roleGet: (roleId: string) => getRoleSafe(ctx, roleId),
     roleMembers: async (roleId: string, _opts?: unknown) => {
       // members are accessor ids — enrich with account names from the user list.

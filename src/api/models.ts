@@ -244,11 +244,22 @@ export async function chatCompletionsStream(
   return out;
 }
 
+/**
+ * The small-model endpoints answer an empty input with a generic
+ * `ExternalSmallModel.UnknownError`, so reject it before sending.
+ */
+function requireNonEmpty(name: string, value: string | string[]): void {
+  if (typeof value === "string" ? value.trim() === "" : value.length === 0) {
+    throw new InputError(`${name} must not be empty`);
+  }
+}
+
 export async function embeddings(
   ctx: RequestContext,
   model: string,
   input: string[],
 ): Promise<unknown> {
+  requireNonEmpty("input", input);
   return request(ctx, `${API}/small-model/embeddings`, {
     method: "POST",
     body: { model: await resolveSmallModelName(ctx, model), input },
@@ -323,6 +334,8 @@ export async function rerank(
   query: string,
   documents: string[],
 ): Promise<unknown> {
+  requireNonEmpty("query", query);
+  requireNonEmpty("documents", documents);
   return request(ctx, `${API}/small-model/reranker`, {
     method: "POST",
     body: { model: await resolveSmallModelName(ctx, model), query, documents },

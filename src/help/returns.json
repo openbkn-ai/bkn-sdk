@@ -376,7 +376,7 @@
       "updated_at"
     ],
     "admin user roles": ["roles"],
-    "admin role list": ["roles"],
+    "admin role list": ["roles", "total"],
     "admin role get": [
       "built_in",
       "created_at",
