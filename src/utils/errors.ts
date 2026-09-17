@@ -211,10 +211,10 @@ function describeEnvelope(j: Record<string, unknown>, depth = 0): string {
   const solution = text(j.solution);
   const details = text(j.error_details) || text(j.details);
   // `error_details` is service-typed: vega answers with objects such as
-  // `{active_ids: [...]}` that name exactly what blocked the call.
-  const structured = details
-    ? ""
-    : describeDetailsObject(j.error_details) || describeDetailsObject(j.details);
+  // `{active_ids: [...]}` that name exactly what blocked the call. Computed
+  // independently of the prose `details`: an envelope can carry both, and the
+  // id list is the part that says what to act on.
+  const structured = describeDetailsObject(j.error_details) || describeDetailsObject(j.details);
 
   const inner = depth < 2 ? innerEnvelope(details, depth) : "";
   const parts = [

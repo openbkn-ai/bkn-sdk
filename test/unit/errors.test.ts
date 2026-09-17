@@ -123,6 +123,21 @@ describe("readableServerError: object `error_details`", () => {
     ).toBe("catalog has running tasks [Vega.Catalog.HasActiveTasks] (running_ids: t1, t2)");
   });
 
+  it("keeps the object `error_details` when a prose `details` string is also present", () => {
+    expect(
+      readableServerError(
+        body({
+          error_code: "Vega.Catalog.HasActiveTasks",
+          description: "catalog has running tasks",
+          details: "wait for the tasks to finish",
+          error_details: { running_ids: ["t1", "t2"] },
+        }),
+      ),
+    ).toBe(
+      "catalog has running tasks [Vega.Catalog.HasActiveTasks] wait for the tasks to finish (running_ids: t1, t2)",
+    );
+  });
+
   it("caps long id lists and keeps nested values compact", () => {
     const ids = Array.from({ length: 12 }, (_, i) => `id${i}`);
     const rendered = readableServerError(
