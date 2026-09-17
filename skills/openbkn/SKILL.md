@@ -29,7 +29,7 @@ BKN 平台的统一命令行工具 —— 一个二进制，运维面收进 `ope
 
 ## 第三方 Agent 业务问答硬门禁
 
-- **业务问答必须受管**：每轮先调用 `bkn_start_interaction`；首轮可声明 `agent_name`，后续轮次复用上一轮返回的 `conversation_id` 且不得变更名称。
+- **业务问答必须受管**：每轮先调用 `bkn_start_interaction`，必传 `question`、`agent_name`（每轮同一名称）和 `conversation_mode`：首轮用 `new` 且不传 `conversation_id`，后续轮次用 `continue` 并传上一轮返回的 `conversation_id`。
 - **只用权威 ID**：业务工具逐字使用 start 返回的 `conversation_id` 和 `interaction_id`，不得虚构、猜测或沿用示例值。
 - **业务调用保持受管**：只通过携带上述 ID 的 Context Loader 工具访问 OpenBKN，Operation、重试和证据闭包由平台管理。
 - **提交本轮结果**：回答生成后调用 `bkn_finish_interaction`；它只提交当前 Interaction 的结果，不关闭 Conversation。

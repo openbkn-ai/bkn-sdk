@@ -84,6 +84,9 @@ export { context } from "./resources/context-loader.js";
 export {
   ManagedToolError,
   type ManagedToolResult,
+  type SchemaConceptKind,
+  type SearchSchemaOptions,
+  type SearchSchemaScope,
   type ToolCallOptions,
   type ToolReceipt,
 } from "./api/context-loader.js";

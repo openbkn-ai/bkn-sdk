@@ -24,10 +24,12 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
 - `bkn push` validates mask-rule JSON, required parameters, bounds, property-type
   compatibility, and kind-specific fields before packaging or making a network
   request. `bkn pull` preserves the `.bkn` payload unchanged.
-- When the lifecycle catalog requires `conversation_mode`, managed retrieval
-  sends `new` without a conversation ID or `continue` with one. If that
-  handshake fails, the SDK surfaces the lifecycle error and does not send an
-  uncontexted business request.
+- A managed-v2 `bkn_start_interaction` always carries `question`, `agent_name`
+  (`openbkn-sdk` unless `ClientOptions.agentName` says otherwise) and
+  `conversation_mode`: `new` without a conversation ID, `continue` with one.
+  Legacy managed-v1 deploys get `conversation_mode` only when their catalog
+  declares it. If that handshake fails, the SDK surfaces the lifecycle error and
+  does not send an uncontexted business request.
 
 ## Index building (via Catalog BuildTask — no KN-level build)
 

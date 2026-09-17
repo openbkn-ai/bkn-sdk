@@ -14,6 +14,7 @@ import { request } from "./http.js";
 import {
   type BknContext,
   requestContextForBusinessContext,
+  toWireBknContext,
   withManagedLifecycle,
 } from "./lifecycle.js";
 
@@ -421,12 +422,13 @@ export interface SearchInstanceOptions {
   /** Ship the trimmed definitions of the object types that produced hits (default true). */
   includeObjectTypes?: boolean;
   /**
-   * A `bkn_context` the caller built itself, sent as-is.
+   * A `bkn_context` the caller built itself.
    *
    * The same escape hatch `context.toolCall` has: supplying one skips the
-   * managed session entirely, so an `operation_key` pre-registered through
-   * `ManagedTrace` survives instead of being replaced, and
-   * `parent_operation_id` / `causation_event_ids` travel with it.
+   * managed session entirely, and `parent_operation_id` / `causation_event_ids`
+   * / `business_refs` travel with it. Fields `BKNContext` does not accept —
+   * notably an `operation_key` minted by `ManagedTrace` — are dropped before
+   * sending: the contract forbids callers to submit it.
    */
   bknContext?: BknContext;
 }
@@ -470,12 +472,13 @@ export function searchInstance(
   opts: SearchInstanceOptions = {},
 ): Promise<unknown> {
   if (opts.bknContext) {
+    const bknContext = toWireBknContext(opts.bknContext);
     return request(
-      requestContextForBusinessContext(ctx, opts.bknContext),
+      requestContextForBusinessContext(ctx, bknContext),
       `${RETRIEVAL_BASE}/search_instance`,
       {
         method: "POST",
-        body: { ...searchBody(knId, query, opts), bkn_context: opts.bknContext },
+        body: { ...searchBody(knId, query, opts), bkn_context: bknContext },
       },
     );
   }

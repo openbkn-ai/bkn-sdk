@@ -138,13 +138,17 @@ describe("progressive KN detail (get_kn_detail)", () => {
     await getKnDetail(ctx, "kn-a");
     const p = toolCallBody(f);
     expect(p.name).toBe("get_kn_detail");
-    expect(p.arguments).toEqual({ response_format: "json" });
+    expect(p.arguments).toEqual({ kn_id: "kn-a", response_format: "json" });
   });
 
   it("passes an explicit detail_level=full", async () => {
     const f = mockMcp();
     await getKnDetail(ctx, "kn-b", "full");
-    expect(toolCallBody(f).arguments).toEqual({ detail_level: "full", response_format: "json" });
+    expect(toolCallBody(f).arguments).toEqual({
+      kn_id: "kn-b",
+      detail_level: "full",
+      response_format: "json",
+    });
   });
 });
 
