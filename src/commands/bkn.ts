@@ -14,11 +14,46 @@ import { clientFrom, csv, cypherParams, outputOptions, readBody } from "./_share
 
 const int = (v: string) => Number.parseInt(v, 10);
 
-function positiveInt(v: string): number {
-  if (!/^[1-9]\d*$/.test(v)) throw new InputError("must be a positive integer");
-  const value = Number(v);
-  if (!Number.isSafeInteger(value)) throw new InputError("must be a positive integer");
-  return value;
+/**
+ * Option parser for a positive integer. Commander does not add the flag to an
+ * error thrown from a parser, so the message names it.
+ */
+function positiveInt(flag: string): (v: string) => number {
+  return (v) => {
+    const value = Number(v);
+    if (!/^[1-9]\d*$/.test(v) || !Number.isSafeInteger(value)) {
+      throw new InputError(`${flag} must be a positive integer, received "${v}"`);
+    }
+    return value;
+  };
+}
+
+/**
+ * `bkn search` lets unknown options through so a query may start with "-"
+ * ("-40℃"). Refuse what that lets in by mistake: an argument shaped like a long
+ * flag (`--rerankk`) that was not placed after a `--` separator, and any
+ * argument beyond <kn-id> <query>.
+ */
+function rejectUnknownSearchOptions(cmd: Command): void {
+  let root = cmd;
+  while (root.parent) root = root.parent;
+  // Commander drops `--` before the action sees the operands; only the root's
+  // untyped `rawArgs` still shows where the caller put it.
+  const raw = (root as Command & { rawArgs?: string[] }).rawArgs ?? [];
+  const separator = raw.indexOf("--");
+  const afterSeparator = separator < 0 ? [] : raw.slice(separator + 1);
+  for (const arg of cmd.args) {
+    if (/^--[A-Za-z]/.test(arg) && !afterSeparator.includes(arg)) {
+      throw new InputError(
+        `unknown option '${arg}' for bkn search (see --help); to search for text that starts with "--", put it after a -- separator`,
+      );
+    }
+  }
+  if (cmd.args.length > 2) {
+    throw new InputError(
+      `bkn search takes <kn-id> <query>, received ${cmd.args.length} arguments; quote a multi-word query`,
+    );
+  }
 }
 
 const CAPABILITY_TYPES = ["skill", "function", "mcp_tool"];
@@ -145,7 +180,10 @@ export function bknCommand(): Command {
     .command("search <kn-id> <query>")
     // A search question may begin with a minus sign (for example, "-40℃").
     // Commander otherwise treats that second positional argument as an option.
+    // The action still refuses a query shaped like a long flag (`--rerankk`),
+    // so a mistyped option errors instead of becoming the search text.
     .allowUnknownOption()
+    .allowExcessArguments()
     .description(
       "Recall instances from a plain sentence — no object type or field names needed → {nodes, object_types}",
     )
@@ -155,12 +193,17 @@ export function bknCommand(): Command {
     .option(
       "--max-object-types <n>",
       "positive count of object types that may take part",
-      positiveInt,
+      positiveInt("--max-object-types"),
     )
-    .option("--max-instances <n>", "positive count of instances per object type", positiveInt)
+    .option(
+      "--max-instances <n>",
+      "positive count of instances per object type",
+      positiveInt("--max-instances"),
+    )
     .option("--rerank", "re-rank hits with a cross-encoder (needs a rerank model deployed)")
     .option("--no-object-types-detail", "omit the object-type definitions that come with hits")
     .action(async (knId: string, query: string, opts, cmd: Command) => {
+      rejectUnknownSearchOptions(cmd);
       const data = await clientFrom(cmd).kn.search(knId, query, {
         objectTypes: csv(opts.objectTypes),
         excludeObjectTypes: csv(opts.excludeObjectTypes),

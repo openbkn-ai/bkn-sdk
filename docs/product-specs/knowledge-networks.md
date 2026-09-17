@@ -15,7 +15,8 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
 - `openbkn bkn list` — networks (default limit 30).
 - `openbkn bkn get <id>` — one network, summary + schema pointers.
 - `openbkn bkn search <id> <query>` accepts a quoted query beginning with `-`
-  without requiring a preceding `--` separator.
+  without requiring a preceding `--` separator. A query shaped like a long flag
+  (`--rerankk`) is refused as an unknown option unless it follows `--`.
 - Search budgets `--max-object-types` and `--max-instances` are positive whole
   numbers; omit them to leave the platform defaults unchanged.
 - `openbkn bkn query <id> ...` — query object types / instances (default limit 50).

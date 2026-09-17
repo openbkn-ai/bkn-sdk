@@ -64,6 +64,30 @@ it.each(["0", "-1", "1.5", "3x"])(
       .catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe("must be a positive integer");
+    expect((error as Error).message).toBe(
+      `--max-object-types must be a positive integer, received "${value}"`,
+    );
   },
 );
+
+it.each([
+  ["kn-1", "--rerankk"],
+  ["kn-1", "--rerankk", "question"],
+  ["kn-1", "question", "--rerankk"],
+])("refuses a mistyped long option instead of searching for it (%j)", async (...args) => {
+  const error = await buildProgram()
+    .parseAsync(
+      ["--base-url", "https://search.example.com", "--token", "t", "bkn", "search", ...args],
+      { from: "user" },
+    )
+    .catch((caught: unknown) => caught);
+
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toMatch(/^unknown option '--rerankk' for bkn search/);
+});
+
+it("searches for flag-shaped text placed after a -- separator", async () => {
+  const signal = await preview(["bkn", "search", "kn-1", "--", "--rerankk"]);
+
+  expect(signal.request.body).toMatchObject({ query: "--rerankk" });
+});
