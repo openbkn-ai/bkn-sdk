@@ -7,7 +7,7 @@ description: >-
   a sandbox function with bkn-osdk and registering it as a tool. Use when creating a skill,
   writing SKILL.md for the execution factory, declaring capability dependencies, or turning
   Python code into a function tool. When the openbkn skill is loaded, use it for
-  `openbkn skill register` / `tool create` after files exist.
+  `openbkn skill register` / `function create` after files exist.
 ---
 
 # Create Skill
@@ -150,11 +150,10 @@ openbkn function enable <tool-id> --toolbox <box-id>          # tools start disa
 openbkn toolbox publish <box-id>
 ```
 
-Mount the tool on the network (CLI subcommand pending bkn-sdk #90; the REST call works today):
+Mount the tool on the network (binding one twice is a no-op):
 
 ```bash
-openbkn call -X POST /api/bkn-backend/v1/knowledge-networks/<kn>/capabilities \
-  -d '{"capabilities":[{"capability_type":"function","box_id":"<box-id>","capability_id":"<tool-id>"}]}'
+openbkn bkn capability attach <kn> --box <box-id> --tool <tool-id>
 ```
 
 ## Delivery
@@ -162,8 +161,7 @@ openbkn call -X POST /api/bkn-backend/v1/knowledge-networks/<kn>/capabilities \
 ```bash
 openbkn skill register ./{skill_dir}          # -> skill_id, status unpublish
 openbkn skill set-status <skill_id> published
-openbkn call -X POST /api/bkn-backend/v1/knowledge-networks/<kn>/capabilities \
-  -d '{"capabilities":[{"capability_type":"skill","capability_id":"<skill_id>"}]}'
+openbkn bkn capability attach <kn> --skill <skill_id>
 ```
 
 ## Validation checklist
