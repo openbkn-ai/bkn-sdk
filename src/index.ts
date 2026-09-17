@@ -104,11 +104,11 @@ export { skills } from "./resources/skills.js";
 export { functions } from "./resources/functions.js";
 export { mcp } from "./resources/mcp.js";
 export type { ListMcpServerToolsOptions, ListMcpServersOptions } from "./api/mcp.js";
+export { FunctionAiGenerationType } from "./api/functions.js";
 export type {
   DependencyInfo,
   ExecuteFunctionOptions,
   FunctionAiGenerationRequest,
-  FunctionAiGenerationType,
   FunctionDefinition,
   FunctionExecuteResult,
   GenerateFunctionOptions,

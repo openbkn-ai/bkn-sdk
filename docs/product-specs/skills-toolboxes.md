@@ -38,5 +38,5 @@ Manage the skill registry and the Toolbox execution surface that agents call. Th
 - `toolbox import --mode create|upsert`; omitted, the service applies `create` (fail if the component exists).
 - MCP Market, registration, lifecycle changes, and proxy invocation are separate from the read-only MCP discovery surface.
 - Function generation is a model invocation, not a persisted component. The SDK and CLI support its JSON response only; `stream: true` answers SSE, which no CLI command (including `openbkn call`, which buffers the response) streams yet.
-- `sandbox generate` waits up to the gateway's ~300 s limit by default rather than the 30 s client default; `--timeout <s>` (CLI) or `timeoutMs` (SDK) overrides it.
+- `sandbox generate` waits 300 s by default rather than the 30 s client default; `--timeout <s>` (CLI) or `timeoutMs` (SDK) overrides it. A default ingress still answers 504 at 60 s (openbkn-ai/bkn-foundry#1641).
 - `function` now means a registered Function Tool. Use `sandbox` for a one-off run, schema inference, dependencies, templates, and AI generation.

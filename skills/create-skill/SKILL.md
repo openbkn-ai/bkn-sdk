@@ -142,11 +142,11 @@ Example: [references/examples/functions/call_l1_check.py](references/examples/fu
 ```bash
 openbkn sandbox run ./fn.py --event '{"kn_id":"<kn>","product":"P1","qty":50}' --pass-token
 openbkn toolbox create --name my_functions --type function     # name: letters, digits, _, CJK
-openbkn tool create ./fn.py --toolbox <box-id> --name fn \
+openbkn function create ./fn.py --toolbox <box-id> --name fn \
     --description "..." \
     --inputs '[{"name":"kn_id","type":"string","required":true}]' \
     --outputs '[{"name":"kitting_ok","type":"boolean"}]'
-openbkn tool enable <tool-id> --toolbox <box-id>              # tools start disabled
+openbkn function enable <tool-id> --toolbox <box-id>          # tools start disabled
 openbkn toolbox publish <box-id>
 ```
 
