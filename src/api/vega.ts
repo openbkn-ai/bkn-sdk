@@ -164,8 +164,10 @@ export const Catalog = z
     enabled: z.boolean(),
     internal: z.boolean().optional(),
     connector_type: z.string(),
-    connector_config: z.record(z.unknown()).optional(),
-    metadata: z.record(z.unknown()).optional(),
+    // An internal (logical) catalog has no connector: the service answers
+    // `connector_config: null` there, so null must parse.
+    connector_config: z.record(z.unknown()).nullish(),
+    metadata: z.record(z.unknown()).nullish(),
     health_check_status: z.string().optional(),
     last_check_time: z.number().optional(),
     health_check_result: z.string().optional(),

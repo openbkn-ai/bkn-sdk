@@ -254,6 +254,29 @@ describe("vega uses the vega-backend base path", () => {
     });
   });
 
+  it("parses an internal catalog whose connector_config is null", async () => {
+    // Live on 14.103.77.23: `vega catalog get` of an --internal catalog failed
+    // schema validation because the service answers connector_config: null.
+    mockFetch({
+      entries: [
+        {
+          id: "c-int",
+          name: "logical",
+          type: "logical",
+          enabled: false,
+          internal: true,
+          connector_type: "",
+          connector_config: null,
+          metadata: {},
+          health_check_result: "",
+        },
+      ],
+    });
+    await expect(getCatalog(ctx, "c-int")).resolves.toMatchObject({
+      entries: [{ id: "c-int", connector_config: null }],
+    });
+  });
+
   it("keeps summary responses forward-compatible without exposing detail-field types", async () => {
     expectTypeOf<CatalogSummary["connector_config"]>().toEqualTypeOf<unknown>();
     expectTypeOf<CatalogSummary["metadata"]>().toEqualTypeOf<unknown>();
