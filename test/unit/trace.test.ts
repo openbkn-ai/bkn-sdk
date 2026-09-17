@@ -48,28 +48,39 @@ describe("typed technical Trace APIs", () => {
     const f = mockFetchSeq([{ entries: [], total: 0 }]);
     await listTechnicalTraces(ctx, {
       limit: 20,
+      cursor: "c-1",
       from: "2026-08-01T00:00:00Z",
       to: "2026-08-09T00:00:00Z",
       status: "failed",
       service: "context-loader",
       tool: "run_sql",
+      agentOrApp: "supply-chain-agent",
       traceId: "trace-1",
+      keyword: "cypher",
       errorKeyword: "timeout",
+      conversationId: "conv-1",
+      interactionId: "int-1",
     });
     const c = calls(f)[0];
     if (!c) throw new Error("no call");
     const url = new URL(c[0]);
     expect(url.pathname).toBe("/api/agent-observability/v1/traces");
     expect(c[1].method).toBe("GET");
-    expect(Object.fromEntries(url.searchParams)).toMatchObject({
+    // keyword and error_keyword are distinct server filters: never merged.
+    expect(Object.fromEntries(url.searchParams)).toEqual({
       limit: "20",
+      cursor: "c-1",
       from: "2026-08-01T00:00:00Z",
       to: "2026-08-09T00:00:00Z",
       status: "failed",
       service: "context-loader",
       tool: "run_sql",
+      agent_or_app: "supply-chain-agent",
       trace_id: "trace-1",
+      keyword: "cypher",
       error_keyword: "timeout",
+      conversation_id: "conv-1",
+      interaction_id: "int-1",
     });
   });
 
@@ -238,6 +249,19 @@ describe("BKN Trace 2.2 business runs and artifacts", () => {
       "/api/agent-observability/v1/evidence/artifacts/art_question_001",
     );
     expect(loaded.content).toBe("客户 A 的风险为什么上升？");
+    expect(new URL(readCall[0]).search).toBe("");
+  });
+
+  it("reads an artifact through an authorized interaction when one is given", async () => {
+    const f = mockFetchSeq([{ artifact_id: "art/1", content: "x" }]);
+
+    await getEvidenceArtifact(ctx, "art/1", { interactionId: "int-1" });
+
+    const c = calls(f)[0];
+    if (!c) throw new Error("no call");
+    const url = new URL(c[0]);
+    expect(url.pathname).toBe("/api/agent-observability/v1/evidence/artifacts/art%2F1");
+    expect(Object.fromEntries(url.searchParams)).toEqual({ interaction_id: "int-1" });
   });
 
   it("lists business requests and follows request-to-trace links", async () => {

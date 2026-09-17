@@ -133,30 +133,7 @@ describe("traceLifecycleApi interactions", () => {
       lease_epoch: 3,
       completion_manifest_version: "3.0.0",
       answer_artifact_ref: "artifact:answer-1",
-      claims: [
-        {
-          claim_id: "claim-1",
-          claim_type: "answer",
-          materiality: "material",
-          claim_status: "asserted",
-          content_artifact_ref: "artifact:answer-1",
-          required_support_roles: ["calculation_input"],
-          supports: [
-            {
-              target_ref: "artifact:result-1#summary",
-              target_type: "artifact_fragment",
-              source_interaction_id: "interaction-1",
-              source_revision_id: "revision-1",
-              source_operation_id: "operation-1",
-              version: "1",
-              content_hash: "sha256:evidence",
-              fragment_selector: "$.summary",
-              role: "calculation_input",
-              status: "adopted",
-            },
-          ],
-        },
-      ],
+      claims: ["claim-1"],
       expected_operations: [{ operation_id: "operation-1", required: true }],
       expected_receipts: [{ receipt_id: "receipt-1", required: true }],
       assembler_deadline: "2026-08-01T12:00:00Z",
@@ -167,6 +144,7 @@ describe("traceLifecycleApi interactions", () => {
       idempotency_key: "interaction-1",
       agent_name: "供应链分析助手",
       lease_seconds: 60,
+      request_hash: "sha256:question",
     });
     await api.getInteraction("interaction-1");
     await api.completeInteraction("interaction-1", completion);
@@ -187,6 +165,7 @@ describe("traceLifecycleApi interactions", () => {
       idempotency_key: "interaction-1",
       agent_name: "供应链分析助手",
       lease_seconds: 60,
+      request_hash: "sha256:question",
     });
     for (const call of interactionCalls.slice(2)) {
       expect(jsonBody(call)).toEqual(completion);
@@ -391,7 +370,7 @@ describe("trace lifecycle contract boundaries", () => {
     const code: LifecycleErrorCode = "resource_not_disclosed";
     // @ts-expect-error operation_not_found is not registered by the lifecycle error contract.
     const unregisteredCode: LifecycleErrorCode = "operation_not_found";
-    // @ts-expect-error internal_error is not registered by the lifecycle error contract.
+    // agent-observability.yaml httphandler.lifecycleError registers internal_error.
     const internalError: LifecycleErrorCode = "internal_error";
     type ReceiptHasContent = "content" extends keyof OperationReceipt ? true : false;
     const receiptHasContent: ReceiptHasContent = false;

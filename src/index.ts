@@ -42,6 +42,7 @@ export {
   type SupportCandidate,
 } from "./managed-trace.js";
 export {
+  type CapabilityProfile,
   type ClaimSupport,
   type CloseConversationInput,
   type ConversationPage,

@@ -71,12 +71,7 @@ export interface UpdateUserInput {
   csfLevel?: number;
 }
 
-export interface AuditListOptions {
-  page?: number;
-  size?: number;
-  user?: string;
-  start?: string;
-  end?: string;
-}
+/** Audit list filters — the bkn-safe `GET /admin/audit-logs` query. */
+export type { AuditLogQuery as AuditListOptions } from "./safe.js";
 
 export type MemberType = "user" | "department" | "group" | "app";

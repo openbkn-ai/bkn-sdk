@@ -107,6 +107,7 @@ const GROUP_ID_SOURCES: Array<[RegExp, string]> = [
   [/^admin role\b/, "openbkn admin role list"],
   [/^admin llm\b/, "openbkn admin llm list"],
   [/^admin small-model\b/, "openbkn admin small-model list"],
+  [/^admin audit\b/, "openbkn admin audit list"],
   [/^model llm\b/, "openbkn model llm list"],
   [/^model small\b/, "openbkn model small list"],
   [/^bkn object-type\b/, "openbkn bkn object-type list <kn-id>"],
@@ -207,7 +208,9 @@ function describeNode(cmd: Command, parentPath: string[], depth: number): Descri
   if (depth <= 0) return children.length ? { ...skeleton, hasCommands: true } : skeleton;
 
   const aliases = cmd.aliases();
-  const options = cmd.options.filter((o) => o.long !== "--help");
+  // Hidden options are deprecated aliases or removed flags kept only to
+  // explain themselves; they are not part of the self-described surface.
+  const options = cmd.options.filter((o) => o.long !== "--help" && !o.hidden);
   return {
     ...skeleton,
     ...(aliases.length ? { aliases } : {}),
