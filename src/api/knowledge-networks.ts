@@ -51,6 +51,9 @@ export interface GetKnOptions {
   exportMode?: boolean;
   /** Include statistics in the response. */
   stats?: boolean;
+  branch?: string;
+  /** `full` (default) returns complete definitions; `summary` only concept ids and names. */
+  detailLevel?: "full" | "summary";
 }
 
 export function getKnowledgeNetwork(
@@ -62,6 +65,8 @@ export function getKnowledgeNetwork(
     query: {
       mode: opts.exportMode ? "export" : undefined,
       include_statistics: opts.stats ? "true" : undefined,
+      branch: opts.branch || undefined,
+      detail_level: opts.detailLevel || undefined,
     },
   });
 }
@@ -69,6 +74,7 @@ export function getKnowledgeNetwork(
 export interface CreateKnOptions {
   name: string;
   branch?: string;
+  /** @deprecated Not part of the create contract; ignored. */
   baseBranch?: string;
 }
 
@@ -83,7 +89,7 @@ export function createKnowledgeNetwork(
 ): Promise<unknown> {
   return request(ctx, ONTOLOGY_BASE, {
     method: "POST",
-    body: { name: opts.name, branch: opts.branch ?? "main", base_branch: opts.baseBranch ?? "" },
+    body: { name: opts.name, branch: opts.branch ?? "main" },
   });
 }
 
@@ -106,11 +112,60 @@ export function updateKnowledgeNetwork(
  */
 const QUERY_OVER_POST = { "X-HTTP-Method-Override": "GET" } as const;
 
+/**
+ * Creates on the schema collection routes. The same POST also serves a search, so the
+ * backend picks the body schema from the override header, which it requires.
+ */
+const CREATE_OVER_POST = { "X-HTTP-Method-Override": "POST" } as const;
+
+/** A comma-joined string or a list, as a list without blanks. */
+function csvList(value: string | Array<string | number> | undefined): string[] {
+  const list = typeof value === "string" ? value.split(",") : (value ?? []).map(String);
+  return list.map((v) => v.trim()).filter(Boolean);
+}
+
+/** System fields an ontology-query read can leave out of each instance. */
+export type SystemProperty = "_instance_id" | "_instance_identity" | "_display";
+
+/** Query-string flags shared by the ontology-query instance reads. */
+export interface InstanceReadOptions {
+  branch?: string;
+  /** Include the computation parameters of logic properties. */
+  includeLogicParams?: boolean;
+  /** Drop these system fields from each returned instance. */
+  excludeSystemProperties?: SystemProperty[];
+  /** Skip the index and read the store directly. */
+  ignoringStoreCache?: boolean;
+}
+
+function instanceReadQuery(opts: InstanceReadOptions & { includeTypeInfo?: boolean }) {
+  return {
+    branch: opts.branch || undefined,
+    include_type_info: opts.includeTypeInfo ? "true" : undefined,
+    include_logic_params: opts.includeLogicParams ? "true" : undefined,
+    exclude_system_properties: opts.excludeSystemProperties?.length
+      ? opts.excludeSystemProperties
+      : undefined,
+    ignoring_store_cache: opts.ignoringStoreCache ? "true" : undefined,
+  };
+}
+
+export interface SubgraphQueryOptions extends InstanceReadOptions {
+  /** `""` (default) explores from a start point; `relation_path` follows given paths. */
+  queryType?: "" | "relation_path";
+}
+
 /** Query a subgraph (ontology-query). Body is a JSON query passthrough. */
-export function querySubgraph(ctx: RequestContext, knId: string, body: unknown): Promise<unknown> {
+export function querySubgraph(
+  ctx: RequestContext,
+  knId: string,
+  body: unknown,
+  opts: SubgraphQueryOptions = {},
+): Promise<unknown> {
   return request(ctx, `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/subgraph`, {
     method: "POST",
     headers: QUERY_OVER_POST,
+    query: { query_type: opts.queryType || undefined, ...instanceReadQuery(opts) },
     body,
     responseParser: parseBigIntJSON,
   });
@@ -118,10 +173,21 @@ export function querySubgraph(ctx: RequestContext, knId: string, body: unknown):
 
 export interface ActionLogListOptions {
   actionTypeId?: string;
+  /** `pending` | `running` | `completed` | `failed` | `cancelled`. */
   status?: string;
+  /** `manual` | `scheduled`. */
   triggerType?: string;
+  /** Case-insensitive literal substring of the execution id. */
+  keyword?: string;
+  /** Start-time range, epoch milliseconds. */
+  startTimeFrom?: number;
+  startTimeTo?: number;
   limit?: number;
+  /** Ignored by the backend once `searchAfter` is set. */
+  offset?: number;
   needTotal?: boolean;
+  /** Deep-paging cursor from the previous page; a list is comma-joined. */
+  searchAfter?: string | Array<string | number>;
 }
 
 export function listActionLogs(
@@ -134,18 +200,44 @@ export function listActionLogs(
       action_type_id: opts.actionTypeId || undefined,
       status: opts.status || undefined,
       trigger_type: opts.triggerType || undefined,
+      keyword: opts.keyword || undefined,
+      start_time_from: opts.startTimeFrom,
+      start_time_to: opts.startTimeTo,
       limit: opts.limit ?? 30,
+      offset: opts.offset,
       need_total: opts.needTotal ? "true" : undefined,
+      search_after: csvList(opts.searchAfter).join(",") || undefined,
     },
     responseParser: parseBigIntJSON,
   });
 }
 
-export function getActionLog(ctx: RequestContext, knId: string, logId: string): Promise<unknown> {
+export interface ActionLogGetOptions {
+  /** Page size of the embedded `results` (backend default 100, max 1000). */
+  resultsLimit?: number;
+  /** `resultsOffset + resultsLimit` must not exceed 10000. */
+  resultsOffset?: number;
+  /** `success` | `failed`. */
+  resultsStatus?: string;
+}
+
+export function getActionLog(
+  ctx: RequestContext,
+  knId: string,
+  logId: string,
+  opts: ActionLogGetOptions = {},
+): Promise<unknown> {
   return request(
     ctx,
     `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-logs/${encodeURIComponent(logId)}`,
-    { responseParser: parseBigIntJSON },
+    {
+      query: {
+        results_limit: opts.resultsLimit,
+        results_offset: opts.resultsOffset,
+        results_status: opts.resultsStatus || undefined,
+      },
+      responseParser: parseBigIntJSON,
+    },
   );
 }
 
@@ -153,39 +245,74 @@ export function cancelActionLog(
   ctx: RequestContext,
   knId: string,
   logId: string,
+  opts: { reason?: string } = {},
 ): Promise<unknown> {
   return request(
     ctx,
     `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-logs/${encodeURIComponent(logId)}/cancel`,
-    { method: "POST" },
+    { method: "POST", body: opts.reason ? { reason: opts.reason } : undefined },
   );
 }
 
-/** Query instances of an object type (ontology-query). Body is a JSON query. */
+export interface ObjectQueryOptions extends InstanceReadOptions {
+  /** Include the object type definition in the response. */
+  includeTypeInfo?: boolean;
+}
+
+/**
+ * Query instances of an object type (ontology-query). Body is a JSON query passthrough:
+ * `{limit, condition?, sort?, need_total?, properties?}`. Paging depends on the deploy:
+ * with foundry #1623 the response carries `paging.next_cursor`, sent back as `cursor`
+ * for the next page; older deploys return no `paging` and page with body `offset`.
+ */
 export function queryObjectTypeInstances(
   ctx: RequestContext,
   knId: string,
   otId: string,
   body: unknown,
+  opts: ObjectQueryOptions = {},
 ): Promise<unknown> {
   return request(
     ctx,
     `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/object-types/${encodeURIComponent(otId)}`,
-    { method: "POST", headers: QUERY_OVER_POST, body, responseParser: parseBigIntJSON },
+    {
+      method: "POST",
+      headers: QUERY_OVER_POST,
+      query: instanceReadQuery(opts),
+      body,
+      responseParser: parseBigIntJSON,
+    },
   );
 }
 
-/** Query an action type (ontology-query). Body is a JSON query passthrough. */
+export interface ActionTypeQueryOptions {
+  branch?: string;
+  /** Include the action type definition in the response. */
+  includeTypeInfo?: boolean;
+  excludeSystemProperties?: SystemProperty[];
+}
+
+/**
+ * Query an action type (ontology-query): a read tunnelled over POST, so it carries
+ * the GET override. Body is a JSON query passthrough.
+ */
 export function queryActionType(
   ctx: RequestContext,
   knId: string,
   atId: string,
   body: unknown,
+  opts: ActionTypeQueryOptions = {},
 ): Promise<unknown> {
   return request(
     ctx,
-    `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-types/${encodeURIComponent(atId)}/`,
-    { method: "POST", body, responseParser: parseBigIntJSON },
+    `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-types/${encodeURIComponent(atId)}`,
+    {
+      method: "POST",
+      headers: QUERY_OVER_POST,
+      query: instanceReadQuery(opts),
+      body,
+      responseParser: parseBigIntJSON,
+    },
   );
 }
 
@@ -195,11 +322,17 @@ export function executeActionType(
   knId: string,
   atId: string,
   body: unknown,
+  opts: { branch?: string } = {},
 ): Promise<unknown> {
   return request(
     ctx,
     `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-types/${encodeURIComponent(atId)}/execute`,
-    { method: "POST", body, responseParser: parseBigIntJSON },
+    {
+      method: "POST",
+      query: { branch: opts.branch || undefined },
+      body,
+      responseParser: parseBigIntJSON,
+    },
   );
 }
 
@@ -215,46 +348,113 @@ export function getActionExecution(
   );
 }
 
+/** Query-string flags of the metric data reads. */
+export interface MetricReadOptions {
+  branch?: string;
+  /** Align trend series to the full bucket axis, filling gaps with null. */
+  fillNull?: boolean;
+}
+
+function metricReadQuery(opts: MetricReadOptions) {
+  return { branch: opts.branch || undefined, fill_null: opts.fillNull ? "true" : undefined };
+}
+
 /** Query a metric's data (ontology-query). Body is a JSON query passthrough. */
 export function queryMetricData(
   ctx: RequestContext,
   knId: string,
   metricId: string,
   body: unknown,
+  opts: MetricReadOptions = {},
 ): Promise<unknown> {
   return request(
     ctx,
     `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/metrics/${encodeURIComponent(metricId)}/data`,
-    { method: "POST", body, responseParser: parseBigIntJSON },
+    { method: "POST", query: metricReadQuery(opts), body, responseParser: parseBigIntJSON },
   );
 }
 
 /** Dry-run a metric definition (ontology-query). */
-export function dryRunMetric(ctx: RequestContext, knId: string, body: unknown): Promise<unknown> {
+export function dryRunMetric(
+  ctx: RequestContext,
+  knId: string,
+  body: unknown,
+  opts: MetricReadOptions = {},
+): Promise<unknown> {
   return request(ctx, `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/metrics/dry-run`, {
     method: "POST",
+    query: metricReadQuery(opts),
     body,
     responseParser: parseBigIntJSON,
   });
 }
 
+/** Filters every bkn-backend schema list takes. */
 export interface ListSchemaOptions {
   branch?: string;
-  /** -1 = all (backend default). */
+  /** -1 = all (the SDK default; the backend's own default is 10). */
   limit?: number;
+  offset?: number;
+  /** Fuzzy name match. */
+  namePattern?: string;
+  /** Exact tag match. */
+  tag?: string;
+  /** `update_time` | `name`. */
+  sort?: string;
+  direction?: "asc" | "desc";
+}
+
+export interface ListObjectTypesOptions extends ListSchemaOptions {
+  /** Return total_count (backend default true). */
+  needTotal?: boolean;
+  /** Deep-paging cursor; a list is comma-joined. Offset is ignored once set. */
+  searchAfter?: string | Array<string | number>;
+}
+
+export interface ListRelationTypesOptions extends ListSchemaOptions {
+  sourceObjectTypeId?: string;
+  targetObjectTypeId?: string;
+  /** Relation types whose source or target is one of these object types. */
+  boundObjectTypeId?: string | string[];
+}
+
+export interface ListActionTypesOptions extends ListSchemaOptions {
+  /** Action category: `add` | `modify` | `delete`. */
+  actionType?: string;
+  /** Bound object type. */
+  objectTypeId?: string;
+}
+
+export interface ListMetricsOptions extends ListSchemaOptions {
+  /** `object_type` | `subgraph`. */
+  scopeType?: string;
+  /** Concept id(s) the metric scope references, comma-joined. */
+  scopeRef?: string;
 }
 
 function schemaListQuery(opts: ListSchemaOptions) {
-  return { branch: opts.branch ?? "main", limit: String(opts.limit ?? -1) };
+  return {
+    branch: opts.branch ?? "main",
+    limit: String(opts.limit ?? -1),
+    offset: opts.offset,
+    name_pattern: opts.namePattern || undefined,
+    tag: opts.tag || undefined,
+    sort: opts.sort || undefined,
+    direction: opts.direction || undefined,
+  };
 }
 
 export function listObjectTypes(
   ctx: RequestContext,
   knId: string,
-  opts: ListSchemaOptions = {},
+  opts: ListObjectTypesOptions = {},
 ): Promise<unknown> {
   return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/object-types`, {
-    query: schemaListQuery(opts),
+    query: {
+      ...schemaListQuery(opts),
+      need_total: opts.needTotal === undefined ? undefined : String(opts.needTotal),
+      search_after: csvList(opts.searchAfter).join(",") || undefined,
+    },
   });
 }
 
@@ -267,6 +467,7 @@ export function createObjectTypes(
 ): Promise<unknown> {
   return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/object-types`, {
     method: "POST",
+    headers: CREATE_OVER_POST,
     query: { branch },
     body: { entries },
   });
@@ -275,75 +476,124 @@ export function createObjectTypes(
 export function listRelationTypes(
   ctx: RequestContext,
   knId: string,
-  opts: ListSchemaOptions = {},
+  opts: ListRelationTypesOptions = {},
 ): Promise<unknown> {
+  const bound = csvList(opts.boundObjectTypeId);
   return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/relation-types`, {
-    query: schemaListQuery(opts),
+    query: {
+      ...schemaListQuery(opts),
+      source_object_type_id: opts.sourceObjectTypeId || undefined,
+      target_object_type_id: opts.targetObjectTypeId || undefined,
+      bound_object_type_id: bound.length ? bound : undefined,
+    },
   });
 }
 
 export function listActionTypes(
   ctx: RequestContext,
   knId: string,
-  opts: ListSchemaOptions = {},
+  opts: ListActionTypesOptions = {},
 ): Promise<unknown> {
   return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/action-types`, {
-    query: schemaListQuery(opts),
+    query: {
+      ...schemaListQuery(opts),
+      action_type: opts.actionType || undefined,
+      object_type_id: opts.objectTypeId || undefined,
+    },
   });
 }
 
 /** Schema item kind in the bkn-backend schema path. */
 export type SchemaKind = "object-types" | "relation-types" | "action-types";
 
+/**
+ * A create body is `{entries:[…]}`; a bare array is wrapped into that envelope,
+ * anything else is sent as given.
+ */
+function entriesBody(body: unknown): unknown {
+  return Array.isArray(body) ? { entries: body } : body;
+}
+
 export function getSchemaItem(
   ctx: RequestContext,
   knId: string,
   kind: SchemaKind,
   id: string,
+  opts: { branch?: string } = {},
 ): Promise<unknown> {
   return request(
     ctx,
     `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/${kind}/${encodeURIComponent(id)}`,
+    { query: { branch: opts.branch || undefined } },
   );
 }
+/** Create schema items: `{entries:[…]}` (a bare array is wrapped). */
 export function createSchemaItem(
   ctx: RequestContext,
   knId: string,
   kind: SchemaKind,
   body: unknown,
+  opts: { branch?: string } = {},
 ): Promise<unknown> {
   return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/${kind}`, {
     method: "POST",
-    body,
+    headers: CREATE_OVER_POST,
+    query: { branch: opts.branch || undefined },
+    body: entriesBody(body),
   });
 }
+
+export interface UpdateSchemaItemOptions {
+  branch?: string;
+  /** Validate dependencies (backend default true); pass false to skip. */
+  strictMode?: boolean;
+}
+
+/** Update one schema item. The body carries `base_version`, the version it was read at. */
 export function updateSchemaItem(
   ctx: RequestContext,
   knId: string,
   kind: SchemaKind,
   id: string,
   body: unknown,
+  opts: UpdateSchemaItemOptions = {},
 ): Promise<unknown> {
   return request(
     ctx,
     `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/${kind}/${encodeURIComponent(id)}`,
     {
       method: "PUT",
+      query: {
+        branch: opts.branch || undefined,
+        strict_mode: opts.strictMode === undefined ? undefined : String(opts.strictMode),
+      },
       body,
     },
   );
 }
+
+export interface DeleteSchemaItemOptions {
+  branch?: string;
+  /** Object types only: delete even when a relation type still binds it. */
+  forceDelete?: boolean;
+}
+
 export function deleteSchemaItem(
   ctx: RequestContext,
   knId: string,
   kind: SchemaKind,
   id: string,
+  opts: DeleteSchemaItemOptions = {},
 ): Promise<unknown> {
   return request(
     ctx,
     `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/${kind}/${encodeURIComponent(id)}`,
     {
       method: "DELETE",
+      query: {
+        branch: opts.branch || undefined,
+        force_delete: opts.forceDelete && kind === "object-types" ? "true" : undefined,
+      },
     },
   );
 }
@@ -352,10 +602,14 @@ export function deleteSchemaItem(
 export function listMetrics(
   ctx: RequestContext,
   knId: string,
-  opts: ListSchemaOptions = {},
+  opts: ListMetricsOptions = {},
 ): Promise<unknown> {
   return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics`, {
-    query: { branch: opts.branch ?? "main", limit: String(opts.limit ?? -1) },
+    query: {
+      ...schemaListQuery(opts),
+      scope_type: opts.scopeType || undefined,
+      scope_ref: opts.scopeRef || undefined,
+    },
   });
 }
 export function getMetric(ctx: RequestContext, knId: string, metricId: string): Promise<unknown> {
@@ -364,10 +618,18 @@ export function getMetric(ctx: RequestContext, knId: string, metricId: string): 
     `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/${encodeURIComponent(metricId)}`,
   );
 }
-export function createMetric(ctx: RequestContext, knId: string, body: unknown): Promise<unknown> {
+/** Create metrics: `{entries:[…]}` (a bare array is wrapped). */
+export function createMetric(
+  ctx: RequestContext,
+  knId: string,
+  body: unknown,
+  opts: { branch?: string } = {},
+): Promise<unknown> {
   return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics`, {
     method: "POST",
-    body,
+    headers: CREATE_OVER_POST,
+    query: { branch: opts.branch || undefined },
+    body: entriesBody(body),
   });
 }
 export function updateMetric(
