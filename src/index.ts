@@ -104,7 +104,11 @@ export { resources } from "./resources/resources.js";
 export { skills } from "./resources/skills.js";
 export { functions } from "./resources/functions.js";
 export { mcp } from "./resources/mcp.js";
-export type { ListMcpServerToolsOptions, ListMcpServersOptions } from "./api/mcp.js";
+export type {
+  ListMcpServerToolsOptions,
+  ListMcpServersOptions,
+  MCPServerConfig,
+} from "./api/mcp.js";
 export { FunctionAiGenerationType } from "./api/functions.js";
 export type {
   DependencyInfo,
@@ -116,6 +120,17 @@ export type {
   ParameterDef,
 } from "./api/functions.js";
 export { toolboxes } from "./resources/toolboxes.js";
+export type {
+  CreateToolOptions,
+  CreateToolboxOptions,
+  GlobalParameter,
+  ImpexMode,
+  ImpexType,
+  ToolBoxInfo,
+  ToolInvokeEnvelope,
+  ToolMetadataType,
+  UpdateToolOptions,
+} from "./api/toolboxes.js";
 export { trace } from "./resources/trace.js";
 export { vega } from "./resources/vega.js";
 
@@ -135,12 +150,16 @@ export type {
 // Skill execution + file-read types are part of the public contract.
 export type {
   ExecuteSkillOptions,
+  ListItemOperation,
   SkillContentResponse,
   SkillExecutionResult,
   SkillFileEntry,
+  SkillInfo,
+  SkillSource,
   SkillReadFileResponse,
   SkillResponseMode,
   SkillView,
+  UpdateSkillMetadataRequest,
 } from "./api/skills.js";
 export type { SkillViewOptions } from "./resources/skills.js";
 export type { SkillChild, SkillDirChild, SkillFileChild } from "./utils/skill-tree.js";

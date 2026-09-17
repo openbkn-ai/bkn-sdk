@@ -35,8 +35,11 @@ Manage the skill registry and the Toolbox execution surface that agents call. Th
 - Toolbox status is `unpublish` / `published` / `offline` (no `draft`): `toolbox unpublish` sends `offline`. Skill `set-status` accepts only `published` / `offline`.
 - `*_time` fields are int64 nanoseconds — skill, toolbox and tool reads parse them as bigint so they stay exact.
 - `tool execute` / `tool debug` (and the typed `function` / `api` equivalents) wait `--timeout` plus a margin (the sandbox maximum when omitted), not the 30s client default.
-- `toolbox import --mode create|upsert`; omitted, the service applies `create` (fail if the component exists).
+- `toolbox import --mode create|upsert`; omitted, the service applies `create` (a live deploy answers 409 `CommonResourceIDConflict` if the component exists; the contract still says 400). `toolbox export|import --type` accepts only `toolbox` / `mcp` / `operator`.
+- `skill republish` copies a historical version back into the draft and publishes nothing; `skill publish-history` publishes one. `skill update-metadata` is a full overwrite: `name` / `description` / `category` are required and `source` is `custom` | `internal`, checked before sending.
+- Enum-valued flags are checked client-side: `tool upload --metadata-type openapi|function`, `sandbox template --type python`, `sandbox run --timeout` (positive integer). Tool-call `--path` values must be strings.
+- `tool update` (and typed `function update`) sends `function_input` in its edit form, without `name` / `description` (those go top-level).
 - MCP Market, registration, lifecycle changes, and proxy invocation are separate from the read-only MCP discovery surface.
 - Function generation is a model invocation, not a persisted component. The SDK and CLI support its JSON response only; `stream: true` answers SSE, which no CLI command (including `openbkn call`, which buffers the response) streams yet.
-- `sandbox generate` waits 300 s by default rather than the 30 s client default; `--timeout <s>` (CLI) or `timeoutMs` (SDK) overrides it. A default ingress still answers 504 at 60 s (openbkn-ai/bkn-foundry#1641).
+- `sandbox generate` waits 300 s by default rather than the 30 s client default; `--timeout <s>` (CLI) or `timeoutMs` (SDK) overrides it. A default ingress still answers 504 at 60 s (ingress-nginx's default read timeout, noted in a comment on openbkn-ai/bkn-foundry#1641, which itself tracks the ~30 s toolbox-proxy cut).
 - `function` now means a registered Function Tool. Use `sandbox` for a one-off run, schema inference, dependencies, templates, and AI generation.
