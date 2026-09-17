@@ -62,6 +62,20 @@ describe("openbkn mcp", () => {
     });
   });
 
+  it("--all omits the default page and page size, which the server would ignore", async () => {
+    await run("mcp", "list", "--all");
+    expect(list).toHaveBeenCalledWith(
+      expect.objectContaining({ all: true, page: undefined, pageSize: undefined }),
+    );
+  });
+
+  it("still sends the paging defaults without --all", async () => {
+    await run("mcp", "list");
+    expect(list).toHaveBeenCalledWith(
+      expect.objectContaining({ all: undefined, page: 1, pageSize: 30 }),
+    );
+  });
+
   it("routes get and tools to the matching read resource", async () => {
     await run("mcp", "get", "mcp-1");
     await run("mcp", "tools", "mcp-1");

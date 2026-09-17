@@ -121,13 +121,17 @@ export function mcpCommand(): Command {
     .addOption(new Option("--sort-order <order>", "sort direction").choices(["asc", "desc"]))
     .option("--limit <n>", "page size (1-100)", boundedInt("--limit", 100), DEFAULT_LIST_LIMIT)
     .option("--page <n>", "page (1-based)", boundedInt("--page"), 1)
-    .option("--all", "return every accessible server")
+    .option("--all", "return every accessible server (ignores --limit/--page defaults)")
     .action(async (opts, command: Command) => {
+      // `all` makes the server ignore paging, so with --all the defaults are not
+      // sent; a --limit/--page the caller typed still goes out as given.
+      const paging = (flag: "page" | "limit") =>
+        opts.all && command.getOptionValueSource(flag) === "default" ? undefined : opts[flag];
       printJson(
         redactMcpOutput(
           await clientFrom(command).mcp.list({
-            page: opts.page,
-            pageSize: opts.limit,
+            page: paging("page"),
+            pageSize: paging("limit"),
             sortBy: opts.sortBy,
             sortOrder: opts.sortOrder,
             name: opts.name,
