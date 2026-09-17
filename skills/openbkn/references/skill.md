@@ -2,13 +2,13 @@
 
 | Command | Notes |
 |---------|-------|
-| `list` / `market` / `get <id>` / `market <id>` | Browse registry + market. |
+| `list` / `market` / `get <id>` / `market-get <id>` | Browse registry + market. Filters: `--name` `--category` `--create-user` `--sort-by create_time\|update_time\|name` `--sort-order asc\|desc` `--limit n`（1–100，默认 30） `--page n` `--all`; `list` also takes `--status unpublish\|published\|offline\|editing` (the market is published-only, so it has none). |
 | `names <id...>` | Resolve ids → names in one call; unknown ids are skipped, not an error. |
 | `content <id> [--raw] [--draft]` / `read-file <id> <rel-path> [--raw] [--draft]` / `history <id>` | Progressive read + versions. |
 | `files <id> [path] [--tree] [--draft]` | File listing. No `path` = root; a directory path = its direct children; `--tree` = whole hierarchy under `path` (or the whole skill when `path` is omitted). |
 | `execute <id> --entry '<shell>' [--timeout <s>] [--raw] [--exit-code]` | Run the skill in the platform sandbox. Omit `--timeout` to leave the limit to the sandbox (300s by default, 3600s max); the client waits out the sandbox's maximum either way. |
-| `set-status <id> <status>` | unpublish \| published \| offline. |
-| `register <dir> [--source custom\|internal] [--extend-info <json>]` | Zip a local skill dir → multipart register. SKILL.md must have frontmatter (name/description). `--source` defaults to `custom`, matching the backend's own default (`default:"custom" validate:"oneof=custom internal"`), so the registered result is unchanged from omitting it. |
+| `set-status <id> <status>` | `published` \| `offline` only — the endpoint refuses `unpublish` / `editing`, which come from registering and editing. |
+| `register <dir> [--source custom\|internal] [--category <c>] [--extend-info <json>]` | Zip a local skill dir → multipart register. SKILL.md must have frontmatter (name/description). `--source` defaults to `custom`, matching the backend's own default (`default:"custom" validate:"oneof=custom internal"`), so the registered result is unchanged from omitting it. |
 | `download <id> [out.zip] [--draft]` / `install <id> [dir]` | Save archive / download + unzip. |
 | `update-metadata <id> --body <json>` / `update-package <id> <dir>` | Edit metadata / replace package (zip). |
 | `republish <id> --version <v>` / `publish-history <id> --version <v>` | Republish / publish a historical version. |

@@ -7,6 +7,7 @@ import { dirname, resolve } from "node:path";
 import {
   type CreateToolOptions,
   type CreateToolboxOptions,
+  type ImpexMode,
   type ImpexType,
   type ListToolboxesOptions,
   type ListToolsOptions,
@@ -37,7 +38,8 @@ export function toolboxes(ctx: RequestContext) {
     create: (opts: CreateToolboxOptions) => createToolbox(ctx, opts),
     delete: (boxId: string) => deleteToolbox(ctx, boxId),
     publish: (boxId: string) => setToolboxStatus(ctx, boxId, "published"),
-    unpublish: (boxId: string) => setToolboxStatus(ctx, boxId, "draft"),
+    /** Take a toolbox down (status `offline`). The service has no `draft`. */
+    unpublish: (boxId: string) => setToolboxStatus(ctx, boxId, "offline"),
     setToolStatus: (boxId: string, toolIds: string[], status: "enabled" | "disabled") =>
       setToolStatuses(
         ctx,
@@ -59,8 +61,9 @@ export function toolboxes(ctx: RequestContext) {
       writeFileSync(dest, bytes);
       return { id, path: dest, bytes: bytes.length };
     },
-    /** Import a toolbox config from a local `.adp` file. */
-    import: (filePath: string, type?: ImpexType) => importConfig(ctx, filePath, type),
+    /** Import a toolbox config from a local `.adp` file; `upsert` updates one that exists. */
+    import: (filePath: string, type?: ImpexType, mode?: ImpexMode) =>
+      importConfig(ctx, filePath, type, { mode }),
     execute: (boxId: string, toolId: string, e?: ToolInvokeEnvelope) =>
       executeTool(ctx, boxId, toolId, e),
     debug: (boxId: string, toolId: string, e?: ToolInvokeEnvelope) =>
