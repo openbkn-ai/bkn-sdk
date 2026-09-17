@@ -27,13 +27,22 @@ request shape the backend answers with an error.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 from .config import Context, resolve_context
 from .errors import InputError
-from .query import QUERY_BASE, Comparison, Filter, to_condition
+from .http import QueryValue
+from .query import (
+    QUERY_BASE,
+    Comparison,
+    Filter,
+    branch_param,
+    checked_system_properties,
+    to_condition,
+)
 
 if TYPE_CHECKING:
     from .types import ObjectType, Relation
@@ -80,6 +89,9 @@ class RelationPath:
         instance: ObjectType,
         *,
         step_limit: int = DEFAULT_STEP_LIMIT,
+        include_logic_params: bool = False,
+        exclude_system_properties: Sequence[str] | None = None,
+        ignoring_store_cache: bool = False,
         context: Context | None = None,
     ) -> list[Any]:
         """Walk the chain from one instance, returning the far end's instances.
@@ -87,6 +99,12 @@ class RelationPath:
         Duplicates are dropped: several paths through the graph commonly land on
         the same object, and a caller asking for "the SKUs of this order" wants
         each SKU once.
+
+        `include_logic_params`, `exclude_system_properties` and
+        `ignoring_store_cache` are the endpoint's documented query flags, as on
+        `ObjectSet.options`. `query_type` is not offered: this walk always sends
+        the seed-based body, and `relation_path` expects a different one.
+        A row returned without `_instance_identity` cannot start a further walk.
         """
         from .http import request
         from .lifecycle import with_context_retry
@@ -98,6 +116,8 @@ class RelationPath:
                 f"The subgraph endpoint walks at most {MAX_PATH_LENGTH} hops; this path has "
                 f"{len(self.steps)}. Split it, or query the intermediate type directly."
             )
+
+        excluded = checked_system_properties(exclude_system_properties or ())
 
         ctx = context or resolve_context()
         kn_id = type(instance).__kn_id__
@@ -114,9 +134,16 @@ class RelationPath:
             "limit": 1,
         }
 
+        query: dict[str, QueryValue] = {
+            "branch": branch_param(type(instance).__branch__),
+            "include_logic_params": include_logic_params or None,
+            "exclude_system_properties": [*excluded] or None,
+            "ignoring_store_cache": ignoring_store_cache or None,
+        }
+
         def send(bkn_context: dict[str, str] | None) -> Any:
             payload = body if bkn_context is None else {**body, "bkn_context": bkn_context}
-            return request(ctx, path, body=payload, method_override="GET")
+            return request(ctx, path, body=payload, query=query, method_override="GET")
 
         response = with_context_retry(ctx, kn_id, send)
         return self._decode(response, target, step_limit, ctx)

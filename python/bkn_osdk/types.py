@@ -313,6 +313,10 @@ class ObjectType:
 
     __kn_id__: ClassVar[str] = ""
     __bkn_id__: ClassVar[str] = ""
+    #: The branch the package was generated from, sent as `branch` on every read
+    #: (omitted for `main`, the endpoint's default). Packages generated before it
+    #: was emitted default to `main`, which is what they always queried.
+    __branch__: ClassVar[str] = "main"
     __primary_key__: ClassVar[tuple[str, ...]] = ()
     __display_key__: ClassVar[str | None] = None
 

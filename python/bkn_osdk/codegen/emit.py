@@ -352,6 +352,7 @@ def _emit_metrics(schema: KnSchema, metrics: tuple[tuple[str, MetricDef], ...]) 
             "",
             f'    __kn_id__ = "{schema.kn_id}"',
             f'    __bkn_id__ = "{metric.bkn_id}"',
+            f'    __branch__ = "{schema.branch}"',
             f'    __object_type__ = "{metric.object_type}"',
             f"    __dimensions__ = {_tuple_literal(metric.dimensions)}",
         ]
@@ -391,6 +392,7 @@ def _emit_class(schema: KnSchema, named: _Named) -> list[str]:
         "",
         f'    __kn_id__ = "{schema.kn_id}"',
         f'    __bkn_id__ = "{definition.bkn_id}"',
+        f'    __branch__ = "{schema.branch}"',
         f"    __primary_key__ = {_tuple_literal(definition.primary_key)}",
     ]
     if definition.display_key:

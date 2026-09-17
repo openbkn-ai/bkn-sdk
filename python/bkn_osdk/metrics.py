@@ -40,11 +40,14 @@ from urllib.parse import quote
 
 from .config import Context, resolve_context
 from .errors import InputError
-from .query import QUERY_BASE, Filter, Sort, to_condition
+from .http import QueryValue
+from .query import QUERY_BASE, Filter, Sort, branch_param, to_condition
 
 __all__ = ["Metric", "TimeWindow"]
 
-#: `step` values the endpoint documents. Case-insensitive on the wire.
+#: `step` values the endpoint's descriptions use. Documentation, not a gate: the
+#: published schema declares `time.step` a free string, so any non-empty value
+#: is sent and the platform decides.
 STEPS = frozenset({"day", "week", "month", "quarter", "year"})
 
 #: 1e12 ms is 2001-09-09. Any real window is later, and any value in seconds
@@ -59,6 +62,8 @@ class Metric:
 
     __kn_id__: ClassVar[str] = ""
     __bkn_id__: ClassVar[str] = ""
+    #: The branch the package was generated from, sent as `branch` on the read.
+    __branch__: ClassVar[str] = "main"
     #: The object type this metric is mounted on, for the error messages.
     __object_type__: ClassVar[str] = ""
     #: The only dimensions the tool accepts: "取值必须来自 related_metrics[].analysis_dimensions".
@@ -75,6 +80,7 @@ class Metric:
         order_by: list[Sort] | list[tuple[str, str]] | None = None,
         limit: int | None = None,
         metrics: Any = None,
+        fill_null: bool = False,
         context: Context | None = None,
     ) -> Any:
         """Compute the metric, returning the platform's rows unchanged.
@@ -85,6 +91,10 @@ class Metric:
 
         `metrics` passes through the period-over-period / share block verbatim:
         its grammar belongs to the metric definition, not to this signature.
+
+        `fill_null=True` aligns a series to every bucket of `[start, end]`,
+        filling missing buckets with null. It is a query-string flag and only
+        applies to a series, not to `instant=True`.
         """
         from .http import request
         from .lifecycle import with_context_retry
@@ -103,6 +113,8 @@ class Metric:
         if order_by:
             arguments["order_by"] = _order_by(order_by)
         if limit is not None:
+            if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+                raise InputError(f"limit must be a positive integer, got {limit!r}.")
             arguments["limit"] = limit
         if metrics is not None:
             arguments["metrics"] = metrics
@@ -112,9 +124,14 @@ class Metric:
             f"/metrics/{quote(cls.__bkn_id__, safe='')}/data"
         )
 
+        query: dict[str, QueryValue] = {
+            "branch": branch_param(cls.__branch__),
+            "fill_null": fill_null or None,
+        }
+
         def send(bkn_context: dict[str, str] | None) -> Any:
             body = arguments if bkn_context is None else {**arguments, "bkn_context": bkn_context}
-            return request(ctx, path, body=body)
+            return request(ctx, path, body=body, query=query)
 
         response = with_context_retry(ctx, cls.__kn_id__, send)
         value = response if isinstance(response, dict) else {}
@@ -152,8 +169,10 @@ def _checked_time(time: TimeWindow) -> TimeWindow:
         )
     if instant and step is not None:
         raise InputError("`instant=True` takes a point, so it cannot also take a `step`.")
-    if step is not None and str(step).lower() not in STEPS:
-        raise InputError(f"`step` must be one of {', '.join(sorted(STEPS))}; got {step!r}.")
+    if step is not None and (not isinstance(step, str) or not step.strip()):
+        raise InputError(
+            f"`step` must be a non-empty string such as {', '.join(sorted(STEPS))}; got {step!r}."
+        )
     for name, value in (("start", start), ("end", end)):
         if isinstance(value, int | float) and not isinstance(value, bool) and value < MIN_EPOCH_MS:
             raise InputError(

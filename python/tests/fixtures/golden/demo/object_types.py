@@ -15,6 +15,7 @@ class Order(ObjectType):
 
     __kn_id__ = "ecommerce_ops_bkn_public"
     __bkn_id__ = "order"
+    __branch__ = "main"
     __primary_key__ = ("order_id",)
     __display_key__ = "order_no"
 
@@ -49,6 +50,7 @@ class OrderLine(ObjectType):
 
     __kn_id__ = "ecommerce_ops_bkn_public"
     __bkn_id__ = "order_line"
+    __branch__ = "main"
     __primary_key__ = ("order_id", "line_no")
 
     line_no = Property[int]("line_no")
@@ -61,6 +63,7 @@ class People(ObjectType):
 
     __kn_id__ = "ecommerce_ops_bkn_public"
     __bkn_id__ = "people"
+    __branch__ = "main"
     __primary_key__ = ("person_id",)
     __display_key__ = "name"
 
