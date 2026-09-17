@@ -66,6 +66,7 @@ def search_instances(
     kn_id: str,
     query: str,
     *,
+    concept_groups: list[str] | None = None,
     object_types: list[str] | None = None,
     exclude_object_types: list[str] | None = None,
     max_object_types: int | None = None,
@@ -80,7 +81,8 @@ def search_instances(
     fused, so only properties whose `condition_operations` include `match` or
     `knn` take part: a type with no index contributes nothing. `rerank=True`
     adds a cross-encoder pass that tells apart what rank fusion cannot, at the
-    cost of a model call.
+    cost of a model call. `concept_groups` narrows the recall to those BKN
+    concept groups; omitted, the whole network is searched.
 
     The result is the platform's own, rows and the trimmed type definitions
     beside them. Turning a row into a typed instance means one more query: the
@@ -90,6 +92,7 @@ def search_instances(
     ctx = context or resolve_context()
     arguments: dict[str, Any] = {"kn_id": kn_id, "query": query, "response_format": "json"}
     for name, value in (
+        ("concept_groups", concept_groups),
         ("object_types", object_types),
         ("exclude_object_types", exclude_object_types),
         ("max_object_types", max_object_types),

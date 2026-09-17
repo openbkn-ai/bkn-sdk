@@ -5,18 +5,20 @@
  * bkn-safe admin API (`/api/safe/v1/admin/*`, token-gated; the gateway-exposed
  * replacement for the retired ISF UserManagement / Authorization / EACP). The
  * logged-in user must be an admin: 401 = no/invalid token, 403 = not an admin.
- * Only `audit list` has no endpoint (login-log retired by design). Response
+ * The audit trail is `/admin/audit-logs` (management mutations + refusals, not
+ * the retired EACP login-log; needs `admin-audit:view`). Response
  * shapes: `{users|roles|departments, total}`; department `parent_id` (not the
  * ISF `parent_deps[]`). See docs/exec-plans/admin-bkn-safe-migration.md.
  * Also carries the cluster license hub (`/admin/license/*`, issue #224).
  */
 import type { RequestContext } from "../types.js";
 import { HttpError, InputError } from "../utils/errors.js";
+import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { request } from "./http.js";
 
 const ADMIN = "/api/safe/v1/admin";
 
-/** Thrown for admin ops with no bkn-safe endpoint (only `audit list`). */
+/** Thrown for admin ops with no bkn-safe endpoint. */
 export function notOnSafe(operation: string): never {
   throw new InputError(
     `'${operation}' is not available on bkn-safe — its admin API has no such endpoint. See docs/exec-plans/admin-bkn-safe-migration.md.`,
@@ -337,6 +339,107 @@ export async function setRolePermissionSafe(
     },
   });
   return { ok: true };
+}
+
+// ── audit logs (bkn-safe/audit.yaml) ─────────────────────────────────────────
+
+/** Server cap on one audit page (`limit`; default 50 when omitted). */
+export const AUDIT_LOG_MAX_LIMIT = 500;
+
+/** Filters for GET /admin/audit-logs. All filters combine with AND. */
+export interface AuditLogQuery {
+  /** Token subject id of the actor (not an account name). */
+  actorId?: string;
+  /** All rows written for one mutating HTTP request (a batch writes one per target). */
+  requestId?: string;
+  /** Top-level route noun, e.g. `users`, `role-bindings`, `policies`. */
+  resource?: string;
+  /** Business verb, e.g. `create`, `grant`, `revoke`, `reset_password`. */
+  action?: string;
+  targetId?: string;
+  /** Only 4xx/5xx rows — refused and failed attempts. */
+  failedOnly?: boolean;
+  /** Inclusive lower bound on `created_at`, RFC 3339. */
+  from?: string;
+  /** Exclusive upper bound on `created_at`, RFC 3339. */
+  to?: string;
+  /** Keyset tiebreaker for rows sharing the `to` timestamp. */
+  beforeId?: string;
+  offset?: number;
+  /** Page size, 0..500 (server default 50). */
+  limit?: number;
+}
+
+/** One audit row. `seq` is int64 and arrives as bigint when unsafe. */
+export interface AuditLogEntry {
+  id: string;
+  actor_id?: string;
+  actor_name_snapshot?: string;
+  actor_type?: "user" | "service" | "anonymous";
+  auth_method?: "oauth" | "network" | "none";
+  credential_id?: string;
+  request_id?: string;
+  source_channel?: "api" | "internal";
+  method?: string;
+  resource?: string;
+  action?: string;
+  target_id?: string;
+  target_name?: string;
+  detail?: string;
+  status?: number;
+  client_ip?: string;
+  created_at?: string;
+  seq?: number | bigint;
+  prev_hash?: string;
+  row_hash?: string;
+}
+
+export interface AuditLogPage {
+  logs: AuditLogEntry[];
+  /** Matching audit rows (not HTTP requests); int64. */
+  total: number | bigint;
+}
+
+/** GET /admin/audit-logs — audit entries, newest first. */
+export async function listAuditLogsSafe(
+  ctx: RequestContext,
+  query: AuditLogQuery = {},
+): Promise<AuditLogPage> {
+  if (
+    query.limit !== undefined &&
+    (!Number.isInteger(query.limit) || query.limit < 0 || query.limit > AUDIT_LOG_MAX_LIMIT)
+  ) {
+    throw new InputError(
+      `Audit log limit must be an integer between 0 and ${AUDIT_LOG_MAX_LIMIT}; got ${query.limit}.`,
+    );
+  }
+  if (query.offset !== undefined && (!Number.isInteger(query.offset) || query.offset < 0)) {
+    throw new InputError(`Audit log offset must be a non-negative integer; got ${query.offset}.`);
+  }
+  return request<AuditLogPage>(ctx, `${ADMIN}/audit-logs`, {
+    query: {
+      actor_id: query.actorId || undefined,
+      request_id: query.requestId || undefined,
+      resource: query.resource || undefined,
+      action: query.action || undefined,
+      target_id: query.targetId || undefined,
+      failed_only: query.failedOnly ? true : undefined,
+      from: query.from || undefined,
+      to: query.to || undefined,
+      before_id: query.beforeId || undefined,
+      offset: query.offset,
+      limit: query.limit,
+    },
+    // `total` and `seq` are int64.
+    responseParser: parseBigIntJSON,
+  });
+}
+
+/** GET /admin/audit-logs/:id — one audit entry. */
+export function getAuditLogSafe(ctx: RequestContext, id: string): Promise<AuditLogEntry> {
+  return request<AuditLogEntry>(ctx, `${ADMIN}/audit-logs/${encodeURIComponent(id)}`, {
+    responseParser: parseBigIntJSON,
+  });
 }
 
 // ── license (cluster license hub) ────────────────────────────────────────────

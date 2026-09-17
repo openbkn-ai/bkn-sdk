@@ -48,6 +48,7 @@ export {
   type SupportCandidate,
 } from "./managed-trace.js";
 export {
+  type CapabilityProfile,
   type ClaimSupport,
   type CloseConversationInput,
   type ConversationPage,
@@ -87,12 +88,22 @@ export {
 // Resource namespaces (advanced: use with a resolved RequestContext).
 export { admin } from "./resources/admin.js";
 export { context } from "./resources/context-loader.js";
-export type { ManagedToolResult, ToolCallOptions, ToolReceipt } from "./api/context-loader.js";
+export {
+  ManagedToolError,
+  type ManagedToolResult,
+  type SchemaConceptKind,
+  type SearchSchemaOptions,
+  type SearchSchemaScope,
+  type ToolCallOptions,
+  type ToolReceipt,
+} from "./api/context-loader.js";
 export { kn } from "./resources/knowledge-networks.js";
 export { models } from "./resources/models.js";
 export { resources } from "./resources/resources.js";
 export { skills } from "./resources/skills.js";
 export { functions } from "./resources/functions.js";
+export { mcp } from "./resources/mcp.js";
+export type { ListMcpServerToolsOptions, ListMcpServersOptions } from "./api/mcp.js";
 export type {
   DependencyInfo,
   ExecuteFunctionOptions,

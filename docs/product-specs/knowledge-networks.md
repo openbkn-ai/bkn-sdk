@@ -13,14 +13,18 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
 ## User-visible behavior
 
 - `openbkn bkn list` — networks (default limit 30).
-- `openbkn bkn get <id>` — one network, summary + schema pointers.
+- `openbkn bkn get <id> [--branch b] [--detail-level full|summary]` — one network; `detail_level` per the contract (`summary` = concept ids and names); on 0.1.5 deploys it only changes the answer together with `--export`, and even then summary still carries full definitions (openbkn-ai/bkn-foundry#1632).
+- `openbkn bkn resources [--keyword s]` — BKN-backend resources (knowledge networks); always sends `resource_type=knowledge_network`, which the backend requires (without it the answer is empty).
 - `openbkn bkn search <id> <query>` accepts a quoted query beginning with `-`
   without requiring a preceding `--` separator. A query shaped like a long flag
   (`--rerankk`) is refused as an unknown option unless it follows `--`.
 - Search budgets `--max-object-types` and `--max-instances` are positive whole
   numbers; omit them to leave the platform defaults unchanged.
 - `openbkn bkn query <id> ...` — query object types / instances (default limit 50).
-- `openbkn bkn push <dir>` / `openbkn bkn pull <id>` — upload/download a BKN package; optional encoding detection (`--no-detect-encoding`, `--source-encoding`).
+- `openbkn bkn push <dir>` / `openbkn bkn pull <id>` — upload/download a BKN package; optional encoding detection (`--no-detect-encoding`, `--source-encoding`). `push` passes `--import-mode normal|overwrite|ignore`, `--no-strict-mode` and `--binding-policy preserve|detach` to the import. Verified on 0.1.5 (14.103.77.23): `binding_policy` is validated, but `import_mode` and `strict_mode` are accepted and not applied — every mode re-applies same-id edits and refuses a new id reusing an existing name (403 `ObjectTypeNameExisted`).
+- Schema creates (`object-type`/`relation-type`/`action-type`/`metric create`) send `X-HTTP-Method-Override: POST` with an `{entries:[…]}` body; ontology-query reads tunnelled over POST (`object-type query`, `action-type query`, `subgraph`) send `X-HTTP-Method-Override: GET`.
+- `object-type query` pages by cursor (`paging.next_cursor` → body `cursor`) on deploys that include foundry #1623; older deploys return no `paging` and page with body `offset`; `action-log list` pages by `--search-after`. `concept-group list` and `action-schedule list` return every row unless `--limit` is given (the backend's own default of 10 would truncate silently).
+- Comma-joined ids in DELETE paths (`concept-group remove-members`, `action-schedule delete`) are encoded one by one; an empty list is refused before any request.
 - An object type's `### Data Properties` table may include an optional `Mask Rule`
   column containing one compact JSON object. The supported discriminated rules
   are `fixed`, `partial`, and `email` for string-like properties; `round` for
@@ -53,10 +57,12 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
   use a different character in place of a pipe and stay on one physical line.
   Structured table rows must stay contiguous. `Logic Properties` must use either
   a flat table or `####` property subsections; mixing them drops the flat rows.
-- When the lifecycle catalog requires `conversation_mode`, managed retrieval
-  sends `new` without a conversation ID or `continue` with one. If that
-  handshake fails, the SDK surfaces the lifecycle error and does not send an
-  uncontexted business request.
+- A managed-v2 `bkn_start_interaction` always carries `question`, `agent_name`
+  (`openbkn-sdk` unless `ClientOptions.agentName` says otherwise) and
+  `conversation_mode`: `new` without a conversation ID, `continue` with one.
+  Legacy managed-v1 deploys get `conversation_mode` only when their catalog
+  declares it. If that handshake fails, the SDK surfaces the lifecycle error and
+  does not send an uncontexted business request.
 - The dedicated `context query-object-instance` command and SDK wrapper reject
   unknown top-level argument keys, extra `filters[]` / `sort[]` keys, and
   misspelled nested condition keys before opening an MCP session. Each filter

@@ -262,7 +262,20 @@ def _unwrap(parsed: Any) -> ToolResult:
     if not isinstance(parsed, dict):
         raise BknError(f"MCP returned an unexpected body: {str(parsed)[:200]}")
     if isinstance(parsed.get("error"), dict):
-        raise BknError(f"MCP error: {parsed['error'].get('message', parsed['error'])}")
+        # A JSON-RPC top-level error is the server refusing this call — the same
+        # kind of answer as an `isError` result, delivered a layer lower by a
+        # gateway that validates before dispatch. As a `ToolError` it keeps its
+        # code, so a lifecycle refusal still reaches `with_context_retry`.
+        rpc_error = parsed["error"]
+        data = rpc_error.get("data")
+        detail = _error_of(data) or (data if isinstance(data, dict) else {})
+        code = rpc_error.get("code")
+        raise ToolError(
+            code if isinstance(code, str) else str(detail.get("code") or "rpc_error"),
+            f"MCP error: {rpc_error.get('message', rpc_error)}",
+            required_action=_str_or_none(detail.get("required_action")),
+            retryable=bool(detail.get("retryable")),
+        )
 
     result = parsed.get("result")
     if not isinstance(result, dict):

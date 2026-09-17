@@ -20,6 +20,7 @@ import { request } from "./http.js";
 import {
   requestContextForBusinessContext,
   requireKnownLifecycleCapability,
+  toWireBknContext,
   withManagedLifecycle,
 } from "./lifecycle.js";
 import { tlsFetch } from "./tls.js";
@@ -179,6 +180,21 @@ export interface ManagedToolResult<T = unknown> {
   receipt: ToolReceipt;
 }
 
+/**
+ * A managed MCP call was refused after ContextLoader had produced a trusted
+ * receipt. The error keeps that receipt so callers can read its authoritative
+ * terminal state without treating a replay as a successful tool result.
+ */
+export class ManagedToolError extends ToolError {
+  readonly receipt: ToolReceipt;
+
+  constructor(message: string, code: string | undefined, receipt: ToolReceipt) {
+    super(message, code);
+    this.name = "ManagedToolError";
+    this.receipt = receipt;
+  }
+}
+
 /** Adapter-owned MCP metadata for lifecycle-safe host retries. */
 export interface ToolCallOptions {
   hostConversationKey?: string;
@@ -188,6 +204,7 @@ export interface ToolCallOptions {
 interface UnwrappedToolResult {
   value: unknown;
   receipt?: ToolReceipt;
+  toolError?: { message: string; code?: string };
 }
 
 const RECEIPT_STATUSES = new Set(["pending", "completed", "failed"]);
@@ -232,7 +249,9 @@ function receiptFrom(structuredContent: unknown): ToolReceipt | undefined {
 }
 
 function toolErrorCode(structuredContent: unknown): string | undefined {
-  const code = (structuredContent as { error?: { code?: unknown } } | undefined)?.error?.code;
+  const content = structuredContent as { code?: unknown; error?: { code?: unknown } } | undefined;
+  // Nested under `error` on older deploys; `ErrorCompact` puts it at the top.
+  const code = content?.error?.code ?? content?.code;
   return typeof code === "string" ? code : lifecycleCodeInText(structuredContent);
 }
 
@@ -285,27 +304,34 @@ function unwrapToolResult(parsed: unknown, extractBusinessReceipt = true): Unwra
   if (result === undefined) return { value: parsed };
   const structuredContent = result.structuredContent;
   const receipt = extractBusinessReceipt ? receiptFrom(structuredContent) : undefined;
-  if (receipt?.receipt_status === "failed") {
-    throw new ToolError("Context-loader operation receipt is failed.", "receipt_failed");
-  }
-  if (receipt?.receipt_status === "pending") return { value: null, receipt };
   const content = result.content;
   if (result.isError === true) {
     const raw =
       Array.isArray(content) && content[0] && typeof content[0].text === "string"
         ? content[0].text
         : "tool call failed";
-    // The tool hands back the platform envelope as a JSON string; a caller wants
-    // the sentence inside it, not the envelope.
+    // Do not throw here. callToolResult still has to verify a receipt against
+    // the caller's conversation and interaction before exposing it on a typed
+    // error. The server's stable structured code wins over receipt status.
     const message = readableServerError(raw) || raw;
-    // The structured error code, not the prose, is what tells a caller whether
-    // the failure is retryable — a dead lifecycle session is reopenable, a bad
-    // argument is not.
-    throw new ToolError(
-      `Context-loader error: ${message}`,
-      toolErrorCode(structuredContent) ?? lifecycleCodeInText(message),
-    );
+    const toolError = {
+      message: `Context-loader error: ${message}`,
+      code: toolErrorCode(structuredContent) ?? lifecycleCodeInText(message),
+    };
+    if (!receipt) throw new ToolError(toolError.message, toolError.code);
+    return { value: null, receipt, toolError };
   }
+  if (receipt?.receipt_status === "failed") {
+    return {
+      value: null,
+      receipt,
+      toolError: {
+        message: "Context-loader operation receipt is failed.",
+        code: "receipt_failed",
+      },
+    };
+  }
+  if (receipt?.receipt_status === "pending") return { value: null, receipt };
   if (Array.isArray(content) && content[0] && typeof content[0].text === "string") {
     try {
       return { value: parseBigIntJSON(content[0].text), receipt };
@@ -321,6 +347,14 @@ function unwrapToolResult(parsed: unknown, extractBusinessReceipt = true): Unwra
   }
   if (receipt) return { value: structuredBusinessValue(structuredContent) ?? null, receipt };
   return { value: structuredContent ?? result };
+}
+
+function throwToolError(result: UnwrappedToolResult): void {
+  if (!result.toolError) return;
+  if (result.receipt) {
+    throw new ManagedToolError(result.toolError.message, result.toolError.code, result.receipt);
+  }
+  throw new ToolError(result.toolError.message, result.toolError.code);
 }
 
 function toolCallParams(
@@ -400,6 +434,19 @@ function receiptMatchesBusinessContext(
   return result;
 }
 
+// finalisedToolResult is intentionally invoked inside the managed lifecycle
+// callback. A stale-session ToolError must be visible to withManagedLifecycle
+// so it can reopen an interaction once; a receipt-bearing error is checked
+// against that interaction before it becomes a ManagedToolError.
+function finalizedToolResult(
+  result: UnwrappedToolResult,
+  businessContext: BusinessContextIds | undefined,
+): UnwrappedToolResult {
+  const verified = receiptMatchesBusinessContext(result, businessContext);
+  throwToolError(verified);
+  return verified;
+}
+
 /**
  * Call an MCP tool exactly as given, with no lifecycle context attached.
  *
@@ -439,7 +486,9 @@ export async function callToolRaw(
   options?: ToolCallOptions,
   timeoutMs?: number,
 ): Promise<unknown> {
-  return (await callToolRawResult(ctx, knId, name, args, options, timeoutMs)).value;
+  const result = await callToolRawResult(ctx, knId, name, args, options, timeoutMs);
+  throwToolError(result);
+  return result.value;
 }
 
 /**
@@ -462,6 +511,89 @@ const LIFECYCLE_TOOLS = new Set([
 ]);
 
 /**
+ * Tools whose published input schema takes `response_format` (`json` | `toon`).
+ *
+ * The MCP schemas default it to `toon`, which this client cannot parse into a
+ * value — the result would come back as `{ raw: "<toon text>" }`. Tools absent
+ * here (`execute_action`, `execute_tool`, `run_code`, `run_shell`, extension
+ * tools) do not declare the argument and are left alone.
+ */
+const RESPONSE_FORMAT_TOOLS = new Set([
+  "search_schema",
+  "search_instance",
+  "query_object_instance",
+  "query_instance_subgraph",
+  "explore_subgraph",
+  "get_logic_properties_values",
+  "get_action_info",
+  "get_action_execution",
+  "list_action_executions",
+  "query_metric",
+  "run_sql",
+  "run_cypher",
+  "list_knowledge_networks",
+  "get_kn_detail",
+  "get_object_types",
+  "get_relation_types",
+  "list_resources",
+  "describe_resource",
+  "list_skills",
+  "get_skill_content",
+  "read_skill_file",
+  "search_capabilities",
+]);
+
+/**
+ * Tools whose `kn_id` argument names the network the call addresses.
+ *
+ * Several (`run_cypher`, `search_capabilities`, `execute_tool`, the skill
+ * readers) require it in the body; the rest accept the `x-kn-id` header as an
+ * alternative, where the body wins. Excluded on purpose: tools with no `kn_id`
+ * (`run_sql`, `describe_resource`, `list_skills`, `list_knowledge_networks`,
+ * `run_code`, `run_shell`) and `list_resources`, where `kn_id` narrows an
+ * account-wide listing to one network's bindings and so changes the answer.
+ */
+const KN_SCOPED_TOOLS = new Set([
+  "search_schema",
+  "search_instance",
+  "query_object_instance",
+  "query_instance_subgraph",
+  "explore_subgraph",
+  "get_logic_properties_values",
+  "get_action_info",
+  "execute_action",
+  "get_action_execution",
+  "list_action_executions",
+  "query_metric",
+  "run_cypher",
+  "get_kn_detail",
+  "get_object_types",
+  "get_relation_types",
+  "get_skill_content",
+  "read_skill_file",
+  "execute_skill",
+  "search_capabilities",
+  "execute_tool",
+]);
+
+/**
+ * Fill the arguments the contract expects and the SDK already knows: `kn_id`
+ * from the network the call is bound to, and `response_format: "json"` so the
+ * result parses. A value the caller supplied always wins.
+ */
+function withContractDefaults(
+  knId: string,
+  name: string,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    ...(KN_SCOPED_TOOLS.has(name) && knId ? { kn_id: knId } : {}),
+    ...(RESPONSE_FORMAT_TOOLS.has(name) ? { response_format: "json" } : {}),
+    ...args,
+  };
+}
+
+/**
  * Call any MCP tool by name.
  *
  * Deploys that enforce the lifecycle contract require a `bkn_context` in the
@@ -479,18 +611,20 @@ async function callToolResult(
 ): Promise<UnwrappedToolResult> {
   if (LIFECYCLE_TOOLS.has(name)) return callToolRawResult(ctx, knId, name, args, options);
   const callerContext = callerContextMatchesTrace(ctx, args);
-  // A caller that built its own `bkn_context` gets it through untouched, and no
-  // session is opened on its behalf. `ManagedTrace.runOperation` pre-registers
-  // an Operation under a specific `operation_key` before handing the context to
-  // the tool call; replacing that key would orphan the registration, and
-  // `parent_operation_id` / `causation_event_ids` would be dropped with it.
+  const toolArgs = withContractDefaults(knId, name, args);
+  // A caller that built its own `bkn_context` keeps its ids, and no session is
+  // opened on its behalf; `parent_operation_id` / `causation_event_ids` /
+  // `business_refs` travel with it. Anything `BKNContext` does not accept —
+  // an `operation_key` minted by `ManagedTrace` in particular — is dropped:
+  // Context Loader derives the Operation identity itself and rejects it.
   if (callerContext) {
-    return receiptMatchesBusinessContext(
+    const bknContext = toWireBknContext(callerContext);
+    return finalizedToolResult(
       await callToolRawResult(
-        requestContextForBusinessContext(ctx, callerContext),
+        requestContextForBusinessContext(ctx, bknContext),
         knId,
         name,
-        args,
+        { ...toolArgs, bkn_context: bknContext },
         options,
       ),
       callerContext,
@@ -506,9 +640,9 @@ async function callToolResult(
         requestContext,
         knId,
         name,
-        bknContext ? { ...args, bkn_context: bknContext } : args,
+        bknContext ? { ...toolArgs, bkn_context: bknContext } : toolArgs,
         options,
-      ).then((result) => receiptMatchesBusinessContext(result, bknContext)),
+      ).then((result) => finalizedToolResult(result, bknContext)),
     requireReceipt,
   );
 }
@@ -520,7 +654,9 @@ export async function callTool(
   args: Record<string, unknown>,
   options?: ToolCallOptions,
 ): Promise<unknown> {
-  return (await callToolResult(ctx, knId, name, args, options)).value;
+  const result = await callToolResult(ctx, knId, name, args, options);
+  throwToolError(result);
+  return result.value;
 }
 
 /**
@@ -546,6 +682,7 @@ export async function callManagedTool<T = unknown>(
   options?: ToolCallOptions,
 ): Promise<ManagedToolResult<T>> {
   const result = await callToolResult(ctx, knId, name, args, options, true);
+  throwToolError(result);
   if (!result.receipt) {
     throw new ToolError(
       "Context-loader managed tool response did not include bkn_receipt",
@@ -587,20 +724,110 @@ export async function callMethod(
 
 // ---- typed tool wrappers ---------------------------------------------------
 
-export interface SearchSchemaOptions {
-  searchScope?: string[];
-  maxConcepts?: number;
+/** A concept kind `search_schema` can return. */
+export type SchemaConceptKind = "object" | "relation" | "action" | "metric";
+
+const SCHEMA_CONCEPT_KINDS: readonly SchemaConceptKind[] = [
+  "object",
+  "relation",
+  "action",
+  "metric",
+];
+
+/**
+ * `search_scope` (`SearchSchemaScope` in schema-search.yaml). Every include flag
+ * defaults to `true` on the server; they cannot all be `false`.
+ */
+export interface SearchSchemaScope {
+  /** Concept-group ids to confine recall to; ids come from `get_kn_detail`. */
+  conceptGroups?: string[];
+  includeObjectTypes?: boolean;
+  includeRelationTypes?: boolean;
+  includeActionTypes?: boolean;
+  includeMetricTypes?: boolean;
 }
 
-export function searchSchema(
+export interface SearchSchemaOptions {
+  /**
+   * Narrow what comes back. The `SchemaConceptKind[]` form is the pre-contract
+   * shape, still accepted: the listed kinds are included and the rest excluded.
+   */
+  searchScope?: SearchSchemaScope | SchemaConceptKind[];
+  maxConcepts?: number;
+  /** Trimmed schema (the MCP default is `true`); `false` adds comments, keys and tags. */
+  schemaBrief?: boolean;
+  /** Re-rank relation types (server default `true`). */
+  enableRerank?: boolean;
+  /** Override the deploy's rerank model. Operator escape hatch — leave unset. */
+  rerankModel?: string;
+  /** Add each data property's physical `column`, which `run_sql` needs. */
+  includeColumns?: boolean;
+}
+
+/**
+ * Turn a list of concept kinds into the contract's include flags: listed kinds
+ * on, the rest off. An empty list or an unknown kind is refused here rather
+ * than as the server's 400.
+ */
+export function scopeFromKinds(kinds: readonly string[]): SearchSchemaScope {
+  const unknown = kinds.filter((k) => !SCHEMA_CONCEPT_KINDS.includes(k as SchemaConceptKind));
+  if (unknown.length > 0) {
+    throw new InputError(
+      `Unknown concept kind: ${unknown.join(", ")} (expected ${SCHEMA_CONCEPT_KINDS.join(", ")})`,
+    );
+  }
+  if (kinds.length === 0) {
+    throw new InputError(
+      `At least one concept kind is required (${SCHEMA_CONCEPT_KINDS.join(", ")})`,
+    );
+  }
+  return {
+    includeObjectTypes: kinds.includes("object"),
+    includeRelationTypes: kinds.includes("relation"),
+    includeActionTypes: kinds.includes("action"),
+    includeMetricTypes: kinds.includes("metric"),
+  };
+}
+
+function wireSearchScope(scope: SearchSchemaScope): Record<string, unknown> | undefined {
+  const wire: Record<string, unknown> = {};
+  if (scope.conceptGroups?.length) wire.concept_groups = scope.conceptGroups;
+  if (scope.includeObjectTypes !== undefined) wire.include_object_types = scope.includeObjectTypes;
+  if (scope.includeRelationTypes !== undefined) {
+    wire.include_relation_types = scope.includeRelationTypes;
+  }
+  if (scope.includeActionTypes !== undefined) wire.include_action_types = scope.includeActionTypes;
+  if (scope.includeMetricTypes !== undefined) wire.include_metric_types = scope.includeMetricTypes;
+  if (
+    wire.include_object_types === false &&
+    wire.include_relation_types === false &&
+    wire.include_action_types === false &&
+    wire.include_metric_types === false
+  ) {
+    throw new InputError("search_scope cannot exclude every concept kind.");
+  }
+  return Object.keys(wire).length > 0 ? wire : undefined;
+}
+
+export async function searchSchema(
   ctx: RequestContext,
   knId: string,
   query: string,
   opts: SearchSchemaOptions = {},
 ): Promise<unknown> {
   const args: Record<string, unknown> = { query, response_format: "json" };
-  if (opts.searchScope) args.search_scope = opts.searchScope;
+  if (opts.searchScope) {
+    const scope = Array.isArray(opts.searchScope)
+      ? scopeFromKinds(opts.searchScope)
+      : opts.searchScope;
+    const wire = wireSearchScope(scope);
+    if (wire) args.search_scope = wire;
+  }
   if (opts.maxConcepts !== undefined) args.max_concepts = opts.maxConcepts;
+  if (opts.schemaBrief !== undefined) args.schema_brief = opts.schemaBrief;
+  if (opts.enableRerank !== undefined) args.enable_rerank = opts.enableRerank;
+  if (opts.rerankModel) args.rerank_model = opts.rerankModel;
+  if (opts.includeColumns !== undefined) args.include_columns = opts.includeColumns;
   return callTool(ctx, knId, "search_schema", args);
 }
 
@@ -641,13 +868,14 @@ export function searchCapabilities(
   return callTool(ctx, knId, "search_capabilities", args);
 }
 
-/** Progressive KN-detail disclosure level: `summary` (skeleton + property names) | `full`. */
+/** Progressive KN-detail disclosure level: `summary` (skeleton + property name/type) | `full`. */
 export type DetailLevel = "summary" | "full";
 
 /**
  * get_kn_detail — the KN schema at a chosen detail level. `summary` (the server
- * default) returns the skeleton + per-property `name/display_name/type/comment`
- * only; `full` returns everything (still deduped). Drill into specific types with
+ * default) returns the skeleton + per-property `name/type` only — no
+ * display_name, comment, field mapping, query operators or mapping rules;
+ * `full` returns everything (still deduped). Drill into specific types with
  * `getObjectTypes` / `getRelationTypes`.
  */
 export function getKnDetail(

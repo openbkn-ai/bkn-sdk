@@ -1155,13 +1155,24 @@ export function vegaCommand(): Command {
     });
   resource
     .command("document-delete-filter <resource-id>")
-    .description("Delete dataset documents by a non-empty filter")
-    .requiredOption("--filter <json>", "filter_condition JSON object")
+    .description("Delete dataset documents by an equality selector or Vega filter condition")
+    .option("--filter <json>", "Vega filter_condition JSON object")
+    .option("--selector <json>", "JSON equality selector")
     .action(async (resourceId: string, opts, cmd: Command) => {
-      const filter = parseJsonObject(opts.filter, "--filter");
-      if (!Object.keys(filter).length) throw new InputError("--filter must not be empty");
+      if (Boolean(opts.filter) === Boolean(opts.selector)) {
+        throw new InputError("exactly one of --filter or --selector is required");
+      }
+      const filter = parseJsonObject(
+        opts.filter ?? opts.selector,
+        opts.filter ? "--filter" : "--selector",
+      );
+      if (!Object.keys(filter).length) {
+        throw new InputError(`${opts.filter ? "--filter" : "--selector"} must not be empty`);
+      }
       printJson(
-        await clientFrom(cmd).resource.deleteDocumentsByFilter(resourceId, filter),
+        await (opts.selector
+          ? clientFrom(cmd).resource.deleteDocumentsBySelector(resourceId, filter)
+          : clientFrom(cmd).resource.deleteDocumentsByFilter(resourceId, filter)),
         outputOptions(cmd),
       );
     });

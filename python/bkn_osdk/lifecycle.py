@@ -50,21 +50,17 @@ CREATE_TOOL = "bkn_create_conversation"
 DEFAULT_QUESTION = "bkn-osdk read"
 #: Display-only attribution, so an SDK-opened turn is identifiable in Trace.
 AGENT_NAME = "bkn-osdk"
+#: Why a turn that ran to completion is closed as `cancelled`: `completed`
+#: requires an answer, and an SDK scope has none to give.
+NO_ANSWER_REASON = "bkn-osdk scope ended without an answer"
 
 
 @dataclass(frozen=True)
 class Catalog:
-    """What a deploy's tool catalog says about opening a turn.
-
-    Two builds advertise the same tool names and still disagree on the
-    arguments: one declares `conversation_mode` required on the start tool, the
-    other never published it. Only the tool's own schema separates them, so the
-    probe keeps it rather than throwing it away with the names.
-    """
+    """What a deploy's tool catalog says about opening a turn: which lifecycle
+    tools exist, so an unsupported contract is refused rather than guessed at."""
 
     tools: frozenset[str]
-    #: True when the start tool declares `conversation_mode`.
-    declares_conversation_mode: bool = False
     #: False when the catalog could not be read at all. An absent tool and an
     #: unreadable catalog look identical in `tools`, and they are not the same
     #: thing: one is a deploy that cannot open a turn, the other is a deploy
@@ -174,15 +170,11 @@ def _start(ctx: Context, kn_id: str, question: str = DEFAULT_QUESTION) -> Intera
             #: opened from a real agent's in a Trace listing.
             "agent_name": AGENT_NAME,
             **({"conversation_id": ctx.conversation_id} if ctx.conversation_id else {}),
-            # Sent only where the tool declares it: this contract validates
-            # strictly, and a deploy may reject an argument it never published.
-            # An unreadable catalog answers "no" — send what has always worked
-            # rather than guess a new field in.
-            **(
-                {"conversation_mode": "continue" if ctx.conversation_id else "new"}
-                if catalog.declares_conversation_mode
-                else {}
-            ),
+            # Required on every start by the lifecycle contract (context-loader
+            # `mcp.yaml`): `new` with no conversation id, `continue` with one.
+            # Sent unconditionally — a catalog that fails to publish the field,
+            # or cannot be read, does not make the contract optional.
+            "conversation_mode": "continue" if ctx.conversation_id else "new",
         },
     )
     value = result.value if isinstance(result.value, dict) else {}
@@ -317,17 +309,20 @@ def finish(ctx: Context, interaction: Interaction, outcome: str, answer: str | N
     """
     if interaction.caller_owned:
         return
+    arguments: dict[str, Any] = {"interaction_id": interaction.interaction_id, "outcome": outcome}
+    if outcome == "completed":
+        if answer:
+            arguments["answer"] = answer
+        else:
+            # The contract rejects `completed` without an answer, and that
+            # rejection is swallowed below — so the turn would stay active.
+            # An SDK scope has no answer artifact of its own to close over,
+            # which is exactly what `cancelled` with a reason records (the
+            # TypeScript SDK releases its sessions the same way).
+            arguments["outcome"] = "cancelled"
+            arguments["reason"] = NO_ANSWER_REASON
     try:
-        call_tool(
-            ctx,
-            interaction.kn_id,
-            FINISH_TOOL,
-            {
-                "interaction_id": interaction.interaction_id,
-                "outcome": outcome,
-                **({"answer": answer} if answer and outcome == "completed" else {}),
-            },
-        )
+        call_tool(ctx, interaction.kn_id, FINISH_TOOL, arguments)
     except BknError:
         return
 
@@ -352,32 +347,10 @@ def _catalog(ctx: Context) -> Catalog:
     entries = payload.get("tools") if isinstance(payload, dict) else None
     tools = [entry for entry in (entries or []) if isinstance(entry, dict)]
     names = frozenset(entry["name"] for entry in tools if isinstance(entry.get("name"), str))
-    catalog = Catalog(
-        tools=names,
-        declares_conversation_mode=any(
-            entry.get("name") == START_TOOL and _declares(entry, "conversation_mode")
-            for entry in tools
-        ),
-    )
+    catalog = Catalog(tools=names)
     with _lock:
         _catalogs[ctx.base_url] = catalog
     return catalog
-
-
-def _declares(tool: dict[str, Any], field: str) -> bool:
-    """Whether a tool's published input schema names this argument.
-
-    Keyed on `properties` rather than `required`: a field the deploy published
-    is one it knows, and sending a published-but-optional argument is safe where
-    sending an unpublished one is not. The platform is moving the other way
-    anyway — a build that listed `conversation_mode` as optional now lists it as
-    required.
-    """
-    schema = tool.get("input_schema") or tool.get("inputSchema")
-    if not isinstance(schema, dict):
-        return False
-    properties = schema.get("properties")
-    return isinstance(properties, dict) and field in properties
 
 
 def _reset_for_tests() -> None:

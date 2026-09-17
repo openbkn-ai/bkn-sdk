@@ -7,15 +7,16 @@ import { join } from "node:path";
 import { Command } from "commander";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { managedToolCall } = vi.hoisted(() => ({
+const { managedToolCall, searchSchema } = vi.hoisted(() => ({
   managedToolCall: vi.fn(),
+  searchSchema: vi.fn(),
 }));
 
 vi.mock("../../src/commands/_shared.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/commands/_shared.js")>();
   return {
     ...actual,
-    clientFrom: vi.fn(() => ({ context: { managedToolCall } })),
+    clientFrom: vi.fn(() => ({ context: { managedToolCall, searchSchema } })),
   };
 });
 
@@ -177,5 +178,90 @@ describe("openbkn context tool-call receipt output", () => {
       query: "supplier",
       limit: 10,
     });
+  });
+});
+
+describe("openbkn context search-schema scope", () => {
+  const run = async (...args: string[]) => {
+    searchSchema.mockResolvedValue({ object_types: [] });
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    await program(true).parseAsync([
+      "node",
+      "openbkn",
+      "--json",
+      "context",
+      "search-schema",
+      ...args,
+    ]);
+    return searchSchema.mock.calls.at(-1);
+  };
+
+  afterEach(() => searchSchema.mockReset());
+
+  it("maps --concept-groups and --only onto the SearchSchemaScope object", async () => {
+    const call = await run(
+      "kn-a",
+      "churn",
+      "--concept-groups",
+      "cg_sales, cg_service",
+      "--only",
+      "object,relation",
+      "--max",
+      "5",
+    );
+    expect(call).toEqual([
+      "kn-a",
+      "churn",
+      {
+        searchScope: {
+          conceptGroups: ["cg_sales", "cg_service"],
+          includeObjectTypes: true,
+          includeRelationTypes: true,
+          includeActionTypes: false,
+          includeMetricTypes: false,
+        },
+        maxConcepts: 5,
+        schemaBrief: undefined,
+        enableRerank: undefined,
+        rerankModel: undefined,
+        includeColumns: undefined,
+      },
+    ]);
+  });
+
+  it("keeps --scope as an alias of --only", async () => {
+    const call = await run("kn-a", "q", "--scope", "metric");
+    expect(call?.[2].searchScope).toEqual({
+      includeObjectTypes: false,
+      includeRelationTypes: false,
+      includeActionTypes: false,
+      includeMetricTypes: true,
+    });
+  });
+
+  it("forwards the documented tuning flags and leaves unset ones undefined", async () => {
+    const call = await run(
+      "kn-a",
+      "q",
+      "--no-schema-brief",
+      "--include-columns",
+      "--no-rerank",
+      "--rerank-model",
+      "bge-reranker",
+    );
+    expect(call?.[2]).toMatchObject({
+      searchScope: undefined,
+      schemaBrief: false,
+      includeColumns: true,
+      enableRerank: false,
+      rerankModel: "bge-reranker",
+    });
+  });
+
+  it("refuses an unknown concept kind before calling the deploy", async () => {
+    await expect(run("kn-a", "q", "--only", "object,table")).rejects.toThrow(
+      "Unknown concept kind: table",
+    );
+    expect(searchSchema).not.toHaveBeenCalled();
   });
 });

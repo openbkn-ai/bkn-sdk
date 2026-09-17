@@ -2,7 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 /** `openbkn context …` (alias of legacy context-loader) — MCP retrieval. */
-import { Command } from "commander";
+import { Command, Option } from "commander";
+import { type SearchSchemaScope, scopeFromKinds } from "../api/context-loader.js";
 import { readPlatformConfig, updatePlatformConfig } from "../config/store.js";
 import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
@@ -92,12 +93,39 @@ export function contextCommand(): Command {
     .description(
       "Search object/relation/action/metric schemas → {object_types, relation_types, action_types, metric_types}",
     )
-    .option("--scope <list>", "comma-separated scopes (object,relation,action,metric)")
-    .option("--max <n>", "max concepts", int)
+    .option(
+      "--concept-groups <ids>",
+      "comma-separated concept-group ids to confine recall to (ids from kn-detail)",
+      list,
+    )
+    .option(
+      "--only <kinds>",
+      "return only these concept kinds, comma-separated: object,relation,action,metric",
+      list,
+    )
+    // The pre-contract spelling. It now maps onto the same include flags as --only.
+    .addOption(new Option("--scope <kinds>", "alias of --only").argParser(list).hideHelp())
+    .option("--max <n>", "max concepts per kind", int)
+    .option("--schema-brief", "trimmed schema: property name/type only (the MCP default)")
+    .option("--no-schema-brief", "full schema: adds property comments, primary keys and tags")
+    .option("--include-columns", "add each data property's physical column (needed for run-sql)")
+    .option("--rerank", "re-rank relation types (the server default)")
+    .option("--no-rerank", "skip relation-type re-ranking")
+    .option("--rerank-model <name>", "override the deploy's rerank model (operators only)")
     .action(async (knId: string, query: string, opts, cmd: Command) => {
+      if (opts.only && opts.scope) throw new InputError("--scope is an alias of --only; pass one");
+      const kinds: string[] | undefined = opts.only ?? opts.scope;
+      const scope: SearchSchemaScope = {
+        ...(kinds ? scopeFromKinds(kinds) : {}),
+        ...(opts.conceptGroups?.length ? { conceptGroups: opts.conceptGroups } : {}),
+      };
       const data = await clientFrom(cmd).context.searchSchema(knId, query, {
-        searchScope: opts.scope ? String(opts.scope).split(",") : undefined,
+        searchScope: Object.keys(scope).length > 0 ? scope : undefined,
         maxConcepts: opts.max,
+        schemaBrief: opts.schemaBrief,
+        enableRerank: opts.rerank,
+        rerankModel: opts.rerankModel,
+        includeColumns: opts.includeColumns,
       });
       printJson(data, outputOptions(cmd));
     });
@@ -107,7 +135,10 @@ export function contextCommand(): Command {
     .description(
       'Query one object type\'s instances — `--args \'{"ot_id":"<id>","limit":10}\'` → {datas, total_count}',
     )
-    .option("--args <json>", "tool arguments as JSON; use - for stdin; <kn-id> is sent as x-kn-id")
+    .option(
+      "--args <json>",
+      "tool arguments as JSON (- for stdin); kn_id is filled from <kn-id> unless given; --schema prints the shape",
+    )
     .option("--args-file <path>", "read tool arguments as JSON from a file (or - for stdin)")
     .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
     .action(async (knId: string, opts, cmd: Command) => {
@@ -408,7 +439,10 @@ rewriting it with \`run-sql\` produces a number the platform will not agree with
   cmd
     .command("tool-call <kn-id> <name>")
     .description("Call any MCP tool by name — current or future (use `tools` to discover)")
-    .option("--args <json>", "tool arguments as JSON; use - for stdin; <kn-id> is sent as x-kn-id")
+    .option(
+      "--args <json>",
+      "tool arguments as JSON (- for stdin); kn_id (for network-scoped tools) and response_format=json are filled unless given — input schema comes from `context tools <kn-id>`",
+    )
     .option("--args-file <path>", "read tool arguments as JSON from a file (or - for stdin)")
     .option(
       "--arg <key=value>",
@@ -501,7 +535,10 @@ rewriting it with \`run-sql\` produces a number the platform will not agree with
   cmd
     .command("query-instance-subgraph <kn-id>")
     .description("Query an instance subgraph across relation-type paths")
-    .option("--args <json>", "tool arguments as JSON; use - for stdin; --schema prints the shape")
+    .option(
+      "--args <json>",
+      "tool arguments as JSON (- for stdin); kn_id is filled from <kn-id> unless given; --schema prints the shape",
+    )
     .option("--args-file <path>", "read tool arguments as JSON from a file (or - for stdin)")
     .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
     .action(async (knId: string, opts, cmd: Command) => {
@@ -514,7 +551,10 @@ rewriting it with \`run-sql\` produces a number the platform will not agree with
   cmd
     .command("get-logic-properties <kn-id>")
     .description("Compute logic-property values for instances")
-    .option("--args <json>", "tool arguments as JSON; use - for stdin; --schema prints the shape")
+    .option(
+      "--args <json>",
+      "tool arguments as JSON (- for stdin); kn_id is filled from <kn-id> unless given; --schema prints the shape",
+    )
     .option("--args-file <path>", "read tool arguments as JSON from a file (or - for stdin)")
     .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
     .action(async (knId: string, opts, cmd: Command) => {
@@ -527,7 +567,10 @@ rewriting it with \`run-sql\` produces a number the platform will not agree with
   cmd
     .command("get-action-info <kn-id>")
     .description("Fetch action info / dynamic tools for an instance")
-    .option("--args <json>", "tool arguments as JSON; use - for stdin; --schema prints the shape")
+    .option(
+      "--args <json>",
+      "tool arguments as JSON (- for stdin); kn_id is filled from <kn-id> unless given; --schema prints the shape",
+    )
     .option("--args-file <path>", "read tool arguments as JSON from a file (or - for stdin)")
     .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
     .action(async (knId: string, opts, cmd: Command) => {

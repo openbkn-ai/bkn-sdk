@@ -4,6 +4,7 @@ import { ToolError } from "../../src/utils/errors.js";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  ManagedToolError,
   callManagedTool,
   callMethod,
   callTool,
@@ -137,13 +138,17 @@ describe("progressive KN detail (get_kn_detail)", () => {
     await getKnDetail(ctx, "kn-a");
     const p = toolCallBody(f);
     expect(p.name).toBe("get_kn_detail");
-    expect(p.arguments).toEqual({ response_format: "json" });
+    expect(p.arguments).toEqual({ kn_id: "kn-a", response_format: "json" });
   });
 
   it("passes an explicit detail_level=full", async () => {
     const f = mockMcp();
     await getKnDetail(ctx, "kn-b", "full");
-    expect(toolCallBody(f).arguments).toEqual({ detail_level: "full", response_format: "json" });
+    expect(toolCallBody(f).arguments).toEqual({
+      kn_id: "kn-b",
+      detail_level: "full",
+      response_format: "json",
+    });
   });
 });
 
@@ -268,6 +273,109 @@ describe("managed MCP tool calls", () => {
     expect(calls[1]?.arguments.bkn_context).toEqual({
       conversation_id: "conv-auto",
       interaction_id: "int-auto",
+    });
+  });
+
+  it("reopens an automatic MCP interaction once after an unreceipted terminal error", async () => {
+    const calls: Array<{ name: string; arguments: Record<string, unknown> }> = [];
+    let starts = 0;
+    let businessCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL, init?: RequestInit) => {
+        if (String(input).endsWith("/mcp/info")) {
+          return new Response(JSON.stringify({ tools: [{ name: "bkn_start_interaction" }] }));
+        }
+        const rpc = JSON.parse(init?.body as string) as {
+          method?: string;
+          params?: { name: string; arguments: Record<string, unknown> };
+        };
+        const headers = { "mcp-session-id": "retry-auto-session" };
+        if (rpc.method !== "tools/call" || !rpc.params) {
+          return new Response(JSON.stringify({ jsonrpc: "2.0", result: {} }), { headers });
+        }
+        calls.push(rpc.params);
+        if (rpc.params.name === "bkn_start_interaction") {
+          starts += 1;
+          return new Response(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              result: {
+                content: [{ type: "text", text: "started" }],
+                structuredContent: {
+                  conversation_id: `conv-retry-${starts}`,
+                  interaction_id: `int-retry-${starts}`,
+                },
+              },
+            }),
+            { headers },
+          );
+        }
+        businessCalls += 1;
+        if (businessCalls === 1) {
+          return new Response(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              result: {
+                isError: true,
+                content: [{ type: "text", text: "interaction_terminal: session expired" }],
+                structuredContent: { error: { code: "interaction_terminal" } },
+              },
+            }),
+            { headers },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            result: {
+              content: [{ type: "text", text: JSON.stringify({ concepts: ["forecast"] }) }],
+              structuredContent: {
+                bkn_receipt: {
+                  receipt_id: "receipt-retry-auto",
+                  conversation_id: "conv-retry-2",
+                  interaction_id: "int-retry-2",
+                  operation_id: "op-retry-auto",
+                  receipt_status: "completed",
+                },
+              },
+            },
+          }),
+          { headers },
+        );
+      }),
+    );
+
+    await expect(
+      callManagedTool(
+        verifiedContext({
+          baseUrl: "https://managed-retry-auto.example.com",
+          token: "receipt-token",
+          insecure: false,
+        }),
+        "kn-retry-auto",
+        "search_schema",
+        { query: "forecast" },
+      ),
+    ).resolves.toMatchObject({
+      value: { concepts: ["forecast"] },
+      receipt: { receipt_id: "receipt-retry-auto", interaction_id: "int-retry-2" },
+    });
+    expect(starts).toBe(2);
+    expect(businessCalls).toBe(2);
+    expect(calls.map((call) => call.name)).toEqual([
+      "bkn_start_interaction",
+      "search_schema",
+      "bkn_start_interaction",
+      "search_schema",
+    ]);
+    expect(calls[1]?.arguments.bkn_context).toEqual({
+      conversation_id: "conv-retry-1",
+      interaction_id: "int-retry-1",
+    });
+    expect(calls[3]?.arguments.bkn_context).toEqual({
+      conversation_id: "conv-retry-2",
+      interaction_id: "int-retry-2",
     });
   });
 
@@ -410,13 +518,54 @@ describe("managed MCP tool calls", () => {
     ).rejects.toMatchObject({ code: "receipt_failed" });
   });
 
+  it.each([
+    ["completed terminal replay", "completed", "receipt_terminal"],
+    ["failed terminal replay", "failed", "receipt_terminal"],
+  ])("retains a replay receipt on a managed tool error: %s", async (_, status, code) => {
+    const receipt = {
+      receipt_id: `receipt-${status}`,
+      conversation_id: "conversation_supply_chain",
+      interaction_id: "interaction_june_forecast",
+      operation_id: `operation-${status}`,
+      receipt_status: status,
+    };
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        isError: true,
+        content: [{ type: "text", text: JSON.stringify({ error: { code } }) }],
+        structuredContent: { bkn_receipt: receipt, error: { code } },
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(body, { status: 200, headers: { "mcp-session-id": `${status}-s1` } }),
+      ),
+    );
+
+    const error = await callManagedTool(ctx, `kn-${status}-replay`, "execute_tool", {
+      bkn_context: {
+        conversation_id: "conversation_supply_chain",
+        interaction_id: "interaction_june_forecast",
+      },
+    }).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(ManagedToolError);
+    expect(error).toMatchObject({ code, receipt });
+  });
+
   it("rejects a receipt whose business context differs from the call", async () => {
     const body = JSON.stringify({
       jsonrpc: "2.0",
       id: 1,
       result: {
-        content: [{ type: "text", text: JSON.stringify({ concepts: ["forecast"] }) }],
+        isError: true,
+        content: [{ type: "text", text: JSON.stringify({ error: { code: "receipt_terminal" } }) }],
         structuredContent: {
+          error: { code: "receipt_terminal" },
           bkn_receipt: {
             receipt_id: "receipt-mismatch",
             conversation_id: "other-conversation",

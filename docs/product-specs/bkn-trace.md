@@ -43,7 +43,7 @@ Operation Receipt 中的 `observed_evidence_refs` 只是证据引用 ID 候选�
 
 - `client.trace.lifecycle`：Conversation、Interaction、Operation、OperationCallFact 与 Receipt 的低层 API。
 - `client.trace.withInteraction`：第三方 Agent 的高层受管包装。
-- `client.trace.search`：通过时间、状态、服务、工具、Trace ID 和错误关键词查询类型化 Trace 摘要，不接受原始查询 DSL。
+- `client.trace.search`：查询类型化 Trace 摘要，过滤字段为 `limit`（1..200）、`cursor`、`from`、`to`、`status`、`service`、`tool`、`agentOrApp`、`traceId`、`keyword`、`errorKeyword`、`conversationId`、`interactionId`；不接受原始查询 DSL。`keyword` 匹配 Trace/请求/Operation/错误关键词，`errorKeyword`（`error_keyword`）只匹配错误文本，二者不是别名。`service`、`tool`、`error_keyword` 已在线上服务生效，但尚未写入 foundry `agent-observability.yaml`。
 - `client.trace.get`：读取单个 Trace 的用户问题、业务结果摘要、Span 与 Operation 原始调用事实。
 - `client.trace.graph`、`client.trace.spans`：技术 Trace 定位。
 - `client.trace.diagnose/scan/evalSet*`：技术 Trace 分析与测试工具。
@@ -77,7 +77,9 @@ Receipt 的消费以 `receipt_status` 为准，而不是 `value === null`：`pen
 回读，不能重试业务工具。若 catalog 明确不支持 lifecycle，Receipt 请求仍可执行一次业务调用；没有
 Receipt 时返回稳定的 `receipt_missing` 错误，不能据此假定业务操作未发生。
 
-Interaction 终止 manifest 和 Operation retry fencing 字段通过受保护的 `--body-file` 提交。lease token 不进入命令行参数，避免出现在 shell history 或进程列表。
+`trace search` 的参数为 `--limit --cursor --from --to --status --service --tool --agent-or-app --trace-id --keyword --error-keyword --conversation-id --interaction-id`，分别发送为同名 snake_case 查询参数；`--service`/`--tool`/`--error-keyword` 为线上已生效、foundry 规范尚未收录的过滤器。
+
+Interaction 终止 manifest 和 Operation retry fencing 字段通过受保护的 `--body-file` 提交。manifest 中的 `claims` 是 Claim ID 字符串数组（`["claim-1"]`），不是 Claim 对象。lease token 不进入命令行参数，避免出现在 shell history 或进程列表。
 
 动态 JSON 证据值中的不安全十进制整数会保留为原生 `bigint`；Trace Session 的 JSON clone 与 CLI JSON 输出不会把它们转为 `number` 或导致序列化失败。
 

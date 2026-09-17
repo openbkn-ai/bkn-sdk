@@ -247,8 +247,13 @@ export function lifecycleHint(body: string): string | undefined {
 
 function requiredAction(body: string): string | undefined {
   try {
-    const parsed = JSON.parse(body) as { error?: { required_action?: unknown } };
-    const action = parsed.error?.required_action;
+    // Nested under `error` on older deploys; top-level on `ErrorCompact` /
+    // Core `lifecycleError` bodies.
+    const parsed = JSON.parse(body) as {
+      required_action?: unknown;
+      error?: { required_action?: unknown };
+    };
+    const action = parsed.error?.required_action ?? parsed.required_action;
     return typeof action === "string" ? action : undefined;
   } catch {
     return undefined;

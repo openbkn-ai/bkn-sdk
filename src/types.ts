@@ -50,6 +50,12 @@ export interface ClientOptions {
    * nothing written to disk.
    */
   onConversationOpened?: (conversationId: string) => void;
+  /**
+   * The `agent_name` sent on `bkn_start_interaction` when the SDK opens a managed
+   * interaction on this caller's behalf. Defaults to `openbkn-sdk`. Keep it
+   * stable: the contract wants the same name on every start in one conversation.
+   */
+  agentName?: string;
   /** @internal CLI clients persist successful version checks for a short TTL. */
   versionCheckMode?: "memory" | "cli";
 }
@@ -92,6 +98,8 @@ export interface RequestContext {
   rememberedConversationId?: string;
   /** See {@link ClientOptions.onConversationOpened}. */
   onConversationOpened?: (conversationId: string) => void;
+  /** See {@link ClientOptions.agentName}. */
+  agentName?: string;
 }
 
 export interface TraceContextOptions {

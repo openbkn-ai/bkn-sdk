@@ -4,7 +4,7 @@
 """Metrics — the platform's aggregation surface, and the only one it has.
 
 An instance query cannot aggregate: `query_object_instance` takes a condition, a
-limit, an offset and a property selection, and nothing else. `need_total` gives a
+sort, a limit, a cursor or offset and a property selection, and nothing else. `need_total` gives a
 row count. So `sum`, `avg` and `group_by` over an object set have no endpoint to
 reach, and are not offered here rather than being faked by pulling every row back
 to the client.
@@ -15,7 +15,7 @@ schema artifact with its own query::
     from bkn.metrics import Gmv
 
     Gmv.query(
-        time={"start": 1751328000, "end": 1753920000, "step": "day"},
+        time={"start": 1751328000000, "end": 1753920000000, "step": "day"},
         analysis_dimensions=["channel_id"],
         order_by=[("gmv", "desc")],
     )
@@ -36,6 +36,7 @@ definition's own condition, the one passed here, and the time range.
 from __future__ import annotations
 
 from typing import Any, ClassVar
+from urllib.parse import quote
 
 from .config import Context, resolve_context
 from .errors import InputError
@@ -45,6 +46,10 @@ __all__ = ["Metric", "TimeWindow"]
 
 #: `step` values the endpoint documents. Case-insensitive on the wire.
 STEPS = frozenset({"day", "week", "month", "quarter", "year"})
+
+#: 1e12 ms is 2001-09-09. Any real window is later, and any value in seconds
+#: (ten digits) is far below it — so this separates the two units cleanly.
+MIN_EPOCH_MS = 1_000_000_000_000
 
 TimeWindow = dict[str, Any]
 
@@ -85,7 +90,8 @@ class Metric:
         from .lifecycle import with_context_retry
 
         ctx = context or resolve_context()
-        arguments: dict[str, Any] = {"response_format": "json"}
+        # `MetricQueryRequestBody` defines no `response_format`: REST answers JSON.
+        arguments: dict[str, Any] = {}
         if time is not None:
             arguments["time"] = _checked_time(time)
         if analysis_dimensions:
@@ -101,7 +107,10 @@ class Metric:
         if metrics is not None:
             arguments["metrics"] = metrics
 
-        path = f"{QUERY_BASE}/{cls.__kn_id__}/metrics/{cls.__bkn_id__}/data"
+        path = (
+            f"{QUERY_BASE}/{quote(cls.__kn_id__, safe='')}"
+            f"/metrics/{quote(cls.__bkn_id__, safe='')}/data"
+        )
 
         def send(bkn_context: dict[str, str] | None) -> Any:
             body = arguments if bkn_context is None else {**arguments, "bkn_context": bkn_context}
@@ -125,9 +134,10 @@ class Metric:
 def _checked_time(time: TimeWindow) -> TimeWindow:
     """The tool's own rules, enforced before the round trip.
 
-    Timestamps are **unix seconds** here. The same metric mounted on an object
-    type documents milliseconds for its logic-property parameters — a different
-    call path with a different unit, and an easy thing to carry across by mistake.
+    `start` and `end` are **unix milliseconds** — the endpoint's own example is
+    `1735689600000`. A value in seconds is ten digits and would be read as a
+    moment in January 1970, answering an empty window rather than an error, so
+    anything below `MIN_EPOCH_MS` (2001-09-09) is refused here.
     """
     instant = bool(time.get("instant"))
     start, end = time.get("start"), time.get("end")
@@ -144,6 +154,12 @@ def _checked_time(time: TimeWindow) -> TimeWindow:
         raise InputError("`instant=True` takes a point, so it cannot also take a `step`.")
     if step is not None and str(step).lower() not in STEPS:
         raise InputError(f"`step` must be one of {', '.join(sorted(STEPS))}; got {step!r}.")
+    for name, value in (("start", start), ("end", end)):
+        if isinstance(value, int | float) and not isinstance(value, bool) and value < MIN_EPOCH_MS:
+            raise InputError(
+                f"`{name}` is {value}, which is not a unix timestamp in milliseconds. "
+                "Metric windows take milliseconds (e.g. 1735689600000); multiply seconds by 1000."
+            )
     return dict(time)
 
 

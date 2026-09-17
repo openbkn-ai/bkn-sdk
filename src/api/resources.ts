@@ -35,6 +35,25 @@ function normalizeSingleDocumentID(documentId: string): string {
   return id;
 }
 
+function normalizeDocumentDeletionSelector(
+  selector: Record<string, unknown>,
+): Record<string, unknown> {
+  const entries = Object.entries(selector);
+  if (entries.length === 0) {
+    throw new InputError("delete-by-selector requires a non-empty selector");
+  }
+
+  const conditions = entries.map(([field, value]) => ({
+    field,
+    operation: "eq",
+    value,
+    value_from: "const",
+  }));
+  return conditions.length === 1
+    ? conditions[0]!
+    : { operation: "and", sub_conditions: conditions };
+}
+
 export interface PropertyFeature {
   name?: string;
   display_name?: string;
@@ -603,5 +622,17 @@ export async function deleteResourceDocumentsByFilter(
     method: "POST",
     headers: { "X-HTTP-Method-Override": "DELETE" },
     body: { filter_condition: filterCondition },
+  });
+}
+
+export async function deleteResourceDocumentsBySelector(
+  ctx: RequestContext,
+  resourceId: string,
+  selector: Record<string, unknown>,
+): Promise<unknown> {
+  return request(ctx, `${BASE}/${encodeURIComponent(resourceId)}/data`, {
+    method: "POST",
+    headers: { "X-HTTP-Method-Override": "DELETE" },
+    body: { filter_condition: normalizeDocumentDeletionSelector(selector) },
   });
 }
