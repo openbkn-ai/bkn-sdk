@@ -33,7 +33,6 @@ const CLI_ENV = [
   "BKN_INTERACTION_ID",
   "BKN_PROFILE",
   "BKN_TOKEN",
-  "BKN_TRACE_EVIDENCE_INGEST_TOKEN",
   "BKN_USER",
 ] as const;
 

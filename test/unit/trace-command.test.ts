@@ -246,6 +246,21 @@ describe("trace lifecycle CLI contract", () => {
     expect(text).toContain("Service: context-loader");
     expect(text).not.toContain("业务依据");
   });
+
+  it("renders a detail that lacks summary, operations, receipt, and fact input", () => {
+    expect(() => renderTechnicalTraceDetail({})).not.toThrow();
+    const text = renderTechnicalTraceDetail({
+      graph: {
+        trace_id: "trace-2",
+        status: "ok",
+        data: { nodes: [], edges: [] },
+      } as never,
+      operations: [{ state: "pending" }, { fact: { tool_name: "run_sql" } }],
+    });
+    expect(text).toContain("Trace: trace-2");
+    expect(text).toContain("run_sql · - · attempt - · -");
+    expect(text).toContain("Input: -");
+  });
 });
 
 describe("trace search CLI query mapping", () => {
