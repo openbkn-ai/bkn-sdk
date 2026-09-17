@@ -305,7 +305,7 @@ export function adminCommand(): Command {
     .option("--keyword <s>", "filter by keyword")
     .option("--limit <n>", "page size", int, 100)
     .option("--offset <n>", "page offset", int, 0)
-    .option("--source <s>", "role source filter (business | user)")
+    .option("--source <s>", "role source filter (system | business | custom)")
     .action(async (opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).admin.roleList({
