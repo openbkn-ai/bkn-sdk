@@ -75,7 +75,7 @@ class ToolResult:
     #: `business_refs` down to property granularity, and `partial_reasons` when
     #: set. Identity fields (`receipt_id`, `operation_id`, …) still arrive on
     #: pending replies and on older deploys, so none of them is assumed. A
-    #: `pending` receipt comes with `value` None; a `failed` one raises.
+    #: `pending` or `failed` receipt raises `ToolError`.
     receipt: dict[str, Any] | None = None
 
 
@@ -324,9 +324,13 @@ def _unwrap(parsed: Any) -> ToolResult:
             receipt=receipt,
         )
     if status == "pending":
-        # Accepted, not finished: there is no value yet, only the receipt that
-        # leads back to it.
-        return ToolResult(None, receipt)
+        # Accepted, not finished: there is no value yet. Returning None would read
+        # as an empty answer ("no rows"), so refuse it like the TypeScript SDK.
+        raise ToolError(
+            "receipt_pending",
+            "Context Loader has not finished this operation; read its receipt later.",
+            receipt=receipt,
+        )
 
     if isinstance(text, str):
         try:

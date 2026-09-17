@@ -289,7 +289,8 @@ def _needs_context(error: HttpError | ToolError) -> bool:
         # The lifecycle envelope nests `code` / `required_action` under `error`;
         # a flat `ErrorCompact`-style body carries them at the top level.
         code, action = error_code(error.body), required_action(error.body)
-    return code in LIFECYCLE_CODES or action in LIFECYCLE_ACTIONS
+    # A deploy may name the missing session in either field.
+    return bool({code, action} & (LIFECYCLE_CODES | LIFECYCLE_ACTIONS))
 
 
 def finish(ctx: Context, interaction: Interaction, outcome: str, answer: str | None) -> None:

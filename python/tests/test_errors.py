@@ -151,6 +151,12 @@ def test_required_action_and_code_are_read_from_a_flat_body_too() -> None:
     assert lifecycle_hint(flat) is not None
 
 
+def test_a_code_only_or_action_only_lifecycle_refusal_still_gets_a_hint() -> None:
+    """Either field may name the missing session; neither alone may lose the hint."""
+    assert lifecycle_hint(json.dumps({"code": "conversation_required"})) is not None
+    assert lifecycle_hint(json.dumps({"required_action": "conversation_required"})) is not None
+
+
 def test_the_nested_field_wins_over_the_top_level_one() -> None:
     both = json.dumps({"code": "Public.BadRequest", "error": {"code": "conversation_required"}})
 

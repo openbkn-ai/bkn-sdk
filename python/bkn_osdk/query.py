@@ -485,8 +485,14 @@ class ObjectSet(Generic[OT]):
 
     def _via_tool(self, context: Context, keys: Any) -> bool:
         """Whether a body with these keys goes to the traced MCP tool rather than REST."""
+        # The tool takes no `branch`, so a package generated for another branch
+        # reads over REST, which carries it; otherwise the traced read would
+        # silently answer from main.
         return (
-            context.traced and not _REST_ONLY_ARGUMENTS & set(keys) and not self._uses_query_flags()
+            context.traced
+            and not _REST_ONLY_ARGUMENTS & set(keys)
+            and not self._uses_query_flags()
+            and branch_param(self.object_type.__branch__) is None
         )
 
     def _uses_query_flags(self) -> bool:

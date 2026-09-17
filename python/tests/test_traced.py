@@ -336,6 +336,18 @@ def test_a_sorted_traced_read_goes_over_the_tool_with_its_sort(deploy: Deploy) -
     assert page.receipt == RECEIPT
 
 
+def test_a_package_from_another_branch_reads_over_rest_when_traced(
+    deploy: Deploy, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The tool takes no `branch`; over it a release-2 package read main in silence."""
+    monkeypatch.setattr(Tournaments, "__branch__", "release-2")
+    with session(traced=True):
+        Tournaments.objects().page(limit=1)
+
+    assert tool_calls(deploy, "query_object_instance") == []
+    assert deploy.rest_bodies[-1]["bkn_context"]["interaction_id"] == "int_1"
+
+
 def test_a_read_flag_takes_the_rest_path_even_when_traced(deploy: Deploy) -> None:
     """The tool takes none of the REST query-string flags; ignoring one in silence
     would hand back rows the caller asked to shape differently."""
@@ -437,6 +449,13 @@ def test_a_json_rpc_error_with_only_a_numeric_code_is_still_a_tool_error() -> No
     assert excinfo.value.code == "rpc_error"
     assert "bad" in str(excinfo.value)
     assert not lifecycle_module._needs_context(excinfo.value)
+
+
+def test_conversation_required_in_required_action_still_reopens_a_turn() -> None:
+    """The earlier action set held it; splitting codes from actions must not drop it."""
+    refusal = ToolError("tool_error", "x", required_action="conversation_required")
+
+    assert lifecycle_module._needs_context(refusal)
 
 
 def test_the_traced_tool_is_asked_for_json(deploy: Deploy) -> None:
@@ -1029,13 +1048,15 @@ def test_a_failed_receipt_without_is_error_raises() -> None:
     assert excinfo.value.receipt == failed
 
 
-def test_a_pending_receipt_carries_no_value() -> None:
+def test_a_pending_receipt_raises_rather_than_reading_as_empty() -> None:
+    """A None value became an empty page, indistinguishable from "no match"."""
     pending = {"receipt_status": "pending", "receipt_id": "r1"}
 
-    result = mcp_module._unwrap(_tool_result({"bkn_receipt": pending}, text={"datas": [ROW]}))
+    with pytest.raises(ToolError) as excinfo:
+        mcp_module._unwrap(_tool_result({"bkn_receipt": pending}, text={"datas": [ROW]}))
 
-    assert result.value is None
-    assert result.receipt == pending
+    assert excinfo.value.code == "receipt_pending"
+    assert excinfo.value.receipt == pending
 
 
 def test_a_completed_slim_receipt_returns_the_value() -> None:

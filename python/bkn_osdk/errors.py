@@ -144,7 +144,10 @@ def lifecycle_hint(body: str) -> str | None:
 
     Returns None for every other error, so any body can be passed in.
     """
-    if required_action(body) not in LIFECYCLE_ACTIONS:
+    if (
+        required_action(body) not in LIFECYCLE_ACTIONS | LIFECYCLE_CODES
+        and error_code(body) not in LIFECYCLE_CODES
+    ):
         return None
     return (
         "This deploy requires a managed lifecycle session: the request needs a `bkn_context` "
