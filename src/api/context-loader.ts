@@ -581,7 +581,7 @@ const KN_SCOPED_TOOLS = new Set([
  * from the network the call is bound to, and `response_format: "json"` so the
  * result parses. A value the caller supplied always wins.
  */
-function withContractDefaults(
+export function withContractDefaults(
   knId: string,
   name: string,
   args: Record<string, unknown>,

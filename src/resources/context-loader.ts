@@ -27,6 +27,7 @@ import {
   runCypher,
   searchCapabilities,
   searchSchema,
+  withContractDefaults,
 } from "../api/context-loader.js";
 import { getSchemaItem } from "../api/knowledge-networks.js";
 import type { RequestContext } from "../types.js";
@@ -57,7 +58,8 @@ export function context(ctx: RequestContext) {
             method: "tools/call",
             params: {
               name: "query_object_instance",
-              arguments: args,
+              // What the real call sends: caller arguments over the contract defaults.
+              arguments: withContractDefaults(knId, "query_object_instance", args),
             },
           },
         });

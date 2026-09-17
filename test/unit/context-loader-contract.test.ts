@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { callTool, searchCapabilities, searchSchema } from "../../src/api/context-loader.js";
 import { lifecycleHint } from "../../src/api/http.js";
 import { resetLifecycleCaches } from "../../src/api/lifecycle.js";
+import { context } from "../../src/resources/context-loader.js";
 import type { RequestContext } from "../../src/types.js";
 import { verifiedContext } from "../setup/verified-context.js";
 
@@ -181,5 +182,34 @@ describe("lifecycle hint reads ErrorCompact bodies", () => {
       lifecycleHint(JSON.stringify({ error: { required_action: "start_interaction" } })),
     ).toContain("bkn_context");
     expect(lifecycleHint(JSON.stringify({ code: "Public.BadRequest" }))).toBeUndefined();
+  });
+});
+
+describe("query_object_instance validation composes with the contract defaults", () => {
+  it("validates the caller's arguments, then sends kn_id and response_format=json", async () => {
+    const calls = mockDeploy(JSON.stringify({ datas: [], total_count: 0 }));
+    await context(freshCtx()).queryObjectInstance("kn-1", { ot_id: "ot-1", limit: 5 });
+    expect(calls[0]).toEqual({
+      name: "query_object_instance",
+      arguments: { kn_id: "kn-1", response_format: "json", ot_id: "ot-1", limit: 5 },
+    });
+  });
+
+  it("accepts kn_id and response_format as caller root keys and keeps their values", async () => {
+    const calls = mockDeploy(JSON.stringify({ datas: [], total_count: 0 }));
+    await context(freshCtx()).queryObjectInstance("kn-1", {
+      ot_id: "ot-1",
+      kn_id: "kn-1",
+      response_format: "json",
+    });
+    expect(calls[0]?.arguments).toEqual({ kn_id: "kn-1", response_format: "json", ot_id: "ot-1" });
+  });
+
+  it("still refuses a caller kn_id naming another network before any request", async () => {
+    const calls = mockDeploy("{}");
+    await expect(
+      context(freshCtx()).queryObjectInstance("kn-1", { ot_id: "ot-1", kn_id: "kn-2" }),
+    ).rejects.toThrow("kn_id must match");
+    expect(calls).toEqual([]);
   });
 });
