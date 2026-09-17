@@ -185,12 +185,39 @@ describe("bkn push integrity verification", () => {
     Response.json({ error: "offline" }, { status: 503 }),
     Response.json({ wrong: "shape" }),
     Response.json({ entries: [{ id: "ot", data_source: {} }] }),
-    Response.json({ entries: [{ id: "ot", data_source: null }] }),
+    Response.json({ entries: [{ id: "ot", data_source: null, data_properties: null }] }),
   ])("refuses to upload when the before-snapshot is unreadable", async (response) => {
     const fetch = server(response);
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     await expect(cli(packageDir())).rejects.toThrow();
     expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it("reads an object type without a data_properties key as having none", () => {
+    // bkn-backend serializes data_properties with `omitempty`.
+    const snapshot = snapshotObjectTypes({ entries: [{ id: "ot", data_source: null }] });
+    expect(snapshot.get("ot")?.properties.size).toBe(0);
+  });
+
+  it("pushes a network whose object type has no data properties", async () => {
+    const bare = { entries: [{ id: "ot", data_source: { type: "resource", id: "resource-1" } }] };
+    const fetch = server(Response.json(bare), Response.json(bare));
+    const stdout: string[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation((part) => {
+      stdout.push(String(part));
+      return true;
+    });
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    await cli(packageDir());
+
+    expect(fetch.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual([
+      listPath,
+      uploadPath,
+      listPath,
+    ]);
+    expect(stderr).not.toHaveBeenCalled();
+    expect(JSON.parse(stdout.join(""))).not.toHaveProperty("integrity_warnings");
   });
 
   it("rejects an undefined binding in a snapshot", () => {

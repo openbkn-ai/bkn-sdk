@@ -32,12 +32,15 @@ export function snapshotObjectTypes(value: unknown): Map<string, ObjectTypeSnaps
       );
     }
     const properties = new Map<string, Set<string>>();
-    if (!Object.hasOwn(entry, "data_properties") || !Array.isArray(entry.data_properties)) {
+    // bkn-backend serializes data_properties with `omitempty`: an object type
+    // with no data properties omits the key, which means an empty list.
+    const dataProperties = Object.hasOwn(entry, "data_properties") ? entry.data_properties : [];
+    if (!Array.isArray(dataProperties)) {
       throw new InputError(
         `Cannot verify BKN push integrity: object type '${entry.id}' has invalid data_properties.`,
       );
     }
-    for (const property of entry.data_properties) {
+    for (const property of dataProperties) {
       if (!record(property) || typeof property.name !== "string" || !property.name) {
         throw new InputError(
           `Cannot verify BKN push integrity: object type '${entry.id}' has an invalid property.`,

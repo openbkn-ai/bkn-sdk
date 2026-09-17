@@ -167,13 +167,15 @@ export function validateRequestedProperties(
       `Cannot validate properties for object type '${otId}': its schema is not visible.`,
     );
   }
-  if (!Array.isArray(entry.data_properties)) {
+  // bkn-backend omits an empty data_properties (`omitempty`): no key means none.
+  const dataProperties = Object.hasOwn(entry, "data_properties") ? entry.data_properties : [];
+  if (!Array.isArray(dataProperties)) {
     throw new InputError(
       `Cannot validate properties for object type '${otId}': unreadable schema.`,
     );
   }
   const available = new Set<string>();
-  for (const property of entry.data_properties) {
+  for (const property of dataProperties) {
     if (!object(property) || typeof property.name !== "string" || !property.name) {
       throw new InputError(
         `Cannot validate properties for object type '${otId}': unreadable schema.`,

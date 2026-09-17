@@ -248,6 +248,15 @@ describe("query_object_instance argument validation", () => {
     expect(fetch.mock.calls[0]?.[1]?.method).toBe("GET");
   });
 
+  it("reads a schema entry without a data_properties key as having no fields", () => {
+    // bkn-backend serializes data_properties with `omitempty`.
+    const schema = { entries: [{ id: "ot-1" }] };
+    expect(() => validateRequestedProperties("ot-1", [], schema)).not.toThrow();
+    expect(() => validateRequestedProperties("ot-1", ["name"], schema)).toThrow(
+      "has no queryable data property 'name'. Available: (none)",
+    );
+  });
+
   it("fails closed when the schema response does not expose the requested object type", async () => {
     const fetch = vi.fn(async () => new Response(JSON.stringify({ entries: [] }), { status: 200 }));
     vi.stubGlobal("fetch", fetch);
