@@ -20,7 +20,9 @@ vi.mock("../../src/commands/_shared.js", async (importOriginal) => {
 
 import { buildProgram } from "../../src/cli-program.js";
 import { describeCommandTree } from "../../src/commands/describe.js";
-import { apiToolCommand, functionToolCommand } from "../../src/commands/toolbox.js";
+import { sandboxCommand } from "../../src/commands/function.js";
+import { apiToolCommand, functionToolCommand, toolboxCommand } from "../../src/commands/toolbox.js";
+import { guideOf } from "../../src/help/grouped-help.js";
 
 let dir = "";
 
@@ -127,5 +129,25 @@ describe("typed execution capability commands", () => {
 
     expect(functionGet?.arguments?.[0]?.from).toBe("openbkn function list --toolbox <box-id>");
     expect(apiGet?.arguments?.[0]?.from).toBe("openbkn api list --toolbox <box-id>");
+  });
+
+  it("teaches publish before execute everywhere a workflow is spelled out", () => {
+    const guides = [
+      guideOf(functionToolCommand()),
+      guideOf(apiToolCommand()),
+      guideOf(toolboxCommand()),
+      guideOf(sandboxCommand()),
+      guideOf(buildProgram()),
+    ];
+    for (const text of guides) {
+      expect(text).toBeDefined();
+      const publish = text?.indexOf("toolbox publish") ?? -1;
+      const execute = text?.search(/(function|api|tool) execute/) ?? -1;
+      expect(publish).toBeGreaterThan(-1);
+      expect(execute).toBeGreaterThan(publish);
+      expect(text).not.toMatch(/market/i);
+    }
+    expect(guideOf(functionToolCommand())).toContain("ToolNotAvailable");
+    expect(guideOf(functionToolCommand())).toContain("sandbox run");
   });
 });

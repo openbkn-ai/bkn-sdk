@@ -66,7 +66,7 @@ Root help, grouped-help classification, `openbkn describe`, ID-source metadata, 
 1. use `sandbox` to test or generate code;
 2. create or select a `toolbox`;
 3. import a persistent `function` or `api` capability into that toolbox;
-4. enable and execute it.
+4. debug it, enable it, publish the toolbox, then execute it (`execute` requires a published toolbox).
 
 Each command description names the user-facing capability it manages rather than the generic backend Tool resource. The new facade commands preserve the existing READ/RUN/WRITE help sections and probe service mapping.
 

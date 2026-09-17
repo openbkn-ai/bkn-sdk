@@ -23,7 +23,7 @@ function checkedGenerationRequest(
 ): FunctionAiGenerationRequest {
   if (request.stream) {
     throw new InputError(
-      "Function AI generation streaming returns SSE and is not supported by client.functions.generate; use `openbkn call` for the raw stream.",
+      "Function AI generation streaming returns SSE, which neither client.functions.generate nor the openbkn CLI supports yet; omit stream for the JSON response.",
     );
   }
   if (type === "python_function_generator" && !request.query?.trim()) {

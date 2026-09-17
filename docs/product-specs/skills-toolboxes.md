@@ -25,6 +25,9 @@ Manage the skill registry and the Toolbox execution surface that agents call. Th
 
 - Skill install is progressive — fetch manifest before pulling the full package.
 - Tool calls are **not idempotent** — never auto-retry.
+- `execute` requires the tool to be enabled **and** its toolbox published; a draft or offline box answers 400 `ToolNotAvailable`. `debug` works before either gate. Order: create box → import/create tool → enable → publish → execute.
+- Toolbox proxy and debug calls to function tools are cut by the platform at ~30 s regardless of `timeout`, answering 200 with `result: null`; long jobs belong on `sandbox run`.
+- Typed `function list` / `api list` do not check the box's metadata type; `--toolbox` must name a box of the matching type.
 - Validate OpenAPI imports at the boundary; reject malformed specs with a clear message.
-- Function generation is a model invocation, not a persisted component. The SDK supports its JSON response only; callers needing `stream: true` use the raw `call` API because the response is SSE.
+- Function generation is a model invocation, not a persisted component. The SDK and CLI support its JSON response only; `stream: true` answers SSE, which no CLI command (including `openbkn call`, which buffers the response) streams yet.
 - `function` now means a registered Function Tool. Use `sandbox` for a one-off run, schema inference, dependencies, templates, and AI generation.

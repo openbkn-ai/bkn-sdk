@@ -273,9 +273,18 @@ export function sandboxCommand(): Command {
                                      draft a handler with the platform model
   toolbox create --type function     a box to keep it in
   function create ./add.py --toolbox the same code, now a registered Function Tool
+  function debug <tool-id> --toolbox try it before enabling or publishing
   function enable <tool-id> --toolbox
-                                     a tool is off until enabled, then agents
-                                     can call it`,
+                                     a tool is off until enabled
+  toolbox publish <box-id>           execute needs a published box
+  function execute <tool-id> --toolbox
+                                     the call agents make
+
+  LONG JOBS
+  A registered function called through the toolbox is cut at about 30s whatever
+  its --timeout, and answers 200 with result: null. Keep long work on
+  \`sandbox run\`, which waits for the sandbox's own limit (the gateway still
+  answers 504 after about 300s).`,
   );
 
   return group(cmd, "TOOLS & SKILLS");

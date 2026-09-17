@@ -96,10 +96,13 @@ export function buildProgram(): Command {
                          vega resource build <resource-id>
     Edit as files        bkn pull <kn-id> ./kn  ->  bkn validate ./kn  ->  bkn push ./kn
     Ship an API          toolbox create --name "<n>" --service-url <url>  ->
-                         api import ./api.yaml --toolbox <box-id>  ->  toolbox publish <box-id>
+                         api import ./api.yaml --toolbox <box-id>  ->
+                         api enable <tool-id> --toolbox <box-id>  ->  toolbox publish <box-id>
+                         ->  api execute <tool-id> --toolbox <box-id>
     Ship some code       sandbox run ./add.py  ->  toolbox create --name "<n>" --type function
                          ->  function create ./add.py --toolbox <box-id> --name add  ->
-                         function enable <tool-id> --toolbox <box-id>
+                         function enable <tool-id> --toolbox <box-id>  ->
+                         toolbox publish <box-id>  ->  function execute <tool-id> --toolbox <box-id>
     Debug an answer      trace conversations list  ->  trace diagnose <conversation-id> --llm
 
   GOOD TO KNOW

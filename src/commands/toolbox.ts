@@ -117,13 +117,13 @@ export function toolboxCommand(): Command {
   ORDER OF WORK
   toolbox create --name "<n>"        an empty box, in draft
   tool create ./add.py --toolbox     a function tool, or --type openapi for a spec
+  tool debug <tool-id>               call it while building, before enable/publish
   tool enable <tool-ids...>          a tool is off until enabled
-  toolbox publish <box-id>           the box becomes visible in the market
-  tool execute <tool-id>             call an enabled tool
-  tool debug <tool-id>               call one that is not, while building it
+  toolbox publish <box-id>           execute needs a published box
+  tool execute <tool-id>             call an enabled tool in a published box
 
-  Publishing the box is about the market, not about calling: an enabled tool in
-  an unpublished box executes. \`tool enable\` is the gate.
+  Both gates apply to \`execute\`: the tool must be enabled and the box published —
+  a draft or offline box answers 400 ToolNotAvailable. \`debug\` skips both.
 
   export / import move a whole box between deploys as an .adp file.`,
   );
@@ -246,7 +246,11 @@ function buildToolCommand(config: ToolCommandOptions): Command {
   invokeOpts(
     cmd
       .command("execute <tool-id>")
-      .description(kind ? `Invoke an enabled ${kindName.slice(0, -1)}` : "Invoke an enabled tool"),
+      .description(
+        kind
+          ? `Invoke an enabled ${kindName.slice(0, -1)} in a published toolbox`
+          : "Invoke an enabled tool in a published toolbox",
+      ),
   ).action(async (toolId: string, opts, cmd: Command) => {
     printJson(
       await clientFrom(cmd).toolboxes.execute(opts.toolbox, toolId, buildEnvelope(opts)),
@@ -258,8 +262,8 @@ function buildToolCommand(config: ToolCommandOptions): Command {
       .command("debug <tool-id>")
       .description(
         kind
-          ? `Invoke a ${kindName.slice(0, -1)} that is not enabled yet`
-          : "Invoke a tool that is not enabled yet",
+          ? `Invoke a ${kindName.slice(0, -1)} before it is enabled or its toolbox published`
+          : "Invoke a tool before it is enabled or its toolbox published",
       ),
   ).action(async (toolId: string, opts, cmd: Command) => {
     printJson(
@@ -411,11 +415,22 @@ function buildToolCommand(config: ToolCommandOptions): Command {
   ORDER OF WORK
   toolbox create --name "<n>"${kind === "openapi" ? " --service-url <url>" : " --type function"}
   ${config.name} ${config.createCommand} <file> --toolbox <box-id>
+  ${config.name} debug <tool-id> --toolbox <box-id>     try it before enable/publish
   ${config.name} enable <tool-id> --toolbox <box-id>
+  toolbox publish <box-id>
   ${config.name} execute <tool-id> --toolbox <box-id>
 
-  \`debug\` invokes a tool before it is enabled. Publishing the toolbox controls
-  market visibility; enabling the tool controls normal execution.`,
+  \`execute\` needs the tool enabled and the box published; a draft or offline box
+  answers 400 ToolNotAvailable. \`debug\` works before either.
+  \`${config.name} list\` does not check the box: --toolbox must name a box whose
+  metadata type is ${kind}.${
+    kind === "function"
+      ? `
+  execute and debug go through the toolbox proxy, which cuts a function at about
+  30s whatever --timeout says, answering 200 with result: null. Run long jobs
+  with \`sandbox run\`.`
+      : ""
+  }`,
     );
   }
 
