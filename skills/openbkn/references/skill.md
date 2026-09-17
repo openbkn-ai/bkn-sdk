@@ -29,9 +29,10 @@ from a laptop. `--raw` writes the file's own bytes to stdout instead, so
 `read-file <id> <path> --raw > file` reproduces the file byte for byte. Binary
 files are refused with a pointer to `install`, never dumped as mojibake.
 
-`--raw` and `--draft` compose. The CLI first asks for the body inline; when the
-answer carries only a URL (the documented shape), it fetches the archive once per
-run and serves every later read from it.
+`--raw` and `--draft` compose. The CLI first asks for the body inline. Draft reads
+(`--draft`, the management routes) answer with the body inline; published reads
+answer with only a URL (verified on 14.103.77.23), so the CLI fetches the archive
+once per run and serves every later read from it.
 
 ## Running a skill
 

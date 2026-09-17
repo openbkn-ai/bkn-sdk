@@ -314,8 +314,9 @@ export function deleteSkill(ctx: RequestContext, skillId: string): Promise<unkno
 /**
  * `url` hands back a pre-signed object-store link; `content` asks for the body
  * inline. The contract documents `response_mode` only on
- * `GET /skills/:id/management/content`; every other read may ignore it and
- * answer with a URL, so a caller must handle a missing `content`.
+ * `GET /skills/:id/management/content`. Live on 14.103.77.23 the management
+ * `files/read` honours it too, while the published `files/read` and `content`
+ * ignore it and answer with a URL, so a caller must handle a missing `content`.
  */
 export type SkillResponseMode = "url" | "content";
 
