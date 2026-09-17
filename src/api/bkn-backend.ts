@@ -25,20 +25,44 @@ function knPath(knId: string, path: string): string {
  * Turn caller ids (a comma-joined string or a list) into one path segment: each id
  * encoded on its own, the separating commas kept literal.
  */
-function idSegment(ids: string | string[]): string {
+export function idSegment(ids: string | string[]): string {
   const list = (Array.isArray(ids) ? ids : ids.split(",")).map((id) => id.trim()).filter(Boolean);
   // An empty segment would leave a trailing slash on a DELETE route: refuse it here.
   if (list.length === 0) throw new InputError("Name at least one id.");
   return list.map(encodeURIComponent).join(",");
 }
 
-/** Query flags `bkn push` (`POST /bkns`) accepts besides the branch. */
-export interface BknImportOptions {
+/** How a create treats a concept whose id or name already exists. */
+export type ImportMode = "normal" | "overwrite" | "ignore";
+
+/** `branch` alone: the query flag every bkn-backend route under a network takes. */
+export interface BranchOptions {
   branch?: string;
-  /** Duplicate concept names: `normal` errors, `overwrite` replaces, `ignore` skips. */
-  importMode?: "normal" | "overwrite" | "ignore";
-  /** Validate that dependencies exist (backend default true). */
+}
+
+/** `branch` + `strict_mode`: updates and member edits. */
+export interface StrictWriteOptions extends BranchOptions {
+  /** Validate that dependencies exist (backend default true); false skips the check. */
   strictMode?: boolean;
+}
+
+/** `branch` + `strict_mode` + `import_mode`: creates and their validations. */
+export interface ImportWriteOptions extends StrictWriteOptions {
+  /** Duplicate concepts: `normal` errors (backend default), `overwrite` replaces, `ignore` skips. */
+  importMode?: ImportMode;
+}
+
+/** The query string of a bkn-backend write; flags left unset are not sent. */
+export function writeQuery(opts: ImportWriteOptions = {}) {
+  return {
+    branch: opts.branch || undefined,
+    strict_mode: opts.strictMode === undefined ? undefined : String(opts.strictMode),
+    import_mode: opts.importMode || undefined,
+  };
+}
+
+/** Query flags `bkn push` (`POST /bkns`) accepts besides the branch. */
+export interface BknImportOptions extends ImportWriteOptions {
   /** `preserve` keeps environment-local bindings; `detach` drops them. */
   bindingPolicy?: "preserve" | "detach";
 }
@@ -148,22 +172,30 @@ export function runCypherQuery(
     method: "POST",
     body,
     query: { branch: branch || undefined },
+    // Entries are raw row values: a BIGINT column past 2^53 must not be rounded.
+    responseParser: parseBigIntJSON,
   });
 }
 
 /**
  * Query relation-type paths between object types (POST, caller-supplied body).
  * A read tunnelled over POST: without the override header the backend answers
- * `InvalidParameter.OverrideMethod` before it looks at the body.
+ * `InvalidParameter.OverrideMethod` before it looks at the body. The published
+ * spec does not declare that header on this route; the SDK keeps sending it.
+ *
+ * Body `direction`: the spec's enum says `forward | reverse | bidirectional` while
+ * its description and example say `backward`; the SDK passes either through.
  */
 export function relationTypePaths(
   ctx: RequestContext,
   knId: string,
   body: unknown,
+  opts: BranchOptions = {},
 ): Promise<unknown> {
   return request(ctx, knPath(knId, "relation-type-paths"), {
     method: "POST",
     headers: { "X-HTTP-Method-Override": "GET" },
+    query: { branch: opts.branch || undefined },
     body,
   });
 }
@@ -225,17 +257,24 @@ export function createConceptGroup(
   ctx: RequestContext,
   knId: string,
   body: unknown,
+  opts: ImportWriteOptions = {},
 ): Promise<unknown> {
-  return request(ctx, knPath(knId, "concept-groups"), { method: "POST", body });
+  return request(ctx, knPath(knId, "concept-groups"), {
+    method: "POST",
+    query: writeQuery(opts),
+    body,
+  });
 }
 export function updateConceptGroup(
   ctx: RequestContext,
   knId: string,
   cgId: string,
   body: unknown,
+  opts: StrictWriteOptions = {},
 ): Promise<unknown> {
   return request(ctx, knPath(knId, `concept-groups/${encodeURIComponent(cgId)}`), {
     method: "PUT",
+    query: writeQuery({ branch: opts.branch, strictMode: opts.strictMode }),
     body,
   });
 }
@@ -243,9 +282,11 @@ export function deleteConceptGroup(
   ctx: RequestContext,
   knId: string,
   cgId: string,
+  opts: BranchOptions = {},
 ): Promise<unknown> {
   return request(ctx, knPath(knId, `concept-groups/${encodeURIComponent(cgId)}`), {
     method: "DELETE",
+    query: { branch: opts.branch || undefined },
   });
 }
 export function addConceptGroupMembers(
@@ -253,9 +294,11 @@ export function addConceptGroupMembers(
   knId: string,
   cgId: string,
   body: unknown,
+  opts: StrictWriteOptions = {},
 ): Promise<unknown> {
   return request(ctx, knPath(knId, `concept-groups/${encodeURIComponent(cgId)}/object-types`), {
     method: "POST",
+    query: writeQuery({ branch: opts.branch, strictMode: opts.strictMode }),
     body,
   });
 }
@@ -264,12 +307,14 @@ export function removeConceptGroupMembers(
   knId: string,
   cgId: string,
   otIds: string | string[],
+  opts: BranchOptions = {},
 ): Promise<unknown> {
   return request(
     ctx,
     knPath(knId, `concept-groups/${encodeURIComponent(cgId)}/object-types/${idSegment(otIds)}`),
     {
       method: "DELETE",
+      query: { branch: opts.branch || undefined },
     },
   );
 }
@@ -393,31 +438,45 @@ export function listActionSchedules(
       offset: opts.offset,
       limit: opts.limit ?? -1,
     },
+    // `_instance_identities` / `dynamic_params` hold primary-key values that can pass
+    // 2^53; rounding them would corrupt the schedule on a read-edit-write round trip.
+    responseParser: parseBigIntJSON,
   });
 }
 export function getActionSchedule(
   ctx: RequestContext,
   knId: string,
   scheduleId: string,
+  opts: BranchOptions = {},
 ): Promise<unknown> {
-  return request(ctx, knPath(knId, `action-schedules/${encodeURIComponent(scheduleId)}`));
+  return request(ctx, knPath(knId, `action-schedules/${encodeURIComponent(scheduleId)}`), {
+    query: { branch: opts.branch || undefined },
+    responseParser: parseBigIntJSON,
+  });
 }
 
 export function createActionSchedule(
   ctx: RequestContext,
   knId: string,
   body: unknown,
+  opts: BranchOptions = {},
 ): Promise<unknown> {
-  return request(ctx, knPath(knId, "action-schedules"), { method: "POST", body });
+  return request(ctx, knPath(knId, "action-schedules"), {
+    method: "POST",
+    query: { branch: opts.branch || undefined },
+    body,
+  });
 }
 export function updateActionSchedule(
   ctx: RequestContext,
   knId: string,
   scheduleId: string,
   body: unknown,
+  opts: BranchOptions = {},
 ): Promise<unknown> {
   return request(ctx, knPath(knId, `action-schedules/${encodeURIComponent(scheduleId)}`), {
     method: "PUT",
+    query: { branch: opts.branch || undefined },
     body,
   });
 }
@@ -426,9 +485,11 @@ export function setActionScheduleStatus(
   knId: string,
   scheduleId: string,
   body: unknown,
+  opts: BranchOptions = {},
 ): Promise<unknown> {
   return request(ctx, knPath(knId, `action-schedules/${encodeURIComponent(scheduleId)}/status`), {
     method: "PUT",
+    query: { branch: opts.branch || undefined },
     body,
   });
 }
@@ -436,6 +497,10 @@ export function deleteActionSchedules(
   ctx: RequestContext,
   knId: string,
   ids: string | string[],
+  opts: BranchOptions = {},
 ): Promise<unknown> {
-  return request(ctx, knPath(knId, `action-schedules/${idSegment(ids)}`), { method: "DELETE" });
+  return request(ctx, knPath(knId, `action-schedules/${idSegment(ids)}`), {
+    method: "DELETE",
+    query: { branch: opts.branch || undefined },
+  });
 }

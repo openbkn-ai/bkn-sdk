@@ -7,10 +7,13 @@ import {
   type ActionScheduleListOptions,
   type BknImportOptions,
   type BknResourceListOptions,
+  type BranchOptions,
   type CapabilityAttachEntry,
   type CapabilityListOptions,
   type ConceptGroupGetOptions,
   type ConceptGroupListOptions,
+  type ImportWriteOptions,
+  type StrictWriteOptions,
   addConceptGroupMembers,
   attachCapabilities,
   createActionSchedule,
@@ -96,8 +99,9 @@ export function kn(ctx: RequestContext) {
     search: (knId: string, query: string, opts?: SearchInstanceOptions) =>
       searchInstance(ctx, knId, query, opts),
     create: (opts: CreateKnOptions) => createKnowledgeNetwork(ctx, opts),
-    update: (knId: string, body: unknown) => updateKnowledgeNetwork(ctx, knId, body),
-    delete: (knId: string) => deleteKnowledgeNetwork(ctx, knId),
+    update: (knId: string, body: unknown, opts?: ImportWriteOptions) =>
+      updateKnowledgeNetwork(ctx, knId, body, opts),
+    delete: (knId: string, opts?: BranchOptions) => deleteKnowledgeNetwork(ctx, knId, opts),
     subgraph: (knId: string, body: unknown, opts?: SubgraphQueryOptions) =>
       querySubgraph(ctx, knId, body, opts),
     actionLogs: (knId: string, opts?: ActionLogListOptions) => listActionLogs(ctx, knId, opts),
@@ -112,67 +116,84 @@ export function kn(ctx: RequestContext) {
     metricDryRun: (knId: string, body: unknown, opts?: MetricReadOptions) =>
       dryRunMetric(ctx, knId, body, opts),
     metricList: (knId: string, opts?: ListMetricsOptions) => listMetrics(ctx, knId, opts),
-    metricGet: (knId: string, metricId: string, opts?: { branch?: string }) =>
+    metricGet: (knId: string, metricId: string | string[], opts?: BranchOptions) =>
       getMetric(ctx, knId, metricId, opts),
-    metricCreate: (knId: string, body: unknown, opts?: { branch?: string }) =>
+    metricCreate: (knId: string, body: unknown, opts?: ImportWriteOptions) =>
       createMetric(ctx, knId, body, opts),
-    metricUpdate: (knId: string, metricId: string, body: unknown, opts?: { branch?: string }) =>
+    metricUpdate: (knId: string, metricId: string, body: unknown, opts?: StrictWriteOptions) =>
       updateMetric(ctx, knId, metricId, body, opts),
-    metricDelete: (knId: string, metricId: string, opts?: { branch?: string }) =>
+    metricDelete: (knId: string, metricId: string | string[], opts?: BranchOptions) =>
       deleteMetric(ctx, knId, metricId, opts),
-    metricValidate: (knId: string, body: unknown, opts?: { branch?: string }) =>
+    metricValidate: (knId: string, body: unknown, opts?: ImportWriteOptions) =>
       validateMetric(ctx, knId, body, opts),
     objectTypes: (knId: string, opts?: ListObjectTypesOptions) => listObjectTypes(ctx, knId, opts),
     objectTypeQuery: (knId: string, otId: string, body: unknown, opts?: ObjectQueryOptions) =>
       queryObjectTypeInstances(ctx, knId, otId, body, opts),
-    objectTypeGet: (knId: string, id: string, opts?: { branch?: string }) =>
+    objectTypeGet: (knId: string, id: string | string[], opts?: BranchOptions) =>
       getSchemaItem(ctx, knId, "object-types", id, opts),
-    objectTypeCreate: (knId: string, body: unknown, opts?: { branch?: string }) =>
+    objectTypeCreate: (knId: string, body: unknown, opts?: ImportWriteOptions) =>
       createSchemaItem(ctx, knId, "object-types", body, opts),
     objectTypeUpdate: (knId: string, id: string, body: unknown, opts?: UpdateSchemaItemOptions) =>
       updateSchemaItem(ctx, knId, "object-types", id, body, opts),
-    objectTypeDelete: (knId: string, id: string, opts?: DeleteSchemaItemOptions) =>
+    objectTypeDelete: (knId: string, id: string | string[], opts?: DeleteSchemaItemOptions) =>
       deleteSchemaItem(ctx, knId, "object-types", id, opts),
     relationTypes: (knId: string, opts?: ListRelationTypesOptions) =>
       listRelationTypes(ctx, knId, opts),
-    relationTypeGet: (knId: string, id: string, opts?: { branch?: string }) =>
+    relationTypeGet: (knId: string, id: string | string[], opts?: BranchOptions) =>
       getSchemaItem(ctx, knId, "relation-types", id, opts),
-    relationTypeCreate: (knId: string, body: unknown, opts?: { branch?: string }) =>
+    relationTypeCreate: (knId: string, body: unknown, opts?: ImportWriteOptions) =>
       createSchemaItem(ctx, knId, "relation-types", body, opts),
     relationTypeUpdate: (knId: string, id: string, body: unknown, opts?: UpdateSchemaItemOptions) =>
       updateSchemaItem(ctx, knId, "relation-types", id, body, opts),
-    relationTypeDelete: (knId: string, id: string, opts?: DeleteSchemaItemOptions) =>
+    relationTypeDelete: (knId: string, id: string | string[], opts?: DeleteSchemaItemOptions) =>
       deleteSchemaItem(ctx, knId, "relation-types", id, opts),
     actionTypes: (knId: string, opts?: ListActionTypesOptions) => listActionTypes(ctx, knId, opts),
     actionTypeQuery: (knId: string, atId: string, body: unknown, opts?: ActionTypeQueryOptions) =>
       queryActionType(ctx, knId, atId, body, opts),
     actionTypeExecute: (knId: string, atId: string, body: unknown, opts?: { branch?: string }) =>
       executeActionType(ctx, knId, atId, body, opts),
-    actionTypeGet: (knId: string, id: string, opts?: { branch?: string }) =>
+    actionTypeGet: (knId: string, id: string | string[], opts?: BranchOptions) =>
       getSchemaItem(ctx, knId, "action-types", id, opts),
     conceptGroups: (knId: string, opts?: ConceptGroupListOptions) =>
       listConceptGroups(ctx, knId, opts),
     conceptGroup: (knId: string, cgId: string, opts?: ConceptGroupGetOptions) =>
       getConceptGroup(ctx, knId, cgId, opts),
-    conceptGroupCreate: (knId: string, body: unknown) => createConceptGroup(ctx, knId, body),
-    conceptGroupUpdate: (knId: string, cgId: string, body: unknown) =>
-      updateConceptGroup(ctx, knId, cgId, body),
-    conceptGroupDelete: (knId: string, cgId: string) => deleteConceptGroup(ctx, knId, cgId),
-    conceptGroupAddMembers: (knId: string, cgId: string, body: unknown) =>
-      addConceptGroupMembers(ctx, knId, cgId, body),
-    conceptGroupRemoveMembers: (knId: string, cgId: string, otIds: string | string[]) =>
-      removeConceptGroupMembers(ctx, knId, cgId, otIds),
+    conceptGroupCreate: (knId: string, body: unknown, opts?: ImportWriteOptions) =>
+      createConceptGroup(ctx, knId, body, opts),
+    conceptGroupUpdate: (knId: string, cgId: string, body: unknown, opts?: StrictWriteOptions) =>
+      updateConceptGroup(ctx, knId, cgId, body, opts),
+    conceptGroupDelete: (knId: string, cgId: string, opts?: BranchOptions) =>
+      deleteConceptGroup(ctx, knId, cgId, opts),
+    conceptGroupAddMembers: (
+      knId: string,
+      cgId: string,
+      body: unknown,
+      opts?: StrictWriteOptions,
+    ) => addConceptGroupMembers(ctx, knId, cgId, body, opts),
+    conceptGroupRemoveMembers: (
+      knId: string,
+      cgId: string,
+      otIds: string | string[],
+      opts?: BranchOptions,
+    ) => removeConceptGroupMembers(ctx, knId, cgId, otIds, opts),
     actionSchedules: (knId: string, opts?: ActionScheduleListOptions) =>
       listActionSchedules(ctx, knId, opts),
-    actionSchedule: (knId: string, scheduleId: string) => getActionSchedule(ctx, knId, scheduleId),
-    actionScheduleCreate: (knId: string, body: unknown) => createActionSchedule(ctx, knId, body),
-    actionScheduleUpdate: (knId: string, scheduleId: string, body: unknown) =>
-      updateActionSchedule(ctx, knId, scheduleId, body),
-    actionScheduleSetStatus: (knId: string, scheduleId: string, body: unknown) =>
-      setActionScheduleStatus(ctx, knId, scheduleId, body),
-    actionScheduleDelete: (knId: string, ids: string | string[]) =>
-      deleteActionSchedules(ctx, knId, ids),
-    relationTypePaths: (knId: string, body: unknown) => relationTypePaths(ctx, knId, body),
+    actionSchedule: (knId: string, scheduleId: string, opts?: BranchOptions) =>
+      getActionSchedule(ctx, knId, scheduleId, opts),
+    actionScheduleCreate: (knId: string, body: unknown, opts?: BranchOptions) =>
+      createActionSchedule(ctx, knId, body, opts),
+    actionScheduleUpdate: (knId: string, scheduleId: string, body: unknown, opts?: BranchOptions) =>
+      updateActionSchedule(ctx, knId, scheduleId, body, opts),
+    actionScheduleSetStatus: (
+      knId: string,
+      scheduleId: string,
+      body: unknown,
+      opts?: BranchOptions,
+    ) => setActionScheduleStatus(ctx, knId, scheduleId, body, opts),
+    actionScheduleDelete: (knId: string, ids: string | string[], opts?: BranchOptions) =>
+      deleteActionSchedules(ctx, knId, ids, opts),
+    relationTypePaths: (knId: string, body: unknown, opts?: BranchOptions) =>
+      relationTypePaths(ctx, knId, body, opts),
     capabilityList: (knId: string, opts?: CapabilityListOptions) =>
       listCapabilities(ctx, knId, opts),
     capabilityAttach: (
