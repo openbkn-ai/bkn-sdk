@@ -15,9 +15,12 @@ import json
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 
-from bkn_osdk.schema import parse_schema
+from bkn_osdk import Context
+from bkn_osdk import http as http_module
+from bkn_osdk.schema import KnSchema, fetch_schema, fingerprint, parse_schema
 
 FIXTURES = Path(__file__).parent / "fixtures" / "schema" / "ecommerce_ops_bkn_public"
 
@@ -104,3 +107,96 @@ def test_the_same_payload_parses_to_the_same_schema(schema: Any) -> None:
     again = parse_schema(payload("network"), payload("object_types"), payload("relation_types"))
 
     assert again == schema
+
+
+# ---- mapping_rules shapes ----------------------------------------------------
+
+INDIRECT = {
+    "id": "rel_via_view",
+    "type": "indirect",
+    "source_object_type_id": "order",
+    "target_object_type_id": "user",
+    "mapping_rules": {
+        "backing_data_source": {"type": "resource", "id": "res_1"},
+        "source_mapping_rules": [
+            {"source_property": {"name": "order_id"}, "target_property": {"name": "oid"}}
+        ],
+        "target_mapping_rules": [
+            {"source_property": {"name": "uid"}, "target_property": {"name": "user_id"}}
+        ],
+    },
+}
+CROSS_JOIN = {
+    "id": "rel_fcj",
+    "type": "filtered_cross_join",
+    "source_object_type_id": "order",
+    "target_object_type_id": "user",
+    "mapping_rules": {"source_condition": {"operation": "==", "field": "a", "value": 1}},
+}
+
+
+def _relations(*entries: Any) -> Any:
+    return parse_schema({"id": "kn"}, [], {"entries": list(entries)}).relation_types
+
+
+def test_an_indirect_relation_keeps_its_object_rules_for_the_fingerprint() -> None:
+    """Iterating the object yielded its keys, so the rules were silently dropped."""
+    (relation,) = _relations(INDIRECT)
+
+    assert relation.mapping_rules == ()
+    assert json.loads(relation.mapping_detail) == INDIRECT["mapping_rules"]
+
+
+def test_editing_object_shaped_rules_changes_the_fingerprint() -> None:
+    edited = json.loads(json.dumps(INDIRECT))
+    edited["mapping_rules"]["backing_data_source"]["id"] = "res_2"
+    fcj_edited = {**CROSS_JOIN, "mapping_rules": {"target_condition": {"operation": "exist"}}}
+
+    def hashed(*entries: Any) -> str:
+        return fingerprint(KnSchema(kn_id="kn", relation_types=_relations(*entries)))
+
+    assert hashed(INDIRECT) != hashed(edited)
+    assert hashed(CROSS_JOIN) != hashed(fcj_edited)
+
+
+@pytest.mark.parametrize("rules", [None, "nonsense"])
+def test_null_or_junk_mapping_rules_read_as_none(rules: Any) -> None:
+    (relation,) = _relations({**INDIRECT, "mapping_rules": rules})
+
+    assert relation.mapping_rules == ()
+    assert relation.mapping_detail == ""
+
+
+def test_missing_mapping_rules_read_as_none() -> None:
+    entry = {key: value for key, value in INDIRECT.items() if key != "mapping_rules"}
+    (relation,) = _relations(entry)
+
+    assert (relation.mapping_rules, relation.mapping_detail) == ((), "")
+
+
+def test_a_direct_relation_fingerprint_is_unchanged_by_the_new_field(schema: Any) -> None:
+    """The object-rule line is only hashed where present, so existing packages do not drift."""
+    from schema_fixtures import DEMO_SCHEMA
+
+    assert all(r.mapping_detail == "" for r in schema.relation_types)
+    golden = (Path(__file__).parent / "fixtures" / "golden" / "demo" / "_meta.py").read_text(
+        encoding="utf-8"
+    )
+    assert fingerprint(DEMO_SCHEMA) in golden
+
+
+def test_fetch_schema_encodes_the_network_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    raw: list[str] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        raw.append(request.url.raw_path.decode("ascii").split("?")[0])
+        return httpx.Response(200, json={"entries": []})
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+    monkeypatch.setattr(http_module, "_client", lambda _ctx: client)
+    monkeypatch.setattr(http_module, "_ensure_platform_floor", lambda _ctx: None)
+
+    fetch_schema(Context(base_url="https://platform.example", token="t-1"), "kn/a b")
+
+    assert raw[0] == "/api/bkn-backend/v1/knowledge-networks/kn%2Fa%20b"
+    assert raw[1].endswith("/kn%2Fa%20b/object-types")
