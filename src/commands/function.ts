@@ -249,7 +249,7 @@ export function sandboxCommand(): Command {
     .option("--outputs <json>", "known output parameters to constrain generation")
     .option(
       "--timeout <s>",
-      "seconds to wait for the model (default 300, the gateway's own limit)",
+      "seconds to wait for the model (default 300; a default ingress answers 504 at 60)",
       positiveInt("--timeout"),
     )
     .action(async (type: string, opts: GenerationFlags & { timeout?: number }, cmd: Command) => {
@@ -317,8 +317,9 @@ export function sandboxCommand(): Command {
   LONG JOBS
   A registered function called through the toolbox is cut at about 30s whatever
   its --timeout, and answers 200 with result: null. Keep long work on
-  \`sandbox run\`, which waits for the sandbox's own limit (the gateway still
-  answers 504 after about 300s).`,
+  \`sandbox run\`, which waits for the sandbox's own limit. The ingress still
+  answers 504 when its read timeout passes: 60s by default, unless the deploy
+  raises proxy-read-timeout.`,
   );
 
   return group(cmd, "TOOLS & SKILLS");

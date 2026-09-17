@@ -193,9 +193,11 @@ export function functionTemplate(ctx: RequestContext, templateType = "python"): 
 }
 
 /**
- * How long a generation call waits by default: the gateway's own ~300 s read
- * limit. A model call routinely outlasts the 30 s client default, and waiting
- * past the gateway only trades its 504 for a longer wait.
+ * How long a generation call waits by default. A model call routinely outlasts
+ * the 30 s client default. The ingress in front of the service still applies
+ * its own read timeout: ingress-nginx defaults to 60 s and the foundry charts
+ * do not raise it (openbkn-ai/bkn-foundry#1641), so on such a deploy a longer
+ * generation answers 504 at 60 s. 300 s leaves room for deploys that raise it.
  */
 export const FUNCTION_GENERATION_TIMEOUT_MS = 300_000;
 
