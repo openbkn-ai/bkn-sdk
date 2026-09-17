@@ -120,7 +120,8 @@ interface ResourceDetail {
   id?: string;
   name?: string;
   source_metadata?: { columns?: Array<Record<string, unknown>> };
-  schema_definition?: Array<{ name?: unknown }>;
+  schema_definition?: Array<{ name?: unknown; type?: unknown; original_type?: unknown }>;
+  index_config?: { primary_key_fields?: unknown };
   primary_keys?: unknown;
 }
 
@@ -142,26 +143,52 @@ function columnIsPk(col: Record<string, unknown>): boolean {
   return typeof col.column_key === "string" && col.column_key.toUpperCase() === "PRI";
 }
 
+const stringList = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((x): x is string => typeof x === "string" && x !== "") : [];
+
+const text = (value: unknown): string | undefined =>
+  typeof value === "string" && value !== "" ? value : undefined;
+
+/**
+ * Columns and primary keys for one table.
+ *
+ * Columns come from `schema_definition` — the documented column list — with the
+ * source type (`original_type`, else the Vega `type`). `source_metadata` is
+ * connector-interpreted and opaque in the contract, so its `columns` are read
+ * only when a resource has no schema_definition at all.
+ *
+ * Keys come from `index_config.primary_key_fields`. Only when that is empty do
+ * the older signals count: a top-level `primary_keys`, or a
+ * `source_metadata.columns` entry flagged `is_primary_key` / `column_key=PRI`.
+ * With none of them, detection falls through to row sampling.
+ */
 function toTableInfo(detail: ResourceDetail): TableInfo {
+  const schema = (detail.schema_definition ?? []).filter((p) => text(p?.name) !== undefined);
   const raw = detail.source_metadata?.columns ?? [];
-  const tablePks = Array.isArray(detail.primary_keys)
-    ? (detail.primary_keys.filter((x) => typeof x === "string") as string[])
-    : [];
-  const columns: TableColumn[] = raw.map((c) => {
-    const name = String(c.name ?? c.field_name ?? "");
-    const flagged = columnIsPk(c) || tablePks.includes(name);
-    return {
-      name,
-      type: String(c.type ?? c.field_type ?? "varchar"),
-      ...(flagged ? { isPrimaryKey: true } : {}),
-    };
-  });
-  const pks =
-    tablePks.length > 0 ? tablePks : columns.filter((c) => c.isPrimaryKey).map((c) => c.name);
+  const configuredPks = stringList(detail.index_config?.primary_key_fields);
+  const fallbackPks = [
+    ...stringList(detail.primary_keys),
+    ...raw.filter(columnIsPk).map((c) => String(c.name ?? c.field_name ?? "")),
+  ].filter((n, i, all) => n !== "" && all.indexOf(n) === i);
+  const tablePks = configuredPks.length > 0 ? configuredPks : fallbackPks;
+
+  const columns: TableColumn[] =
+    schema.length > 0
+      ? schema.map((p) => ({
+          name: text(p.name) as string,
+          type: text(p.original_type) ?? text(p.type) ?? "varchar",
+        }))
+      : raw.map((c) => ({
+          name: String(c.name ?? c.field_name ?? ""),
+          type: String(c.type ?? c.field_type ?? "varchar"),
+        }));
+  for (const column of columns) {
+    if (tablePks.includes(column.name)) column.isPrimaryKey = true;
+  }
   return {
     name: String(detail.name ?? ""),
     columns,
-    ...(pks.length > 0 ? { primaryKeys: pks } : {}),
+    ...(tablePks.length > 0 ? { primaryKeys: tablePks } : {}),
   };
 }
 
@@ -171,6 +198,9 @@ function toTableInfo(detail: ResourceDetail): TableInfo {
  * asking for every table.
  */
 const DETAIL_READ_BATCH = 20;
+
+/** Resources asked for per list page while collecting a catalog's tables. */
+const RESOURCE_PAGE_SIZE = 100;
 
 const bareName = (n: string) => n.slice(n.lastIndexOf(".") + 1);
 const sameTable = (a: string, b: string) => bareName(a).toLowerCase() === bareName(b).toLowerCase();
@@ -301,14 +331,25 @@ export async function createFromCatalog(
 ): Promise<unknown> {
   const log = opts.onProgress ?? (() => {});
   // 1. List catalog tables, scanning once if the catalog is empty.
-  //    `limit: -1` (NO_LIMIT), not the backend's default page: this list
-  //    decides which tables become object types AND is the source of every
-  //    "tables in this run" message below, so a truncated page would drop the
-  //    21st table from the network without a word and then deny it exists.
-  const listTables = () =>
-    listResources(ctx, { catalogId: opts.catalogId, category: "table", limit: -1 }).then(
-      (result) => result.entries,
-    );
+  //    Every page, not the backend's default one: this list decides which
+  //    tables become object types AND is the source of every "tables in this
+  //    run" message below, so a truncated page would drop the 21st table from
+  //    the network without a word and then deny it exists. Paged by `offset`
+  //    against `total_count`, because `/resources` documents neither `-1` nor a
+  //    maximum page size.
+  const listTables = async () => {
+    const all: Awaited<ReturnType<typeof listResources>>["entries"] = [];
+    for (;;) {
+      const page = await listResources(ctx, {
+        catalogId: opts.catalogId,
+        category: "table",
+        limit: RESOURCE_PAGE_SIZE,
+        offset: all.length,
+      });
+      all.push(...page.entries);
+      if (page.entries.length === 0 || all.length >= page.total_count) return all;
+    }
+  };
   let summaries = await listTables();
   if (summaries.length === 0) {
     log("No tables found; scanning catalog metadata...");
