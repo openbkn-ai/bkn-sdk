@@ -66,14 +66,23 @@ export function snapshotObjectTypes(value: unknown): Map<string, ObjectTypeSnaps
       );
     }
     const source = entry.data_source;
-    if (source !== null && (!record(source) || typeof source.id !== "string" || !source.id)) {
+    // DataSource requires only `type`: `{type: "resource"}` with no id is a valid,
+    // unbound source, not a reason to abort the push. A non-object, an id of the
+    // wrong type, or an id-less source without even a type stays unreadable.
+    const idless = record(source) && (source.id === undefined || source.id === "");
+    if (
+      source !== null &&
+      (!record(source) ||
+        (source.id !== undefined && typeof source.id !== "string") ||
+        (idless && typeof source.type !== "string"))
+    ) {
       throw new InputError(
         `Cannot verify BKN push integrity: object type '${entry.id}' has invalid data_source.`,
       );
     }
     out.set(entry.id, {
       id: entry.id,
-      dataSourceId: record(source) ? (source.id as string) : undefined,
+      dataSourceId: record(source) && source.id ? (source.id as string) : undefined,
       properties,
     });
   }
