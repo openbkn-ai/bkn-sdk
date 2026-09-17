@@ -112,7 +112,7 @@ async function post(
     rpcMethod === "initialize" || Boolean(rpcMethod?.startsWith("notifications/"));
   const send = () =>
     authFetch(ctx, () =>
-      tlsFetch(ctx.insecure, mcpUrl(ctx), {
+      tlsFetch(ctx, mcpUrl(ctx), {
         method: "POST",
         headers: headers(ctx, knId, sessionId),
         body: stringifyBigIntJSON(body),

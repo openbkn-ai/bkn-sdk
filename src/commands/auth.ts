@@ -13,7 +13,7 @@ import { trimTrailingSlashes } from "../utils/base-url.js";
 import { HttpError, InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { promptLine } from "../utils/prompt.js";
-import { outputOptions } from "./_shared.js";
+import { outputOptions, retryOptionsFrom } from "./_shared.js";
 
 /** Best-effort: resolve the logged-in user's account name from their token. */
 async function resolveAccount(
@@ -330,6 +330,7 @@ export function registerAuthLeaves(cmd: Command): void {
         user: g.user,
         insecure: g.insecure,
         versionCheckMode: "cli",
+        ...retryOptionsFrom(g),
       });
       const account = opts.account ?? (await promptLine("Account: "));
       const oldPassword = opts.oldPassword ?? (await promptLine("Current password: ", true));

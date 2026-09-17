@@ -35,6 +35,7 @@ export { parseBigIntJSON, stringifyBigIntJSON } from "./utils/json-bigint.js";
 // and needs the same way to hand them back.
 export { releaseLifecycleSessions } from "./api/lifecycle.js";
 export type { BknContext } from "./api/lifecycle.js";
+export type { RetryNotice, Transport } from "./api/tls.js";
 export {
   ManagedTrace,
   type BknBusinessContext,

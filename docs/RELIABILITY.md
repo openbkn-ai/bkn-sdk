@@ -9,10 +9,25 @@ Runtime expectations for the SDK and CLI as a client of the BKN backend.
 
 ## Retries
 
-- The SDK does not retry transient network/5xx failures today; the error surfaces to the caller.
-  Transport retry is designed separately (MCP reads, 429/`Retry-After`, a `--no-retry` switch) and
-  must stay limited to idempotent reads.
-- Never auto-retry writes (create/update/delete, chat turns) — surface the error instead.
+- Retry lives in `api/tls.ts` `tlsFetch`, which every outbound request passes through;
+  up to 3 retries after 0.5 s / 1 s / 2 s.
+- A connection that was never made (`ECONNREFUSED`, `EHOSTUNREACH`, `ENETUNREACH`,
+  `EAI_AGAIN`, `UND_ERR_CONNECT_TIMEOUT`) is retried for any method: the request
+  reached no server. That covers writes and an MCP `tools/call` with a managed
+  `bkn_context` — nothing was received, so no operation or receipt is duplicated.
+- A dropped or timed-out connection (`ECONNRESET`, `EPIPE`, `ETIMEDOUT`,
+  `UND_ERR_SOCKET`, `UND_ERR_CLOSED`) and HTTP 429/502/503 are retried only for
+  GET/HEAD — a write may already have landed. A Retry-After up to 10 s lengthens the
+  wait; a longer one returns the response at once. 429 on a write is not retried: a
+  rate limiter in front of a gateway cannot prove the write was never forwarded.
+- A backoff sleep ends when the caller's signal aborts, so a deadline (the 5 s version
+  preflight, `request()`'s 30 s) bounds every attempt and wait together.
+- Never retried: `ENOTFOUND`, TLS errors, 504, other statuses, caller aborts, stream
+  bodies, dry runs. `ClientOptions.retry: false` / CLI `--no-retry` turn retry off —
+  including `call`, `admin call` and `auth change-password`, which resolve their own
+  context. The CLI prints one stderr line per retry. OAuth login and refresh keep the
+  default (no notice, no opt-out); under the same rule a rotated refresh token is
+  never spent twice.
 
 ## Idempotency
 

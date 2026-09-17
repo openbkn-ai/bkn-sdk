@@ -40,7 +40,7 @@ export async function exportConfig(
   );
   const res = await authFetch(ctx, () =>
     tlsFetch(
-      ctx.insecure,
+      ctx,
       `${ctx.baseUrl}${IMPEX}/export/${encodeURIComponent(type)}/${encodeURIComponent(id)}`,
       {
         headers: buildHeaders(ctx),
@@ -69,7 +69,7 @@ export async function importConfig(
   form.append("data", new Blob([new Uint8Array(buf)]), basename(filePath));
   if (opts.mode) form.append("mode", opts.mode);
   const res = await authFetch(ctx, () =>
-    tlsFetch(ctx.insecure, `${ctx.baseUrl}${IMPEX}/import/${encodeURIComponent(type)}`, {
+    tlsFetch(ctx, `${ctx.baseUrl}${IMPEX}/import/${encodeURIComponent(type)}`, {
       method: "POST",
       headers: buildHeaders(ctx),
       body: form,
@@ -100,7 +100,7 @@ export async function uploadTool(
   form.append("metadata_type", metadataType);
   form.append("data", new Blob([new Uint8Array(buf)]), basename(filePath));
   const res = await authFetch(ctx, () =>
-    tlsFetch(ctx.insecure, `${ctx.baseUrl}${PATH}/${encodeURIComponent(boxId)}/tool`, {
+    tlsFetch(ctx, `${ctx.baseUrl}${PATH}/${encodeURIComponent(boxId)}/tool`, {
       method: "POST",
       headers: buildHeaders(ctx),
       body: form,

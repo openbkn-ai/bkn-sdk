@@ -4,6 +4,7 @@
 /** Helpers shared by command modules: client construction + output options. */
 import { readFileSync } from "node:fs";
 import type { Command } from "commander";
+import type { RetryNotice } from "../api/tls.js";
 import { type BknClient, createClient } from "../client.js";
 import { activePlatform, readPlatformConfig, updatePlatformConfig } from "../config/store.js";
 import type { TraceContextOptions } from "../types.js";
@@ -81,6 +82,24 @@ export function traceOptionsFrom(o: Record<string, unknown>): TraceContextOption
   };
 }
 
+/**
+ * `--no-retry` and the stderr retry notice, for every command that builds a
+ * client or a context — `call` and `admin call` resolve their own.
+ */
+export function retryOptionsFrom(o: Record<string, unknown>): {
+  retry: boolean;
+  onRetry: (n: RetryNotice) => void;
+} {
+  return {
+    retry: o.retry !== false,
+    onRetry: (n) => {
+      process.stderr.write(
+        `openbkn: ${n.method} ${new URL(n.url).pathname} failed (${n.reason}); retry ${n.attempt}/${n.retries} in ${n.delayMs / 1000}s\n`,
+      );
+    },
+  };
+}
+
 /** Build a client from a command's merged (global + local) options. */
 export function clientFrom(cmd: Command): BknClient {
   const o = cmd.optsWithGlobals();
@@ -93,6 +112,7 @@ export function clientFrom(cmd: Command): BknClient {
     user: o.user,
     insecure: o.insecure,
     versionCheckMode: "cli",
+    ...retryOptionsFrom(o),
     ...(trace ? { trace } : {}),
     ...(remembered.source === "stored" && remembered.id
       ? { rememberedConversationId: remembered.id }

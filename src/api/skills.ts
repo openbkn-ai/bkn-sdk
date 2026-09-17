@@ -32,7 +32,7 @@ export async function registerSkillZip(
   if (opts.category) form.set("category", opts.category);
   if (opts.extendInfo) form.set("extend_info", stringifyBigIntJSON(opts.extendInfo));
   const res = await authFetch(ctx, () =>
-    tlsFetch(ctx.insecure, `${ctx.baseUrl}${BASE}/skills`, {
+    tlsFetch(ctx, `${ctx.baseUrl}${BASE}/skills`, {
       method: "POST",
       headers: buildHeaders(ctx),
       body: form,
@@ -58,7 +58,7 @@ export async function updateSkillPackageZip(
   form.set("file_type", "zip");
   form.set("file", new Blob([bytes]), filename);
   const res = await authFetch(ctx, () =>
-    tlsFetch(ctx.insecure, `${ctx.baseUrl}${BASE}/skills/${encodeURIComponent(skillId)}/package`, {
+    tlsFetch(ctx, `${ctx.baseUrl}${BASE}/skills/${encodeURIComponent(skillId)}/package`, {
       method: "PUT",
       headers: buildHeaders(ctx),
       body: form,
@@ -92,7 +92,7 @@ export async function downloadSkill(
 ): Promise<Uint8Array> {
   await ensureCompatible(ctx, new URL(`${ctx.baseUrl}${skillPath(skillId, view, "download")}`));
   const res = await authFetch(ctx, () =>
-    tlsFetch(ctx.insecure, `${ctx.baseUrl}${skillPath(skillId, view, "download")}`, {
+    tlsFetch(ctx, `${ctx.baseUrl}${skillPath(skillId, view, "download")}`, {
       headers: buildHeaders(ctx),
     }),
   );

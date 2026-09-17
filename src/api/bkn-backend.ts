@@ -67,7 +67,7 @@ export async function uploadBkn(
   );
   // Let fetch set the multipart boundary; only send auth/domain headers.
   const res = await authFetch(ctx, () =>
-    tlsFetch(ctx.insecure, url, { method: "POST", headers: buildHeaders(ctx), body: form }),
+    tlsFetch(ctx, url, { method: "POST", headers: buildHeaders(ctx), body: form }),
   );
   const text = await res.text();
   if (!res.ok) throw new HttpError(res.status, res.statusText, text);
@@ -87,7 +87,7 @@ export async function downloadBkn(
   url.searchParams.set("branch", opts.branch ?? "main");
   await ensureCompatible(ctx, url);
   const res = await authFetch(ctx, () =>
-    tlsFetch(ctx.insecure, url, { method: "GET", headers: buildHeaders(ctx) }),
+    tlsFetch(ctx, url, { method: "GET", headers: buildHeaders(ctx) }),
   );
   if (!res.ok) throw new HttpError(res.status, res.statusText, await res.text());
   return Buffer.from(await res.arrayBuffer());
