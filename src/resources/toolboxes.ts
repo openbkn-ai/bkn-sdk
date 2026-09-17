@@ -12,6 +12,7 @@ import {
   type ListToolboxesOptions,
   type ListToolsOptions,
   type ToolInvokeEnvelope,
+  type ToolMetadataType,
   type UpdateToolOptions,
   createTool,
   createToolbox,
@@ -46,7 +47,7 @@ export function toolboxes(ctx: RequestContext) {
         boxId,
         toolIds.map((toolId) => ({ toolId, status })),
       ),
-    upload: (boxId: string, filePath: string, metadataType?: string) =>
+    upload: (boxId: string, filePath: string, metadataType?: ToolMetadataType) =>
       uploadTool(ctx, boxId, filePath, metadataType),
     createTool: (boxId: string, opts: CreateToolOptions) => createTool(ctx, boxId, opts),
     getTool: (boxId: string, toolId: string) => getTool(ctx, boxId, toolId),

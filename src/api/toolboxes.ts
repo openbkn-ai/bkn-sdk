@@ -11,7 +11,7 @@ import type { RequestContext } from "../types.js";
 import { HttpError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { authFetch } from "./auth-fetch.js";
-import { type FunctionDefinition, functionInputBody } from "./functions.js";
+import { type FunctionDefinition, functionInputBody, functionInputEditBody } from "./functions.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
 import { sandboxBudgetMs } from "./sandbox-budget.js";
@@ -21,10 +21,13 @@ import { ensureCompatible } from "./version-check.js";
 const PATH = "/api/agent-operator-integration/v1/tool-box";
 
 const IMPEX = "/api/agent-operator-integration/v1/impex";
-export type ImpexType = "toolbox" | "mcp" | "operator";
+/** The impex component types (`ComponentType`); any other value is a 400. */
+export const IMPEX_TYPES = ["toolbox", "mcp", "operator"] as const;
+export type ImpexType = (typeof IMPEX_TYPES)[number];
 /**
  * What an import does with a component that already exists: `create` refuses
- * it (400), `upsert` updates it. The service defaults to `create`.
+ * it (409 `CommonResourceIDConflict` on a live deploy; the contract still says
+ * 400), `upsert` updates it. The service defaults to `create`.
  */
 export type ImpexMode = "create" | "upsert";
 
@@ -86,13 +89,14 @@ export async function importConfig(
  *
  * The same endpoint as {@link createTool}, in its other encoding: this one
  * streams the file, that one carries the definition as JSON and can therefore
- * also describe a function.
+ * also describe a function. The contract documents only the JSON encoding for
+ * this endpoint; the multipart form is what the service's own UI posts.
  */
 export async function uploadTool(
   ctx: RequestContext,
   boxId: string,
   filePath: string,
-  metadataType = "openapi",
+  metadataType: ToolMetadataType = "openapi",
 ): Promise<unknown> {
   const buf = await readFile(filePath);
   await ensureCompatible(ctx, new URL(`${ctx.baseUrl}${PATH}/${encodeURIComponent(boxId)}/tool`));
@@ -111,7 +115,22 @@ export async function uploadTool(
   return text ? parseBigIntJSON(text) : text;
 }
 
-export type ToolMetadataType = "openapi" | "function";
+/** `MetadataType`: what a tool (or a box's tools) is described by. */
+export const TOOL_METADATA_TYPES = ["openapi", "function"] as const;
+export type ToolMetadataType = (typeof TOOL_METADATA_TYPES)[number];
+
+/**
+ * A parameter fixed onto every call of a tool (a shared API key, say). The
+ * service takes a **single object**, not an array.
+ */
+export interface GlobalParameter {
+  name: string;
+  description: string;
+  in: "query" | "path" | "header" | "cookie" | "body";
+  type: "string" | "integer" | "boolean" | "array" | "object";
+  required?: boolean;
+  value?: unknown;
+}
 
 export interface CreateToolOptions {
   metadataType: ToolMetadataType;
@@ -125,14 +144,25 @@ export interface CreateToolOptions {
    */
   data?: unknown;
   useRule?: string;
+  /** A single global parameter attached to every call of the tool. */
+  globalParameters?: GlobalParameter;
+  extendInfo?: Record<string, unknown>;
 }
 
-function toolBody(opts: CreateToolOptions): Record<string, unknown> {
+function toolBody(opts: CreateToolOptions, edit = false): Record<string, unknown> {
   return {
     metadata_type: opts.metadataType,
-    ...(opts.function ? { function_input: functionInputBody(opts.function) } : {}),
+    ...(opts.function
+      ? {
+          function_input: edit
+            ? functionInputEditBody(opts.function)
+            : functionInputBody(opts.function),
+        }
+      : {}),
     ...(opts.data !== undefined ? { data: opts.data } : {}),
     ...(opts.useRule ? { use_rule: opts.useRule } : {}),
+    ...(opts.globalParameters ? { global_parameters: opts.globalParameters } : {}),
+    ...(opts.extendInfo ? { extend_info: opts.extendInfo } : {}),
   };
 }
 
@@ -171,6 +201,8 @@ export interface UpdateToolOptions extends CreateToolOptions {
  * Replace a tool's definition. POST, not PUT, and the id survives: a new
  * metadata version is generated behind the same `tool_id`, so nothing that
  * points at the tool has to be rebound and an enabled tool stays enabled.
+ * `function_input` goes in its edit form (`FunctionInputEdit`): `name` and
+ * `description` travel at the top level only. `function.name` is ignored here.
  */
 export function updateTool(
   ctx: RequestContext,
@@ -180,7 +212,7 @@ export function updateTool(
 ): Promise<unknown> {
   return request(ctx, `${PATH}/${encodeURIComponent(boxId)}/tool/${encodeURIComponent(toolId)}`, {
     method: "POST",
-    body: { name: opts.name, description: opts.description, ...toolBody(opts) },
+    body: { name: opts.name, description: opts.description, ...toolBody(opts, true) },
   });
 }
 
@@ -200,6 +232,31 @@ export function deleteTools(
 export type ToolboxStatus = "unpublish" | "published" | "offline";
 
 export type SortOrder = "asc" | "desc";
+
+/**
+ * One entry of `GET /tool-box/list` (`ToolBoxInfo`). Only the fields the SDK
+ * documents are typed; the rest pass through.
+ */
+export interface ToolBoxInfo {
+  /**
+   * The caller's effective operations on this box, projected only on the
+   * management list. The service omits it when empty, so treat absent as `[]`.
+   */
+  operations?: Array<"view" | "modify" | "publish" | "unpublish" | "delete" | "authorize">;
+  box_id?: string;
+  box_name?: string;
+  box_desc?: string;
+  box_svc_url?: string;
+  metadata_type?: ToolMetadataType;
+  status?: string;
+  category_type?: string;
+  category_name?: string;
+  is_internal?: boolean;
+  source?: string;
+  /** Tool **names**, not objects or ids. */
+  tools?: string[];
+  [key: string]: unknown;
+}
 
 /** A page size the service accepts, or nothing — never `NaN` or `0` on the wire. */
 function pageSizeOf(n: number | undefined): number | undefined {
@@ -302,6 +359,14 @@ export interface CreateToolboxOptions {
    * run as platform functions and takes no service URL.
    */
   metadataType?: "openapi" | "function";
+  /** `box_category`; the service files the box under `other_category` when omitted. */
+  category?: string;
+  /**
+   * An OpenAPI document to import as the box's tools at creation. Sent as
+   * given: the contract declares a string, while the tool-create endpoint
+   * wants the parsed document, so pass whichever your deploy accepts.
+   */
+  data?: unknown;
 }
 
 export function createToolbox(ctx: RequestContext, opts: CreateToolboxOptions): Promise<unknown> {
@@ -313,6 +378,8 @@ export function createToolbox(ctx: RequestContext, opts: CreateToolboxOptions): 
       box_desc: opts.description ?? "",
       ...(opts.serviceUrl ? { box_svc_url: opts.serviceUrl } : {}),
       source: opts.source ?? "custom",
+      ...(opts.category ? { box_category: opts.category } : {}),
+      ...(opts.data !== undefined ? { data: opts.data } : {}),
     },
   });
 }
@@ -341,7 +408,8 @@ export function setToolboxStatus(
 export interface ToolInvokeEnvelope {
   header?: Record<string, unknown>;
   query?: Record<string, unknown>;
-  path?: Record<string, unknown>;
+  /** Path parameters; the contract types every value as a string. */
+  path?: Record<string, string>;
   body?: unknown;
   timeout?: number;
 }
