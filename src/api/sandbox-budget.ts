@@ -5,8 +5,9 @@
  * How long a client waits on the sandbox.
  *
  * Every endpoint that runs code — `function/execute`, `function/infer-schema`,
- * `operator/debug`, `skills/execute-sync` — blocks and sends no response header
- * until the run is over. Two deadlines therefore apply, and both have to move
+ * `operator/debug`, `skills/{id}/execute`, and a function tool called through
+ * `tool-box/{id}/proxy/{tool}` or `.../debug` — blocks and sends no response
+ * header until the run is over. Two deadlines therefore apply, and both have to move
  * together: the abort budget, and undici's 300s header deadline, which the
  * abort budget alone cannot lift.
  */

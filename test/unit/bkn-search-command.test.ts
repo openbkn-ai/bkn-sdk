@@ -65,7 +65,7 @@ it.each(["0", "-1", "1.5", "3x"])(
 
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toBe(
-      `--max-object-types must be a positive integer, received "${value}"`,
+      `--max-object-types must be a positive integer (got '${value}')`,
     );
   },
 );

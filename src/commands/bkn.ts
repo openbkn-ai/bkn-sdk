@@ -10,23 +10,17 @@ import { type CapabilityCheck, validateBknDirectory } from "../utils/bkn-validat
 import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { parsePkMap } from "../utils/pk-detection.js";
-import { clientFrom, csv, cypherParams, outputOptions, readBody } from "./_shared.js";
+import {
+  clientFrom,
+  csv,
+  cypherParams,
+  oneOf,
+  outputOptions,
+  positiveInt,
+  readBody,
+} from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
-
-/**
- * Option parser for a positive integer. Commander does not add the flag to an
- * error thrown from a parser, so the message names it.
- */
-function positiveInt(flag: string): (v: string) => number {
-  return (v) => {
-    const value = Number(v);
-    if (!/^[1-9]\d*$/.test(v) || !Number.isSafeInteger(value)) {
-      throw new InputError(`${flag} must be a positive integer, received "${v}"`);
-    }
-    return value;
-  };
-}
 
 /**
  * `bkn search` lets unknown options through so a query may start with "-"
@@ -55,14 +49,6 @@ function rejectUnknownSearchOptions(cmd: Command): void {
     );
   }
 }
-
-/** Option parser that refuses a value outside the backend's enum before any call. */
-const oneOf =
-  (flag: string, allowed: readonly string[]) =>
-  (v: string): string => {
-    if (!allowed.includes(v)) throw new InputError(`${flag} must be one of ${allowed.join(", ")}.`);
-    return v;
-  };
 
 const SYSTEM_PROPERTIES = ["_instance_id", "_instance_identity", "_display"] as const;
 
