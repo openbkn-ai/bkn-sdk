@@ -75,7 +75,24 @@ export interface CodeFlags {
   indexUrl?: string;
 }
 
-export function definitionFlags(c: Command, includeType = true): Command {
+/**
+ * Which definition flags a command shows. A spec-backed OpenAPI command has no
+ * code to describe: `import` takes everything from the spec, and `update` only
+ * needs the name and description the service insists on for a replacement.
+ */
+export type DefinitionFlagSet = "all" | "openapi-import" | "openapi-update";
+
+export function definitionFlags(
+  c: Command,
+  includeType = true,
+  flagSet: DefinitionFlagSet = "all",
+): Command {
+  if (flagSet === "openapi-import") return c;
+  if (flagSet === "openapi-update") {
+    return c
+      .option("--name <n>", "tool name; required, update replaces the tool")
+      .option("--description <d>", "what it does; required, update replaces the tool");
+  }
   const flags = c
     .option("--name <n>", "name; required when the definition is a function")
     .option("--description <d>", "what it does — the model reads this to decide when to call it")

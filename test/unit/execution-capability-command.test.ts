@@ -25,7 +25,12 @@ vi.mock("../../src/commands/_shared.js", async (importOriginal) => {
 import { buildProgram } from "../../src/cli-program.js";
 import { describeCommandTree } from "../../src/commands/describe.js";
 import { sandboxCommand } from "../../src/commands/function.js";
-import { apiToolCommand, functionToolCommand, toolboxCommand } from "../../src/commands/toolbox.js";
+import {
+  apiToolCommand,
+  functionToolCommand,
+  toolCommand,
+  toolboxCommand,
+} from "../../src/commands/toolbox.js";
 import { guideOf } from "../../src/help/grouped-help.js";
 
 let dir = "";
@@ -133,6 +138,32 @@ describe("typed execution capability commands", () => {
 
     expect(functionGet?.arguments?.[0]?.from).toBe("openbkn function list --toolbox <box-id>");
     expect(apiGet?.arguments?.[0]?.from).toBe("openbkn api list --toolbox <box-id>");
+  });
+
+  it("hides code-only flags on spec-backed api commands", () => {
+    const longs = (group: Command, name: string) =>
+      group.commands.find((command) => command.name() === name)?.options.map((o) => o.long) ?? [];
+    const codeOnly = ["--inputs", "--outputs", "--dep", "--index-url"];
+
+    const apiImport = longs(apiToolCommand(), "import");
+    for (const flag of [...codeOnly, "--name", "--description"]) {
+      expect(apiImport).not.toContain(flag);
+    }
+    const apiUpdate = longs(apiToolCommand(), "update");
+    for (const flag of codeOnly) expect(apiUpdate).not.toContain(flag);
+    expect(apiUpdate).toEqual(expect.arrayContaining(["--name", "--description"]));
+
+    const functionCreate = longs(functionToolCommand(), "create");
+    expect(functionCreate).toEqual(expect.arrayContaining([...codeOnly, "--name"]));
+    const toolCreate = longs(toolCommand(), "create");
+    expect(toolCreate).toEqual(expect.arrayContaining([...codeOnly, "--name", "--type"]));
+  });
+
+  it("still requires --name and --description on api update", async () => {
+    const spec = file("orders.yaml", "openapi: 3.0.0\npaths: {}\n");
+    await expect(
+      run(apiToolCommand(), "api", "update", "tool-1", spec, "--toolbox", "box-2"),
+    ).rejects.toThrow(/--name and --description are required/);
   });
 
   it("passes sandbox generate --timeout to the SDK in milliseconds", async () => {

@@ -314,6 +314,7 @@ function buildToolCommand(config: ToolCommandOptions): Command {
       .requiredOption("--toolbox <box-id>", "target toolbox id")
       .option("--use-rule <s>", "usage rule carried onto the tool"),
     !kind,
+    kind === "openapi" ? "openapi-import" : "all",
   ).action(async (file: string, opts: ToolFlags, cmd: Command) => {
     const result = (await clientFrom(cmd).toolboxes.createTool(
       opts.toolbox,
@@ -348,6 +349,7 @@ function buildToolCommand(config: ToolCommandOptions): Command {
       .requiredOption("--toolbox <box-id>", "toolbox id")
       .option("--use-rule <s>", "usage rule carried onto the tool"),
     !kind,
+    kind === "openapi" ? "openapi-update" : "all",
   ).action(async (toolId: string, file: string, opts: ToolFlags, cmd: Command) => {
     if (!opts.name || !opts.description) {
       throw new InputError(
