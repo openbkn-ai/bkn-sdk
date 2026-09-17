@@ -19,9 +19,13 @@ const int = (v: string) => Number.parseInt(v, 10);
  */
 async function resolveLlmModelName(client: BknClient, model: string): Promise<string> {
   if (!/^\d+$/.test(model)) return model;
-  const detail = (await client.models.llm.get(model)) as { model_name?: string };
-  if (!detail?.model_name) throw new InputError(`No LLM found with id ${model}.`);
-  return detail.model_name;
+  // Accept both a bare record and a `{data: {...}}` envelope, as resolveSmallModel does.
+  const detail = (await client.models.llm.get(model)) as
+    | { model_name?: string; data?: { model_name?: string } }
+    | undefined;
+  const name = detail?.model_name ?? detail?.data?.model_name;
+  if (!name) throw new InputError(`No LLM found with id ${model}.`);
+  return name;
 }
 
 /** Management subcommands (add/edit/delete/test) wired to the model resource. */
