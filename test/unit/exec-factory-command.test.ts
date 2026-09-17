@@ -4,7 +4,13 @@ import { join } from "node:path";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { skillCommand } from "../../src/commands/skill.js";
-import { toolCallFailed, toolCommand, toolboxCommand } from "../../src/commands/toolbox.js";
+import {
+  apiToolCommand,
+  functionToolCommand,
+  toolCallFailed,
+  toolCommand,
+  toolboxCommand,
+} from "../../src/commands/toolbox.js";
 import { writeVersionCheckCache } from "../../src/config/store.js";
 
 const BASE = "https://demo.example.com";
@@ -16,7 +22,13 @@ function cli(): Command {
     .option("--base-url <url>")
     .option("--token <t>")
     .option("--json");
-  for (const c of [skillCommand(), toolboxCommand(), toolCommand()]) {
+  for (const c of [
+    skillCommand(),
+    toolboxCommand(),
+    toolCommand(),
+    functionToolCommand(),
+    apiToolCommand(),
+  ]) {
     c.exitOverride();
     for (const sub of c.commands) sub.exitOverride();
     root.addCommand(c);
@@ -119,11 +131,11 @@ describe("toolbox unpublish / import", () => {
   });
 });
 
-describe("tool list", () => {
+describe.each(["tool", "function", "api"])("%s list", (group) => {
   it("forwards name/status/sort/user filters", async () => {
     const m = stubFetch();
     await run(
-      "tool",
+      group,
       "list",
       "--toolbox",
       "b1",
@@ -195,22 +207,32 @@ describe("tool execute exit status", () => {
     expect(toolCallFailed(null)).toBe(false);
   });
 
-  it("sets a non-zero exit code when the proxy reports a failed call", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () =>
-          new Response(JSON.stringify({ status_code: 500, error: "deadline exceeded" }), {
-            status: 200,
-          }),
-      ),
-    );
-    const previous = process.exitCode;
-    try {
-      await run("tool", "execute", "t1", "--toolbox", "b1");
-      expect(process.exitCode).toBe(1);
-    } finally {
-      process.exitCode = previous;
-    }
-  });
+  it.each([
+    ["tool", "execute"],
+    ["tool", "debug"],
+    ["function", "execute"],
+    ["function", "debug"],
+    ["api", "execute"],
+    ["api", "debug"],
+  ])(
+    "%s %s sets a non-zero exit code when the proxy reports a failed call",
+    async (group, verb) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          async () =>
+            new Response(JSON.stringify({ status_code: 500, error: "deadline exceeded" }), {
+              status: 200,
+            }),
+        ),
+      );
+      const previous = process.exitCode;
+      try {
+        await run(group, verb, "t1", "--toolbox", "b1");
+        expect(process.exitCode).toBe(1);
+      } finally {
+        process.exitCode = previous;
+      }
+    },
+  );
 });
