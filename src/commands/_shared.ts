@@ -128,6 +128,41 @@ export function outputOptions(cmd: Command): OutputOptions {
   return { json: Boolean(o.json), compact: Boolean(o.compact), full: Boolean(o.full) };
 }
 
+/**
+ * A commander argument parser for a positive integer flag.
+ *
+ * A bare `parseInt` turns a typo into `NaN`, which is worse than an error:
+ * `JSON.stringify` writes it to the wire as `null` (not "absent"), and Node
+ * clamps a `NaN` setTimeout delay to 1ms. Digits only, too: `parseInt` stops at
+ * the first non-digit, so `1e3` would become 1 and `30abc` would become 30 — a
+ * silently different value rather than an error.
+ */
+export const positiveInt =
+  (flag: string, max?: number) =>
+  (v: string): number => {
+    const bound = max === undefined ? "a positive integer" : `an integer from 1 to ${max}`;
+    if (!/^\d+$/.test(v)) throw new InputError(`${flag} must be ${bound} (got '${v}')`);
+    const n = Number.parseInt(v, 10);
+    if (!Number.isSafeInteger(n) || n <= 0 || (max !== undefined && n > max)) {
+      throw new InputError(`${flag} must be ${bound} (got '${v}')`);
+    }
+    return n;
+  };
+
+/**
+ * The execution factory's page-size ceiling. Its list endpoints declare
+ * `page_size` as 1–100; a larger value is a 400, so refuse it before sending.
+ */
+export const MAX_PAGE_SIZE = 100;
+
+/** A commander argument parser that accepts only one of `values`. */
+export const oneOf =
+  <T extends string>(flag: string, values: readonly T[]) =>
+  (v: string): T => {
+    if ((values as readonly string[]).includes(v)) return v as T;
+    throw new InputError(`${flag} must be one of: ${values.join(" | ")} (got '${v}')`);
+  };
+
 /** Parse a comma-separated flag value into a trimmed string list. */
 export function csv(value: string | undefined): string[] | undefined {
   if (!value) return undefined;
