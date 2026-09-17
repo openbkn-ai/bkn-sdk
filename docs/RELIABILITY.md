@@ -9,7 +9,9 @@ Runtime expectations for the SDK and CLI as a client of the BKN backend.
 
 ## Retries
 
-- Retry **only idempotent** reads (GET, list, query) on transient network/5xx errors; small bounded backoff.
+- The SDK does not retry transient network/5xx failures today; the error surfaces to the caller.
+  Transport retry is designed separately (MCP reads, 429/`Retry-After`, a `--no-retry` switch) and
+  must stay limited to idempotent reads.
 - Never auto-retry writes (create/update/delete, chat turns) — surface the error instead.
 
 ## Idempotency

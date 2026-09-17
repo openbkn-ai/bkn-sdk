@@ -159,33 +159,6 @@ describe("reads tunnelled over POST", () => {
     expect(header(init, "X-HTTP-Method-Override")).toBe("GET");
   });
 
-  it("retries each body-carrying read after a transient response", async () => {
-    const attempts = new Map<string, number>();
-    const fetch = vi.fn(async (url: string | URL) => {
-      const path = new URL(url).pathname;
-      const attempt = (attempts.get(path) ?? 0) + 1;
-      attempts.set(path, attempt);
-      return attempt === 1
-        ? Response.json({ error: "temporary" }, { status: 503 })
-        : Response.json({ ok: true });
-    });
-    vi.stubGlobal("fetch", fetch);
-
-    await querySubgraph(ctx, "kn-1", {});
-    await queryObjectTypeInstances(ctx, "kn-1", "ot-1", {});
-    await queryActionType(ctx, "kn-1", "at-1", {});
-    await queryMetricData(ctx, "kn-1", "m-1", {});
-    await expect(executeActionType(ctx, "kn-1", "at-1", {})).rejects.toMatchObject({ status: 503 });
-
-    expect(Object.fromEntries(attempts)).toEqual({
-      "/api/ontology-query/v1/knowledge-networks/kn-1/subgraph": 2,
-      "/api/ontology-query/v1/knowledge-networks/kn-1/object-types/ot-1": 2,
-      "/api/ontology-query/v1/knowledge-networks/kn-1/action-types/at-1/": 2,
-      "/api/ontology-query/v1/knowledge-networks/kn-1/metrics/m-1/data": 2,
-      "/api/ontology-query/v1/knowledge-networks/kn-1/action-types/at-1/execute": 1,
-    });
-  });
-
   it("preserves object-query integer boundaries in responses", async () => {
     vi.stubGlobal(
       "fetch",

@@ -113,7 +113,6 @@ export function querySubgraph(ctx: RequestContext, knId: string, body: unknown):
     method: "POST",
     headers: QUERY_OVER_POST,
     body,
-    retryable: true,
     responseParser: parseBigIntJSON,
   });
 }
@@ -173,13 +172,7 @@ export function queryObjectTypeInstances(
   return request(
     ctx,
     `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/object-types/${encodeURIComponent(otId)}`,
-    {
-      method: "POST",
-      headers: QUERY_OVER_POST,
-      body,
-      retryable: true,
-      responseParser: parseBigIntJSON,
-    },
+    { method: "POST", headers: QUERY_OVER_POST, body, responseParser: parseBigIntJSON },
   );
 }
 
@@ -193,7 +186,7 @@ export function queryActionType(
   return request(
     ctx,
     `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-types/${encodeURIComponent(atId)}/`,
-    { method: "POST", body, retryable: true, responseParser: parseBigIntJSON },
+    { method: "POST", body, responseParser: parseBigIntJSON },
   );
 }
 
@@ -233,7 +226,7 @@ export function queryMetricData(
   return request(
     ctx,
     `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/metrics/${encodeURIComponent(metricId)}/data`,
-    { method: "POST", body, retryable: true, responseParser: parseBigIntJSON },
+    { method: "POST", body, responseParser: parseBigIntJSON },
   );
 }
 

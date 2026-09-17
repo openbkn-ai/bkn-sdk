@@ -182,15 +182,15 @@ describe("bkn push integrity verification", () => {
   });
 
   it.each([
-    { response: Response.json({ error: "offline" }, { status: 503 }), attempts: 3 },
-    { response: Response.json({ wrong: "shape" }), attempts: 1 },
-    { response: Response.json({ entries: [{ id: "ot", data_source: {} }] }), attempts: 1 },
-    { response: Response.json({ entries: [{ id: "ot", data_source: null }] }), attempts: 1 },
-  ])("refuses to upload when the before-snapshot is unreadable", async ({ response, attempts }) => {
-    const fetch = server(...Array.from({ length: attempts }, () => response.clone()));
+    Response.json({ error: "offline" }, { status: 503 }),
+    Response.json({ wrong: "shape" }),
+    Response.json({ entries: [{ id: "ot", data_source: {} }] }),
+    Response.json({ entries: [{ id: "ot", data_source: null }] }),
+  ])("refuses to upload when the before-snapshot is unreadable", async (response) => {
+    const fetch = server(response);
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     await expect(cli(packageDir())).rejects.toThrow();
-    expect(fetch).toHaveBeenCalledTimes(attempts);
+    expect(fetch).toHaveBeenCalledOnce();
   });
 
   it("rejects an undefined binding in a snapshot", () => {
