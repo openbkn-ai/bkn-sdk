@@ -696,6 +696,20 @@ describe("createCatalog", () => {
     expect(body.connector_config).toEqual({ host: "h" });
   });
 
+  it("uses built_in for the platform-owned catalog marker", async () => {
+    const f = mockFetch({ id: "c-9" });
+    await createCatalog(ctx, {
+      name: "platform-catalog",
+      connectorType: "",
+      connectorConfig: {},
+      builtIn: true,
+    });
+
+    const body = JSON.parse(firstCall(f)[1].body as string);
+    expect(body).toMatchObject({ built_in: true });
+    expect(body).not.toHaveProperty("internal");
+  });
+
   it("sends allow_unhealthy and an initial health-check schedule", async () => {
     const f = mockFetch({ id: "c-9" });
     await createCatalog(
