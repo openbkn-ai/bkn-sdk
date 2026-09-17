@@ -6,10 +6,10 @@ Manage and invoke models: large models (LLM) and small models (embedding/rerank/
 
 ## User-visible behavior
 
-- `openbkn model list` — registered models (limit 30); filter by kind (llm | small-model).
+- `openbkn model llm|small list [--name] [--type] [--limit] [--page]` and `openbkn admin llm|small-model list [--name] [--type] [--page] [--size]` — registered models (limit 30), paged by `page` + `size`. Filters are sent only when given (no empty `name=`/`model_type=`); the LLM list filters by `name`, the small-model list by `model_name`.
 - `openbkn model get <id>` / `add` / `edit` / `delete` — model registry CRUD (operator).
 - `openbkn model test <id>` — connectivity / smoke test.
-- `openbkn model chat <id>` — OpenAI-compatible chat against a managed LLM.
+- `openbkn model llm chat <model>` — OpenAI-compatible chat against a managed LLM. A numeric `<model>` is resolved to its `model_name` through `llm/get`, accepting both a bare record and a `{data: {...}}` envelope.
 
 ## SDK touchpoints
 

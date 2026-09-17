@@ -2,7 +2,7 @@
 
 | Command | Notes |
 |---------|-------|
-| `llm\|small list [--name] [--type] [--limit n] [--page n]` | Paginated by `--page` (from 1) + `--limit` (page size, default 30). There is no `--series` filter. |
+| `llm\|small list [--name] [--type] [--limit n] [--page n]` | Paginated by `--page` (from 1) + `--limit` (page size, default 30). `--name`/`--type` are sent only when given (small models filter by `model_name`). There is no `--series` filter. |
 | `llm\|small get <modelid>` | Detail (by model id). |
 | `llm\|small add --body '<json>' \| --body-file <path>` | Register from a model definition JSON. Granular flags (`--name --series --api-model --api-base --api-key --icon` for LLMs, `--name --type --api-model --api-url --api-key --embedding-dim --max-tokens --batch-size` for small models) live on `openbkn admin llm\|small-model add` (see [admin.md](admin.md)). |
 | `llm\|small edit --body …` / `delete <modelids>` (comma-joined) / `test --body …` | Update / delete / connectivity test. `edit` and `test` take the model id inside the JSON body. |
