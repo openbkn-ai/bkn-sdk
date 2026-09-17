@@ -83,6 +83,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 | `resource` | Vega-backend 资源 | `list`/`get`/`find --name`/`query`/`delete` |
 | `vega` | Catalog + 资源 + 索引构建 + SQL | `catalog list/get/stats`、`catalog resources`、`resource create/update/delete/build`、`build-task list/get/start/stop/delete`、`connector-type list/get`、`index-capabilities`、`sql --query "<sql>"`（直连 MySQL/PG/OpenSearch，SQL 用 `{{resource-id}}` 占位） |
 | `context` | MCP 检索 | 业务对话通过 MCP 工具 `bkn_start_interaction` / `bkn_finish_interaction` 管理；CLI 沿用 `tool-call` 透传，不另设生命周期命令 |
+| `mcp` | 已注册 MCP Server | `list`/`get`/`tools` 只读发现；不含 Market、登记、发布或调用 |
 | `model` | 模型工厂 | `llm/small list/get/add/edit/delete/test`、`llm chat <name\|id> -m "…" [--stream]`（id 自动解析成 name）、`small embeddings/rerank <name>`（只收 name，填数字 id 会 400；与 chat 不同，暂不解析 id）、`llm set-default/unset-default <id>`、`small set-default/unset-default <id>`、`small get-default [--type embedding\|reranker]` |
 | `skill` | Skill 注册/市场/生命周期/沙箱执行 | `list`/`market`/`get`/`names <id...>`/`content`/`read-file`/`files [path] [--tree]`/`history`/`set-status`、`execute <id> --entry '<shell>'`、`register <dir>`/`download`/`install`、`update-metadata`/`update-package`、`republish`/`publish-history`；读类命令带 `--raw`（要正文而非对象存储 URL）与 `--draft`（读草稿版而非已发布版） |
 | `toolbox` / `tool` | 工具箱与工具 | toolbox `list/create [--type openapi\|function]/publish/delete/export/import`；tool `create <file> --toolbox <id>`（函数工具唯一入口）/`get`/`update`/`delete`/`upload <spec>`、`enable`/`disable`、`execute`/`debug`（结果在 `body.result`） |
@@ -96,7 +97,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 **本 CLI 暂未覆盖的平台能力**（别猜命令，直接用 `openbkn call` 打原始接口）：
 
 - Agent 运行时 `bkn-agent`（`/api/bkn-agent/v1/agents`、`/chat`、`/run`、`/tasks`、`/prompts`）
-- 执行工厂的 MCP 注册面（`/api/agent-operator-integration/v1/mcp`）
+- 执行工厂 MCP 的写入、Market 与调用面（`/api/agent-operator-integration/v1/mcp`）
 - Skill 索引构建任务（`/api/agent-operator-integration/v1/skills/index/build`）
 - `openbkn call /api/<service>/v1/... [-X POST] [-d '<json>']` 会自动注入认证头
 - **接口文档在 https://openbkn-ai.github.io/bkn-foundry/** —— 按模块分组的交互式
@@ -119,6 +120,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 | Vega Catalog + 索引构建 | [vega.md](references/vega.md) |
 | vega-backend 资源 | [resource.md](references/resource.md) |
 | Context Loader（MCP） | [context.md](references/context.md) |
+| 已注册 MCP Server（只读发现） | [mcp.md](references/mcp.md) |
 | Skill 注册 / 生命周期 | [skill.md](references/skill.md) |
 | 写一个 Skill 包 / 沙箱函数（bkn-osdk） | [create-skill](../create-skill/SKILL.md) 技能 |
 | Toolbox / Tool | [toolbox.md](references/toolbox.md) |

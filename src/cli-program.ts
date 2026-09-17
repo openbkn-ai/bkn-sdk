@@ -16,6 +16,7 @@ import { configCommand } from "./commands/config.js";
 import { contextCommand } from "./commands/context.js";
 import { describeCommand } from "./commands/describe.js";
 import { functionCommand } from "./commands/function.js";
+import { mcpCommand } from "./commands/mcp.js";
 import { modelCommand } from "./commands/model.js";
 import { resourceCommand } from "./commands/resource.js";
 import { skillCommand } from "./commands/skill.js";
@@ -62,6 +63,7 @@ export function buildProgram(): Command {
   program.addCommand(contextCommand());
   program.addCommand(modelCommand());
   program.addCommand(skillCommand());
+  program.addCommand(mcpCommand());
   program.addCommand(toolboxCommand());
   program.addCommand(toolCommand());
   program.addCommand(functionCommand());
