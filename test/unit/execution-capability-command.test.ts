@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { Command } from "commander";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { createTool, tools, setToolStatus } = vi.hoisted(() => ({
+const { createTool, tools, setToolStatus, generate } = vi.hoisted(() => ({
+  generate: vi.fn(async () => ({ content: "def handler(event): ..." })),
   createTool: vi.fn(async () => ({ success_ids: ["tool-1"] })),
   tools: vi.fn(async () => ({ entries: [], total_count: 0 })),
   setToolStatus: vi.fn(async () => undefined),
@@ -14,7 +15,10 @@ vi.mock("../../src/commands/_shared.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/commands/_shared.js")>();
   return {
     ...actual,
-    clientFrom: vi.fn(() => ({ toolboxes: { createTool, tools, setToolStatus } })),
+    clientFrom: vi.fn(() => ({
+      toolboxes: { createTool, tools, setToolStatus },
+      functions: { generate },
+    })),
   };
 });
 
@@ -129,6 +133,36 @@ describe("typed execution capability commands", () => {
 
     expect(functionGet?.arguments?.[0]?.from).toBe("openbkn function list --toolbox <box-id>");
     expect(apiGet?.arguments?.[0]?.from).toBe("openbkn api list --toolbox <box-id>");
+  });
+
+  it("passes sandbox generate --timeout to the SDK in milliseconds", async () => {
+    await run(
+      sandboxCommand(),
+      "sandbox",
+      "generate",
+      "python_function_generator",
+      "--query",
+      "add",
+      "--timeout",
+      "120",
+    );
+    expect(generate).toHaveBeenCalledWith(
+      "python_function_generator",
+      expect.objectContaining({ query: "add" }),
+      { timeoutMs: 120_000 },
+    );
+  });
+
+  it("leaves the generation budget to the SDK default when --timeout is absent", async () => {
+    await run(
+      sandboxCommand(),
+      "sandbox",
+      "generate",
+      "python_function_generator",
+      "--query",
+      "add",
+    );
+    expect(generate).toHaveBeenCalledWith("python_function_generator", expect.anything(), {});
   });
 
   it("teaches publish before execute everywhere a workflow is spelled out", () => {

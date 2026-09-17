@@ -6,6 +6,7 @@ import {
   type ExecuteFunctionOptions,
   type FunctionAiGenerationRequest,
   type FunctionAiGenerationType,
+  type GenerateFunctionOptions,
   executeFunction,
   functionTemplate,
   generateFunction,
@@ -35,6 +36,14 @@ function checkedGenerationRequest(
   return request;
 }
 
+function checkedOptions(opts: GenerateFunctionOptions): GenerateFunctionOptions {
+  const { timeoutMs } = opts;
+  if (timeoutMs !== undefined && !(Number.isSafeInteger(timeoutMs) && timeoutMs > 0)) {
+    throw new InputError(`timeoutMs must be a positive integer (got ${timeoutMs}).`);
+  }
+  return opts;
+}
+
 export function functions(ctx: RequestContext) {
   return {
     run: (opts: ExecuteFunctionOptions) => executeFunction(ctx, opts),
@@ -45,8 +54,11 @@ export function functions(ctx: RequestContext) {
       opts?: { pypiRepoUrl?: string; pythonVersion?: string },
     ) => listDependencyVersions(ctx, packageName, opts),
     template: (templateType?: string) => functionTemplate(ctx, templateType),
-    generate: (type: FunctionAiGenerationType, request: FunctionAiGenerationRequest) =>
-      generateFunction(ctx, type, checkedGenerationRequest(type, request)),
+    generate: (
+      type: FunctionAiGenerationType,
+      request: FunctionAiGenerationRequest,
+      opts: GenerateFunctionOptions = {},
+    ) => generateFunction(ctx, type, checkedGenerationRequest(type, request), checkedOptions(opts)),
     promptTemplate: (type: FunctionAiGenerationType) => getFunctionPromptTemplate(ctx, type),
   };
 }

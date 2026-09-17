@@ -192,14 +192,32 @@ export function functionTemplate(ctx: RequestContext, templateType = "python"): 
   return request(ctx, `${PATH}/template/${encodeURIComponent(templateType)}`);
 }
 
+/**
+ * How long a generation call waits by default: the gateway's own ~300 s read
+ * limit. A model call routinely outlasts the 30 s client default, and waiting
+ * past the gateway only trades its 504 for a longer wait.
+ */
+export const FUNCTION_GENERATION_TIMEOUT_MS = 300_000;
+
+export interface GenerateFunctionOptions {
+  /** Client-side budget in milliseconds; defaults to `FUNCTION_GENERATION_TIMEOUT_MS`. */
+  timeoutMs?: number;
+}
+
 /** Generate function code or parameter metadata through the platform's default LLM. */
 export function generateFunction(
   ctx: RequestContext,
   type: FunctionAiGenerationType,
   body: FunctionAiGenerationRequest,
+  opts: GenerateFunctionOptions = {},
 ): Promise<unknown> {
+  const budget = opts.timeoutMs ?? FUNCTION_GENERATION_TIMEOUT_MS;
   return request(ctx, `${PATH}/ai_generate/function/${encodeURIComponent(type)}`, {
     method: "POST",
+    // The service answers only once the model is done, so no header arrives
+    // before then: both the abort budget and undici's header deadline move.
+    timeoutMs: budget,
+    headersTimeoutMs: budget,
     body,
   });
 }

@@ -30,4 +30,5 @@ Manage the skill registry and the Toolbox execution surface that agents call. Th
 - Typed `function list` / `api list` do not check the box's metadata type; `--toolbox` must name a box of the matching type.
 - Validate OpenAPI imports at the boundary; reject malformed specs with a clear message.
 - Function generation is a model invocation, not a persisted component. The SDK and CLI support its JSON response only; `stream: true` answers SSE, which no CLI command (including `openbkn call`, which buffers the response) streams yet.
+- `sandbox generate` waits up to the gateway's ~300 s limit by default rather than the 30 s client default; `--timeout <s>` (CLI) or `timeoutMs` (SDK) overrides it.
 - `function` now means a registered Function Tool. Use `sandbox` for a one-off run, schema inference, dependencies, templates, and AI generation.

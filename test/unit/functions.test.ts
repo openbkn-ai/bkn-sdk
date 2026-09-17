@@ -162,6 +162,30 @@ describe("function endpoints", () => {
     });
   });
 
+  it("waits for generation up to the gateway limit rather than the 30s default", async () => {
+    mockFetch();
+    const timer = vi.spyOn(globalThis, "setTimeout");
+    try {
+      await generateFunction(ctx, "python_function_generator", { query: "q" });
+      const delays = timer.mock.calls.map((args) => args[1]);
+      expect(delays).toContain(300_000);
+      expect(delays).not.toContain(30_000);
+    } finally {
+      timer.mockRestore();
+    }
+  });
+
+  it("lets a caller move the generation budget, header deadline included", async () => {
+    const f = mockFetch();
+    await generateFunction(
+      ctx,
+      "python_function_generator",
+      { query: "q" },
+      { timeoutMs: 450_000 },
+    );
+    expect(dispatcherOf(f)?.headersTimeout).toBe(450_000);
+  });
+
   it("reads a prompt template without a request body", async () => {
     const f = mockFetch();
     await getFunctionPromptTemplate(ctx, "metadata_param_generator");

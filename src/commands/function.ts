@@ -20,6 +20,17 @@ import { clientFrom, outputOptions } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 
+/** `--timeout` for calls where a typo must not silently become another limit. */
+export function positiveSeconds(flag: string) {
+  return (v: string): number => {
+    const n = /^\d+$/.test(v) ? Number.parseInt(v, 10) : Number.NaN;
+    if (!Number.isSafeInteger(n) || n <= 0) {
+      throw new InputError(`${flag} must be a positive integer (got '${v}')`);
+    }
+    return n;
+  };
+}
+
 /** Code from a path, or from stdin when the path is `-`. */
 export function readCode(file: string): string {
   try {
@@ -222,10 +233,19 @@ export function sandboxCommand(): Command {
     .option("--code <file>", "existing code to analyse (metadata_param_generator; `-` reads stdin)")
     .option("--inputs <json>", "known input parameters to constrain generation")
     .option("--outputs <json>", "known output parameters to constrain generation")
-    .action(async (type: string, opts: GenerationFlags, cmd: Command) => {
+    .option(
+      "--timeout <s>",
+      "seconds to wait for the model (default 300, the gateway's own limit)",
+      positiveSeconds("--timeout"),
+    )
+    .action(async (type: string, opts: GenerationFlags & { timeout?: number }, cmd: Command) => {
       const direction = generationType(type);
       printJson(
-        await clientFrom(cmd).functions.generate(direction, generationRequestFrom(direction, opts)),
+        await clientFrom(cmd).functions.generate(
+          direction,
+          generationRequestFrom(direction, opts),
+          opts.timeout === undefined ? {} : { timeoutMs: opts.timeout * 1000 },
+        ),
         outputOptions(cmd),
       );
     });

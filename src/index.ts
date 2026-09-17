@@ -99,6 +99,7 @@ export type {
   FunctionAiGenerationType,
   FunctionDefinition,
   FunctionExecuteResult,
+  GenerateFunctionOptions,
   ParameterDef,
 } from "./api/functions.js";
 export { toolboxes } from "./resources/toolboxes.js";

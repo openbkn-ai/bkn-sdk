@@ -4,6 +4,7 @@ import {
   generationRequestFrom,
   generationType,
   parseJsonOption,
+  positiveSeconds,
   readCode,
 } from "../../src/commands/function.js";
 import { InputError } from "../../src/utils/errors.js";
@@ -65,5 +66,19 @@ describe("Function AI generation flags", () => {
     expect(() =>
       generationRequestFrom(generationType("metadata_param_generator"), { query: "wrong mode" }),
     ).toThrow(/--query only applies/);
+  });
+});
+
+describe("--timeout on sandbox generate", () => {
+  it("accepts whole seconds", () => {
+    expect(positiveSeconds("--timeout")("120")).toBe(120);
+  });
+
+  it("refuses values that would silently become another limit", () => {
+    for (const bad of ["0", "-5", "1.5", "30abc", "1e3", ""]) {
+      expect(() => positiveSeconds("--timeout")(bad)).toThrow(
+        /--timeout must be a positive integer/,
+      );
+    }
   });
 });

@@ -15,7 +15,7 @@
 | `sandbox deps` / `sandbox versions <package>` | 查看沙箱已安装库，或实时查询包索引。 |
 | `sandbox run <file\|-> [--event '<json>'] [--timeout <s>] [--dep name@version] [--index-url <url>] [--pass-token]` | 跑一次代码。`--event` 是 `handler` 入参；`-` 从 stdin 读代码。 |
 | `sandbox infer-schema <file>` | 从 `@tool` 装饰的代码反推参数定义；会真的执行代码。 |
-| `sandbox generate <type>` / `sandbox prompt <type>` | 让平台模型生成函数代码或参数元数据，或读取对应提示词模板。 |
+| `sandbox generate <type> [--timeout <s>]` / `sandbox prompt <type>` | 让平台模型生成函数代码或参数元数据（默认等 300 秒），或读取对应提示词模板。 |
 
 **读返回值**：代码自己抛异常时接口仍是 HTTP 200，看 `exit_code`（0 才成功）与
 `stderr`。`sandbox run` 会把非零 `exit_code` 映射成进程退出码，所以 shell 里
@@ -30,6 +30,7 @@
 
 **超时有两道墙**：`--timeout` 抬的是沙箱与客户端的预算，但网关（nginx）自己有
 约 300 秒的读超时，超过就是 504，跟 `--timeout` 填多大无关。长任务别指望同步等。
+`sandbox generate` 是一次模型调用，客户端默认等到网关的 300 秒上限（不是通用的 30 秒），`--timeout <s>` 可调。
 
 ## function
 
