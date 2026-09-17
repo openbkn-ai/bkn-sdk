@@ -16,20 +16,9 @@ import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
-import { clientFrom, outputOptions } from "./_shared.js";
+import { clientFrom, oneOf, outputOptions, positiveInt } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
-
-/** `--timeout` for calls where a typo must not silently become another limit. */
-export function positiveSeconds(flag: string) {
-  return (v: string): number => {
-    const n = /^\d+$/.test(v) ? Number.parseInt(v, 10) : Number.NaN;
-    if (!Number.isSafeInteger(n) || n <= 0) {
-      throw new InputError(`${flag} must be a positive integer (got '${v}')`);
-    }
-    return n;
-  };
-}
 
 /** Code from a path, or from stdin when the path is `-`. */
 export function readCode(file: string): string {
@@ -127,12 +116,7 @@ export function functionDefinitionFrom(file: string, opts: CodeFlags): FunctionD
 
 /** Validate a Function generation direction before a request is opened. */
 export function generationType(value: string): FunctionAiGenerationType {
-  if ((FUNCTION_AI_GENERATION_TYPES as readonly string[]).includes(value)) {
-    return value as FunctionAiGenerationType;
-  }
-  throw new InputError(
-    `type must be one of: ${FUNCTION_AI_GENERATION_TYPES.join(" | ")} (got '${value}')`,
-  );
+  return oneOf("type", FUNCTION_AI_GENERATION_TYPES)(value);
 }
 
 export interface GenerationFlags {
@@ -253,7 +237,7 @@ export function sandboxCommand(): Command {
     .option(
       "--timeout <s>",
       "seconds to wait for the model (default 300, the gateway's own limit)",
-      positiveSeconds("--timeout"),
+      positiveInt("--timeout"),
     )
     .action(async (type: string, opts: GenerationFlags & { timeout?: number }, cmd: Command) => {
       const direction = generationType(type);
