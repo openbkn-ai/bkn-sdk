@@ -889,7 +889,7 @@ describe("managed MCP tool calls", () => {
     expect(formatError(error)).not.toContain("secret");
   });
 
-  it("does not apply business receipt state rules to lifecycle receipt reads", async () => {
+  it("does not apply business receipt state rules to a lifecycle tool's result", async () => {
     const receipt = {
       receipt_id: "receipt-lifecycle-read",
       conversation_id: "conversation_supply_chain",
@@ -910,7 +910,10 @@ describe("managed MCP tool calls", () => {
     );
 
     await expect(
-      callTool(ctx, "kn-receipt-read", "bkn_get_receipt", { receipt_id: receipt.receipt_id }),
+      callTool(ctx, "kn-receipt-read", "bkn_finish_interaction", {
+        interaction_id: receipt.interaction_id,
+        outcome: "cancelled",
+      }),
     ).resolves.toEqual({
       receipt,
     });

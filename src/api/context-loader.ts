@@ -492,23 +492,11 @@ export async function callToolRaw(
 }
 
 /**
- * The tools that manage lifecycle state rather than consume it. They are how a
- * session gets opened in the first place, so wrapping them in one would recur.
+ * The tools that manage lifecycle state rather than consume it — the two the
+ * context-loader contract (`mcp.yaml`) defines. They are how a session gets
+ * opened in the first place, so wrapping them in one would recur.
  */
-const LIFECYCLE_TOOLS = new Set([
-  "bkn_create_conversation",
-  "bkn_resume_conversation",
-  "bkn_start_interaction",
-  "bkn_complete_interaction",
-  "bkn_finish_interaction",
-  "bkn_fail_interaction",
-  "bkn_cancel_interaction",
-  "bkn_handoff_interaction",
-  "bkn_close_conversation",
-  "bkn_get_operation",
-  "bkn_retry_operation",
-  "bkn_get_receipt",
-]);
+const LIFECYCLE_TOOLS = new Set(["bkn_start_interaction", "bkn_finish_interaction"]);
 
 /**
  * Tools whose published input schema takes `response_format` (`json` | `toon`).
@@ -552,6 +540,8 @@ const RESPONSE_FORMAT_TOOLS = new Set([
  * (`run_sql`, `describe_resource`, `list_skills`, `list_knowledge_networks`,
  * `run_code`, `run_shell`) and `list_resources`, where `kn_id` narrows an
  * account-wide listing to one network's bindings and so changes the answer.
+ * That `kn_id` is MCP-only: the live tool declares it, while the REST
+ * `ListResourcesRequest` (data-access.yaml) has no such field.
  */
 const KN_SCOPED_TOOLS = new Set([
   "search_schema",
@@ -615,7 +605,7 @@ async function callToolResult(
   // A caller that built its own `bkn_context` keeps its ids, and no session is
   // opened on its behalf; `parent_operation_id` / `causation_event_ids` /
   // `business_refs` travel with it. Anything `BKNContext` does not accept —
-  // an `operation_key` minted by `ManagedTrace` in particular — is dropped:
+  // an `operation_key` from an older caller in particular — is dropped:
   // Context Loader derives the Operation identity itself and rejects it.
   if (callerContext) {
     const bknContext = toWireBknContext(callerContext);
@@ -754,7 +744,10 @@ export interface SearchSchemaOptions {
    */
   searchScope?: SearchSchemaScope | SchemaConceptKind[];
   maxConcepts?: number;
-  /** Trimmed schema (the MCP default is `true`); `false` adds comments, keys and tags. */
+  /**
+   * Trimmed schema; `false` adds comments, keys and tags. MCP tool default `true`;
+   * REST default `false`. Sent explicitly whenever set.
+   */
   schemaBrief?: boolean;
   /** Re-rank relation types (server default `true`). */
   enableRerank?: boolean;

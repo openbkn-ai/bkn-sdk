@@ -56,7 +56,7 @@ openbkn --json context tool-call <kn-id> <tool-name> --args '{"k":"v"}' --receip
 openbkn --help        # grouped command map
 ```
 
-On a `managed-v2` deploy, commands continue the conversation the previous one
+On a deploy with the managed lifecycle, commands continue the conversation the previous one
 opened, so work spanning several commands lands in one thread. `openbkn context conversation` shows which
 is in force and where it came from; `--forget` drops it. An explicit `--token` /
 `BKN_TOKEN` opts out (identity there is the token, not the stored user) — use

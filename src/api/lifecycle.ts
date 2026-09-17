@@ -19,23 +19,19 @@
  * and supplying one is what makes the evidence land on a nameable turn rather
  * than an anonymous per-connection bucket.
  *
- * Two incompatible contracts are in the wild and a deploy advertises which one
- * it speaks in its tool catalog:
+ * The contract (context-loader `mcp.yaml`) is two tools: `bkn_start_interaction`
+ * mints the conversation and interaction ids, `bkn_finish_interaction` ends the
+ * interaction. `bkn_context` is `BKNContext` (`additionalProperties: false`): the
+ * two ids plus the optional causality fields. Operation identity is derived
+ * server-side, so callers never send an `operation_key`.
  *
- * - `managed-v1` — `bkn_create_conversation` then `bkn_start_interaction`, and
- *   `bkn_context` carries a caller-chosen `operation_key`.
- * - `managed-v2` — one `bkn_start_interaction` mints both ids, and `bkn_context`
- *   is `BKNContext` (`additionalProperties: false`): the two ids plus the optional
- *   causality fields; anything else, `operation_key` included, is
- *   `invalid_business_context`.
- *
- * A deploy that predates the middleware has neither tool and needs no context;
- * sending none keeps working exactly as before. Once a managed contract is
- * advertised, however, a failed handshake is authoritative and is surfaced.
+ * A deploy whose catalog lacks `bkn_start_interaction` needs no context; sending
+ * none keeps working exactly as before. Once the tool is advertised, however, a
+ * failed handshake is authoritative and is surfaced.
  */
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import type { RequestContext } from "../types.js";
-import { HttpError, ToolError } from "../utils/errors.js";
+import { HttpError, InputError, ToolError } from "../utils/errors.js";
 import { callToolRaw, mcpInfo } from "./context-loader.js";
 import { inheritVersionCheck } from "./version-check.js";
 
@@ -51,13 +47,6 @@ export interface BknContext {
   parent_operation_id?: string;
   causation_event_ids?: string[];
   business_refs?: Array<{ ref_type: string; ref_id: string; version?: string }>;
-  /**
-   * Legacy `managed-v1` only, and only on a context this module opened itself.
-   * The contract says callers must not submit it: Context Loader derives the
-   * Operation identity server-side, so a caller-built context has it stripped
-   * by {@link toWireBknContext} before it is sent.
-   */
-  operation_key?: string;
 }
 
 /** The keys `BKNContext` accepts. Anything else is rejected by a strict deploy. */
@@ -72,11 +61,9 @@ const WIRE_BKN_CONTEXT_KEYS = [
 /**
  * Reduce a caller-built `bkn_context` to the fields the contract accepts.
  *
- * `ManagedTrace` scopes still mint an `operation_key` for Trace Core's own
- * registration; that key stays on the Core side. Context Loader derives the
- * Operation idempotency identity itself and `BKNContext` is
- * `additionalProperties: false`, so forwarding it (or any other unknown key)
- * would get the call refused.
+ * Context Loader derives the Operation identity itself and `BKNContext` is
+ * `additionalProperties: false`, so forwarding any other key — an
+ * `operation_key` from an older caller included — would get the call refused.
  */
 export function toWireBknContext(bknContext: object): BknContext {
   const source = bknContext as Record<string, unknown>;
@@ -87,33 +74,14 @@ export function toWireBknContext(bknContext: object): BknContext {
   return wire as unknown as BknContext;
 }
 
-/** Which lifecycle contract a deploy speaks, decided from its tool catalog. */
-type Contract = "none" | "managed-v1" | "managed-v2";
+/** Whether a deploy speaks the managed lifecycle, decided from its tool catalog. */
 type LifecycleCapability = "managed" | "unsupported" | "unknown";
 
-/**
- * What the catalog says about opening an interaction, beyond which tools exist.
- *
- * `bkn_start_interaction` gained a required `conversation_mode` in a later
- * platform build. A deploy that wants it refuses every handshake without it, and the
- * refusal surfaces as the server's own `conversation_required` on the *business*
- * call — so the whole `context` surface stops working with an error that names
- * neither the field nor the handshake.
- *
- * `managed-v2` always sends it: the context-loader contract (`mcp.yaml`) requires
- * it on every start, and the version preflight only lets this SDK talk to a
- * platform of its own base version, whose contract that is. `startWantsConversationMode`
- * is still read from the tool's `input_schema` for legacy `managed-v1`, where the
- * field is sent only when declared.
- */
 interface Lifecycle {
-  contract: Contract;
   capability: LifecycleCapability;
-  startWantsConversationMode: boolean;
 }
 
 interface Session {
-  contract: Exclude<Contract, "none">;
   conversationId: string;
   interactionId: string;
   /** Kept so the session can be released later without the caller threading them back. */
@@ -121,13 +89,13 @@ interface Session {
   knId: string;
 }
 
-const V1_MARKER = "bkn_create_conversation";
-const V2_MARKER = "bkn_start_interaction";
+const START_TOOL = "bkn_start_interaction";
+const FINISH_TOOL = "bkn_finish_interaction";
 
 /**
- * Errors that mean "the session is gone, open a new one". A v1 interaction's
- * lease is five minutes and a long-lived client outlives it; a conversation
- * swept for being idle takes its interaction with it.
+ * Errors that mean "the session is gone, open a new one": a conversation swept
+ * for being idle takes its interaction with it, and a long-lived client
+ * outlives both.
  */
 const STALE_SESSION_CODES = new Set([
   "conversation_required",
@@ -139,21 +107,7 @@ const STALE_SESSION_CODES = new Set([
   "interaction_required",
   "interaction_terminal",
   "interaction_in_progress",
-  // Not in any current spec; kept because v1 deploys (#38) answered with them
-  // and nothing shows they no longer do.
-  "lease_expired",
-  "lease_invalid",
-  "lease_superseded",
 ]);
-
-/**
- * One conversation per process, named so a support engineer can find it. The
- * generation suffix matters under v1: `bkn_create_conversation` is
- * ensure-current, so replaying a key returns the same conversation — and its
- * still-active interaction would reject the replacement we are trying to open.
- */
-const PROCESS_ID = randomUUID();
-let generation = 0;
 
 /**
  * Default attribution, so an SDK-opened conversation is identifiable in Trace.
@@ -162,8 +116,19 @@ let generation = 0;
  */
 const DEFAULT_AGENT_NAME = "openbkn-sdk";
 
+/** `startInteractionRequest.agent_name` is `maxLength: 128` (agent-observability.yaml). */
+export const MAX_AGENT_NAME_LENGTH = 128;
+
 function agentNameFor(ctx: RequestContext): string {
-  return ctx.agentName?.trim() || DEFAULT_AGENT_NAME;
+  const name = ctx.agentName?.trim() || DEFAULT_AGENT_NAME;
+  // Checked locally: the server's `agent_name_invalid` would otherwise arrive on
+  // every managed call, naming a handshake the caller never made.
+  if ([...name].length > MAX_AGENT_NAME_LENGTH) {
+    throw new InputError(
+      `agentName must be at most ${MAX_AGENT_NAME_LENGTH} characters (got ${[...name].length}).`,
+    );
+  }
+  return name;
 }
 
 /**
@@ -207,16 +172,9 @@ export function resetLifecycleCaches(): void {
  * lacks lifecycle tools: ordinary calls preserve the old best-effort fallback,
  * while receipt-required calls must not mistake uncertainty for legacy support.
  */
-const NO_LIFECYCLE: Lifecycle = {
-  contract: "none",
-  capability: "unsupported",
-  startWantsConversationMode: false,
-};
-const UNKNOWN_LIFECYCLE: Lifecycle = {
-  contract: "none",
-  capability: "unknown",
-  startWantsConversationMode: false,
-};
+const MANAGED_LIFECYCLE: Lifecycle = { capability: "managed" };
+const NO_LIFECYCLE: Lifecycle = { capability: "unsupported" };
+const UNKNOWN_LIFECYCLE: Lifecycle = { capability: "unknown" };
 
 /**
  * The raw catalog probe. Receipt callers need an authentication failure to stay
@@ -242,13 +200,7 @@ function lifecycleProbeFor(ctx: RequestContext): Promise<Lifecycle> {
         probeFailures.set(failureKey, Date.now());
         return UNKNOWN_LIFECYCLE;
       }
-      const startWantsConversationMode = requiresArgument(info, V2_MARKER, "conversation_mode");
-      if (names.includes(V1_MARKER)) {
-        return { contract: "managed-v1", capability: "managed", startWantsConversationMode };
-      }
-      return names.includes(V2_MARKER)
-        ? { contract: "managed-v2", capability: "managed", startWantsConversationMode }
-        : NO_LIFECYCLE;
+      return names.includes(START_TOOL) ? MANAGED_LIFECYCLE : NO_LIFECYCLE;
     });
     contracts.set(failureKey, pending);
     // Same rule the session cache follows: a probe that failed is not a lasting
@@ -269,27 +221,6 @@ function lifecycleProbeFor(ctx: RequestContext): Promise<Lifecycle> {
 
 export function lifecycleFor(ctx: RequestContext): Promise<Lifecycle> {
   return lifecycleProbeFor(ctx).catch((): Lifecycle => UNKNOWN_LIFECYCLE);
-}
-
-/** Kept for callers that only care which contract a deploy speaks. */
-export function lifecycleContract(ctx: RequestContext): Promise<Contract> {
-  return lifecycleFor(ctx).then((l) => l.contract);
-}
-
-/**
- * Does a tool declare this argument as required?
- *
- * `false` when the catalog cannot be read that far — an unknown schema means
- * "send what has always worked", not "guess a new field in".
- */
-function requiresArgument(info: unknown, tool: string, argument: string): boolean {
-  const tools = (info as { tools?: Array<Record<string, unknown>> } | undefined)?.tools;
-  if (!Array.isArray(tools)) return false;
-  const found = tools.find((t) => t?.name === tool);
-  // The catalog spells it `input_schema`; MCP's own wire format uses
-  // `inputSchema`. Accept both rather than depend on which one answers.
-  const schema = (found?.input_schema ?? found?.inputSchema) as { required?: unknown } | undefined;
-  return Array.isArray(schema?.required) && schema.required.includes(argument);
 }
 
 function isAuthFailure(err: unknown): boolean {
@@ -339,8 +270,8 @@ function readId(result: unknown, field: string, tool: string): string {
 /**
  * A conversation the caller named but did not pair with an interaction.
  *
- * Both contracts can open an interaction inside an existing conversation, so
- * this is a supported input, not an incomplete one — `--conversation-id` and
+ * `bkn_start_interaction` can open an interaction inside an existing
+ * conversation, so this is a supported input, not an incomplete one — `--conversation-id` and
  * `--interaction-id` are independent flags. Opening a fresh conversation here
  * instead would file the evidence somewhere the caller never asked for, without
  * saying so.
@@ -383,103 +314,28 @@ function refusesThisConversation(err: unknown): boolean {
  * A caller-named one and a remembered one look the same to the server; they
  * differ in what a failure means. `ensureSession` drops the remembered one and
  * tries again, because it offered convenience, not intent.
- *
- * A remembered one is honoured only under v2, mirroring the gate on reporting
- * them. Joining under v1 would produce an interaction nothing can release —
- * `releaseOne` handles only v2 — so the next call would wait out the lease. The
- * CLI never stores a v1 conversation, but this field is public, and a caller
- * passing one must not fall into the hole the write side already avoids.
  */
-function joinTarget(ctx: RequestContext, contract: Exclude<Contract, "none">): string | undefined {
-  const named = callerNamedConversation(ctx);
-  if (named) return named;
-  return contract === "managed-v2" ? ctx.rememberedConversationId : undefined;
+function joinTarget(ctx: RequestContext): string | undefined {
+  return callerNamedConversation(ctx) ?? ctx.rememberedConversationId;
 }
 
-async function openSession(
-  ctx: RequestContext,
-  knId: string,
-  lifecycle: Lifecycle & { contract: Exclude<Contract, "none"> },
-  question: string,
-): Promise<Session> {
-  const { contract } = lifecycle;
-  generation += 1;
-  // `continue` whenever a conversation is named — that is exactly what the
-  // enum means — and `new` when one is being minted.
-  const conversationMode = (joining: boolean) => (joining ? "continue" : "new");
-  // Legacy v1 builds predate the field; send it there only when the catalog
-  // declares it, since a deploy may reject an argument it never published.
-  const legacyMode = (joining: boolean) =>
-    lifecycle.startWantsConversationMode ? { conversation_mode: conversationMode(joining) } : {};
-  const named = joinTarget(ctx, contract);
-  if (contract === "managed-v2") {
-    // Without a conversation_id the server mints a fresh conversation. Reusing
-    // one of our own would be rejected whenever its interaction is still
-    // active, which is exactly the state a reopen is trying to escape — so only
-    // a caller-named conversation is passed back in.
-    //
-    // `conversation_mode`, `question` and `agent_name` are required on every
-    // start (context-loader mcp.yaml), whatever the catalog managed to say.
-    const started = await callToolRaw(ctx, knId, V2_MARKER, {
-      question,
-      conversation_mode: conversationMode(Boolean(named)),
-      agent_name: agentNameFor(ctx),
-      ...(named ? { conversation_id: named } : {}),
-    });
-    return {
-      contract,
-      ctx,
-      knId,
-      conversationId: readId(started, "conversation_id", V2_MARKER),
-      interactionId: readId(started, "interaction_id", V2_MARKER),
-    };
-  }
-
-  if (named) {
-    // Borrowed, not ours: this interaction lives in the caller's conversation,
-    // which permits one active interaction at a time, so until its lease
-    // expires the caller cannot open their own. `releaseLifecycleSessions`
-    // cannot shorten that under v1 — `bkn_cancel_interaction` there demands a
-    // `completion_manifest_version`, and Core takes that as a free-form
-    // required string with no defined value to send, so a guess would fail the
-    // call rather than release anything. The v1 lease is five minutes and
-    // self-heals; a v2 deploy releases immediately. Revisit if a v1 deploy
-    // becomes available to verify a cancel against.
-    const started = await callToolRaw(ctx, knId, V2_MARKER, {
-      conversation_id: named,
-      idempotency_key: `start:${PROCESS_ID}:${generation}`,
-      question,
-      ...legacyMode(true),
-    });
-    return {
-      contract,
-      ctx,
-      knId,
-      conversationId: named,
-      interactionId: readId(started, "interaction_id", V2_MARKER),
-    };
-  }
-
-  const conversation = await callToolRaw(ctx, knId, V1_MARKER, {
-    external_conversation_key: `cli:${PROCESS_ID}:${generation}`,
-    // Nothing closes this conversation: a CLI invocation has no answer to close
-    // over, and v1's closure manifest must enumerate every operation it
-    // produced. one_shot hands it to the server's idle sweeper instead.
-    one_shot: true,
-  });
-  const conversationId = readId(conversation, "conversation_id", V1_MARKER);
-  const started = await callToolRaw(ctx, knId, V2_MARKER, {
-    conversation_id: conversationId,
-    idempotency_key: `start:${PROCESS_ID}:${generation}`,
+async function openSession(ctx: RequestContext, knId: string, question: string): Promise<Session> {
+  const named = joinTarget(ctx);
+  // Without a conversation_id the server mints a fresh conversation, so only a
+  // conversation being joined is passed in. `conversation_mode` is `continue`
+  // exactly then and `new` otherwise; it, `question` and `agent_name` are
+  // required on every start (context-loader mcp.yaml).
+  const started = await callToolRaw(ctx, knId, START_TOOL, {
     question,
-    ...legacyMode(true),
+    conversation_mode: named ? "continue" : "new",
+    agent_name: agentNameFor(ctx),
+    ...(named ? { conversation_id: named } : {}),
   });
   return {
-    contract,
     ctx,
     knId,
-    conversationId,
-    interactionId: readId(started, "interaction_id", V2_MARKER),
+    conversationId: readId(started, "conversation_id", START_TOOL),
+    interactionId: readId(started, "interaction_id", START_TOOL),
   };
 }
 
@@ -520,13 +376,7 @@ function sessionKey(ctx: RequestContext, knId: string): string {
  * handshake — a conversation permits a single active interaction, so two racing
  * opens would leave one of them rejected.
  */
-function ensureSession(
-  ctx: RequestContext,
-  knId: string,
-  lifecycle: Lifecycle & { contract: Exclude<Contract, "none"> },
-  question: string,
-): Promise<Session> {
-  const { contract } = lifecycle;
+function ensureSession(ctx: RequestContext, knId: string, question: string): Promise<Session> {
   const key = sessionKey(ctx, knId);
   const cached = sessions.get(key);
   if (cached) return cached;
@@ -541,25 +391,18 @@ function ensureSession(
   // not as a value comparison. A caller that names the same id it also stored
   // still named it, and a named conversation must never be swapped out from
   // under them.
-  const remembered = callerNamedConversation(ctx) ? undefined : joinTarget(ctx, contract);
+  const remembered = callerNamedConversation(ctx) ? undefined : joinTarget(ctx);
   const opening = remembered
-    ? openSession(ctx, knId, lifecycle, question).catch((err: unknown) => {
+    ? openSession(ctx, knId, question).catch((err: unknown) => {
         if (!refusesThisConversation(err)) throw err;
         const { rememberedConversationId: _dropped, ...fresh } = ctx;
-        return openSession(inheritVersionCheck(ctx, fresh), knId, lifecycle, question);
+        return openSession(inheritVersionCheck(ctx, fresh), knId, question);
       })
-    : openSession(ctx, knId, lifecycle, question);
+    : openSession(ctx, knId, question);
   // Report only a conversation this call minted. One the caller named is
   // already theirs to keep, and echoing it back would let a `--conversation-id`
   // meant for a single command quietly become the stored default.
-  //
-  // And only under v2, because only there can a caller act on it. A
-  // conversation permits one active interaction, and `releaseOne` can end one
-  // early only under v2 — v1's cancel wants a `completion_manifest_version`
-  // with no value to send. So a v1 conversation handed to the next command
-  // would be refused until the five-minute lease expired: reuse would cost
-  // exactly what it set out to give.
-  if (contract === "managed-v2" && !callerNamedConversation(ctx)) {
+  if (!callerNamedConversation(ctx)) {
     opening
       .then((session) => {
         // Joining a remembered conversation returns the same id; reporting it
@@ -577,29 +420,8 @@ function ensureSession(
   return opening;
 }
 
-/**
- * A fresh v1 key per call, deliberately not derived from the input.
- *
- * Under v1 `operation_key` is an idempotency key, and Core answers a replay with
- * the recorded operation and receipt instead of the tool's payload — the receipt
- * carries only a hash, so the data is unrecoverable. Hashing the input would
- * therefore make the same query twice in one interaction return no results the
- * second time. Core computes its own normalized input hash regardless.
- */
-function newOperationKey(): string {
-  return `op:${randomUUID()}`;
-}
-
-function contextFor(
-  session: Pick<Session, "conversationId" | "interactionId">,
-  contract: Contract,
-): BknContext {
-  return {
-    conversation_id: session.conversationId,
-    interaction_id: session.interactionId,
-    // v2 validates bkn_context strictly and rejects the field.
-    ...(contract === "managed-v1" ? { operation_key: newOperationKey() } : {}),
-  };
+function contextFor(session: Pick<Session, "conversationId" | "interactionId">): BknContext {
+  return { conversation_id: session.conversationId, interaction_id: session.interactionId };
 }
 
 /**
@@ -628,14 +450,12 @@ export async function bknContextFor(
     if (requireKnownCapability) await requireKnownLifecycleCapability(ctx);
     return undefined;
   }
-  const { contract } = lifecycle;
-  if (contract === "none") return undefined;
+  if (lifecycle.capability !== "managed") return undefined;
 
   const owned = callerOwnedSession(ctx);
-  if (owned) return contextFor(owned, contract);
+  if (owned) return contextFor(owned);
 
-  const session = await ensureSession(ctx, knId, { ...lifecycle, contract }, question);
-  return contextFor(session, contract);
+  return contextFor(await ensureSession(ctx, knId, question));
 }
 
 /**
@@ -696,12 +516,8 @@ export async function withManagedLifecycle<T>(
 /**
  * Release the interactions this process opened.
  *
- * Only v2 is released. Its finish takes an id and an outcome, where v1's
- * cancel demands a closure manifest — and the two kinds of v1 session are
- * skipped for different reasons: one we opened ourselves carries `one_shot`
- * and is swept when idle, while one opened inside a caller's conversation has
- * no `one_shot` to rely on and no manifest we can supply (see `openSession`),
- * so it waits out its five-minute lease. The outcome is `cancelled` because a
+ * `bkn_finish_interaction` takes the interaction id and an outcome. The
+ * outcome is `cancelled` because a
  * CLI invocation has no answer artifact to close over, and `completed` without
  * one is rejected.
  *
@@ -733,11 +549,10 @@ function withDeadline(work: Promise<void>): Promise<void> {
 async function releaseOne(opening: Promise<Session>): Promise<void> {
   try {
     const session = await opening;
-    if (session.contract !== "managed-v2") return;
     await callToolRaw(
       session.ctx,
       session.knId,
-      "bkn_finish_interaction",
+      FINISH_TOOL,
       {
         interaction_id: session.interactionId,
         outcome: "cancelled",

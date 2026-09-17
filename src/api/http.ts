@@ -214,12 +214,7 @@ function hintFor(
   return withEnv(lifecycleHint(body));
 }
 
-const LIFECYCLE_ACTIONS = new Set([
-  "create_conversation",
-  "start_interaction",
-  "ensure_operation",
-  "bkn_start_interaction",
-]);
+const LIFECYCLE_ACTIONS = new Set(["start_interaction", "bkn_start_interaction"]);
 
 /**
  * Next-step guidance when a deploy rejects a request for want of a managed
@@ -227,21 +222,17 @@ const LIFECYCLE_ACTIONS = new Set([
  * this means a hand-rolled request body — say what it lacks and where to get it.
  * Returns `undefined` for every other error, so callers can pass any body in.
  *
- * The handshake differs by deploy and `required_action` does not distinguish
- * them — a deploy needing only `bkn_start_interaction` still answers
- * `create_conversation` — so the text sends the reader to the tool catalog
- * rather than naming one of the two shapes and being wrong half the time.
+ * The contract (context-loader `mcp.yaml`) has one handshake:
+ * `bkn_start_interaction` returns both ids.
  */
 export function lifecycleHint(body: string): string | undefined {
   if (!LIFECYCLE_ACTIONS.has(requiredAction(body) ?? "")) return undefined;
   return (
     "This deploy requires a managed lifecycle session: the request needs a `bkn_context` " +
     "with conversation_id and interaction_id. Easiest fix: use the `openbkn bkn` / `openbkn " +
-    "context` commands, which open and release one for you. To do it by hand, check " +
-    "`openbkn context info` for the deploy's lifecycle tools — where it lists " +
-    "`bkn_create_conversation`, call that first and pass the conversation_id it returns to " +
-    "`bkn_start_interaction`; where it does not, `bkn_start_interaction` alone returns both ids. " +
-    "Either way: `openbkn context tool-call <kn-id> <tool> --args '{...}'`."
+    "context` commands, which open and release one for you. To do it by hand, call " +
+    "`bkn_start_interaction` (question, agent_name, conversation_mode) — it returns both ids: " +
+    "`openbkn context tool-call <kn-id> bkn_start_interaction --args '{...}'`."
   );
 }
 
