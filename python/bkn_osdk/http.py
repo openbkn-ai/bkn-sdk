@@ -46,6 +46,10 @@ def request(
 ) -> Any:
     """Send one request and return its parsed JSON body (None for an empty body).
 
+    A body served as `application/toon` — what a capability route answers when
+    called with `response_format="toon"` — is returned as its text, since it is
+    not JSON.
+
     `method_override` sets `X-HTTP-Method-Override`, which the read path needs:
     `ontology-query` takes a GET semantically but a body in practice.
     """
@@ -88,6 +92,8 @@ def request(
         )
     if not text:
         return None
+    if "toon" in response.headers.get("content-type", "").lower():
+        return text
     return response.json()
 
 
