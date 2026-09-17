@@ -221,18 +221,19 @@ describe("vega uses the vega-backend base path", () => {
       name: "orders",
       type: "physical",
       enabled: true,
+      built_in: true,
       connector_type: "mysql",
       update_time: 1720000000123,
     };
     mockFetch({ entries: [catalog], total_count: 1 });
     await expect(listCatalogs(ctx)).resolves.toMatchObject({
-      entries: [{ id: "c-1", update_time: 1720000000123 }],
+      entries: [{ built_in: true, id: "c-1", update_time: 1720000000123 }],
       total_count: 1,
     });
 
     mockFetch({ entries: [catalog] });
     await expect(getCatalog(ctx, "c-1")).resolves.toMatchObject({
-      entries: [{ id: "c-1", update_time: 1720000000123 }],
+      entries: [{ built_in: true, id: "c-1", update_time: 1720000000123 }],
     });
   });
 
