@@ -81,6 +81,7 @@ class ToolError(BknError):
         required_action: str | None = None,
         retryable: bool = False,
         retry_after_ms: int | None = None,
+        receipt: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(f"{code}: {message}")
         self.code = code
@@ -90,6 +91,8 @@ class ToolError(BknError):
         self.required_action = required_action
         self.retryable = retryable
         self.retry_after_ms = retry_after_ms
+        #: The operation receipt the refusal came with, where there was one.
+        self.receipt = receipt
 
 
 class SchemaDriftError(BknError):
@@ -106,7 +109,10 @@ class ObjectNotFound(BknError):
 
 # ---- next-step hints --------------------------------------------------------
 
-_LIFECYCLE_ACTIONS = frozenset(
+#: `required_action` values a deploy sends when a request lacks a `bkn_context`.
+#: `create_conversation` is a value, not a tool to call: a 0.1.5 deploy still
+#: answers it, and `bkn_start_interaction` alone mints both ids there.
+LIFECYCLE_ACTIONS = frozenset(
     {
         "create_conversation",
         "start_interaction",
@@ -114,6 +120,9 @@ _LIFECYCLE_ACTIONS = frozenset(
         "bkn_start_interaction",
     }
 )
+
+#: Error codes that mean the same thing when a body names no action.
+LIFECYCLE_CODES = frozenset({"conversation_required", "interaction_required"})
 
 
 def hint_for(token: str, status: int, body: str) -> str | None:
@@ -135,26 +144,39 @@ def lifecycle_hint(body: str) -> str | None:
 
     Returns None for every other error, so any body can be passed in.
     """
-    if required_action(body) not in _LIFECYCLE_ACTIONS:
+    if required_action(body) not in LIFECYCLE_ACTIONS:
         return None
     return (
         "This deploy requires a managed lifecycle session: the request needs a `bkn_context` "
-        "with conversation_id and interaction_id, obtained from the deploy's lifecycle tools "
-        "(`bkn_start_interaction`, preceded by `bkn_create_conversation` where the catalog "
-        "lists one). `openbkn context info` reports which shape this deploy uses."
+        "with conversation_id and interaction_id, both returned by `bkn_start_interaction`. "
+        "`openbkn context info` lists the deploy's lifecycle tools."
     )
 
 
 def required_action(body: str) -> str | None:
-    """`error.required_action` from a JSON error body, or None."""
+    """`required_action` from a JSON error body, or None.
+
+    Nested under `error` on the lifecycle envelope; at the top level of a flat
+    `ErrorCompact`-style body. The nested one wins where both are present.
+    """
+    return _error_field(body, "required_action")
+
+
+def error_code(body: str) -> str | None:
+    """The error `code` from a JSON error body, nested or top-level, or None."""
+    return _error_field(body, "code")
+
+
+def _error_field(body: str, name: str) -> str | None:
     parsed = _parse_json(body)
     if not isinstance(parsed, dict):
         return None
     error = parsed.get("error")
-    if not isinstance(error, dict):
-        return None
-    action = error.get("required_action")
-    return action if isinstance(action, str) else None
+    nested = error.get(name) if isinstance(error, dict) else None
+    if isinstance(nested, str):
+        return nested
+    value = parsed.get(name)
+    return value if isinstance(value, str) else None
 
 
 def _parse_json(body: str) -> Any:

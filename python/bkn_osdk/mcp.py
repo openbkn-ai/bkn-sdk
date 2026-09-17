@@ -69,8 +69,13 @@ class ToolResult:
     """A tool's payload, and the receipt that proves the read happened."""
 
     value: Any
-    #: `operation_id`, `payload_hash`, `business_refs` down to property
-    #: granularity — the evidence chain entry for this read.
+    #: `structuredContent.bkn_receipt` — the evidence-chain entry for this read.
+    #: Since foundry #1417 a completed call carries the slim receipt:
+    #: `receipt_status`, `evidence_durability`, `observed_evidence_refs`,
+    #: `business_refs` down to property granularity, and `partial_reasons` when
+    #: set. Identity fields (`receipt_id`, `operation_id`, …) still arrive on
+    #: pending replies and on older deploys, so none of them is assumed. A
+    #: `pending` receipt comes with `value` None; a `failed` one raises.
     receipt: dict[str, Any] | None = None
 
 
@@ -290,6 +295,8 @@ def _unwrap(parsed: Any) -> ToolResult:
         else None
     )
 
+    receipt = receipt if isinstance(receipt, dict) else None
+
     if result.get("isError") is True:
         error = _error_of(structured) or _error_of(_loads(text)) or {}
         raise ToolError(
@@ -303,16 +310,32 @@ def _unwrap(parsed: Any) -> ToolResult:
             retry_after_ms=error.get("retry_after_ms")
             if isinstance(error.get("retry_after_ms"), int)
             else None,
+            receipt=receipt,
         )
+
+    status = receipt.get("receipt_status") if receipt is not None else None
+    if status == "failed":
+        # The platform recorded the operation as failed without flagging the
+        # result an error. Its payload is not an answer, so it is not returned
+        # as one — the same refusal the TypeScript SDK makes.
+        raise ToolError(
+            "receipt_failed",
+            "Context Loader recorded this operation as failed.",
+            receipt=receipt,
+        )
+    if status == "pending":
+        # Accepted, not finished: there is no value yet, only the receipt that
+        # leads back to it.
+        return ToolResult(None, receipt)
 
     if isinstance(text, str):
         try:
-            return ToolResult(json.loads(text), receipt if isinstance(receipt, dict) else None)
+            return ToolResult(json.loads(text), receipt)
         except ValueError:
             pass
     if isinstance(structured, dict):
-        return ToolResult(structured, receipt if isinstance(receipt, dict) else None)
-    return ToolResult(result, receipt if isinstance(receipt, dict) else None)
+        return ToolResult(structured, receipt)
+    return ToolResult(result, receipt)
 
 
 def _error_of(payload: Any) -> dict[str, Any] | None:
@@ -326,7 +349,17 @@ def _error_of(payload: Any) -> dict[str, Any] | None:
     if not isinstance(payload, dict):
         return None
     error = payload.get("error")
-    return error if isinstance(error, dict) else None
+    if isinstance(error, dict):
+        return error
+    # `ErrorCompact` puts `code` / `description` / `solution` / `details` at the
+    # top level rather than under `error`; read it as the same structured error,
+    # with `description` standing in for a missing `message`.
+    if isinstance(payload.get("code"), str):
+        flat = dict(payload)
+        if not isinstance(flat.get("message"), str) and isinstance(flat.get("description"), str):
+            flat["message"] = flat["description"]
+        return flat
+    return None
 
 
 def _loads(text: str | None) -> Any:

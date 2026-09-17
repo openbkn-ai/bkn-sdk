@@ -14,7 +14,7 @@ import json
 import pytest
 
 from bkn_osdk import BknError, HttpError, ToolError
-from bkn_osdk.errors import hint_for, lifecycle_hint, required_action
+from bkn_osdk.errors import error_code, hint_for, lifecycle_hint, required_action
 
 LIFECYCLE_BODY = json.dumps(
     {"error": {"code": "conversation_required", "required_action": "bkn_start_interaction"}}
@@ -140,3 +140,25 @@ def test_required_action_reads_only_a_string() -> None:
     assert required_action(LIFECYCLE_BODY) == "bkn_start_interaction"
     assert required_action(json.dumps({"error": {"required_action": ["a"]}})) is None
     assert required_action("{") is None
+
+
+def test_required_action_and_code_are_read_from_a_flat_body_too() -> None:
+    """`ErrorCompact` and Core's flat lifecycle errors carry them at the top level."""
+    flat = json.dumps({"code": "conversation_required", "required_action": "start_interaction"})
+
+    assert required_action(flat) == "start_interaction"
+    assert error_code(flat) == "conversation_required"
+    assert lifecycle_hint(flat) is not None
+
+
+def test_the_nested_field_wins_over_the_top_level_one() -> None:
+    both = json.dumps({"code": "Public.BadRequest", "error": {"code": "conversation_required"}})
+
+    assert error_code(both) == "conversation_required"
+
+
+def test_the_lifecycle_hint_names_only_the_start_tool() -> None:
+    hint = lifecycle_hint(LIFECYCLE_BODY) or ""
+
+    assert "bkn_start_interaction" in hint
+    assert "bkn_create_conversation" not in hint
