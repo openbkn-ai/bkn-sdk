@@ -43,9 +43,8 @@ function normalizeDocumentDeletionSelector(
     throw new InputError("delete-by-selector requires a non-empty selector");
   }
 
-  // "eq", not the "==" other FilterCondCfg consumers document: the vega
-  // contract leaves filter_condition opaque, and "eq" is what deployments have
-  // accepted for delete. Pending a live check before switching.
+  // The vega contract leaves filter_condition opaque. Live on 14.103.77.23 a
+  // delete-by-filter honours both "eq" and "==" on a dataset; keep "eq".
   const conditions = entries.map(([field, value]) => ({
     field,
     operation: "eq",
