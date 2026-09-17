@@ -243,6 +243,7 @@ export function kn(ctx: RequestContext) {
         warnings = lostIndexWarnings(
           before,
           snapshotObjectTypes(await listObjectTypes(ctx, validation.networkId, { branch })),
+          { bindingPolicy: opts?.bindingPolicy },
         );
       } catch {
         warnings = [

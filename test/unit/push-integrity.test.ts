@@ -40,7 +40,7 @@ const before = {
   ],
 };
 
-function cli(dir: string): Promise<Command> {
+function cli(dir: string, extra: string[] = []): Promise<Command> {
   const root = new Command("openbkn")
     .exitOverride()
     .option("--base-url <url>")
@@ -48,7 +48,19 @@ function cli(dir: string): Promise<Command> {
     .option("--json");
   root.addCommand(bknCommand());
   return root.parseAsync(
-    ["--base-url", BASE, "--token", "t", "--json", "bkn", "push", dir, "--branch", "release"],
+    [
+      "--base-url",
+      BASE,
+      "--token",
+      "t",
+      "--json",
+      "bkn",
+      "push",
+      dir,
+      "--branch",
+      "release",
+      ...extra,
+    ],
     { from: "user" },
   );
 }
@@ -276,6 +288,67 @@ describe("bkn push integrity verification", () => {
   it("warns when an indexed object type disappears from the post-push list", () => {
     expect(
       lostIndexWarnings(snapshotObjectTypes(before), snapshotObjectTypes({ entries: [] })),
+    ).toEqual([
+      "Object type 'ot' disappeared after push; its binding/index state was not preserved.",
+    ]);
+  });
+
+  it("treats a binding dropped under --binding-policy detach as expected", async () => {
+    const fetch = server(
+      Response.json(before),
+      Response.json({
+        entries: [
+          {
+            id: "ot",
+            data_source: null,
+            data_properties: [{ name: "title", condition_operations: [] }],
+          },
+        ],
+      }),
+    );
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation((part) => {
+      stdout.push(String(part));
+      return true;
+    });
+    vi.spyOn(process.stderr, "write").mockImplementation((part) => {
+      stderr.push(String(part));
+      return true;
+    });
+
+    await cli(packageDir(), ["--binding-policy", "detach"]);
+
+    const upload = fetch.mock.calls
+      .map(([url]) => new URL(String(url)))
+      .find((url) => url.pathname === uploadPath);
+    expect(upload?.searchParams.get("binding_policy")).toBe("detach");
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(stderr.join("")).not.toContain("data_source");
+    expect(stderr.join("")).not.toContain("condition_operations");
+    const out = JSON.parse(stdout.join(""));
+    expect(out).toEqual({ id: "kn1" });
+  });
+
+  it("still reports detach-unrelated losses under the detach policy", () => {
+    const changed = {
+      entries: [
+        {
+          id: "ot",
+          data_source: { type: "resource", id: "resource-2" },
+          data_properties: [{ name: "title", condition_operations: ["=="] }],
+        },
+      ],
+    };
+    const policy = { bindingPolicy: "detach" as const };
+    expect(
+      lostIndexWarnings(snapshotObjectTypes(before), snapshotObjectTypes(changed), policy),
+    ).toEqual([
+      "Object type 'ot' changed its data_source binding after push: resource-1 -> resource-2.",
+      "Object type 'ot' property 'title' lost condition_operations after push: match, knn.",
+    ]);
+    expect(
+      lostIndexWarnings(snapshotObjectTypes(before), snapshotObjectTypes({ entries: [] }), policy),
     ).toEqual([
       "Object type 'ot' disappeared after push; its binding/index state was not preserved.",
     ]);

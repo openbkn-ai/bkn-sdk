@@ -36,6 +36,10 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
 - The CLI `bkn push` reads the target branch's visible object-type list before and
   after import. It warns on stderr, naming an object type and property, when a
   `data_source` binding disappears/changes or `condition_operations` are lost.
+  With `--binding-policy detach` a dropped binding is the requested outcome: an
+  object type whose `data_source` is gone after push, and the index operators
+  that went with it, produce no warning (a binding changed to another resource,
+  or an object type that disappeared, still warns).
   The list is filtered by the current user's `view_detail` permission, so this
   check cannot cover object types the user cannot see. An entry without a
   `data_properties` key (the backend omits an empty list) has no properties.
