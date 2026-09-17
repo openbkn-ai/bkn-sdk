@@ -68,5 +68,10 @@ describe("registered MCP Server endpoints", () => {
     expect(url(toolsFetch).pathname).toBe(
       "/api/agent-operator-integration/v1/mcp/proxy/mcp%20%2F%201/tools",
     );
+    expect(url(toolsFetch).search).toBe("");
+
+    const draftFetch = mockFetch();
+    await listMcpServerTools(ctx, "mcp-1", { draft: true });
+    expect(url(draftFetch).searchParams.get("draft")).toBe("true");
   });
 });

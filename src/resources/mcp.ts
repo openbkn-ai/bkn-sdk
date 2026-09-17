@@ -3,6 +3,7 @@
 
 /** Registered MCP Server discovery resource surface. */
 import {
+  type ListMcpServerToolsOptions,
   type ListMcpServersOptions,
   getMcpServer,
   listMcpServerTools,
@@ -14,6 +15,7 @@ export function mcp(ctx: RequestContext) {
   return {
     list: (opts?: ListMcpServersOptions) => listMcpServers(ctx, opts),
     get: (mcpId: string) => getMcpServer(ctx, mcpId),
-    tools: (mcpId: string) => listMcpServerTools(ctx, mcpId),
+    tools: (mcpId: string, opts?: ListMcpServerToolsOptions) =>
+      listMcpServerTools(ctx, mcpId, opts),
   };
 }

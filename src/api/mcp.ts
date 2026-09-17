@@ -53,9 +53,19 @@ export function getMcpServer(ctx: RequestContext, mcpId: string): Promise<unknow
   return request(ctx, `${PATH}/${encodeURIComponent(mcpId)}`, { responseParser: parseBigIntJSON });
 }
 
+export interface ListMcpServerToolsOptions {
+  /** Read the draft configuration's tools; needs `view` permission on the server. */
+  draft?: boolean;
+}
+
 /** Discover the MCP protocol tools available through one registered server. */
-export function listMcpServerTools(ctx: RequestContext, mcpId: string): Promise<unknown> {
+export function listMcpServerTools(
+  ctx: RequestContext,
+  mcpId: string,
+  opts: ListMcpServerToolsOptions = {},
+): Promise<unknown> {
   return request(ctx, `${PATH}/proxy/${encodeURIComponent(mcpId)}/tools`, {
+    query: { draft: opts.draft },
     responseParser: parseBigIntJSON,
   });
 }

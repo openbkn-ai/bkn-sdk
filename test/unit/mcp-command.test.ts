@@ -66,7 +66,7 @@ describe("openbkn mcp", () => {
     await run("mcp", "get", "mcp-1");
     await run("mcp", "tools", "mcp-1");
     expect(get).toHaveBeenCalledWith("mcp-1");
-    expect(tools).toHaveBeenCalledWith("mcp-1");
+    expect(tools).toHaveBeenCalledWith("mcp-1", { draft: undefined });
   });
 
   it("marks every MCP command as READ and sources mcp ids from the list", () => {
@@ -85,5 +85,68 @@ describe("openbkn mcp", () => {
     expect(
       redactMcpOutput({ headers: { Authorization: "Bearer upstream-secret" }, create_time: 1n }),
     ).toEqual({ headers: { Authorization: "<redacted>" }, create_time: 1n });
+  });
+
+  it("masks env values, secret launch args, URL secrets and credential-named scalars", () => {
+    expect(
+      redactMcpOutput({
+        data: [
+          {
+            mode: "stdio_npx",
+            command: "npx",
+            args: ["server", "--token", "t1", "--api-key=k1", "DB_PASS=p1", "--port", "8080"],
+            env: { AWS_ACCESS_KEY_ID: "id", REGION: "cn" },
+            url: "https://user:pw@upstream.example.com/mcp?access_token=abc&tenant=t",
+            x_api_key: "k2",
+            max_tokens: 10,
+          },
+        ],
+      }),
+    ).toEqual({
+      data: [
+        {
+          mode: "stdio_npx",
+          command: "npx",
+          args: [
+            "server",
+            "--token",
+            "<redacted>",
+            "--api-key=<redacted>",
+            "DB_PASS=<redacted>",
+            "--port",
+            "8080",
+          ],
+          env: { AWS_ACCESS_KEY_ID: "<redacted>", REGION: "<redacted>" },
+          url: "https://user:%3Credacted%3E@upstream.example.com/mcp?access_token=%3Credacted%3E&tenant=t",
+          x_api_key: "<redacted>",
+          max_tokens: 10,
+        },
+      ],
+    });
+  });
+
+  it("prints tool input schemas as advertised even when parameters look like credentials", () => {
+    const tools = {
+      tools: [
+        {
+          name: "complete",
+          inputSchema: {
+            type: "object",
+            properties: { api_key: { type: "string" }, max_tokens: { type: "integer" } },
+            required: ["api_key"],
+          },
+        },
+      ],
+    };
+    expect(redactMcpOutput(tools)).toEqual(tools);
+  });
+
+  it("passes --draft to tool discovery and validates list bounds and enums", async () => {
+    await run("mcp", "tools", "mcp-1", "--draft");
+    expect(tools).toHaveBeenCalledWith("mcp-1", { draft: true });
+    await expect(run("mcp", "list", "--limit", "101")).rejects.toThrow(/--limit/);
+    await expect(run("mcp", "list", "--page", "1e3")).rejects.toThrow(/--page/);
+    await expect(run("mcp", "list", "--mode", "http")).rejects.toThrow();
+    expect(list).not.toHaveBeenCalled();
   });
 });

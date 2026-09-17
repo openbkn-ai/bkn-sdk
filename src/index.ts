@@ -93,7 +93,7 @@ export { resources } from "./resources/resources.js";
 export { skills } from "./resources/skills.js";
 export { functions } from "./resources/functions.js";
 export { mcp } from "./resources/mcp.js";
-export type { ListMcpServersOptions } from "./api/mcp.js";
+export type { ListMcpServerToolsOptions, ListMcpServersOptions } from "./api/mcp.js";
 export type {
   DependencyInfo,
   ExecuteFunctionOptions,
