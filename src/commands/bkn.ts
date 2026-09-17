@@ -14,6 +14,36 @@ import { clientFrom, csv, cypherParams, outputOptions, readBody } from "./_share
 
 const int = (v: string) => Number.parseInt(v, 10);
 
+/** Option parser that refuses a value outside the backend's enum before any call. */
+const oneOf =
+  (flag: string, allowed: readonly string[]) =>
+  (v: string): string => {
+    if (!allowed.includes(v)) throw new InputError(`${flag} must be one of ${allowed.join(", ")}.`);
+    return v;
+  };
+
+const SYSTEM_PROPERTIES = ["_instance_id", "_instance_identity", "_display"] as const;
+
+/** Sort enums, per endpoint, as the bkn-backend OpenAPI spec declares them. */
+const DIRECTIONS = ["asc", "desc"] as const;
+const NAME_OR_UPDATE_TIME = ["update_time", "name"] as const;
+const SCHEDULE_SORTS = [
+  "create_time",
+  "update_time",
+  "next_run_time",
+  "last_run_time",
+  "name",
+] as const;
+const CAPABILITY_SORTS = ["create_time", "update_time"] as const;
+const sortDirection = oneOf("--direction", DIRECTIONS);
+
+/** `--exclude-system-properties a,b` → the validated list. */
+function systemProperties(value: string | undefined) {
+  const list = csv(value);
+  for (const p of list ?? []) oneOf("--exclude-system-properties", SYSTEM_PROPERTIES)(p);
+  return list as Array<(typeof SYSTEM_PROPERTIES)[number]> | undefined;
+}
+
 const CAPABILITY_TYPES = ["skill", "function", "mcp_tool"];
 
 /**
@@ -80,8 +110,11 @@ export function warnUnboundCapabilities(result: unknown, declared: CapabilityChe
     );
   }
   const report = (result as { capabilities?: { skipped?: unknown } } | undefined)?.capabilities;
+  // `skipped` is not in the published contract: anything but a list of objects reads as unknown.
   const skipped = Array.isArray(report?.skipped)
-    ? (report.skipped as Array<Record<string, unknown>>)
+    ? (report.skipped as unknown[]).filter(
+        (s): s is Record<string, unknown> => typeof s === "object" && s !== null,
+      )
     : [];
   if (skipped.length === 0) return;
   const noun = skipped.length === 1 ? "capability was" : "capabilities were";
@@ -106,8 +139,13 @@ export function bknCommand(): Command {
     .option("--offset <n>", "page offset", int, 0)
     .option("--name-pattern <s>", "filter by name pattern")
     .option("--tag <s>", "filter by tag")
-    .option("--sort <field>", "sort field", "update_time")
-    .option("--direction <dir>", "asc | desc", "desc")
+    .option(
+      "--sort <field>",
+      "update_time | name",
+      oneOf("--sort", NAME_OR_UPDATE_TIME),
+      "update_time",
+    )
+    .option("--direction <dir>", "asc | desc", sortDirection, "desc")
     .action(async (_opts, cmd: Command) => {
       const o = cmd.optsWithGlobals();
       const data = await clientFrom(cmd).kn.list({
@@ -126,10 +164,18 @@ export function bknCommand(): Command {
     .description("Get a knowledge network (use --stats or --export)")
     .option("--stats", "include statistics")
     .option("--export", "return the full export payload")
+    .option("--branch <b>", "branch (default: main)")
+    .option(
+      "--detail-level <level>",
+      "full (default) | summary — sent as detail_level; the service applies it only with --export (openbkn-ai/bkn-foundry#1632)",
+      oneOf("--detail-level", ["full", "summary"]),
+    )
     .action(async (knId: string, opts, cmd: Command) => {
       const data = await clientFrom(cmd).kn.get(knId, {
         stats: opts.stats,
         exportMode: opts.export,
+        branch: opts.branch,
+        detailLevel: opts.detailLevel,
       });
       printJson(data, outputOptions(cmd));
     });
@@ -172,9 +218,15 @@ export function bknCommand(): Command {
     g.command("list <kn-id>")
       .description(`List ${name}s`)
       .option("--branch <b>", "branch", "main")
+      .option("--name-pattern <s>", "fuzzy name filter")
+      .option("--tag <s>", "exact tag filter")
       .action(async (knId: string, opts, cmd: Command) => {
         printJson(
-          await clientFrom(cmd).kn[listMethod](knId, { branch: opts.branch }),
+          await clientFrom(cmd).kn[listMethod](knId, {
+            branch: opts.branch,
+            namePattern: opts.namePattern,
+            tag: opts.tag,
+          }),
           outputOptions(cmd),
         );
       });
@@ -182,41 +234,64 @@ export function bknCommand(): Command {
       g.command("get <kn-id> <id>")
         // The backend route takes a list of ids, so a single get answers an envelope.
         .description(`Get ${name} → {entries}`)
-        .action(async (knId: string, id: string, _o, cmd: Command) => {
-          printJson(await clientFrom(cmd).kn[`${crud}Get`](knId, id), outputOptions(cmd));
+        .option("--branch <b>", "branch (default: main)")
+        .action(async (knId: string, id: string, opts, cmd: Command) => {
+          printJson(
+            await clientFrom(cmd).kn[`${crud}Get`](knId, id, { branch: opts.branch }),
+            outputOptions(cmd),
+          );
         });
       g.command("create <kn-id>")
-        .description(`Create ${name} (--body / --body-file)`)
+        .description(`Create ${name}s (--body / --body-file) → body is {entries:[…]}`)
         .option(
           "--body <json>",
-          "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+          "body JSON {entries:[…]} (a bare array is wrapped) — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
         )
         .option("--body-file <path>", "read body JSON from a file")
+        .option("--branch <b>", "branch (default: main)")
         .action(async (knId: string, opts, cmd: Command) => {
           printJson(
-            await clientFrom(cmd).kn[`${crud}Create`](knId, readBody(opts)),
+            await clientFrom(cmd).kn[`${crud}Create`](knId, readBody(opts), {
+              branch: opts.branch,
+            }),
             outputOptions(cmd),
           );
         });
       g.command("update <kn-id> <id>")
-        .description(`Update ${name} (--body / --body-file)`)
+        .description(`Update ${name} (--body / --body-file); the body carries base_version`)
         .option(
           "--body <json>",
-          "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+          "body JSON, including base_version from `get` — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
         )
         .option("--body-file <path>", "read body JSON from a file")
+        .option("--branch <b>", "branch (default: main)")
+        .option("--no-strict-mode", "skip dependency validation (strict_mode=false)")
         .action(async (knId: string, id: string, opts, cmd: Command) => {
           printJson(
-            await clientFrom(cmd).kn[`${crud}Update`](knId, id, readBody(opts)),
+            await clientFrom(cmd).kn[`${crud}Update`](knId, id, readBody(opts), {
+              branch: opts.branch,
+              strictMode: opts.strictMode === false ? false : undefined,
+            }),
             outputOptions(cmd),
           );
         });
-      g.command("delete <kn-id> <id>")
+      const del = g
+        .command("delete <kn-id> <id>")
         .description(`Delete ${name}`)
         .option("-y, --yes", "skip confirmation")
-        .action(async (knId: string, id: string, _o, cmd: Command) => {
-          printJson(await clientFrom(cmd).kn[`${crud}Delete`](knId, id), outputOptions(cmd));
-        });
+        .option("--branch <b>", "branch (default: main)");
+      if (crud === "objectType") {
+        del.option("--force", "delete even when a relation type still binds it (force_delete)");
+      }
+      del.action(async (knId: string, id: string, opts, cmd: Command) => {
+        printJson(
+          await clientFrom(cmd).kn[`${crud}Delete`](knId, id, {
+            branch: opts.branch,
+            forceDelete: opts.force,
+          }),
+          outputOptions(cmd),
+        );
+      });
     }
   }
 
@@ -230,9 +305,20 @@ export function bknCommand(): Command {
       "query JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (ontology-query)",
     )
     .option("--body-file <path>", "read query JSON from a file")
+    .option("--branch <b>", "branch (default: main)")
+    .option("--include-type-info", "include the action type definition")
+    .option(
+      "--exclude-system-properties <list>",
+      "drop system fields: _instance_id,_instance_identity,_display",
+    )
     .action(async (knId: string, atId: string, opts, cmd: Command) => {
+      const excludeSystemProperties = systemProperties(opts.excludeSystemProperties);
       printJson(
-        await clientFrom(cmd).kn.actionTypeQuery(knId, atId, readBody(opts)),
+        await clientFrom(cmd).kn.actionTypeQuery(knId, atId, readBody(opts), {
+          branch: opts.branch,
+          includeTypeInfo: opts.includeTypeInfo,
+          excludeSystemProperties,
+        }),
         outputOptions(cmd),
       );
     });
@@ -244,17 +330,24 @@ export function bknCommand(): Command {
       "execution envelope JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (ontology-query)",
     )
     .option("--body-file <path>", "read envelope JSON from a file")
+    .option("--branch <b>", "branch (default: main)")
     .action(async (knId: string, atId: string, opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).kn.actionTypeExecute(knId, atId, readBody(opts)),
+        await clientFrom(cmd).kn.actionTypeExecute(knId, atId, readBody(opts), {
+          branch: opts.branch,
+        }),
         outputOptions(cmd),
       );
     });
   actionType
     ?.command("get <kn-id> <at-id>")
     .description("Get an action type")
-    .action(async (knId: string, atId: string, _o, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.actionTypeGet(knId, atId), outputOptions(cmd));
+    .option("--branch <b>", "branch (default: main)")
+    .action(async (knId: string, atId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.actionTypeGet(knId, atId, { branch: opts.branch }),
+        outputOptions(cmd),
+      );
     });
 
   // stats/export are aliases of `get --stats` / `get --export`.
@@ -281,9 +374,36 @@ export function bknCommand(): Command {
       "query JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (ontology-query)",
     )
     .option("--body-file <path>", "read query JSON from a file")
+    .option("--branch <b>", "branch (default: main)")
+    .option("--include-type-info", "include the object type definition")
+    .option("--include-logic-params", "include the computation parameters of logic properties")
+    .option(
+      "--exclude-system-properties <list>",
+      "drop system fields: _instance_id,_instance_identity,_display",
+    )
+    .option("--ignoring-store-cache", "skip the index and read the store directly")
+    .addHelpText(
+      "after",
+      `
+The first page sends {limit, condition?, sort?, need_total?, properties?}. How the next
+page is asked for depends on the deploy: one that includes foundry #1623 answers with
+paging.next_cursor (null on the last page) — resend the query with "cursor" set to it.
+An older deploy answers without paging — resend the query with "offset" instead.
+
+  openbkn bkn object-type query <kn-id> <ot-id> --body '{"limit": 20}'
+  openbkn bkn object-type query <kn-id> <ot-id> --body '{"limit": 20, "cursor": "<next_cursor>"}'
+  openbkn bkn object-type query <kn-id> <ot-id> --body '{"limit": 20, "offset": 20}'   # older deploys`,
+    )
     .action(async (knId: string, otId: string, opts, cmd: Command) => {
+      const excludeSystemProperties = systemProperties(opts.excludeSystemProperties);
       printJson(
-        await clientFrom(cmd).kn.objectTypeQuery(knId, otId, readBody(opts)),
+        await clientFrom(cmd).kn.objectTypeQuery(knId, otId, readBody(opts), {
+          branch: opts.branch,
+          includeTypeInfo: opts.includeTypeInfo,
+          includeLogicParams: opts.includeLogicParams,
+          excludeSystemProperties,
+          ignoringStoreCache: opts.ignoringStoreCache,
+        }),
         outputOptions(cmd),
       );
     });
@@ -327,25 +447,69 @@ export function bknCommand(): Command {
       "subgraph query JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (ontology-query)",
     )
     .option("--body-file <path>", "read subgraph query JSON from a file")
+    .option(
+      "--query-type <type>",
+      "relation_path to follow given paths (default: explore from a start point)",
+      oneOf("--query-type", ["", "relation_path"]),
+    )
+    .option("--branch <b>", "branch (default: main)")
+    .option("--include-logic-params", "include the computation parameters of logic properties")
+    .option(
+      "--exclude-system-properties <list>",
+      "drop system fields: _instance_id,_instance_identity,_display",
+    )
+    .option("--ignoring-store-cache", "skip the index and read the store directly")
     .action(async (knId: string, opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.subgraph(knId, readBody(opts)), outputOptions(cmd));
+      const excludeSystemProperties = systemProperties(opts.excludeSystemProperties);
+      printJson(
+        await clientFrom(cmd).kn.subgraph(knId, readBody(opts), {
+          queryType: opts.queryType,
+          branch: opts.branch,
+          includeLogicParams: opts.includeLogicParams,
+          excludeSystemProperties,
+          ignoringStoreCache: opts.ignoringStoreCache,
+        }),
+        outputOptions(cmd),
+      );
     });
 
   const actionLog = bkn
     .command("action-log")
-    .description("Action logs — list/get/cancel; list pages with search_after");
+    .description("Action logs — list/get/cancel; list pages with --search-after");
   actionLog
     .command("list <kn-id>")
     .description("List action logs")
-    .option("--status <s>", "filter by status")
+    .option(
+      "--status <s>",
+      "pending | running | completed | failed | cancelled",
+      oneOf("--status", ["pending", "running", "completed", "failed", "cancelled"]),
+    )
     .option("--action-type-id <id>", "filter by action type")
+    .option(
+      "--trigger-type <t>",
+      "manual | scheduled",
+      oneOf("--trigger-type", ["manual", "scheduled"]),
+    )
+    .option("--keyword <s>", "case-insensitive substring of the execution id")
+    .option("--start-time-from <ms>", "start time lower bound, epoch milliseconds", int)
+    .option("--start-time-to <ms>", "start time upper bound, epoch milliseconds", int)
     .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
+    .option("--offset <n>", "page offset (ignored with --search-after)", int)
+    .option("--need-total", "also return total_count")
+    .option("--search-after <cursor>", "deep-paging cursor from the previous page (comma-joined)")
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).kn.actionLogs(knId, {
           status: opts.status,
           actionTypeId: opts.actionTypeId,
+          triggerType: opts.triggerType,
+          keyword: opts.keyword,
+          startTimeFrom: opts.startTimeFrom,
+          startTimeTo: opts.startTimeTo,
           limit: opts.limit,
+          offset: opts.offset,
+          needTotal: opts.needTotal,
+          searchAfter: opts.searchAfter,
         }),
         outputOptions(cmd),
       );
@@ -353,14 +517,32 @@ export function bknCommand(): Command {
   actionLog
     .command("get <kn-id> <log-id>")
     .description("Get an action log")
-    .action(async (knId: string, logId: string, _opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.actionLog(knId, logId), outputOptions(cmd));
+    .option("--results-limit <n>", "page size of the embedded results (max 1000)", int)
+    .option("--results-offset <n>", "offset into the embedded results", int)
+    .option(
+      "--results-status <s>",
+      "success | failed",
+      oneOf("--results-status", ["success", "failed"]),
+    )
+    .action(async (knId: string, logId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.actionLog(knId, logId, {
+          resultsLimit: opts.resultsLimit,
+          resultsOffset: opts.resultsOffset,
+          resultsStatus: opts.resultsStatus,
+        }),
+        outputOptions(cmd),
+      );
     });
   actionLog
     .command("cancel <kn-id> <log-id>")
     .description("Cancel a running action")
-    .action(async (knId: string, logId: string, _opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.cancelActionLog(knId, logId), outputOptions(cmd));
+    .option("--reason <text>", "why it was cancelled")
+    .action(async (knId: string, logId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.cancelActionLog(knId, logId, { reason: opts.reason }),
+        outputOptions(cmd),
+      );
     });
 
   bkn
@@ -379,9 +561,14 @@ export function bknCommand(): Command {
       "query JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (ontology-query)",
     )
     .option("--body-file <path>", "read query JSON from a file")
+    .option("--branch <b>", "branch (default: main)")
+    .option("--fill-null", "align trend series to every bucket, filling gaps with null")
     .action(async (knId: string, metricId: string, opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).kn.metricQuery(knId, metricId, readBody(opts)),
+        await clientFrom(cmd).kn.metricQuery(knId, metricId, readBody(opts), {
+          branch: opts.branch,
+          fillNull: opts.fillNull,
+        }),
         outputOptions(cmd),
       );
     });
@@ -393,14 +580,32 @@ export function bknCommand(): Command {
       "metric definition JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (ontology-query)",
     )
     .option("--body-file <path>", "read metric definition JSON from a file")
+    .option("--branch <b>", "branch (default: main)")
+    .option("--fill-null", "align trend series to every bucket, filling gaps with null")
     .action(async (knId: string, opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.metricDryRun(knId, readBody(opts)), outputOptions(cmd));
+      printJson(
+        await clientFrom(cmd).kn.metricDryRun(knId, readBody(opts), {
+          branch: opts.branch,
+          fillNull: opts.fillNull,
+        }),
+        outputOptions(cmd),
+      );
     });
   metric
     .command("list <kn-id>")
     .description("List metrics")
-    .action(async (knId: string, _o, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.metricList(knId), outputOptions(cmd));
+    .option("--branch <b>", "branch", "main")
+    .option("--name-pattern <s>", "fuzzy name filter")
+    .option("--tag <s>", "exact tag filter")
+    .action(async (knId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.metricList(knId, {
+          branch: opts.branch,
+          namePattern: opts.namePattern,
+          tag: opts.tag,
+        }),
+        outputOptions(cmd),
+      );
     });
   metric
     .command("get <kn-id> <metric-id>")
@@ -410,14 +615,18 @@ export function bknCommand(): Command {
     });
   metric
     .command("create <kn-id>")
-    .description("Create a metric (--body / --body-file)")
+    .description("Create metrics (--body / --body-file) → body is {entries:[…]}")
     .option(
       "--body <json>",
-      "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+      "body JSON {entries:[…]} (a bare array is wrapped) — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
     )
     .option("--body-file <path>", "read body JSON from a file")
+    .option("--branch <b>", "branch (default: main)")
     .action(async (knId: string, opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.metricCreate(knId, readBody(opts)), outputOptions(cmd));
+      printJson(
+        await clientFrom(cmd).kn.metricCreate(knId, readBody(opts), { branch: opts.branch }),
+        outputOptions(cmd),
+      );
     });
   metric
     .command("update <kn-id> <metric-id>")
@@ -453,14 +662,42 @@ export function bknCommand(): Command {
 
   const cg = bkn.command("concept-group").description("Concept groups — list/get");
   cg.command("list <kn-id>")
-    .description("List concept groups")
-    .action(async (knId: string, _o, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.conceptGroups(knId), outputOptions(cmd));
+    .description("List concept groups (all of them unless --limit is given)")
+    .option("--branch <b>", "branch (default: main)")
+    .option("--name-pattern <s>", "fuzzy name filter")
+    .option("--tag <s>", "exact tag filter")
+    .option("--sort <field>", "update_time | name", oneOf("--sort", NAME_OR_UPDATE_TIME))
+    .option("--direction <dir>", "asc | desc", sortDirection)
+    .option("--offset <n>", "page offset", int)
+    .option("--limit <n>", "page size (default: -1, all)", int)
+    .action(async (knId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.conceptGroups(knId, {
+          branch: opts.branch,
+          namePattern: opts.namePattern,
+          tag: opts.tag,
+          sort: opts.sort,
+          direction: opts.direction,
+          offset: opts.offset,
+          limit: opts.limit,
+        }),
+        outputOptions(cmd),
+      );
     });
   cg.command("get <kn-id> <cg-id>")
     .description("Get a concept group")
-    .action(async (knId: string, cgId: string, _o, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.conceptGroup(knId, cgId), outputOptions(cmd));
+    .option("--branch <b>", "branch (default: main)")
+    .option("--stats", "include statistics")
+    .option("--mode <mode>", "response view mode (default view when omitted)")
+    .action(async (knId: string, cgId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.conceptGroup(knId, cgId, {
+          branch: opts.branch,
+          includeStatistics: opts.stats,
+          mode: opts.mode,
+        }),
+        outputOptions(cmd),
+      );
     });
   cg.command("create <kn-id>")
     .description("Create a concept group (--body / --body-file)")
@@ -518,9 +755,29 @@ export function bknCommand(): Command {
   const sched = bkn.command("action-schedule").description("Action schedules — list/get");
   sched
     .command("list <kn-id>")
-    .description("List action schedules")
-    .action(async (knId: string, _o, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.actionSchedules(knId), outputOptions(cmd));
+    .description("List action schedules (all of them unless --limit is given)")
+    .option("--branch <b>", "branch (default: main)")
+    .option("--name-pattern <s>", "fuzzy name filter")
+    .option("--action-type-id <id>", "filter by bound action type")
+    .option("--status <s>", "active | inactive", oneOf("--status", ["active", "inactive"]))
+    .option("--sort <field>", SCHEDULE_SORTS.join(" | "), oneOf("--sort", SCHEDULE_SORTS))
+    .option("--direction <dir>", "asc | desc", sortDirection)
+    .option("--offset <n>", "page offset", int)
+    .option("--limit <n>", "page size (default: -1, all)", int)
+    .action(async (knId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.actionSchedules(knId, {
+          branch: opts.branch,
+          namePattern: opts.namePattern,
+          actionTypeId: opts.actionTypeId,
+          status: opts.status,
+          sort: opts.sort,
+          direction: opts.direction,
+          offset: opts.offset,
+          limit: opts.limit,
+        }),
+        outputOptions(cmd),
+      );
     });
   sched
     .command("get <kn-id> <schedule-id>")
@@ -590,6 +847,8 @@ export function bknCommand(): Command {
     .option("--branch <name>", "knowledge network branch (default: main)")
     .option("--limit <n>", "page size", int)
     .option("--offset <n>", "page offset", int)
+    .option("--sort <field>", "create_time | update_time", oneOf("--sort", CAPABILITY_SORTS))
+    .option("--direction <dir>", "asc | desc", sortDirection)
     .action(async (knId: string, opts, cmd: Command) => {
       if (opts.type && !CAPABILITY_TYPES.includes(opts.type)) {
         throw new InputError(`--type must be one of ${CAPABILITY_TYPES.join(", ")}.`);
@@ -603,6 +862,8 @@ export function bknCommand(): Command {
           withDetail: opts.withDetail,
           limit: opts.limit,
           offset: opts.offset,
+          sort: opts.sort,
+          direction: opts.direction,
         }),
         outputOptions(cmd),
       );
@@ -657,9 +918,28 @@ not bound until you attach it (\`capability list\` counts it under boxes[].unmou
     .command("push <directory>")
     .description("Pack a BKN directory into a tar and import it as a knowledge network")
     .option("--branch <name>", "target branch", "main")
+    .option(
+      "--import-mode <mode>",
+      "sent as import_mode: normal (default) | overwrite | ignore — 0.1.5 deploys accept but do not apply it yet",
+      oneOf("--import-mode", ["normal", "overwrite", "ignore"]),
+    )
+    .option(
+      "--no-strict-mode",
+      "send strict_mode=false (skip dependency checks) — 0.1.5 deploys accept but do not apply it yet",
+    )
+    .option(
+      "--binding-policy <policy>",
+      "environment-local bindings: preserve (default) | detach",
+      oneOf("--binding-policy", ["preserve", "detach"]),
+    )
     .action(async (dir: string, opts, cmd: Command) => {
       const declared = validateBknDirectory(dir).capabilities;
-      const result = await clientFrom(cmd).kn.push(dir, { branch: opts.branch });
+      const result = await clientFrom(cmd).kn.push(dir, {
+        branch: opts.branch,
+        importMode: opts.importMode,
+        strictMode: opts.strictMode === false ? false : undefined,
+        bindingPolicy: opts.bindingPolicy,
+      });
       warnUnboundCapabilities(result, declared);
       printJson(result, outputOptions(cmd));
     });
@@ -728,9 +1008,23 @@ should be able to account for.
 
   bkn
     .command("resources")
-    .description("List BKN-backend resources")
-    .action(async (_opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.bknResources(), outputOptions(cmd));
+    .description("List BKN-backend resources (knowledge networks) → {entries, total_count}")
+    .option("--keyword <s>", "name keyword filter")
+    .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
+    .option("--offset <n>", "page offset", int, 0)
+    .option("--sort <field>", "sort field (default: name)")
+    .option("--direction <dir>", "asc | desc", sortDirection)
+    .action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.bknResources({
+          keyword: opts.keyword,
+          limit: opts.limit,
+          offset: opts.offset,
+          sort: opts.sort,
+          direction: opts.direction,
+        }),
+        outputOptions(cmd),
+      );
     });
 
   bkn
