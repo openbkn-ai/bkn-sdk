@@ -442,7 +442,7 @@ export function traceLifecycleApi(ctx: RequestContext): TraceLifecycleApi {
     input: InteractionCompletionInput,
   ): Promise<ManagedInteraction> =>
     post(`/interactions/${encodeURIComponent(interactionId)}/${action}`, input);
-  const finishAttempt = (
+  const finishAttempt = async (
     operationId: string,
     attempt: number,
     action: "complete" | "fail",
@@ -506,10 +506,21 @@ function withTraceCorrelation(
   input: FinishOperationAttemptInput,
 ): FinishOperationAttemptInput {
   const traceparent = ctx.trace?.traceparent.split("-");
+  const requestId = input.request_id || ctx.trace?.requestId;
+  const traceId = input.trace_id || traceparent?.[1];
+  // The contract requires both on :complete and :fail. A hand-built context
+  // without `trace` cannot supply them, so refuse before sending a body the
+  // service would reject.
+  if (!requestId || !traceId) {
+    const missing = [!requestId && "request_id", !traceId && "trace_id"].filter(Boolean);
+    throw new InputError(
+      `Operation attempt completion requires ${missing.join(" and ")}: pass it in the input or build the client with a trace context`,
+    );
+  }
   return {
     ...input,
-    request_id: input.request_id ?? ctx.trace?.requestId,
-    trace_id: input.trace_id ?? traceparent?.[1],
+    request_id: requestId,
+    trace_id: traceId,
     span_id: input.span_id ?? traceparent?.[2],
   };
 }

@@ -10,7 +10,7 @@ import {
   traceLifecycleApi,
 } from "../../src/api/trace-lifecycle.js";
 import type { RequestContext } from "../../src/types.js";
-import { HttpError } from "../../src/utils/errors.js";
+import { HttpError, InputError } from "../../src/utils/errors.js";
 import { verifiedContext } from "../setup/verified-context.js";
 
 const ctx = verifiedContext<RequestContext>({
@@ -270,6 +270,45 @@ describe("traceLifecycleApi operations and receipts", () => {
     });
     expect(jsonBody(operationCalls[5]!)).toEqual(completeInput);
     expect(jsonBody(operationCalls[6]!)).toEqual(failInput);
+  });
+});
+
+describe("operation attempt completion correlation", () => {
+  const finish = {
+    receipt_id: "receipt-1",
+    evidence_durability: "durable" as const,
+  };
+
+  it("refuses :complete and :fail when neither input nor context names request_id and trace_id", async () => {
+    const fetchMock = mockFetch();
+    const api = traceLifecycleApi(ctx);
+
+    await expect(api.completeOperationAttempt("operation-1", 1, finish)).rejects.toThrow(
+      /request_id and trace_id/,
+    );
+    await expect(
+      api.failOperationAttempt("operation-1", 1, { ...finish, request_id: "request-1" }),
+    ).rejects.toThrow(InputError);
+    expect(calls(fetchMock)).toHaveLength(0);
+  });
+
+  it("fills request_id and trace_id from the client trace context", async () => {
+    const fetchMock = mockFetch();
+    const traced = verifiedContext<RequestContext>({
+      ...ctx,
+      trace: {
+        requestId: "req_ctx",
+        traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+      } as RequestContext["trace"],
+    });
+
+    await traceLifecycleApi(traced).completeOperationAttempt("operation-1", 1, finish);
+
+    expect(jsonBody(calls(fetchMock)[0]!)).toMatchObject({
+      request_id: "req_ctx",
+      trace_id: "4bf92f3577b34da6a3ce929d0e0e4736",
+      span_id: "00f067aa0ba902b7",
+    });
   });
 });
 
