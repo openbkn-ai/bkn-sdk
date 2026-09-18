@@ -1,8 +1,8 @@
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { writeVersionCheckCache } from "../../src/config/store.js";
 import { resourceCommand } from "../../src/commands/resource.js";
+import { writeVersionCheckCache } from "../../src/config/store.js";
 
 function cli(): Command {
   const root = new Command("openbkn")
