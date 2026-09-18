@@ -6,7 +6,7 @@ import { Command } from "commander";
 import { group, groupChildren } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT, DEFAULT_QUERY_LIMIT } from "../types.js";
 import { printJson } from "../utils/output.js";
-import { clientFrom, outputOptions } from "./_shared.js";
+import { clientFrom, oneOf, outputOptions } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
 
@@ -23,7 +23,7 @@ export function resourceCommand(): Command {
     .option("--category <c>", "resource category (table | logicview | dataset)")
     .option("--type <c>", "alias of --category")
     .option("--status <status>", "filter by status")
-    .option("--enabled <bool>", "filter by enabled state")
+    .option("--enabled <bool>", "filter by enabled state", oneOf("--enabled", ["true", "false"]))
     .option("--last-discover-status <status>", "filter by latest discovery status")
     .option("--schema <name>", "filter by source schema")
     .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)

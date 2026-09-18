@@ -344,7 +344,7 @@ export function vegaCommand(): Command {
     .option("--tag <s>", "filter by tag")
     .option("--type <type>", "filter by catalog type: physical | logical")
     .option("--connector-type <type>", "filter by connector type")
-    .option("--enabled <bool>", "filter by enabled state")
+    .option("--enabled <bool>", "filter by enabled state", bool)
     .option("--health-check-status <s>", "filter by health status")
     .option("--sort <field>", "sort field: name | create_time | update_time")
     .option("--direction <dir>", "sort direction: asc | desc")
@@ -958,7 +958,7 @@ export function vegaCommand(): Command {
           name: opts.name,
           category: opts.type ?? opts.category,
           status: opts.status,
-          enabled: opts.enabled === undefined ? undefined : opts.enabled === "true",
+          enabled: opts.enabled,
           lastDiscoverStatus: opts.lastDiscoverStatus,
           schema: opts.schema,
           limit: opts.limit,
