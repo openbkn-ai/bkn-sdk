@@ -3,7 +3,7 @@ name: openbkn
 description: >-
   操作 BKN（Business Knowledge Network）平台的统一 CLI `openbkn` —— 知识网络
   构建/查询（Schema：对象/关系/行动类型、指标、概念组；实例与语义搜索；
-  push/pull/validate；从 Vega Catalog 或 CSV 建网）、资源、Vega Catalog 与
+  push/pull/validate；从 Vega Catalog 建网）、资源、Vega Catalog 与
   索引构建任务、Context Loader（MCP 检索）、模型工厂（大模型/小模型 CRUD、OpenAI 兼容对话/embedding/
   rerank）、Skill 注册（zip 注册/下载/安装 + 生命周期）、Toolbox/Tool（上传、
   导入导出、调用）、BKN Trace（第三方 Agent 受管
@@ -18,7 +18,9 @@ description: >-
   sandbox / 沙箱 / 沙箱函数 / 生成函数代码 /
   trace / 证据链 / diagnose /
   eval-set / Vega / Catalog / 数据源 / 组织 / 用户 / 角色 / 审计 audit /
-  AppKey / api-key / bak_ 凭据 / 签发 key / 撤销 key 等意图时使用。
+  AppKey / api-key / bak_ 凭据 / 签发 key / 撤销 key / MCP Server / mcp /
+  Cypher / 挂载能力 / capability attach / Context Loader / 检索 / vega sql /
+  重试 / --no-retry 等意图时使用。
 allowed-tools: Bash(openbkn *), Bash(npx openbkn *)
 argument-hint: [自然语言指令]
 ---
@@ -44,7 +46,7 @@ BKN 平台的统一命令行工具 —— 一个二进制，运维面收进 `ope
 npm install -g @openbkn/bkn-sdk      # 提供 `openbkn` 命令
 ```
 
-需 Node.js 22+。也可用 `npx @openbkn/bkn-sdk` 临时运行。
+需 Node.js 22.19.0+。也可用 `npx @openbkn/bkn-sdk` 临时运行。
 
 ## 使用方式
 
@@ -83,10 +85,10 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 | `bkn` | 知识网络 + Schema + 查询 + 本地包 | `list`/`get`/`search`/`stats`/`export`、`object-type/relation-type/action-type list/get/create/update/delete`、`action-type query/execute`、`metric …`、`concept-group …`、`capability list/attach/detach`、`action-log/action-schedule …`、`subgraph`、`relation-type-paths`、`resources`、`push <dir>`/`pull <kn> [dir]`、`validate <dir>`、`create-from-catalog <catalog> --name … --pk-map t:col` |
 | `resource` | Vega-backend 资源 | `list`/`get`/`find --name`/`query`/`delete` |
 | `vega` | Catalog + 资源 + 索引构建 + SQL | `catalog list/get/stats`、`catalog resources`、`resource create/update/delete/build`、`build-task list/get/start/stop/delete`、`connector-type list/get`、`index-capabilities`、`sql --query "<sql>"`（直连 MySQL/PG/OpenSearch，SQL 用 `{{resource-id}}` 占位） |
-| `context` | MCP 检索 | 业务对话通过 MCP 工具 `bkn_start_interaction` / `bkn_finish_interaction` 管理；CLI 沿用 `tool-call` 透传，不另设生命周期命令 |
+| `context` | Context Loader（MCP 检索） | `info`/`tools <kn>`、`kn-detail`/`object-types`/`relation-types`、`search-schema <kn> "<q>"`、`query-object-instance`/`query-instance-subgraph`/`explore-subgraph`/`query-metric`/`get-logic-properties`/`get-action-info --args '<json>'`、`run-cypher --query`、`run-sql --sql`、`search-capabilities`、`tool-call <kn> <tool> --args`、`conversation [--forget]`。第三方 Agent 业务问答用 MCP `bkn_start_interaction`/`bkn_finish_interaction`；CLI 未带受管上下文时自己开一次托管会话并记住 |
 | `mcp` | 已注册 MCP Server | `list`/`get`/`tools` 只读发现；不含 Market、登记、发布或调用 |
 | `model` | 模型工厂 | `llm/small list/get/add/edit/delete/test`、`llm chat <name\|id> -m "…" [--stream]`（id 自动解析成 name）、`small embeddings/rerank <name>`（只收 name，填数字 id 会 400；与 chat 不同，暂不解析 id）、`llm set-default/unset-default <id>`、`small set-default/unset-default <id>`、`small get-default [--type embedding\|reranker]` |
-| `skill` | Skill 注册/市场/生命周期/沙箱执行 | `list`/`market`/`get`/`names <id...>`/`content`/`read-file`/`files [path] [--tree]`/`history`/`set-status`、`execute <id> --entry '<shell>'`、`register <dir>`/`download`/`install`、`update-metadata`/`update-package`、`republish`/`publish-history`；读类命令带 `--raw`（要正文而非对象存储 URL）与 `--draft`（读草稿版而非已发布版） |
+| `skill` | Skill 注册/市场/生命周期/沙箱执行 | `list`/`market`/`get`/`names <id...>`/`content`/`read-file`/`files [path] [--tree]`/`history`/`set-status`、`execute <id> --entry '<shell>'`、`register <dir>`/`download`/`install`、`update-metadata`/`update-package`、`republish`/`publish-history`；`content`/`read-file` 带 `--raw`（要正文而非对象存储 URL）；`content`/`read-file`/`files`/`download` 带 `--draft`（读草稿版而非已发布版） |
 | `toolbox` | 工具箱容器 | `list`/`create --name <n> [--type openapi\|function] [--service-url <url>]`/`publish`/`unpublish`/`delete`/`export`/`import`。**`execute` 要求箱子已 `publish`**（未发布/下线返回 400 `ToolNotAvailable`），`debug` 不要求 |
 | `sandbox` | 临时代码（不注册任何东西） | `run <file> --event '<json>' [--timeout <s>] [--pass-token]`、`infer-schema`、`deps`、`versions`、`template`、`generate <type> [--timeout <s>]`/`prompt <type>`（平台模型生成代码/参数元数据，客户端默认等 300 秒，默认网关 60 秒即 504）。入口函数必须叫 `handler`；成败看 `exit_code` 不是 HTTP 码；长任务留在这里跑 |
 | `function` | 已注册的函数工具（`--type function` 箱子） | `create <file> --toolbox <id> --name <n>`/`list`/`get`/`update`/`delete`、`enable`/`disable`、`debug`/`execute`（结果在 `body.result`）。流程 create → enable → `toolbox publish` → execute；经工具箱调用约 30 秒被切断（200 + `result: null`） |
@@ -110,8 +112,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
   请求体，再 `call`，不要猜路径
 
 另注：知识网络没有"整网构建"这回事。先用 `openbkn vega resource update <resource-id>`
-保存索引配置，再由 `openbkn vega resource build <resource-id>` 创建 BuildTask；`trace` 的 business-provenance 摘要（requests/interactions）自 foundry 0.1.4 起
-只在企业版注册，社区版部署上会 404。
+保存索引配置，再由 `openbkn vega resource build <resource-id>` 创建 BuildTask。
 
 ## 详细参考（references/）
 
@@ -138,9 +139,9 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 
 | 场景 | 参考 |
 |------|------|
-| 从 Catalog / CSV 端到端建知识网络 | [build-kn.md](references/build-kn.md) |
+| 从 Vega Catalog 端到端建知识网络（CSV 需先载入数据源） | [build-kn.md](references/build-kn.md) |
 | 一次问答里反复取数 / 沙箱代码要读知识网络 | [osdk.md](references/osdk.md) —— 换 Python，业务问答仍挂在本轮 turn 上 |
-| 排障速查（401 / 空列表 / 403 / EACP / trace 索引） | [troubleshooting.md](references/troubleshooting.md) |
+| 排障速查（401 / 重试 / 空列表 / 403 / 审计权限 / trace 无数据） | [troubleshooting.md](references/troubleshooting.md) |
 
 ## 调用示例
 

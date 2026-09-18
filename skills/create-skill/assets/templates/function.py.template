@@ -27,7 +27,7 @@ def _rows(kn_id: str, ot_id: str, **query) -> list:
 
 
 def handler(event: dict) -> dict:
-    """event 就是工具入参；在 tool create 的 inputs 里逐个声明."""
+    """event 就是工具入参；在 function create 的 inputs 里逐个声明."""
     kn_id = event["kn_id"]
     key = str(event["{{param}}"]).strip()
 
@@ -39,7 +39,7 @@ def handler(event: dict) -> dict:
     # 2. 计算：只做确定性的业务计算，不调模型、不猜数据。
     total = sum(float(r.get("{{field_b}}") or 0) for r in rows)
 
-    # 3. 返回结构化结果；在 tool create 的 outputs 里声明关键字段，Agent 据此复述。
+    # 3. 返回结构化结果；在 function create 的 outputs 里声明关键字段，Agent 据此复述。
     return {"{{param}}": key, "row_count": len(rows), "total": total}
 
 

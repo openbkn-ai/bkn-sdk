@@ -3,7 +3,7 @@
 From a Vega catalog of tables:
 ```bash
 openbkn bkn create-from-catalog <catalog-id> --name my-kn
-#   lists tables → introspects columns → resolves one PK per table → creates a
+#   lists tables → introspects columns → resolves one PK per table →
 #   binds existing Vega resources → creates the KN → batch-creates object types.
 #   Save index config with `openbkn vega resource update`, then build with
 #   `openbkn vega resource build`.
