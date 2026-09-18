@@ -4,11 +4,13 @@
 /** `openbkn auth …` — login / session / token (store-backed). */
 import { Command } from "commander";
 import { changePasswordSafe, getUserSafe } from "../api/safe.js";
+import { configureVersionCheck, ensureCompatible } from "../api/version-check.js";
 import { decodeJwt } from "../auth/jwt.js";
 import { credentialDeviceLogin, deviceLogin, isHeadless, openBrowser } from "../auth/oauth.js";
 import { resolveContext } from "../config/resolve.js";
 import { group, groupChildren, guide } from "../help/grouped-help.js";
 import * as auth from "../resources/auth.js";
+import type { RequestContext } from "../types.js";
 import { trimTrailingSlashes } from "../utils/base-url.js";
 import { HttpError, InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
@@ -16,22 +18,39 @@ import { promptLine } from "../utils/prompt.js";
 import { outputOptions, retryOptionsFrom } from "./_shared.js";
 
 /** Best-effort: resolve the logged-in user's account name from their token. */
-async function resolveAccount(
-  baseUrl: string,
-  accessToken: string,
-  insecure: boolean,
-  idToken?: string,
-): Promise<string | undefined> {
-  const sub = decodeJwt(idToken ?? accessToken)?.sub;
+async function resolveAccount(ctx: RequestContext, idToken?: string): Promise<string | undefined> {
+  const sub = decodeJwt(idToken ?? ctx.token)?.sub;
   if (!sub) return undefined;
   try {
-    const u = (await getUserSafe({ baseUrl, token: accessToken, insecure }, sub)) as {
+    const u = (await getUserSafe(ctx, sub)) as {
       account?: string;
     };
     return u.account; // needs admin; ignored on 403 for non-admins
   } catch {
     return undefined;
   }
+}
+
+/** Verify a newly acquired credential before allowing it into the session store. */
+async function verifyLoginPlatform(ctx: RequestContext): Promise<void> {
+  await ensureCompatible(ctx, new URL(ctx.baseUrl));
+}
+
+/** Build an authenticated preflight context without resolving saved user credentials. */
+function loginContext(
+  baseUrl: string,
+  token: string,
+  insecure: boolean | undefined,
+  options: Record<string, unknown>,
+): RequestContext {
+  const ctx: RequestContext = {
+    baseUrl: trimTrailingSlashes(baseUrl),
+    token,
+    insecure: Boolean(insecure),
+    ...retryOptionsFrom(options),
+  };
+  configureVersionCheck(ctx, "login");
+  return ctx;
 }
 
 /**
@@ -107,6 +126,7 @@ export function registerAuthLeaves(cmd: Command): void {
       };
       const token = opts.token ?? g.token;
       if (token) {
+        await verifyLoginPlatform(loginContext(url, token, g.insecure, g));
         report(auth.attachToken(url, token, { insecure: g.insecure }));
         return;
       }
@@ -160,15 +180,12 @@ export function registerAuthLeaves(cmd: Command): void {
         }
         throw e;
       }
+      const authenticatedContext = loginContext(url, tokens.accessToken, g.insecure, g);
+      await verifyLoginPlatform(authenticatedContext);
       // For browser/device logins (no -u), look the account name up so the
       // session list shows a name, not a UUID.
       if (!account) {
-        account = await resolveAccount(
-          url,
-          tokens.accessToken,
-          Boolean(g.insecure),
-          tokens.idToken,
-        );
+        account = await resolveAccount(authenticatedContext, tokens.idToken);
       }
       report(
         auth.attachToken(url, tokens.accessToken, {

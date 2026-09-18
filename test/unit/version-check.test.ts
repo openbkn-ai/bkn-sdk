@@ -29,7 +29,7 @@ function ctx(
 }
 
 function route(version = "0.1.5", business = { ok: true }) {
-  return vi.fn(async (input: string | URL) => {
+  return vi.fn(async (input: string | URL, _init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
     if (path === "/api/bkn-backend/v1/health")
       return new Response(JSON.stringify({ ServerVersion: version }), { status: 200 });
@@ -49,6 +49,7 @@ describe("platform version preflight", () => {
     });
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(new URL(String(fetch.mock.calls[0]?.[0])).pathname).toBe("/api/bkn-backend/v1/health");
+    expect((fetch.mock.calls[0]?.[1] as RequestInit | undefined)?.headers).toBeUndefined();
     expect(new URL(String(fetch.mock.calls[1]?.[0])).pathname).toBe(
       "/api/bkn-backend/v1/knowledge-networks",
     );
