@@ -256,7 +256,7 @@ export interface ListResourcesOptions {
   status?: ResourceStatus;
   /** Whether the resource is enabled. */
   enabled?: boolean;
-  /** Latest discovery result, for example updated or failed. */
+  /** Latest discovery result, for example updated or error. */
   lastDiscoverStatus?: string;
   schema?: string;
   limit?: number;

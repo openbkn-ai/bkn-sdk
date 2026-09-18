@@ -74,6 +74,31 @@ describe("vega catalog delete", () => {
   });
 });
 
+describe("vega resource list", () => {
+  it("rejects an invalid enabled filter before requesting resources", async () => {
+    const fetchMock = mockFetch({ entries: [], total_count: 0 });
+    suppressOutput();
+
+    await expect(
+      cli().parseAsync(
+        [
+          "--base-url",
+          "https://demo.example.com",
+          "--token",
+          "t",
+          "vega",
+          "resource",
+          "list",
+          "--enabled",
+          "invalid",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow("boolean value must be true or false");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("vega resource document input", () => {
   it("preserves unsafe integers in document-create data", async () => {
     const fetchMock = mockFetch({ id: "doc-1" });
