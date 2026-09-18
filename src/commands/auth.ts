@@ -4,7 +4,7 @@
 /** `openbkn auth …` — login / session / token (store-backed). */
 import { Command } from "commander";
 import { changePasswordSafe, getUserSafe } from "../api/safe.js";
-import { ensureCompatible } from "../api/version-check.js";
+import { configureVersionCheck, ensureCompatible } from "../api/version-check.js";
 import { decodeJwt } from "../auth/jwt.js";
 import { credentialDeviceLogin, deviceLogin, isHeadless, openBrowser } from "../auth/oauth.js";
 import { resolveContext } from "../config/resolve.js";
@@ -34,6 +34,23 @@ async function resolveAccount(ctx: RequestContext, idToken?: string): Promise<st
 /** Verify a newly acquired credential before allowing it into the session store. */
 async function verifyLoginPlatform(ctx: RequestContext): Promise<void> {
   await ensureCompatible(ctx, new URL(ctx.baseUrl));
+}
+
+/** Build an authenticated preflight context without resolving saved user credentials. */
+function loginContext(
+  baseUrl: string,
+  token: string,
+  insecure: boolean | undefined,
+  options: Record<string, unknown>,
+): RequestContext {
+  const ctx: RequestContext = {
+    baseUrl: trimTrailingSlashes(baseUrl),
+    token,
+    insecure: Boolean(insecure),
+    ...retryOptionsFrom(options),
+  };
+  configureVersionCheck(ctx, "login");
+  return ctx;
 }
 
 /**
@@ -109,15 +126,7 @@ export function registerAuthLeaves(cmd: Command): void {
       };
       const token = opts.token ?? g.token;
       if (token) {
-        await verifyLoginPlatform(
-          resolveContext({
-            baseUrl: url,
-            token,
-            insecure: g.insecure,
-            versionCheckMode: "cli",
-            ...retryOptionsFrom(g),
-          }),
-        );
+        await verifyLoginPlatform(loginContext(url, token, g.insecure, g));
         report(auth.attachToken(url, token, { insecure: g.insecure }));
         return;
       }
@@ -171,18 +180,12 @@ export function registerAuthLeaves(cmd: Command): void {
         }
         throw e;
       }
-      const loginContext = resolveContext({
-        baseUrl: url,
-        token: tokens.accessToken,
-        insecure: g.insecure,
-        versionCheckMode: "cli",
-        ...retryOptionsFrom(g),
-      });
-      await verifyLoginPlatform(loginContext);
+      const authenticatedContext = loginContext(url, tokens.accessToken, g.insecure, g);
+      await verifyLoginPlatform(authenticatedContext);
       // For browser/device logins (no -u), look the account name up so the
       // session list shows a name, not a UUID.
       if (!account) {
-        account = await resolveAccount(loginContext, tokens.idToken);
+        account = await resolveAccount(authenticatedContext, tokens.idToken);
       }
       report(
         auth.attachToken(url, tokens.accessToken, {

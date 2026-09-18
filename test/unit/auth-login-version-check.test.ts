@@ -22,6 +22,7 @@ import * as auth from "../../src/resources/auth.js";
 
 const BASE = "https://login-version-check.example.com";
 const previousConfigDir = process.env.BKN_CONFIG_DIR;
+const previousUser = process.env.BKN_USER;
 let configDir: string;
 
 function health(version = "0.1.5") {
@@ -48,6 +49,8 @@ afterEach(() => {
   rmSync(configDir, { force: true, recursive: true });
   if (previousConfigDir === undefined) delete process.env.BKN_CONFIG_DIR;
   else process.env.BKN_CONFIG_DIR = previousConfigDir;
+  if (previousUser === undefined) delete process.env.BKN_USER;
+  else process.env.BKN_USER = previousUser;
 });
 
 describe("auth login platform-version preflight", () => {
@@ -61,6 +64,15 @@ describe("auth login platform-version preflight", () => {
     expect(fetch.mock.calls[0]?.[1]).toMatchObject({
       headers: { authorization: "Bearer direct-token" },
     });
+    expect(auth.status()).toMatchObject({ baseUrl: BASE, hasToken: true });
+  });
+
+  it("does not resolve BKN_USER before saving a first login", async () => {
+    process.env.BKN_USER = "alice";
+    vi.stubGlobal("fetch", health());
+
+    await expect(login(["--token", "direct-token"])).resolves.toBeUndefined();
+
     expect(auth.status()).toMatchObject({ baseUrl: BASE, hasToken: true });
   });
 
@@ -81,12 +93,17 @@ describe("auth login platform-version preflight", () => {
     ["browser", ["--no-browser"], deviceLogin],
     ["device-code", ["--device"], deviceLogin],
   ])("checks before saving a %s login", async (_name, args, loginFlow) => {
-    vi.stubGlobal("fetch", health());
+    const fetch = health();
+    vi.stubGlobal("fetch", fetch);
     vi.mocked(loginFlow).mockResolvedValue({ accessToken: `${_name}-token` } satisfies OAuthTokens);
 
     await login(args);
 
     expect(loginFlow).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/bkn-backend/v1/health"),
+      expect.objectContaining({ headers: { authorization: `Bearer ${_name}-token` } }),
+    );
     expect(auth.status()).toMatchObject({ baseUrl: BASE, hasToken: true });
   });
 });

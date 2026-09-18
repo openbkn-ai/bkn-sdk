@@ -13,7 +13,7 @@ const VERSION_PATH = "/api/bkn-backend/v1/health";
 const CLI_CACHE_TTL_MS = 60_000;
 const HEALTH_TIMEOUT_MS = 5_000;
 
-type VersionCheckMode = "memory" | "cli";
+type VersionCheckMode = "memory" | "cli" | "login";
 
 interface VersionCheckState {
   mode: VersionCheckMode;
@@ -87,7 +87,7 @@ async function checkCompatibility(ctx: RequestContext): Promise<void> {
     throw new VersionCompatibilityError(`SDK version '${pkg.version}' is not valid SemVer.`);
   }
 
-  if (stateFor(ctx).mode === "cli") {
+  if (usesCliCache(ctx)) {
     const cached = readVersionCheckCache(ctx.baseUrl);
     if (cached && isFresh(cached.checkedAt) && compatible(sdkVersion, cached.serverVersion)) return;
   }
@@ -100,7 +100,7 @@ async function checkCompatibility(ctx: RequestContext): Promise<void> {
     );
   }
 
-  if (stateFor(ctx).mode === "cli") {
+  if (usesCliCache(ctx)) {
     // The cache only saves one health request on a later CLI invocation. A
     // read-only config directory must not prevent an otherwise valid request.
     try {
@@ -127,13 +127,18 @@ function isFresh(checkedAt: string): boolean {
   );
 }
 
+function usesCliCache(ctx: RequestContext): boolean {
+  const mode = stateFor(ctx).mode;
+  return mode === "cli" || mode === "login";
+}
+
 async function readServerVersion(ctx: RequestContext): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
   try {
     const response = await tlsFetch(ctx, `${ctx.baseUrl}${VERSION_PATH}`, {
       method: "GET",
-      headers: buildHeaders(ctx),
+      ...(stateFor(ctx).mode === "login" ? { headers: buildHeaders(ctx) } : {}),
       signal: controller.signal,
     });
     const body = await response.text();
