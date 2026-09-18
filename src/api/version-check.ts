@@ -6,6 +6,7 @@ import pkg from "../../package.json" with { type: "json" };
 import { readVersionCheckCache, writeVersionCheckCache } from "../config/store.js";
 import type { RequestContext } from "../types.js";
 import { isDryRun } from "../utils/dry-run.js";
+import { buildHeaders } from "./headers.js";
 import { tlsFetch } from "./tls.js";
 
 const VERSION_PATH = "/api/bkn-backend/v1/health";
@@ -132,6 +133,7 @@ async function readServerVersion(ctx: RequestContext): Promise<string> {
   try {
     const response = await tlsFetch(ctx, `${ctx.baseUrl}${VERSION_PATH}`, {
       method: "GET",
+      headers: buildHeaders(ctx),
       signal: controller.signal,
     });
     const body = await response.text();
