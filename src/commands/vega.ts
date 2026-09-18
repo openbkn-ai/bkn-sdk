@@ -940,9 +940,12 @@ export function vegaCommand(): Command {
     .command("list")
     .description("List resources")
     .option("--catalog-id <id>", "filter by catalog id")
+    .option("--name <name>", "filter by name")
     .option("--type <category>", "resource category")
     .option("--category <category>", "alias of --type")
     .option("--status <status>", "filter by status")
+    .option("--enabled <bool>", "filter by enabled state", bool)
+    .option("--last-discover-status <status>", "filter by latest discovery status")
     .option("--schema <name>", "filter by source schema")
     .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
     .option("--offset <n>", "page offset", int, 0)
@@ -952,8 +955,11 @@ export function vegaCommand(): Command {
       printJson(
         await clientFrom(cmd).resource.list({
           catalogId: opts.catalogId,
+          name: opts.name,
           category: opts.type ?? opts.category,
           status: opts.status,
+          enabled: opts.enabled,
+          lastDiscoverStatus: opts.lastDiscoverStatus,
           schema: opts.schema,
           limit: opts.limit,
           offset: opts.offset,
