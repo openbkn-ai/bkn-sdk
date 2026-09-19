@@ -13,6 +13,7 @@ import {
   clientFrom,
   conversationSource,
   cypherParams,
+  oneOf,
   outputOptions,
   platformOf,
   readJsonArgs,
@@ -106,7 +107,10 @@ export function contextCommand(): Command {
     // The pre-contract spelling. It now maps onto the same include flags as --only.
     .addOption(new Option("--scope <kinds>", "alias of --only").argParser(list).hideHelp())
     .option("--max <n>", "max concepts per kind", int)
-    .option("--schema-brief", "trimmed schema: property name/type only (the MCP default)")
+    .option(
+      "--schema-brief",
+      "trimmed schema: property name/type only (MCP tool default true; REST default false)",
+    )
     .option("--no-schema-brief", "full schema: adds property comments, primary keys and tags")
     .option("--include-columns", "add each data property's physical column (needed for run-sql)")
     .option("--rerank", "re-rank relation types (the server default)")
@@ -177,10 +181,14 @@ export function contextCommand(): Command {
   cmd
     .command("kn-detail <kn-id>")
     .description("Get a KN's schema at a detail level (progressive: summary skeleton → drill down)")
-    .option("--detail-level <level>", "summary (default) | full", "summary")
+    .option(
+      "--detail-level <level>",
+      "summary (default) | full",
+      oneOf("--detail-level", ["summary", "full"] as const),
+      "summary",
+    )
     .action(async (knId: string, opts, cmd: Command) => {
-      const level = opts.detailLevel === "full" ? "full" : "summary";
-      printJson(await clientFrom(cmd).context.knDetail(knId, level), outputOptions(cmd));
+      printJson(await clientFrom(cmd).context.knDetail(knId, opts.detailLevel), outputOptions(cmd));
     });
 
   cmd
@@ -409,7 +417,7 @@ Paths multiply with each hop, so start at 1 or 2.`,
     .description("Read a modelled metric through its own definition — do not restate it in SQL")
     .option(
       "--args <json>",
-      "tool arguments: analysis_dimensions, time, condition, having, order_by; - for stdin",
+      "tool arguments: analysis_dimensions, time, condition, having, order_by, limit, fill_null; - for stdin",
     )
     .option("--args-file <path>", "read tool arguments as JSON from a file (or - for stdin)")
     .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
@@ -622,7 +630,7 @@ PICKING THE RIGHT QUERY
   can be stated in object types and relation types — filter along a path, aggregate what
   it reaches — use \`run-cypher <kn-id>\`: model names only, no resource ids or physical
   columns. SQL through \`run-sql <kn-id>\` is for what the Cypher subset cannot say.
-  Unknown topology is \`tool-call <kn-id> explore_subgraph\`, not a hand-built path.
+  Unknown topology is \`explore-subgraph <kn-id> <ot-id> --hops <n>\`, not a hand-built path.
 
 THE SAME ID, FOUR NAMES
   An object type's id is \`concept_id\` in search-schema output, \`id\` in kn-detail and
@@ -633,8 +641,9 @@ QUERY ARGUMENTS
   query-object-instance rejects unknown argument keys before calling the platform. Combine
   conditions with condition.sub_conditions, not condition.conditions; vector search belongs in
   condition.operation=knn, not a top-level knn argument. Do not combine condition and filters:
-  the platform ignores filters when condition is present. Use cursor or offset, never both;
-  any kn_id in --args must match <kn-id>. For properties and condition.field,
+  the platform ignores filters when condition is present. Page with cursor (the MCP tool's
+  key) or offset, never both; search_after (the REST name) is passed through unchanged for a
+  deploy that advertises it. Any kn_id in --args must match <kn-id>. For properties and condition.field,
   run object-types <kn-id> <ot-id> first to see the valid field names. Specifying properties
   also reads the object-type schema once and rejects unknown names before the query. --schema shows the
   argument shape advertised by this deploy. Every --args option also accepts --args-file <path>,

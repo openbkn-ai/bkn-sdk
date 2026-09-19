@@ -4,10 +4,14 @@
 // Argument defaults the context-loader contract expects on every tool call:
 // `response_format: "json"` (the MCP schemas default to toon) and `kn_id` in the
 // body (run_cypher / search_capabilities require it there, not only as a header).
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { callTool, searchCapabilities, searchSchema } from "../../src/api/context-loader.js";
 import { lifecycleHint } from "../../src/api/http.js";
 import { resetLifecycleCaches } from "../../src/api/lifecycle.js";
+import { buildProgram } from "../../src/cli-program.js";
 import { context } from "../../src/resources/context-loader.js";
 import type { RequestContext } from "../../src/types.js";
 import { verifiedContext } from "../setup/verified-context.js";
@@ -30,6 +34,8 @@ function mockDeploy(text: string): Array<{ name: string; arguments: Record<strin
     vi.fn(async (input: string | URL, init?: RequestInit) => {
       const url = String(input);
       const headers = { "mcp-session-id": "s1" };
+      // The CLI's version preflight; SDK-level calls here are already verified.
+      if (url.endsWith("/health")) return new Response(JSON.stringify({ ServerVersion: "0.1.5" }));
       if (url.endsWith("/mcp/info")) {
         return new Response(JSON.stringify({ tools: [{ name: "search_schema" }] }));
       }
@@ -173,6 +179,41 @@ describe("search_schema search_scope", () => {
   });
 });
 
+describe("context CLI flags reach the contract", () => {
+  const cli = (ctx: RequestContext, ...argv: string[]) =>
+    buildProgram().parseAsync(["--base-url", ctx.baseUrl, "--token", ctx.token, ...argv], {
+      from: "user",
+    });
+
+  it("sends schema_brief explicitly when a flag sets it, and leaves the default otherwise", async () => {
+    const configDir = mkdtempSync(join(tmpdir(), "bkn-schema-brief-"));
+    const previousConfigDir = process.env.BKN_CONFIG_DIR;
+    process.env.BKN_CONFIG_DIR = configDir;
+    const calls = mockDeploy("{}");
+    const ctx = freshCtx();
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      await cli(ctx, "context", "search-schema", "kn-1", "q", "--schema-brief");
+      await cli(ctx, "context", "search-schema", "kn-1", "q", "--no-schema-brief");
+      await cli(ctx, "context", "search-schema", "kn-1", "q");
+    } finally {
+      write.mockRestore();
+      if (previousConfigDir === undefined) delete process.env.BKN_CONFIG_DIR;
+      else process.env.BKN_CONFIG_DIR = previousConfigDir;
+      rmSync(configDir, { recursive: true, force: true });
+    }
+    expect(calls.map((c) => c.arguments.schema_brief)).toEqual([true, false, undefined]);
+  });
+
+  it("refuses a --detail-level that is neither summary nor full before any request", async () => {
+    mockDeploy("{}");
+    await expect(
+      cli(freshCtx(), "context", "kn-detail", "kn-1", "--detail-level", "ful"),
+    ).rejects.toThrow("--detail-level must be one of: summary | full");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
 describe("lifecycle hint reads ErrorCompact bodies", () => {
   it("finds required_action at the top level as well as under error", () => {
     expect(
@@ -182,6 +223,15 @@ describe("lifecycle hint reads ErrorCompact bodies", () => {
       lifecycleHint(JSON.stringify({ error: { required_action: "start_interaction" } })),
     ).toContain("bkn_context");
     expect(lifecycleHint(JSON.stringify({ code: "Public.BadRequest" }))).toBeUndefined();
+  });
+
+  it("names only the contract's start tool, not the removed managed-v1 handshake", () => {
+    const hint = lifecycleHint(JSON.stringify({ required_action: "bkn_start_interaction" }));
+    expect(hint).toContain("bkn_start_interaction");
+    expect(hint).not.toContain("bkn_create_conversation");
+    for (const legacy of ["create_conversation", "ensure_operation"]) {
+      expect(lifecycleHint(JSON.stringify({ required_action: legacy }))).toBeUndefined();
+    }
   });
 });
 

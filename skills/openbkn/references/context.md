@@ -23,9 +23,8 @@ lifecycle itself.
 A `bkn_context` you build yourself is always honoured — the SDK keeps its ids
 and opens nothing, so `parent_operation_id`, `causation_event_ids` and
 `business_refs` survive. Keys the contract's `BKNContext` does not accept are
-dropped before sending — in particular `operation_key` (for example one minted
-by `ManagedTrace`): callers must not submit it, because Context Loader derives
-the Operation identity on the server. That holds for MCP
+dropped before sending — in particular `operation_key`: callers must not submit
+it, because Context Loader derives the Operation identity on the server. That holds for MCP
 tool arguments (`client.context.*`, `openbkn context tool-call`) and for the
 HTTP retrieval path, where `client.kn.search(kn, q, { bknContext })` takes the
 same object. The same holds for
@@ -42,8 +41,7 @@ probe: the caller has already asserted the business pair. A receipt-requested
 call still requires the server to return and validate its Receipt; catalog
 unavailability is not an authorization bypass.
 
-The CLI remembers a conversation it opened **on a `managed-v2` deploy**, per
-platform and active identity, so
+The CLI remembers a conversation it opened, per platform and active identity, so
 consecutive commands continue one thread instead of starting a new one each
 time. Only the conversation — every command still opens its own interaction,
 since an interaction is one turn and carries a short lease. Precedence:
@@ -58,18 +56,17 @@ someone else. A script exporting `BKN_TOKEN` therefore opens a conversation per
 command, which is the pre-existing behaviour, not a regression — pass
 `--conversation-id` (or export `BKN_CONVERSATION_ID`) to tie such a script's
 commands together.
-A v1 deploy remembers nothing, and `context conversation` reports `none` there:
-a v1 interaction cannot be ended early and a conversation permits one at a time,
-so a remembered v1 conversation would refuse the next command until its lease
-expired. A remembered conversation that can no longer be joined is replaced
+A remembered conversation that can no longer be joined is replaced
 rather than reported — the run opens a fresh one and stores that instead.
 The SDK writes nothing on its own: persistence is the CLI passing
 `onConversationOpened` to `createClient`, and a conversation it may replace
 travels as `rememberedConversationId`, not as `trace.conversationId`.
 
 Every `bkn_start_interaction` requires `conversation_mode`, `question` and
-`agent_name`. `agent_name` is the Agent's stable name: send the same value on
-every call in one conversation.
+`agent_name`. `agent_name` is the Agent's stable name (at most 128 characters;
+the SDK refuses a longer `agentName` locally): send the same value on every call
+in one conversation. The contract has exactly two lifecycle tools,
+`bkn_start_interaction` and `bkn_finish_interaction`.
 
 1. For the first business question in a chat, call `bkn_start_interaction` with
    `conversation_mode: "new"`, the complete `question`, your `agent_name`, and no
@@ -244,7 +241,7 @@ Flag mapping → MCP `search_schema`:
 | `--concept-groups a,b` | `search_scope.concept_groups: ["a","b"]` (group ids from `kn-detail`) |
 | `--only object,relation` | `search_scope.include_{object,relation,action,metric}_types` — listed kinds `true`, the rest `false` (`--scope` is a kept alias) |
 | `--max n` | `max_concepts` |
-| `--schema-brief` / `--no-schema-brief` | `schema_brief` |
+| `--schema-brief` / `--no-schema-brief` | `schema_brief` (MCP tool default `true`; REST default `false`; sent only when you pass a flag) |
 | `--include-columns` | `include_columns` (physical column names for `run-sql`) |
 | `--rerank` / `--no-rerank` | `enable_rerank` |
 | `--rerank-model <name>` | `rerank_model` (operators only) |
@@ -264,6 +261,8 @@ openbkn context query-object-instance <kn> --args '{
   ]},
   "limit": 5
 }'
+# Page with `cursor` (what the live MCP tool returns) or `offset`, never both.
+# The REST contract names the cursor `search_after`; it is passed through unchanged.
 
 # query-instance-subgraph: n-hop path = n+1 object_types and n relation_types, in path order.
 # Every object type needs `condition` and `limit`; `operation: "and"` with no
@@ -316,6 +315,26 @@ openbkn context run-cypher <kn> \
   functions) or for resources never modelled as object types.
 - `openbkn bkn cypher <kn> --query ...` runs the same statement outside any Trace session.
 
+### Topology, metrics and SQL
+
+```bash
+# explore-subgraph: walk relations outward from one object type without naming a path.
+# --hops 1-3, --direction forward|backward|bidirectional (default bidirectional).
+# --limit counts instances of the STARTING type, not paths or total objects.
+openbkn context explore-subgraph <kn> <ot-id> --hops 2 --direction bidirectional --limit 5
+
+# query-metric: read a modelled metric through its own definition.
+# --args: analysis_dimensions, time, condition, having, order_by, limit, fill_null.
+openbkn context query-metric <kn> <metric-id> --args '{"time":{"instant":true}}'
+
+# run-sql: read-only MySQL; tables are {{.<data_source.id>}} placeholders, ids and
+# physical columns from `search-schema <kn> "<q>" --include-columns`. --timeout <sec>.
+openbkn context run-sql <kn> --sql 'SELECT COUNT(*) FROM {{.<data_source.id>}}'
+```
+
+Every command that takes `--args <json>` also accepts `--args-file <path>`
+(or `-` for stdin).
+
 ### Instance enrichment / actions — `--args <json>`
 
 ```bash
@@ -343,8 +362,10 @@ openbkn context search-capabilities <kn> --types function --metadata-types opena
 
 Each hit carries `capability_type`, which decides what comes next: `function`
 and `mcp_tool` are called through `execute_tool` with the returned
-`input_schema`, `skill` is read with `get_skill_content` and run with
-`execute_skill`. Omit `--query` to list what is mounted, in mount order.
+`input_schema`, `skill` is read with `get_skill_content`. `execute_skill` exists
+only when the deploy enables it (`EXECUTE_SKILL_ENABLED=true`, off by default —
+check `openbkn context info`); otherwise run the skill with
+`openbkn skill execute <id> --entry '<shell>'`. Omit `--query` to list what is mounted, in mount order.
 
 Replaces `find-skills` and the tool-only search, removed in bkn-foundry#1401.
 

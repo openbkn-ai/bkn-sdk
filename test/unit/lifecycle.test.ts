@@ -11,19 +11,20 @@ import {
 import { searchInstance } from "../../src/api/knowledge-networks.js";
 import { releaseLifecycleSessions, resetLifecycleCaches } from "../../src/api/lifecycle.js";
 import type { RequestContext } from "../../src/types.js";
-import { HttpError, ToolError } from "../../src/utils/errors.js";
+import { HttpError, InputError, ToolError } from "../../src/utils/errors.js";
 import { verifiedContext } from "../setup/verified-context.js";
 
-const V1_CATALOG = {
+// What a pre-contract deploy advertised. The SDK no longer speaks that
+// handshake: the start tool alone decides, and the extra tool is never called.
+const LEGACY_V1_CATALOG = {
   tools: [{ name: "bkn_create_conversation" }, { name: "bkn_start_interaction" }],
 };
 const V2_CATALOG = {
   tools: [{ name: "bkn_start_interaction" }, { name: "bkn_finish_interaction" }],
 };
 const LEGACY_CATALOG = { tools: [{ name: "search_schema" }] };
-// A later platform build declares `conversation_mode` required on the start
-// tool. Both shapes advertise the same tool names, so only the schema tells
-// them apart — which is why the probe reads it.
+// A catalog that also publishes the start tool's schema. The SDK sends the
+// contract's required arguments either way.
 const V2_CATALOG_WITH_MODE = {
   tools: [
     {
@@ -70,7 +71,6 @@ interface Recorded {
 function mockDeploy(opts: MockOptions = {}): Recorded {
   const recorded: Recorded = { retrievalBodies: [], toolCalls: [], infoCount: 0 };
   const catalog = opts.catalog ?? V2_CATALOG;
-  const isV1 = JSON.stringify(catalog).includes("bkn_create_conversation");
   const retrieval = opts.retrieval ?? [{ status: 200, body: { concepts: [] } }];
   let retrievalIndex = 0;
   let conversationSeq = 0;
@@ -130,17 +130,10 @@ function mockDeploy(opts: MockOptions = {}): Recorded {
             { status: 200, headers },
           );
         }
-        if (rpc.params.name === "bkn_create_conversation") {
-          conversationSeq += 1;
-          structuredContent = { conversation_id: `conv_${conversationSeq}`, one_shot: true };
-        } else if (rpc.params.name === "bkn_finish_interaction") {
+        if (rpc.params.name === "bkn_finish_interaction") {
           structuredContent = { execution_status: "canceled" };
-        } else if (isV1) {
-          // v1 starts an interaction inside a conversation that already exists.
-          interactionSeq += 1;
-          structuredContent = { interaction_id: `int_${interactionSeq}`, lease_epoch: 1 };
         } else {
-          // v2 mints both ids in one call, unless the caller named a conversation.
+          // The start mints both ids in one call, unless the caller named a conversation.
           const named = rpc.params.arguments.conversation_id;
           if (typeof named !== "string") conversationSeq += 1;
           interactionSeq += 1;
@@ -309,25 +302,6 @@ describe("managed lifecycle on semantic search", () => {
     expect(recorded.retrievalBodies[0]).not.toHaveProperty("bkn_context");
   });
 
-  it("v1: creates a conversation, starts an interaction, and sends an operation_key", async () => {
-    const recorded = mockDeploy({ catalog: V1_CATALOG });
-    await searchInstance(freshCtx(), "kn-managed", "物料");
-
-    expect(recorded.toolCalls.map((c) => c.name)).toEqual([
-      "bkn_create_conversation",
-      "bkn_start_interaction",
-    ]);
-    expect(recorded.toolCalls[0]?.arguments.one_shot).toBe(true);
-    expect(recorded.toolCalls[0]?.arguments.external_conversation_key).toMatch(/^cli:/);
-    // The question is the user's query, so the recorded evidence is meaningful.
-    expect(recorded.toolCalls[1]?.arguments.question).toBe("物料");
-
-    const context = recorded.retrievalBodies[0]?.bkn_context as Record<string, string>;
-    expect(context.conversation_id).toBe("conv_1");
-    expect(context.interaction_id).toBe("int_1");
-    expect(context.operation_key).toMatch(/^op:/);
-  });
-
   it("reports a conversation it minted, and one it did not", async () => {
     const minted: string[] = [];
     mockDeploy({ catalog: V2_CATALOG });
@@ -351,19 +325,6 @@ describe("managed lifecycle on semantic search", () => {
       "物料",
     );
     expect(borrowed).toEqual([]);
-  });
-
-  it("stays silent on v1, where a later command could not use the conversation", async () => {
-    const seen: string[] = [];
-    mockDeploy({ catalog: V1_CATALOG });
-    await searchInstance(
-      freshCtx({ onConversationOpened: (id) => seen.push(id) }),
-      "kn-v1",
-      "物料",
-    );
-    // A v1 interaction cannot be ended early and a conversation permits one at
-    // a time, so handing this on would block the next command for the lease.
-    expect(seen).toEqual([]);
   });
 
   it("opens a fresh conversation when the remembered one cannot be joined", async () => {
@@ -458,13 +419,6 @@ describe("managed lifecycle on semantic search", () => {
     });
   });
 
-  it("still gates conversation_mode on the catalog for a legacy v1 start", async () => {
-    const recorded = mockDeploy({ catalog: V1_CATALOG });
-    await searchInstance(freshCtx(), "kn-managed", "物料");
-    const start = recorded.toolCalls.find((c) => c.name === "bkn_start_interaction");
-    expect(start?.arguments).not.toHaveProperty("conversation_mode");
-  });
-
   it("sends the caller's agentName instead of the default", async () => {
     const recorded = mockDeploy({ catalog: V2_CATALOG });
     await searchInstance(freshCtx({ agentName: "supply-chain-agent" }), "kn-managed", "物料");
@@ -529,15 +483,6 @@ describe("managed lifecycle on semantic search", () => {
     expect(seen).toEqual([]);
   });
 
-  it("ignores a remembered conversation on v1, where joining one traps the next call", async () => {
-    const recorded = mockDeploy({ catalog: V1_CATALOG });
-    await searchInstance(freshCtx({ rememberedConversationId: "conv_v1" }), "kn-v1", "物料");
-    // v1 opens its own conversation; the field is public, so an SDK caller must
-    // not be able to reach the hole the CLI's write side already avoids.
-    const start = recorded.toolCalls.find((c) => c.name === "bkn_start_interaction");
-    expect(start?.arguments.conversation_id).not.toBe("conv_v1");
-  });
-
   it("keeps sessions apart when two callers want different conversations", async () => {
     const recorded = mockDeploy({ catalog: V2_CATALOG });
     // Same deploy, same identity, same KN — only the wanted conversation differs.
@@ -564,7 +509,44 @@ describe("managed lifecycle on semantic search", () => {
     ).toEqual(["conv_a", "conv_b"]);
   });
 
-  it("v2: mints both ids in one call and omits operation_key", async () => {
+  it("never speaks the removed managed-v1 handshake, whatever the catalog lists", async () => {
+    const recorded = mockDeploy({ catalog: LEGACY_V1_CATALOG });
+    const ctx = freshCtx({ rememberedConversationId: "conv_kept" });
+    await searchInstance(ctx, "kn-managed", "物料");
+    await releaseLifecycleSessions();
+
+    // Only the contract's two tools: no bkn_create_conversation, no v1-only
+    // arguments on the start (the live tool is additionalProperties:false).
+    expect(recorded.toolCalls.map((c) => c.name)).toEqual([
+      "bkn_start_interaction",
+      "bkn_finish_interaction",
+    ]);
+    expect(recorded.toolCalls[0]?.arguments).toEqual({
+      question: "物料",
+      conversation_mode: "continue",
+      agent_name: "openbkn-sdk",
+      conversation_id: "conv_kept",
+    });
+    const context = recorded.retrievalBodies[0]?.bkn_context as Record<string, string>;
+    expect(Object.keys(context).sort()).toEqual(["conversation_id", "interaction_id"]);
+  });
+
+  it("refuses an agentName over 128 characters before any lifecycle or business call", async () => {
+    const recorded = mockDeploy({ catalog: V2_CATALOG });
+    const err = await searchInstance(freshCtx({ agentName: "a".repeat(129) }), "kn-managed", "物料")
+      .then(() => undefined)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(InputError);
+    expect((err as Error).message).toMatch(/at most 128 characters/);
+    expect(recorded.toolCalls).toHaveLength(0);
+    expect(recorded.retrievalBodies).toHaveLength(0);
+
+    const ok = mockDeploy({ catalog: V2_CATALOG });
+    await searchInstance(freshCtx({ agentName: "a".repeat(128) }), "kn-managed", "物料");
+    expect(ok.toolCalls[0]?.arguments.agent_name).toHaveLength(128);
+  });
+
+  it("mints both ids in one call and omits operation_key", async () => {
     const recorded = mockDeploy({ catalog: V2_CATALOG });
     await searchInstance(freshCtx(), "kn-managed", "物料");
 
@@ -595,23 +577,7 @@ describe("managed lifecycle on semantic search", () => {
     expect(recorded.retrievalBodies).toHaveLength(0);
   });
 
-  it("v1: reuses one session across calls but never reuses an operation_key", async () => {
-    const recorded = mockDeploy({ catalog: V1_CATALOG });
-    const ctx = freshCtx();
-    await searchInstance(ctx, "kn-managed", "物料");
-    await searchInstance(ctx, "kn-managed", "供应商");
-
-    // A replayed operation_key returns the receipt instead of the payload, so
-    // the second search would come back empty.
-    const first = recorded.retrievalBodies[0]?.bkn_context as Record<string, string>;
-    const second = recorded.retrievalBodies[1]?.bkn_context as Record<string, string>;
-    expect(second.operation_key).not.toBe(first.operation_key);
-    expect(second.conversation_id).toBe(first.conversation_id);
-    expect(recorded.toolCalls).toHaveLength(2);
-    expect(recorded.infoCount).toBe(1);
-  });
-
-  it("v2: reuses one session and probes the catalog once", async () => {
+  it("reuses one session and probes the catalog once", async () => {
     const recorded = mockDeploy({ catalog: V2_CATALOG });
     const ctx = freshCtx();
     await searchInstance(ctx, "kn-managed", "物料");
@@ -622,7 +588,7 @@ describe("managed lifecycle on semantic search", () => {
   });
 
   it("prefers a caller-owned conversation and opens nothing", async () => {
-    const recorded = mockDeploy({ catalog: V1_CATALOG });
+    const recorded = mockDeploy({ catalog: V2_CATALOG });
     const ctx = freshCtx({
       trace: {
         requestId: "req_1",
@@ -637,7 +603,7 @@ describe("managed lifecycle on semantic search", () => {
     const context = recorded.retrievalBodies[0]?.bkn_context as Record<string, string>;
     expect(context.conversation_id).toBe("conv_caller_owned");
     expect(context.interaction_id).toBe("int_caller_owned");
-    expect(context.operation_key).toMatch(/^op:/);
+    expect(Object.keys(context).sort()).toEqual(["conversation_id", "interaction_id"]);
   });
 
   it("opens an interaction inside a conversation the caller named on its own", async () => {
@@ -833,7 +799,7 @@ describe("managed lifecycle on semantic search", () => {
   });
 
   it("sends a caller-built bkn_context without operation_key and opens no session", async () => {
-    const recorded = mockDeploy({ catalog: V1_CATALOG });
+    const recorded = mockDeploy({ catalog: V2_CATALOG });
     const owned = {
       conversation_id: "conv_owned",
       interaction_id: "int_owned",
@@ -910,7 +876,7 @@ describe("managed lifecycle on semantic search", () => {
     });
   });
 
-  it("releases a v2 interaction so the conversation does not linger", async () => {
+  it("releases an interaction so the conversation does not linger", async () => {
     const recorded = mockDeploy({ catalog: V2_CATALOG });
     const ctx = freshCtx();
     await searchInstance(ctx, "kn-managed", "物料");
@@ -921,15 +887,6 @@ describe("managed lifecycle on semantic search", () => {
     // `completed` demands an answer artifact a CLI invocation does not have.
     expect(finish?.arguments.outcome).toBe("cancelled");
     expect(finish?.arguments.interaction_id).toBe("int_1");
-  });
-
-  it("leaves a v1 interaction to the idle sweeper rather than mis-closing it", async () => {
-    const recorded = mockDeploy({ catalog: V1_CATALOG });
-    const ctx = freshCtx();
-    await searchInstance(ctx, "kn-managed", "物料");
-    await releaseLifecycleSessions();
-
-    expect(recorded.toolCalls.map((c) => c.name)).not.toContain("bkn_finish_interaction");
   });
 
   it("releasing without a session is a no-op", async () => {
@@ -1002,7 +959,7 @@ describe("managed lifecycle on MCP business tools", () => {
   });
 
   it("passes a caller-built bkn_context's contract fields through and opens no session", async () => {
-    const recorded = mockDeploy({ catalog: V1_CATALOG });
+    const recorded = mockDeploy({ catalog: V2_CATALOG });
     const owned = {
       conversation_id: "conv_owned",
       interaction_id: "int_owned",
@@ -1049,8 +1006,10 @@ describe("managed lifecycle on MCP business tools", () => {
 describe("MCP results that carry structuredContent", () => {
   it("returns the structured payload when the text is prose", async () => {
     mockDeploy();
-    const result = (await callTool(freshCtx(), "kn-managed", "bkn_create_conversation", {
-      external_conversation_key: "cli:test",
+    const result = (await callTool(freshCtx(), "kn-managed", "bkn_start_interaction", {
+      question: "probe",
+      conversation_mode: "new",
+      agent_name: "openbkn-sdk",
     })) as { conversation_id: string };
 
     expect(result.conversation_id).toBe("conv_1");

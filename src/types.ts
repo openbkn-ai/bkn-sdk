@@ -33,11 +33,6 @@ export interface ClientOptions {
    * otherwise a conversation that has been swept, or still holds an active
    * interaction, would fail every later run with no way back except a manual
    * reset.
-   *
-   * Honoured only on a `managed-v2` deploy, for the reason
-   * {@link ClientOptions.onConversationOpened} gives: a v1 interaction cannot be
-   * ended early, so joining one would block the next call for its lease. On v1
-   * this field is ignored and a fresh conversation is opened instead.
    */
   rememberedConversationId?: string;
   /**
@@ -49,10 +44,6 @@ export interface ClientOptions {
    * that now exists; a caller keeping only one decides which (the CLI keeps the
    * last). Make the handler idempotent.
    *
-   * Only fires on a `managed-v2` deploy. A v1 interaction cannot be ended
-   * early, and a conversation permits one at a time, so a v1 conversation
-   * handed to a later call would be refused until its lease expired.
-   *
    * The hook exists so persistence stays a decision of whoever built the
    * client. The CLI uses it to remember a conversation across invocations; a
    * library consumer that omits it gets a fresh conversation per process and
@@ -63,6 +54,7 @@ export interface ClientOptions {
    * The `agent_name` sent on `bkn_start_interaction` when the SDK opens a managed
    * interaction on this caller's behalf. Defaults to `openbkn-sdk`. Keep it
    * stable: the contract wants the same name on every start in one conversation.
+   * At most 128 characters; a longer name is refused locally with an `InputError`.
    */
   agentName?: string;
   /** @internal CLI clients persist successful version checks for a short TTL. */

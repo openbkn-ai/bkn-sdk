@@ -61,18 +61,20 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
   use a different character in place of a pipe and stay on one physical line.
   Structured table rows must stay contiguous. `Logic Properties` must use either
   a flat table or `####` property subsections; mixing them drops the flat rows.
-- A managed-v2 `bkn_start_interaction` always carries `question`, `agent_name`
-  (`openbkn-sdk` unless `ClientOptions.agentName` says otherwise) and
-  `conversation_mode`: `new` without a conversation ID, `continue` with one.
-  Legacy managed-v1 deploys get `conversation_mode` only when their catalog
-  declares it. If that handshake fails, the SDK surfaces the lifecycle error and
+- `bkn_start_interaction` always carries `question`, `agent_name`
+  (`openbkn-sdk` unless `ClientOptions.agentName` says otherwise; at most 128
+  characters, checked locally) and `conversation_mode`: `new` without a
+  conversation ID, `continue` with one. The SDK speaks only the contract's two
+  lifecycle tools (`bkn_start_interaction` / `bkn_finish_interaction`) and never
+  sends `operation_key`. If that handshake fails, the SDK surfaces the lifecycle error and
   does not send an uncontexted business request.
 - The dedicated `context query-object-instance` command and SDK wrapper reject
   unknown top-level argument keys, extra `filters[]` / `sort[]` keys, and
   misspelled nested condition keys before opening an MCP session. Each filter
   requires `field`, `op`, and `value`; `condition` and `filters` cannot be combined
   because the backend ignores `filters` when `condition` is present. `cursor`
-  and `offset` are mutually exclusive, and an explicit `kn_id` must match the
+  and `offset` are mutually exclusive (`search_after`, the REST name for the
+  cursor, is accepted and passed through), and an explicit `kn_id` must match the
   network being queried. Each sort item requires `field` and an
   `asc` or `desc` direction. A composite condition uses `sub_conditions`; vector
   search uses `condition.operation=knn`. `properties` must be an array of nonblank field
