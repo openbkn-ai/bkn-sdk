@@ -28,6 +28,22 @@ const kn = vi.hoisted(() => {
     capabilityList: ok(),
     list: ok(),
     get: ok(),
+    create: ok(),
+    update: ok(),
+    delete: ok(),
+    objectTypeCreate: ok(),
+    metricCreate: ok(),
+    conceptGroupCreate: ok(),
+    conceptGroupUpdate: ok(),
+    conceptGroupDelete: ok(),
+    conceptGroupAddMembers: ok(),
+    conceptGroupRemoveMembers: ok(),
+    actionSchedule: ok(),
+    actionScheduleCreate: ok(),
+    actionScheduleUpdate: ok(),
+    actionScheduleSetStatus: ok(),
+    actionScheduleDelete: ok(),
+    relationTypePaths: ok(),
   };
 });
 
@@ -267,6 +283,231 @@ describe("openbkn bkn flags", () => {
         detailLevel: "summary",
         branch: "dev",
       }),
+    );
+  });
+
+  it("create sends --branch to the SDK, which puts it in both query and body", async () => {
+    await run("create", "demo", "--branch", "dev");
+    expect(kn.create).toHaveBeenLastCalledWith({
+      name: "demo",
+      branch: "dev",
+      strictMode: undefined,
+      importMode: undefined,
+      bindingPolicy: undefined,
+    });
+    await run(
+      "create",
+      "demo",
+      "--import-mode",
+      "ignore",
+      "--no-strict-mode",
+      "--binding-policy",
+      "detach",
+    );
+    expect(kn.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        branch: "main",
+        importMode: "ignore",
+        strictMode: false,
+        bindingPolicy: "detach",
+      }),
+    );
+    await expect(run("create", "demo", "--import-mode", "replace")).rejects.toThrow(
+      "--import-mode must be one of",
+    );
+  });
+
+  it("update and delete take --branch; update takes the write modes", async () => {
+    await run(
+      "update",
+      "kn-1",
+      "--body",
+      "{}",
+      "--branch",
+      "dev",
+      "--no-strict-mode",
+      "--import-mode",
+      "overwrite",
+    );
+    expect(kn.update).toHaveBeenCalledWith(
+      "kn-1",
+      {},
+      { branch: "dev", strictMode: false, importMode: "overwrite" },
+    );
+    await run("delete", "kn-1", "--branch", "dev", "-y");
+    expect(kn.delete).toHaveBeenCalledWith("kn-1", { branch: "dev" });
+  });
+
+  it("schema and metric creates take --import-mode and --no-strict-mode", async () => {
+    await run(
+      "object-type",
+      "create",
+      "kn-1",
+      "--body",
+      "[]",
+      "--import-mode",
+      "overwrite",
+      "--no-strict-mode",
+    );
+    expect(kn.objectTypeCreate).toHaveBeenCalledWith("kn-1", [], {
+      branch: undefined,
+      strictMode: false,
+      importMode: "overwrite",
+    });
+    await run("metric", "create", "kn-1", "--body", "[]", "--import-mode", "ignore");
+    expect(kn.metricCreate).toHaveBeenCalledWith(
+      "kn-1",
+      [],
+      expect.objectContaining({ importMode: "ignore", strictMode: undefined }),
+    );
+    await run("metric", "update", "kn-1", "m-1", "--body", "{}", "--no-strict-mode");
+    expect(kn.metricUpdate).toHaveBeenLastCalledWith(
+      "kn-1",
+      "m-1",
+      {},
+      expect.objectContaining({ strictMode: false }),
+    );
+    await run("metric", "validate", "kn-1", "--body", "{}", "--import-mode", "overwrite");
+    expect(kn.metricValidate).toHaveBeenLastCalledWith(
+      "kn-1",
+      {},
+      expect.objectContaining({ importMode: "overwrite" }),
+    );
+    // Update has no import_mode in the contract.
+    await expect(
+      run("metric", "update", "kn-1", "m-1", "--body", "{}", "--import-mode", "ignore"),
+    ).rejects.toThrow();
+  });
+
+  it("concept-group writes forward --branch and their write modes", async () => {
+    await run(
+      "concept-group",
+      "create",
+      "kn-1",
+      "--body",
+      "{}",
+      "--branch",
+      "dev",
+      "--import-mode",
+      "ignore",
+    );
+    expect(kn.conceptGroupCreate).toHaveBeenCalledWith(
+      "kn-1",
+      {},
+      { branch: "dev", strictMode: undefined, importMode: "ignore" },
+    );
+    await run("concept-group", "update", "kn-1", "cg-1", "--body", "{}", "--no-strict-mode");
+    expect(kn.conceptGroupUpdate).toHaveBeenCalledWith(
+      "kn-1",
+      "cg-1",
+      {},
+      expect.objectContaining({ strictMode: false }),
+    );
+    await run("concept-group", "delete", "kn-1", "cg-1", "--branch", "dev");
+    expect(kn.conceptGroupDelete).toHaveBeenCalledWith("kn-1", "cg-1", { branch: "dev" });
+    await run("concept-group", "add-members", "kn-1", "cg-1", "--body", "{}", "--branch", "dev");
+    expect(kn.conceptGroupAddMembers).toHaveBeenCalledWith(
+      "kn-1",
+      "cg-1",
+      {},
+      expect.objectContaining({ branch: "dev" }),
+    );
+    await run("concept-group", "remove-members", "kn-1", "cg-1", "a,b", "--branch", "dev");
+    expect(kn.conceptGroupRemoveMembers).toHaveBeenCalledWith("kn-1", "cg-1", "a,b", {
+      branch: "dev",
+    });
+  });
+
+  it("action-schedule get/create/update/set-status/delete forward --branch", async () => {
+    await run("action-schedule", "get", "kn-1", "s-1", "--branch", "dev");
+    expect(kn.actionSchedule).toHaveBeenCalledWith("kn-1", "s-1", { branch: "dev" });
+    await run("action-schedule", "create", "kn-1", "--body", "{}", "--branch", "dev");
+    expect(kn.actionScheduleCreate).toHaveBeenCalledWith("kn-1", {}, { branch: "dev" });
+    await run("action-schedule", "update", "kn-1", "s-1", "--body", "{}", "--branch", "dev");
+    expect(kn.actionScheduleUpdate).toHaveBeenCalledWith("kn-1", "s-1", {}, { branch: "dev" });
+    await run("action-schedule", "set-status", "kn-1", "s-1", "--body", "{}", "--branch", "dev");
+    expect(kn.actionScheduleSetStatus).toHaveBeenCalledWith("kn-1", "s-1", {}, { branch: "dev" });
+    await run("action-schedule", "delete", "kn-1", "s-1,s-2", "--branch", "dev");
+    expect(kn.actionScheduleDelete).toHaveBeenCalledWith("kn-1", "s-1,s-2", { branch: "dev" });
+  });
+
+  it("relation-type-paths forwards --branch", async () => {
+    await run("relation-type-paths", "kn-1", "--body", "{}", "--branch", "dev");
+    expect(kn.relationTypePaths).toHaveBeenCalledWith("kn-1", {}, { branch: "dev" });
+  });
+
+  it("bkn list --limit takes 1–1000 or -1", async () => {
+    await run("list", "--limit", "-1");
+    expect(kn.list).toHaveBeenLastCalledWith(expect.objectContaining({ limit: -1 }));
+    await run("list", "--limit", "1000");
+    expect(kn.list).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 1000 }));
+    for (const bad of ["0", "1001", "-2", "abc"]) {
+      await expect(run("list", "--limit", bad)).rejects.toThrow("--limit must be an integer");
+    }
+    expect(kn.list).toHaveBeenCalledTimes(2);
+  });
+
+  it("action-log bounds are checked before calling the deploy", async () => {
+    await expect(run("action-log", "list", "kn-1", "--limit", "1001")).rejects.toThrow(
+      "--limit must be an integer from 1 to 1000",
+    );
+    await expect(run("action-log", "list", "kn-1", "--keyword", "x".repeat(129))).rejects.toThrow(
+      "--keyword must be at most 128 characters",
+    );
+    // Length is measured on the string that is sent, untrimmed.
+    await expect(
+      run("action-log", "list", "kn-1", "--keyword", `  ${"x".repeat(128)}  `),
+    ).rejects.toThrow(/at most 128/);
+    await expect(
+      run("action-log", "get", "kn-1", "log-1", "--results-limit", "1001"),
+    ).rejects.toThrow("--results-limit must be an integer from 1 to 1000");
+    await expect(
+      run(
+        "action-log",
+        "get",
+        "kn-1",
+        "log-1",
+        "--results-offset",
+        "9950",
+        "--results-limit",
+        "100",
+      ),
+    ).rejects.toThrow("must not exceed 10000");
+    // The backend's results_limit default of 100 counts when the flag is left out.
+    await expect(
+      run("action-log", "get", "kn-1", "log-1", "--results-offset", "9901"),
+    ).rejects.toThrow("must not exceed 10000");
+    await expect(
+      run("action-log", "get", "kn-1", "log-1", "--results-offset", "-1"),
+    ).rejects.toThrow();
+    expect(kn.actionLogs).not.toHaveBeenCalled();
+    expect(kn.actionLog).not.toHaveBeenCalled();
+    await run(
+      "action-log",
+      "get",
+      "kn-1",
+      "log-1",
+      "--results-offset",
+      "9000",
+      "--results-limit",
+      "1000",
+    );
+    expect(kn.actionLog).toHaveBeenCalledWith(
+      "kn-1",
+      "log-1",
+      expect.objectContaining({ resultsOffset: 9000, resultsLimit: 1000 }),
+    );
+  });
+
+  it("capability list --metadata-type is limited to openapi | function", async () => {
+    await expect(run("capability", "list", "kn-1", "--metadata-type", "mcp")).rejects.toThrow(
+      "--metadata-type must be one of",
+    );
+    expect(kn.capabilityList).not.toHaveBeenCalled();
+    await run("capability", "list", "kn-1", "--metadata-type", "openapi");
+    expect(kn.capabilityList).toHaveBeenCalledWith(
+      "kn-1",
+      expect.objectContaining({ metadataType: "openapi" }),
     );
   });
 

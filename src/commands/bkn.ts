@@ -64,6 +64,58 @@ const SCHEDULE_SORTS = [
 ] as const;
 const CAPABILITY_SORTS = ["create_time", "update_time"] as const;
 const sortDirection = oneOf("--direction", DIRECTIONS);
+const IMPORT_MODES = ["normal", "overwrite", "ignore"] as const;
+const BINDING_POLICIES = ["preserve", "detach"] as const;
+
+/** `bkn list --limit`: 1–1000 per page, or -1 for every row. */
+function knListLimit(v: string): number {
+  if (v === "-1") return -1;
+  const n = /^\d+$/.test(v) ? Number(v) : Number.NaN;
+  if (!(n >= 1 && n <= 1000)) {
+    throw new InputError(`--limit must be an integer from 1 to 1000, or -1 for all (got '${v}')`);
+  }
+  return n;
+}
+
+/** A non-negative integer flag (an offset). */
+const nonNegativeInt = (flag: string) => (v: string) => {
+  const n = /^\d+$/.test(v) ? Number(v) : Number.NaN;
+  if (!Number.isSafeInteger(n)) {
+    throw new InputError(`${flag} must be a non-negative integer (got '${v}')`);
+  }
+  return n;
+};
+
+/** `--keyword` of `action-log list`: the backend refuses more than 128 characters. */
+function actionLogKeyword(v: string): string {
+  // Measure what is sent: the value goes out untrimmed.
+  if (v.length > 128) {
+    throw new InputError(`--keyword must be at most 128 characters (got ${v.length})`);
+  }
+  return v;
+}
+
+/** Add `--no-strict-mode` (and `--import-mode` when `withImportMode`) to a write command. */
+function writeModeFlags(cmd: Command, withImportMode: boolean): Command {
+  cmd.option("--no-strict-mode", "skip dependency validation (strict_mode=false)");
+  if (withImportMode) {
+    cmd.option(
+      "--import-mode <mode>",
+      "existing ids/names: normal (default, error) | overwrite | ignore",
+      oneOf("--import-mode", IMPORT_MODES),
+    );
+  }
+  return cmd;
+}
+
+/** The SDK write options from parsed flags; unset flags stay unset so nothing extra is sent. */
+function writeModes(opts: Record<string, unknown>) {
+  return {
+    branch: opts.branch as string | undefined,
+    strictMode: opts.strictMode === false ? false : undefined,
+    importMode: opts.importMode as (typeof IMPORT_MODES)[number] | undefined,
+  };
+}
 
 /** `--exclude-system-properties a,b` → the validated list. */
 function systemProperties(value: string | undefined) {
@@ -163,7 +215,7 @@ export function bknCommand(): Command {
   bkn
     .command("list")
     .description("List knowledge networks")
-    .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
+    .option("--limit <n>", "page size, 1–1000, or -1 for all", knListLimit, DEFAULT_LIST_LIMIT)
     .option("--offset <n>", "page offset", int, 0)
     .option("--name-pattern <s>", "filter by name pattern")
     .option("--tag <s>", "filter by tag")
@@ -284,22 +336,23 @@ export function bknCommand(): Command {
             outputOptions(cmd),
           );
         });
-      g.command("create <kn-id>")
-        .description(`Create ${name}s (--body / --body-file) → body is {entries:[…]}`)
-        .option(
-          "--body <json>",
-          "body JSON {entries:[…]} (a bare array is wrapped) — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
-        )
-        .option("--body-file <path>", "read body JSON from a file")
-        .option("--branch <b>", "branch (default: main)")
-        .action(async (knId: string, opts, cmd: Command) => {
-          printJson(
-            await clientFrom(cmd).kn[`${crud}Create`](knId, readBody(opts), {
-              branch: opts.branch,
-            }),
-            outputOptions(cmd),
-          );
-        });
+      writeModeFlags(
+        g
+          .command("create <kn-id>")
+          .description(`Create ${name}s (--body / --body-file) → body is {entries:[…]}`)
+          .option(
+            "--body <json>",
+            "body JSON {entries:[…]} (a bare array is wrapped) — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+          )
+          .option("--body-file <path>", "read body JSON from a file")
+          .option("--branch <b>", "branch (default: main)"),
+        true,
+      ).action(async (knId: string, opts, cmd: Command) => {
+        printJson(
+          await clientFrom(cmd).kn[`${crud}Create`](knId, readBody(opts), writeModes(opts)),
+          outputOptions(cmd),
+        );
+      });
       g.command("update <kn-id> <id>")
         .description(`Update ${name} (--body / --body-file); the body carries base_version`)
         .option(
@@ -457,29 +510,54 @@ An older deploy answers without paging — resend the query with "offset" instea
   bkn
     .command("create <name>")
     .description("Create an (empty) knowledge network")
-    .option("--branch <b>", "branch", "main")
+    .option("--branch <b>", "branch, sent in both the query and the body", "main")
+    .option(
+      "--import-mode <mode>",
+      "an existing id/name: normal (default, error) | overwrite | ignore",
+      oneOf("--import-mode", IMPORT_MODES),
+    )
+    .option("--no-strict-mode", "skip dependency validation (strict_mode=false)")
+    .option(
+      "--binding-policy <policy>",
+      "environment-local bindings: preserve (default) | detach",
+      oneOf("--binding-policy", BINDING_POLICIES),
+    )
     .action(async (name: string, opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.create({ name, branch: opts.branch }), outputOptions(cmd));
+      printJson(
+        await clientFrom(cmd).kn.create({
+          name,
+          ...writeModes(opts),
+          bindingPolicy: opts.bindingPolicy,
+        }),
+        outputOptions(cmd),
+      );
     });
 
-  bkn
-    .command("update <kn-id>")
-    .description("Update a knowledge network (--body / --body-file)")
-    .option(
-      "--body <json>",
-      "update body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
-    )
-    .option("--body-file <path>", "read update body JSON from a file")
-    .action(async (knId: string, opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.update(knId, readBody(opts)), outputOptions(cmd));
-    });
+  writeModeFlags(
+    bkn
+      .command("update <kn-id>")
+      .description("Update a knowledge network (--body / --body-file)")
+      .option(
+        "--body <json>",
+        "update body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+      )
+      .option("--body-file <path>", "read update body JSON from a file")
+      .option("--branch <b>", "branch (default: the body's branch, else main)"),
+    true,
+  ).action(async (knId: string, opts, cmd: Command) => {
+    printJson(
+      await clientFrom(cmd).kn.update(knId, readBody(opts), writeModes(opts)),
+      outputOptions(cmd),
+    );
+  });
 
   bkn
     .command("delete <kn-id>")
     .description("Delete a knowledge network")
     .option("-y, --yes", "skip confirmation")
-    .action(async (knId: string, _opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.delete(knId), outputOptions(cmd));
+    .option("--branch <b>", "branch (default: main)")
+    .action(async (knId: string, opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn.delete(knId, { branch: opts.branch }), outputOptions(cmd));
     });
 
   bkn
@@ -533,10 +611,14 @@ An older deploy answers without paging — resend the query with "offset" instea
       "manual | scheduled",
       oneOf("--trigger-type", ["manual", "scheduled"]),
     )
-    .option("--keyword <s>", "case-insensitive substring of the execution id")
+    .option(
+      "--keyword <s>",
+      "case-insensitive substring of the execution id (max 128 characters)",
+      actionLogKeyword,
+    )
     .option("--start-time-from <ms>", "start time lower bound, epoch milliseconds", int)
     .option("--start-time-to <ms>", "start time upper bound, epoch milliseconds", int)
-    .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
+    .option("--limit <n>", "page size, 1–1000", positiveInt("--limit", 1000), DEFAULT_LIST_LIMIT)
     .option("--offset <n>", "page offset (ignored with --search-after)", int)
     .option("--need-total", "also return total_count")
     .option("--search-after <cursor>", "deep-paging cursor from the previous page (comma-joined)")
@@ -560,14 +642,29 @@ An older deploy answers without paging — resend the query with "offset" instea
   actionLog
     .command("get <kn-id> <log-id>")
     .description("Get an action log")
-    .option("--results-limit <n>", "page size of the embedded results (max 1000)", int)
-    .option("--results-offset <n>", "offset into the embedded results", int)
+    .option(
+      "--results-limit <n>",
+      "page size of the embedded results, 1–1000",
+      positiveInt("--results-limit", 1000),
+    )
+    .option(
+      "--results-offset <n>",
+      "offset into the embedded results; offset + limit must not exceed 10000",
+      nonNegativeInt("--results-offset"),
+    )
     .option(
       "--results-status <s>",
       "success | failed",
       oneOf("--results-status", ["success", "failed"]),
     )
     .action(async (knId: string, logId: string, opts, cmd: Command) => {
+      // The backend's own results_limit default is 100 when the flag is left out.
+      const window = (opts.resultsOffset ?? 0) + (opts.resultsLimit ?? 100);
+      if (opts.resultsOffset !== undefined && window > 10000) {
+        throw new InputError(
+          `--results-offset + --results-limit must not exceed 10000 (got ${window})`,
+        );
+      }
       printJson(
         await clientFrom(cmd).kn.actionLog(knId, logId, {
           resultsLimit: opts.resultsLimit,
@@ -660,36 +757,40 @@ An older deploy answers without paging — resend the query with "offset" instea
         outputOptions(cmd),
       );
     });
-  metric
-    .command("create <kn-id>")
-    .description("Create metrics (--body / --body-file) → body is {entries:[…]}")
-    .option(
-      "--body <json>",
-      "body JSON {entries:[…]} (a bare array is wrapped) — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
-    )
-    .option("--body-file <path>", "read body JSON from a file")
-    .option("--branch <b>", "branch (default: main)")
-    .action(async (knId: string, opts, cmd: Command) => {
-      printJson(
-        await clientFrom(cmd).kn.metricCreate(knId, readBody(opts), { branch: opts.branch }),
-        outputOptions(cmd),
-      );
-    });
-  metric
-    .command("update <kn-id> <metric-id>")
-    .description("Update a metric (--body / --body-file)")
-    .option(
-      "--body <json>",
-      "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
-    )
-    .option("--body-file <path>", "read body JSON from a file")
-    .option("--branch <b>", "branch (default: main)")
-    .action(async (knId: string, id: string, opts, cmd: Command) => {
-      printJson(
-        await clientFrom(cmd).kn.metricUpdate(knId, id, readBody(opts), { branch: opts.branch }),
-        outputOptions(cmd),
-      );
-    });
+  writeModeFlags(
+    metric
+      .command("create <kn-id>")
+      .description("Create metrics (--body / --body-file) → body is {entries:[…]}")
+      .option(
+        "--body <json>",
+        "body JSON {entries:[…]} (a bare array is wrapped) — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+      )
+      .option("--body-file <path>", "read body JSON from a file")
+      .option("--branch <b>", "branch (default: main)"),
+    true,
+  ).action(async (knId: string, opts, cmd: Command) => {
+    printJson(
+      await clientFrom(cmd).kn.metricCreate(knId, readBody(opts), writeModes(opts)),
+      outputOptions(cmd),
+    );
+  });
+  writeModeFlags(
+    metric
+      .command("update <kn-id> <metric-id>")
+      .description("Update a metric (--body / --body-file)")
+      .option(
+        "--body <json>",
+        "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+      )
+      .option("--body-file <path>", "read body JSON from a file")
+      .option("--branch <b>", "branch (default: main)"),
+    false,
+  ).action(async (knId: string, id: string, opts, cmd: Command) => {
+    printJson(
+      await clientFrom(cmd).kn.metricUpdate(knId, id, readBody(opts), writeModes(opts)),
+      outputOptions(cmd),
+    );
+  });
   metric
     .command("delete <kn-id> <metric-id>")
     .description("Delete a metric")
@@ -700,21 +801,23 @@ An older deploy answers without paging — resend the query with "offset" instea
         outputOptions(cmd),
       );
     });
-  metric
-    .command("validate <kn-id>")
-    .description("Validate a metric definition (--body / --body-file)")
-    .option(
-      "--body <json>",
-      "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
-    )
-    .option("--body-file <path>", "read body JSON from a file")
-    .option("--branch <b>", "branch (default: main)")
-    .action(async (knId: string, opts, cmd: Command) => {
-      printJson(
-        await clientFrom(cmd).kn.metricValidate(knId, readBody(opts), { branch: opts.branch }),
-        outputOptions(cmd),
-      );
-    });
+  writeModeFlags(
+    metric
+      .command("validate <kn-id>")
+      .description("Validate a metric definition (--body / --body-file)")
+      .option(
+        "--body <json>",
+        "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+      )
+      .option("--body-file <path>", "read body JSON from a file")
+      .option("--branch <b>", "branch (default: main)"),
+    true,
+  ).action(async (knId: string, opts, cmd: Command) => {
+    printJson(
+      await clientFrom(cmd).kn.metricValidate(knId, readBody(opts), writeModes(opts)),
+      outputOptions(cmd),
+    );
+  });
 
   const cg = bkn.command("concept-group").description("Concept groups — list/get");
   cg.command("list <kn-id>")
@@ -755,55 +858,74 @@ An older deploy answers without paging — resend the query with "offset" instea
         outputOptions(cmd),
       );
     });
-  cg.command("create <kn-id>")
-    .description("Create a concept group (--body / --body-file)")
-    .option(
-      "--body <json>",
-      "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
-    )
-    .option("--body-file <path>", "read body JSON from a file")
-    .action(async (knId: string, opts, cmd: Command) => {
-      printJson(
-        await clientFrom(cmd).kn.conceptGroupCreate(knId, readBody(opts)),
-        outputOptions(cmd),
-      );
-    });
-  cg.command("update <kn-id> <cg-id>")
-    .description("Update a concept group (--body / --body-file)")
-    .option(
-      "--body <json>",
-      "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
-    )
-    .option("--body-file <path>", "read body JSON from a file")
-    .action(async (knId: string, cgId: string, opts, cmd: Command) => {
-      printJson(
-        await clientFrom(cmd).kn.conceptGroupUpdate(knId, cgId, readBody(opts)),
-        outputOptions(cmd),
-      );
-    });
+  writeModeFlags(
+    cg
+      .command("create <kn-id>")
+      .description("Create a concept group (--body / --body-file)")
+      .option(
+        "--body <json>",
+        "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+      )
+      .option("--body-file <path>", "read body JSON from a file")
+      .option("--branch <b>", "branch (default: main)"),
+    true,
+  ).action(async (knId: string, opts, cmd: Command) => {
+    printJson(
+      await clientFrom(cmd).kn.conceptGroupCreate(knId, readBody(opts), writeModes(opts)),
+      outputOptions(cmd),
+    );
+  });
+  writeModeFlags(
+    cg
+      .command("update <kn-id> <cg-id>")
+      .description("Update a concept group (--body / --body-file)")
+      .option(
+        "--body <json>",
+        "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+      )
+      .option("--body-file <path>", "read body JSON from a file")
+      .option("--branch <b>", "branch (default: main)"),
+    false,
+  ).action(async (knId: string, cgId: string, opts, cmd: Command) => {
+    printJson(
+      await clientFrom(cmd).kn.conceptGroupUpdate(knId, cgId, readBody(opts), writeModes(opts)),
+      outputOptions(cmd),
+    );
+  });
   cg.command("delete <kn-id> <cg-id>")
     .description("Delete a concept group")
-    .action(async (knId: string, cgId: string, _o, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.conceptGroupDelete(knId, cgId), outputOptions(cmd));
-    });
-  cg.command("add-members <kn-id> <cg-id>")
-    .description("Add object types to a concept group (--body / --body-file)")
-    .option(
-      "--body <json>",
-      "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
-    )
-    .option("--body-file <path>", "read body JSON from a file")
+    .option("--branch <b>", "branch (default: main)")
     .action(async (knId: string, cgId: string, opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).kn.conceptGroupAddMembers(knId, cgId, readBody(opts)),
+        await clientFrom(cmd).kn.conceptGroupDelete(knId, cgId, { branch: opts.branch }),
         outputOptions(cmd),
       );
     });
+  writeModeFlags(
+    cg
+      .command("add-members <kn-id> <cg-id>")
+      .description("Add object types to a concept group (--body / --body-file)")
+      .option(
+        "--body <json>",
+        "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+      )
+      .option("--body-file <path>", "read body JSON from a file")
+      .option("--branch <b>", "branch (default: main)"),
+    false,
+  ).action(async (knId: string, cgId: string, opts, cmd: Command) => {
+    printJson(
+      await clientFrom(cmd).kn.conceptGroupAddMembers(knId, cgId, readBody(opts), writeModes(opts)),
+      outputOptions(cmd),
+    );
+  });
   cg.command("remove-members <kn-id> <cg-id> <ot-ids>")
     .description("Remove object types (comma-joined ids) from a concept group")
-    .action(async (knId: string, cgId: string, otIds: string, _o, cmd: Command) => {
+    .option("--branch <b>", "branch (default: main)")
+    .action(async (knId: string, cgId: string, otIds: string, opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).kn.conceptGroupRemoveMembers(knId, cgId, otIds),
+        await clientFrom(cmd).kn.conceptGroupRemoveMembers(knId, cgId, otIds, {
+          branch: opts.branch,
+        }),
         outputOptions(cmd),
       );
     });
@@ -838,8 +960,12 @@ An older deploy answers without paging — resend the query with "offset" instea
   sched
     .command("get <kn-id> <schedule-id>")
     .description("Get an action schedule")
-    .action(async (knId: string, sId: string, _o, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.actionSchedule(knId, sId), outputOptions(cmd));
+    .option("--branch <b>", "branch (default: main)")
+    .action(async (knId: string, sId: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.actionSchedule(knId, sId, { branch: opts.branch }),
+        outputOptions(cmd),
+      );
     });
   sched
     .command("create <kn-id>")
@@ -849,9 +975,12 @@ An older deploy answers without paging — resend the query with "offset" instea
       "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
     )
     .option("--body-file <path>", "read body JSON from a file")
+    .option("--branch <b>", "branch (default: main)")
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).kn.actionScheduleCreate(knId, readBody(opts)),
+        await clientFrom(cmd).kn.actionScheduleCreate(knId, readBody(opts), {
+          branch: opts.branch,
+        }),
         outputOptions(cmd),
       );
     });
@@ -863,9 +992,12 @@ An older deploy answers without paging — resend the query with "offset" instea
       "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
     )
     .option("--body-file <path>", "read body JSON from a file")
+    .option("--branch <b>", "branch (default: main)")
     .action(async (knId: string, sId: string, opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).kn.actionScheduleUpdate(knId, sId, readBody(opts)),
+        await clientFrom(cmd).kn.actionScheduleUpdate(knId, sId, readBody(opts), {
+          branch: opts.branch,
+        }),
         outputOptions(cmd),
       );
     });
@@ -877,17 +1009,24 @@ An older deploy answers without paging — resend the query with "offset" instea
       "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
     )
     .option("--body-file <path>", "read body JSON from a file")
+    .option("--branch <b>", "branch (default: main)")
     .action(async (knId: string, sId: string, opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).kn.actionScheduleSetStatus(knId, sId, readBody(opts)),
+        await clientFrom(cmd).kn.actionScheduleSetStatus(knId, sId, readBody(opts), {
+          branch: opts.branch,
+        }),
         outputOptions(cmd),
       );
     });
   sched
     .command("delete <kn-id> <schedule-ids>")
     .description("Delete action schedule(s) (comma-joined ids)")
-    .action(async (knId: string, ids: string, _o, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn.actionScheduleDelete(knId, ids), outputOptions(cmd));
+    .option("--branch <b>", "branch (default: main)")
+    .action(async (knId: string, ids: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).kn.actionScheduleDelete(knId, ids, { branch: opts.branch }),
+        outputOptions(cmd),
+      );
     });
 
   const capability = bkn
@@ -898,7 +1037,11 @@ An older deploy answers without paging — resend the query with "offset" instea
     .description("List what the network has bound → {entries, boxes, total_count, …}")
     .option("--type <type>", "skill | function | mcp_tool")
     .option("--box <box-id>", "only the tools of this tool box or MCP Server")
-    .option("--metadata-type <kind>", "only function bindings whose tool box is openapi | function")
+    .option(
+      "--metadata-type <kind>",
+      "only function bindings whose tool box is openapi | function",
+      oneOf("--metadata-type", ["openapi", "function"]),
+    )
     .option("--with-detail", "also fill description and status (one extra call per skill)")
     .option("--branch <name>", "knowledge network branch (default: main)")
     .option("--limit <n>", "page size", int)
@@ -1020,9 +1163,20 @@ not bound until you attach it (\`capability list\` counts it under boxes[].unmou
       "request JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
     )
     .option("--body-file <path>", "read request JSON from a file")
+    .option("--branch <b>", "branch (default: main)")
+    .addHelpText(
+      "after",
+      `
+The body needs source_object_type_id, direction (forward | backward | bidirectional) and
+path_length (1–3). The contract's enum spells the reverse direction \`reverse\`, but the
+backend refuses it with 400 InvalidParameter.Direction; use \`backward\`.
+
+  openbkn bkn relation-type-paths <kn-id> \\
+    --body '{"source_object_type_id": "<ot-id>", "direction": "bidirectional", "path_length": 2}'`,
+    )
     .action(async (knId: string, opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).kn.relationTypePaths(knId, readBody(opts)),
+        await clientFrom(cmd).kn.relationTypePaths(knId, readBody(opts), { branch: opts.branch }),
         outputOptions(cmd),
       );
     });

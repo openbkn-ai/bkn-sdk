@@ -237,6 +237,21 @@ describe("bkn push integrity verification", () => {
     expect(JSON.parse(stdout.join(""))).not.toHaveProperty("integrity_warnings");
   });
 
+  it("reads a data_source without an id as unbound, as the contract allows", () => {
+    // DataSource.required is [type]; an id-less source must not abort the push.
+    const snapshot = snapshotObjectTypes({
+      entries: [{ id: "ot", data_source: { type: "resource" }, data_properties: [] }],
+    });
+    expect(snapshot.get("ot")?.dataSourceId).toBeUndefined();
+    const empty = snapshotObjectTypes({
+      entries: [{ id: "ot", data_source: { type: "resource", id: "" } }],
+    });
+    expect(empty.get("ot")?.dataSourceId).toBeUndefined();
+    expect(() =>
+      snapshotObjectTypes({ entries: [{ id: "ot", data_source: { type: "resource", id: 7 } }] }),
+    ).toThrow("invalid data_source");
+  });
+
   it("rejects an undefined binding in a snapshot", () => {
     expect(() =>
       snapshotObjectTypes({

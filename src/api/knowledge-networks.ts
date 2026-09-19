@@ -11,6 +11,13 @@
 import type { RequestContext } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
+import {
+  type BranchOptions,
+  type ImportWriteOptions,
+  type StrictWriteOptions,
+  idSegment,
+  writeQuery,
+} from "./bkn-backend.js";
 import { request } from "./http.js";
 import {
   type BknContext,
@@ -73,38 +80,97 @@ export function getKnowledgeNetwork(
   });
 }
 
-export interface CreateKnOptions {
+/** Query flags of a knowledge-network create. */
+export interface CreateKnQueryOptions extends ImportWriteOptions {
+  /** `preserve` (backend default) keeps environment-local bindings; `detach` drops them. */
+  bindingPolicy?: "preserve" | "detach";
+}
+
+export interface CreateKnOptions extends CreateKnQueryOptions {
   name: string;
-  branch?: string;
+  /** Network id; immutable after creation. The backend mints one when omitted. */
+  id?: string;
+  tags?: string[];
+  comment?: string;
+  icon?: string;
+  color?: string;
   /** @deprecated Not part of the create contract; ignored. */
   baseBranch?: string;
 }
 
-/** Create a knowledge network from a fully-formed body (e.g. a rendered template). */
-export function createKnowledgeNetworkRaw(ctx: RequestContext, body: unknown): Promise<unknown> {
-  return request(ctx, ONTOLOGY_BASE, { method: "POST", body });
+function createKnQuery(opts: CreateKnQueryOptions, branch: string | undefined) {
+  return {
+    ...writeQuery({ ...opts, branch }),
+    binding_policy: opts.bindingPolicy || undefined,
+  };
+}
+
+/**
+ * Create a knowledge network from a fully-formed body (e.g. a rendered template).
+ * The query `branch` defaults to the body's own, so the two never disagree.
+ */
+export function createKnowledgeNetworkRaw(
+  ctx: RequestContext,
+  body: unknown,
+  opts: CreateKnQueryOptions = {},
+): Promise<unknown> {
+  const declared = (body as { branch?: unknown } | null)?.branch;
+  const bodyBranch = typeof declared === "string" ? declared : undefined;
+  return request(ctx, ONTOLOGY_BASE, {
+    method: "POST",
+    query: createKnQuery(opts, opts.branch || bodyBranch),
+    body,
+  });
 }
 
 export function createKnowledgeNetwork(
   ctx: RequestContext,
   opts: CreateKnOptions,
 ): Promise<unknown> {
+  // The backend reads the branch from the query (default main) as well as the body;
+  // send the same one in both, or `--branch dev` creates on main.
+  const branch = opts.branch || "main";
   return request(ctx, ONTOLOGY_BASE, {
     method: "POST",
-    body: { name: opts.name, branch: opts.branch ?? "main" },
+    query: createKnQuery(opts, branch),
+    body: {
+      ...(opts.id ? { id: opts.id } : {}),
+      name: opts.name,
+      ...(opts.tags ? { tags: opts.tags } : {}),
+      ...(opts.comment !== undefined ? { comment: opts.comment } : {}),
+      ...(opts.icon !== undefined ? { icon: opts.icon } : {}),
+      ...(opts.color !== undefined ? { color: opts.color } : {}),
+      branch,
+    },
   });
 }
 
-export function deleteKnowledgeNetwork(ctx: RequestContext, knId: string): Promise<unknown> {
-  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}`, { method: "DELETE" });
+export function deleteKnowledgeNetwork(
+  ctx: RequestContext,
+  knId: string,
+  opts: BranchOptions = {},
+): Promise<unknown> {
+  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}`, {
+    method: "DELETE",
+    query: { branch: opts.branch || undefined },
+  });
 }
 
 export function updateKnowledgeNetwork(
   ctx: RequestContext,
   knId: string,
   body: unknown,
+  opts: ImportWriteOptions = {},
 ): Promise<unknown> {
-  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}`, { method: "PUT", body });
+  // Like create: the backend reads the branch from the query (default main), so a
+  // body that names a branch without --branch must not quietly update main.
+  const declared = (body as { branch?: unknown } | null)?.branch;
+  const bodyBranch = typeof declared === "string" ? declared : undefined;
+  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}`, {
+    method: "PUT",
+    query: writeQuery({ ...opts, branch: opts.branch || bodyBranch }),
+    body,
+  });
 }
 
 /**
@@ -478,11 +544,12 @@ export function createObjectTypes(
   knId: string,
   entries: unknown[],
   branch = "main",
+  opts: Omit<ImportWriteOptions, "branch"> = {},
 ): Promise<unknown> {
   return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/object-types`, {
     method: "POST",
     headers: CREATE_OVER_POST,
-    query: { branch },
+    query: writeQuery({ ...opts, branch }),
     body: { entries },
   });
 }
@@ -528,18 +595,20 @@ function entriesBody(body: unknown): unknown {
   return Array.isArray(body) ? { entries: body } : body;
 }
 
+/**
+ * Get one or more schema items. The route takes a list: ids may be comma-joined (or
+ * a list), each encoded on its own with the commas kept literal.
+ */
 export function getSchemaItem(
   ctx: RequestContext,
   knId: string,
   kind: SchemaKind,
-  id: string,
-  opts: { branch?: string } = {},
+  id: string | string[],
+  opts: BranchOptions = {},
 ): Promise<unknown> {
-  return request(
-    ctx,
-    `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/${kind}/${encodeURIComponent(id)}`,
-    { query: { branch: opts.branch || undefined } },
-  );
+  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/${kind}/${idSegment(id)}`, {
+    query: { branch: opts.branch || undefined },
+  });
 }
 /** Create schema items: `{entries:[…]}` (a bare array is wrapped). */
 export function createSchemaItem(
@@ -547,21 +616,17 @@ export function createSchemaItem(
   knId: string,
   kind: SchemaKind,
   body: unknown,
-  opts: { branch?: string } = {},
+  opts: ImportWriteOptions = {},
 ): Promise<unknown> {
   return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/${kind}`, {
     method: "POST",
     headers: CREATE_OVER_POST,
-    query: { branch: opts.branch || undefined },
+    query: writeQuery(opts),
     body: entriesBody(body),
   });
 }
 
-export interface UpdateSchemaItemOptions {
-  branch?: string;
-  /** Validate dependencies (backend default true); pass false to skip. */
-  strictMode?: boolean;
-}
+export type UpdateSchemaItemOptions = StrictWriteOptions;
 
 /** Update one schema item. The body carries `base_version`, the version it was read at. */
 export function updateSchemaItem(
@@ -592,24 +657,21 @@ export interface DeleteSchemaItemOptions {
   forceDelete?: boolean;
 }
 
+/** Delete one or more schema items (comma-joined ids or a list, as {@link getSchemaItem}). */
 export function deleteSchemaItem(
   ctx: RequestContext,
   knId: string,
   kind: SchemaKind,
-  id: string,
+  id: string | string[],
   opts: DeleteSchemaItemOptions = {},
 ): Promise<unknown> {
-  return request(
-    ctx,
-    `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/${kind}/${encodeURIComponent(id)}`,
-    {
-      method: "DELETE",
-      query: {
-        branch: opts.branch || undefined,
-        force_delete: opts.forceDelete && kind === "object-types" ? "true" : undefined,
-      },
+  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/${kind}/${idSegment(id)}`, {
+    method: "DELETE",
+    query: {
+      branch: opts.branch || undefined,
+      force_delete: opts.forceDelete && kind === "object-types" ? "true" : undefined,
     },
-  );
+  });
 }
 
 // Metric definitions live under bkn-backend (data/dry-run are query-side).
@@ -626,16 +688,19 @@ export function listMetrics(
     },
   });
 }
+/** Get one or more metrics (comma-joined ids or a list). */
 export function getMetric(
   ctx: RequestContext,
   knId: string,
-  metricId: string,
-  opts: { branch?: string } = {},
+  metricId: string | string[],
+  opts: BranchOptions = {},
 ): Promise<unknown> {
   return request(
     ctx,
-    `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/${encodeURIComponent(metricId)}`,
-    { query: { branch: opts.branch || undefined } },
+    `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/${idSegment(metricId)}`,
+    {
+      query: { branch: opts.branch || undefined },
+    },
   );
 }
 /** Create metrics: `{entries:[…]}` (a bare array is wrapped). */
@@ -643,12 +708,12 @@ export function createMetric(
   ctx: RequestContext,
   knId: string,
   body: unknown,
-  opts: { branch?: string } = {},
+  opts: ImportWriteOptions = {},
 ): Promise<unknown> {
   return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics`, {
     method: "POST",
     headers: CREATE_OVER_POST,
-    query: { branch: opts.branch || undefined },
+    query: writeQuery(opts),
     body: entriesBody(body),
   });
 }
@@ -657,27 +722,28 @@ export function updateMetric(
   knId: string,
   metricId: string,
   body: unknown,
-  opts: { branch?: string } = {},
+  opts: StrictWriteOptions = {},
 ): Promise<unknown> {
   return request(
     ctx,
     `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/${encodeURIComponent(metricId)}`,
     {
       method: "PUT",
-      query: { branch: opts.branch || undefined },
+      query: writeQuery({ branch: opts.branch, strictMode: opts.strictMode }),
       body,
     },
   );
 }
+/** Delete one or more metrics (comma-joined ids or a list). */
 export function deleteMetric(
   ctx: RequestContext,
   knId: string,
-  metricId: string,
-  opts: { branch?: string } = {},
+  metricId: string | string[],
+  opts: BranchOptions = {},
 ): Promise<unknown> {
   return request(
     ctx,
-    `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/${encodeURIComponent(metricId)}`,
+    `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/${idSegment(metricId)}`,
     {
       method: "DELETE",
       query: { branch: opts.branch || undefined },
@@ -688,11 +754,11 @@ export function validateMetric(
   ctx: RequestContext,
   knId: string,
   body: unknown,
-  opts: { branch?: string } = {},
+  opts: ImportWriteOptions = {},
 ): Promise<unknown> {
   return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/validation`, {
     method: "POST",
-    query: { branch: opts.branch || undefined },
+    query: writeQuery(opts),
     body,
   });
 }

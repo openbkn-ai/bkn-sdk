@@ -7,20 +7,33 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  addConceptGroupMembers,
+  createActionSchedule,
+  createConceptGroup,
   deleteActionSchedules,
+  deleteConceptGroup,
+  getActionSchedule,
   getConceptGroup,
   listActionSchedules,
   listBknResources,
   listCapabilities,
   listConceptGroups,
+  relationTypePaths,
   removeConceptGroupMembers,
+  runCypherQuery,
+  setActionScheduleStatus,
+  updateActionSchedule,
+  updateConceptGroup,
   uploadBkn,
 } from "../../src/api/bkn-backend.js";
 import {
   cancelActionLog,
+  createKnowledgeNetwork,
+  createKnowledgeNetworkRaw,
   createMetric,
   createObjectTypes,
   createSchemaItem,
+  deleteKnowledgeNetwork,
   deleteMetric,
   deleteSchemaItem,
   dryRunMetric,
@@ -38,6 +51,7 @@ import {
   queryMetricData,
   queryObjectTypeInstances,
   querySubgraph,
+  updateKnowledgeNetwork,
   updateMetric,
   updateSchemaItem,
   validateMetric,
@@ -475,5 +489,187 @@ describe("bkn push", () => {
     const f = mockFetch();
     await uploadBkn(ctx, Buffer.from("tar"));
     expect([...lastCall(f).url.searchParams.keys()]).toEqual(["branch"]);
+  });
+});
+
+describe("write modes and branch on bkn-backend writes", () => {
+  it("knowledge-network create sends the same branch in query and body", async () => {
+    const f = mockFetch();
+    await createKnowledgeNetwork(ctx, { name: "demo", branch: "dev" });
+    let { url, init } = lastCall(f);
+    expect(url.searchParams.get("branch")).toBe("dev");
+    expect(JSON.parse(init.body as string)).toEqual({ name: "demo", branch: "dev" });
+
+    await createKnowledgeNetwork(ctx, {
+      name: "demo",
+      id: "kn_demo",
+      tags: ["t"],
+      comment: "c",
+      importMode: "overwrite",
+      strictMode: false,
+      bindingPolicy: "detach",
+    });
+    ({ url, init } = lastCall(f));
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      branch: "main",
+      strict_mode: "false",
+      import_mode: "overwrite",
+      binding_policy: "detach",
+    });
+    expect(JSON.parse(init.body as string)).toEqual({
+      id: "kn_demo",
+      name: "demo",
+      tags: ["t"],
+      comment: "c",
+      branch: "main",
+    });
+
+    await createKnowledgeNetworkRaw(ctx, { name: "demo", branch: "feature" });
+    expect(lastCall(f).url.searchParams.get("branch")).toBe("feature");
+  });
+
+  it("knowledge-network update and delete pass their query flags", async () => {
+    const f = mockFetch();
+    await updateKnowledgeNetwork(
+      ctx,
+      "kn-1",
+      { name: "n", branch: "dev" },
+      { branch: "dev", strictMode: false, importMode: "ignore" },
+    );
+    expect(Object.fromEntries(lastCall(f).url.searchParams)).toEqual({
+      branch: "dev",
+      strict_mode: "false",
+      import_mode: "ignore",
+    });
+    await updateKnowledgeNetwork(ctx, "kn-1", {});
+    expect(lastCall(f).url.search).toBe("");
+    // A body naming its branch without --branch must not update main.
+    await updateKnowledgeNetwork(ctx, "kn-1", { name: "n", branch: "dev" });
+    expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
+    await deleteKnowledgeNetwork(ctx, "kn-1", { branch: "dev" });
+    expect(lastCall(f).init.method).toBe("DELETE");
+    expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
+  });
+
+  it("schema and metric creates pass import_mode and strict_mode", async () => {
+    const f = mockFetch();
+    await createSchemaItem(ctx, "kn-1", "relation-types", [], {
+      importMode: "ignore",
+      strictMode: false,
+    });
+    expect(lastCall(f).url.searchParams.get("import_mode")).toBe("ignore");
+    expect(lastCall(f).url.searchParams.get("strict_mode")).toBe("false");
+    await createObjectTypes(ctx, "kn-1", [], "dev", { importMode: "overwrite" });
+    expect(Object.fromEntries(lastCall(f).url.searchParams)).toEqual({
+      branch: "dev",
+      import_mode: "overwrite",
+    });
+    await createMetric(ctx, "kn-1", [], { importMode: "normal", strictMode: true });
+    expect(lastCall(f).url.searchParams.get("import_mode")).toBe("normal");
+    expect(lastCall(f).url.searchParams.get("strict_mode")).toBe("true");
+    await validateMetric(ctx, "kn-1", {}, { importMode: "overwrite", strictMode: false });
+    expect(lastCall(f).url.searchParams.get("import_mode")).toBe("overwrite");
+    expect(lastCall(f).url.searchParams.get("strict_mode")).toBe("false");
+    await updateMetric(ctx, "kn-1", "m-1", {}, { strictMode: false });
+    expect(Object.fromEntries(lastCall(f).url.searchParams)).toEqual({ strict_mode: "false" });
+  });
+
+  it("comma-joined schema and metric ids keep literal commas, each id encoded", async () => {
+    const f = mockFetch();
+    const base = "/api/bkn-backend/v1/knowledge-networks/kn-1";
+    await getSchemaItem(ctx, "kn-1", "object-types", "ot-1, ot/2");
+    expect(lastCall(f).url.pathname).toBe(`${base}/object-types/ot-1,ot%2F2`);
+    await deleteSchemaItem(ctx, "kn-1", "relation-types", ["rt-1", "rt-2"]);
+    expect(lastCall(f).url.pathname).toBe(`${base}/relation-types/rt-1,rt-2`);
+    await getMetric(ctx, "kn-1", "m-1,m-2");
+    expect(lastCall(f).url.pathname).toBe(`${base}/metrics/m-1,m-2`);
+    await deleteMetric(ctx, "kn-1", ["m 1", "m-2"]);
+    expect(lastCall(f).url.pathname).toBe(`${base}/metrics/m%201,m-2`);
+  });
+
+  it("relation-type-paths passes branch and keeps the GET override", async () => {
+    const f = mockFetch();
+    await relationTypePaths(ctx, "kn-1", { direction: "backward" }, { branch: "dev" });
+    const { url, init } = lastCall(f);
+    expect(url.searchParams.get("branch")).toBe("dev");
+    expect(header(init, "X-HTTP-Method-Override")).toBe("GET");
+    expect(JSON.parse(init.body as string)).toEqual({ direction: "backward" });
+  });
+
+  it("concept-group writes pass branch, import_mode and strict_mode", async () => {
+    const f = mockFetch();
+    await createConceptGroup(
+      ctx,
+      "kn-1",
+      {},
+      { branch: "dev", importMode: "ignore", strictMode: false },
+    );
+    expect(Object.fromEntries(lastCall(f).url.searchParams)).toEqual({
+      branch: "dev",
+      import_mode: "ignore",
+      strict_mode: "false",
+    });
+    await updateConceptGroup(ctx, "kn-1", "cg-1", {}, { branch: "dev", strictMode: false });
+    expect(Object.fromEntries(lastCall(f).url.searchParams)).toEqual({
+      branch: "dev",
+      strict_mode: "false",
+    });
+    await deleteConceptGroup(ctx, "kn-1", "cg-1", { branch: "dev" });
+    expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
+    await addConceptGroupMembers(ctx, "kn-1", "cg-1", {}, { strictMode: false });
+    expect(Object.fromEntries(lastCall(f).url.searchParams)).toEqual({ strict_mode: "false" });
+    await removeConceptGroupMembers(ctx, "kn-1", "cg-1", "ot-1", { branch: "dev" });
+    expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
+    await createConceptGroup(ctx, "kn-1", {});
+    expect(lastCall(f).url.search).toBe("");
+  });
+
+  it("action-schedule get/create/update/status/delete pass branch", async () => {
+    const f = mockFetch();
+    const opts = { branch: "dev" };
+    await getActionSchedule(ctx, "kn-1", "s-1", opts);
+    expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
+    await createActionSchedule(ctx, "kn-1", {}, opts);
+    expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
+    await updateActionSchedule(ctx, "kn-1", "s-1", {}, opts);
+    expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
+    await setActionScheduleStatus(ctx, "kn-1", "s-1", {}, opts);
+    expect(lastCall(f).url.pathname).toMatch(/action-schedules\/s-1\/status$/);
+    expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
+    await deleteActionSchedules(ctx, "kn-1", "s-1", opts);
+    expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
+    await getActionSchedule(ctx, "kn-1", "s-1");
+    expect(lastCall(f).url.search).toBe("");
+  });
+});
+
+describe("big integers in dynamic bkn-backend reads", () => {
+  function bigResponse(body: string) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(body, { status: 200 })),
+    );
+  }
+
+  it("cypher-queries keeps a BIGINT row value past 2^53", async () => {
+    bigResponse('{"columns":["id"],"entries":[{"id":9223372036854775807}]}');
+    await expect(
+      runCypherQuery(ctx, "kn-1", { query: "MATCH (o:order) RETURN o.id AS id" }),
+    ).resolves.toEqual({
+      columns: ["id"],
+      entries: [{ id: 9223372036854775807n }],
+    });
+  });
+
+  it("action-schedule reads keep instance identities past 2^53", async () => {
+    const body = '{"_instance_identities":[{"id":9007199254740993}]}';
+    bigResponse(body);
+    await expect(getActionSchedule(ctx, "kn-1", "s-1")).resolves.toEqual({
+      _instance_identities: [{ id: 9007199254740993n }],
+    });
+    bigResponse(`{"entries":[${body}]}`);
+    await expect(listActionSchedules(ctx, "kn-1")).resolves.toEqual({
+      entries: [{ _instance_identities: [{ id: 9007199254740993n }] }],
+    });
   });
 });
