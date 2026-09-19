@@ -43,6 +43,8 @@ function normalizeDocumentDeletionSelector(
     throw new InputError("delete-by-selector requires a non-empty selector");
   }
 
+  // The vega contract leaves filter_condition opaque. Live on 14.103.77.23 a
+  // delete-by-filter honours both "eq" and "==" on a dataset; keep "eq".
   const conditions = entries.map(([field, value]) => ({
     field,
     operation: "eq",
@@ -211,8 +213,9 @@ export const Resource = z
       .passthrough()
       .optional(),
     // Optional: neither reference deploy sends the key at all, so requiring it
-    // rejects every resource read against them. Still an enum when present —
-    // a deploy that reports the state must report one this SDK knows.
+    // rejects every resource read against them — although the contract lists it
+    // as required. Still an enum when present — a deploy that reports the state
+    // must report one this SDK knows.
     local_status: ResourceLocalStatus.optional(),
     index_name: z.string().optional(),
     column_count: z.number().optional(),
@@ -278,9 +281,10 @@ export async function listResources(
       enabled: opts.enabled === undefined ? undefined : String(opts.enabled),
       last_discover_status: opts.lastDiscoverStatus || undefined,
       schema: opts.schema || undefined,
-      // Same `/resources` endpoint as `catalogResources`: limit=-1 (NO_LIMIT)
-      // fetches every row; any other non-positive/invalid value uses the SDK
-      // list default.
+      // The `/resources` contract documents neither a maximum page size nor
+      // `-1`. -1 is still forwarded for deployments that honour it; any other
+      // non-positive/invalid value uses the SDK list default. To read every
+      // resource portably, page with `offset` until `total_count`.
       limit:
         opts.limit === undefined
           ? DEFAULT_LIST_LIMIT
@@ -403,7 +407,9 @@ function resourceUpdateBody(
     description: patch.description ?? current.description ?? "",
     category: current.category,
     enabled: current.enabled,
-    schema_definition: patch.schemaDefinition ?? current.schema_definition,
+    schema_definition: withoutReadOnlyFeatureConfig(
+      patch.schemaDefinition ?? current.schema_definition,
+    ),
     index_config: patch.indexConfig === undefined ? current.index_config : patch.indexConfig,
     logic_definition: patch.logicDefinition ?? current.logic_definition,
   };
@@ -412,6 +418,29 @@ function resourceUpdateBody(
     body.expected_update_time = expectedUpdateTime;
   }
   return body;
+}
+
+/**
+ * Drop `config.dimension` from vector features. The server writes it from the
+ * embedding model's registration and the contract says callers must not send
+ * it, yet a read-modify-write would echo it straight back.
+ */
+function withoutReadOnlyFeatureConfig(
+  properties: ResourceProperty[] | undefined,
+): ResourceProperty[] | undefined {
+  if (!properties) return properties;
+  return properties.map((property) => {
+    if (!property.features?.some((f) => f.feature_type === "vector" && f.config)) return property;
+    return {
+      ...property,
+      features: property.features.map((feature) => {
+        if (feature.feature_type !== "vector" || !feature.config) return feature;
+        if (!("dimension" in feature.config)) return feature;
+        const { dimension: _dimension, ...config } = feature.config;
+        return { ...feature, config };
+      }),
+    };
+  });
 }
 
 /**
@@ -474,6 +503,16 @@ export interface QueryResourceOptions {
   keepAliveSec?: number;
   /** Opaque cursor returned by the preceding resource data page. */
   cursor?: string;
+  /**
+   * How Binary fields come back: `metadata` (byte length; the server default)
+   * or `content` (Base64). Initial request only — never sent with `cursor`.
+   */
+  binaryMode?: "metadata" | "content";
+  /**
+   * Skip an available local index and read the table's source directly. Table
+   * resources only; initial request only — never sent with `cursor`.
+   */
+  ignoreLocalIndex?: boolean;
   filterCondition?: Record<string, unknown>;
   sort?: Array<{ field: string; direction: "asc" | "desc" }>;
   outputFields?: string[];
@@ -494,7 +533,11 @@ export interface QueryResourceOptions {
   };
 }
 
-export type ResourceDocument = Record<string, unknown> & { id?: string };
+/**
+ * A dataset document. The contract names the id key `_id`; `id` stays in the
+ * type for callers that already use it as an ordinary content field.
+ */
+export type ResourceDocument = Record<string, unknown> & { _id?: string; id?: string };
 
 export interface ResourceDataPaging {
   next_cursor: string | null;
@@ -502,6 +545,8 @@ export interface ResourceDataPaging {
 }
 
 export interface QueryResourceResponse {
+  /** Which data path answered: the table's local index, or its source. */
+  query_source?: "local_index" | "source" | (string & {});
   entries: ResourceDocument[];
   total_count?: number;
   paging?: ResourceDataPaging;
@@ -529,6 +574,10 @@ export function queryResource(
         },
         ...(opts.sort !== undefined ? { sort: opts.sort } : {}),
         ...(opts.outputFields !== undefined ? { output_fields: opts.outputFields } : {}),
+        ...(opts.binaryMode !== undefined ? { binary_mode: opts.binaryMode } : {}),
+        ...(opts.ignoreLocalIndex !== undefined
+          ? { ignore_local_index: opts.ignoreLocalIndex }
+          : {}),
         need_total: opts.needTotal ?? false,
         ...(opts.aggregation !== undefined ? { aggregation: opts.aggregation } : {}),
         ...(opts.groupBy !== undefined
@@ -557,6 +606,11 @@ export async function createResourceDocument(
   resourceId: string,
   document: ResourceDocument,
 ): Promise<{ id: string }> {
+  if (Object.hasOwn(document, "_id")) {
+    throw new InputError(
+      "a created document must not carry _id (the server assigns it); use upsertResourceDocument to write a known id",
+    );
+  }
   const result = await request<unknown>(ctx, `${BASE}/${encodeURIComponent(resourceId)}/data`, {
     method: "POST",
     headers: { "X-HTTP-Method-Override": "POST" },

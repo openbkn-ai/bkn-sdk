@@ -82,7 +82,9 @@ function normalizeVegaResponse(url: URL, body: unknown): unknown {
   return {
     ...body,
     entries,
-    ...(url.pathname.endsWith("/resources") ? { total_count: entries.length } : {}),
+    ...(url.pathname.endsWith("/resources") && !("total_count" in body)
+      ? { total_count: entries.length }
+      : {}),
   };
 }
 
@@ -111,9 +113,13 @@ function catalogRoutes(
               id: t?.id,
               name: t?.name,
               category: "table",
-              source_metadata: { columns: t?.columns.map((c) => ({ name: c, type: "varchar" })) },
-              schema_definition: t?.columns.map((c) => ({ name: c, type: "varchar" })),
-              ...(t?.pk ? { primary_keys: [t.pk] } : {}),
+              schema_definition: t?.columns.map((c) => ({
+                name: c,
+                type: "string",
+                original_name: c,
+                original_type: "varchar",
+              })),
+              ...(t?.pk ? { index_config: { primary_key_fields: [t.pk] } } : {}),
             },
           ],
         };
@@ -200,17 +206,116 @@ describe("createFromCatalog table identifiers", () => {
     );
   });
 
-  it("asks for every table, not the backend's default page", async () => {
-    const f = mockFetch(
-      catalogRoutes([{ id: "r-1", name: "document", columns: ["id"], pk: "id" }]),
-    );
-    await createFromCatalog(ctx, { catalogId: "c-1", name: "kn" });
-    // A default page of 20 would drop the 21st table from the network and then
-    // report it as one the catalog does not have.
-    const list = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.find(
-      ([u]) => new URL(String(u)).pathname === "/api/vega-backend/v1/resources",
-    );
-    expect(new URL(String(list?.[0])).searchParams.get("limit")).toBe("-1");
+  it("pages through every table by offset until total_count, not the default page", async () => {
+    // A default page would drop the 21st table from the network and then report
+    // it as one the catalog does not have. `/resources` documents no `-1`, so
+    // the listing pages instead.
+    const tables = Array.from({ length: 3 }, (_, i) => ({
+      id: `r-${i}`,
+      name: `t${i}`,
+      columns: ["id"],
+      pk: "id",
+    }));
+    const listed: URL[] = [];
+    const routes = catalogRoutes(tables);
+    mockFetch([
+      [
+        /^\/api\/vega-backend\/v1\/resources$/,
+        (url) => {
+          listed.push(url);
+          const offset = Number(url.searchParams.get("offset") ?? 0);
+          // Two per page regardless of the limit asked for: the server decides.
+          const page = tables.slice(offset, offset + 2).map((t) => ({ id: t.id, name: t.name }));
+          return { entries: page, total_count: tables.length };
+        },
+      ],
+      ...routes.slice(1),
+    ]);
+    const out = (await createFromCatalog(ctx, { catalogId: "c-1", name: "kn" })) as {
+      object_types: Array<{ name: string }>;
+    };
+    expect(out.object_types.map((t) => t.name)).toEqual(["t0", "t1", "t2"]);
+    expect(listed.map((u) => u.searchParams.get("offset"))).toEqual(["0", "2"]);
+    expect(listed.every((u) => u.searchParams.get("limit") !== "-1")).toBe(true);
+  });
+
+  it("reads columns from schema_definition and keys from index_config, ignoring source_metadata", async () => {
+    const f = mockFetch([
+      [
+        /^\/api\/vega-backend\/v1\/resources$/,
+        () => ({ entries: [{ id: "r-1", name: "orders" }] }),
+      ],
+      [
+        /^\/api\/vega-backend\/v1\/resources\/r-1$/,
+        () => ({
+          entries: [
+            {
+              id: "r-1",
+              name: "orders",
+              schema_definition: [
+                {
+                  name: "order_no",
+                  type: "string",
+                  original_name: "order_no",
+                  original_type: "char(12)",
+                },
+                { name: "amount", type: "float", original_name: "amount" },
+              ],
+              index_config: { primary_key_fields: ["order_no"] },
+              // Opaque and stale: must not add a column or decide the key.
+              source_metadata: { columns: [{ name: "legacy_id", column_key: "PRI" }] },
+            },
+          ],
+        }),
+      ],
+      ...catalogRoutes([]).slice(2),
+    ]);
+    const out = (await createFromCatalog(ctx, { catalogId: "c-1", name: "kn" })) as {
+      object_types: Array<{ name: string; pk: string }>;
+    };
+    expect(out.object_types).toEqual([{ name: "orders", pk: "order_no" }]);
+    const calls = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls;
+    const create = calls.find(([u]) => new URL(u).pathname.endsWith("/object-types"));
+    const body = JSON.parse(String(create?.[1].body));
+    const entries = (body.entries ?? body) as Array<{
+      data_properties: Array<{ name: string; mapped_field: { type: string } }>;
+    }>;
+    expect(entries[0]?.data_properties.map((p) => [p.name, p.mapped_field.type])).toEqual([
+      ["order_no", "char(12)"],
+      ["amount", "float"],
+    ]);
+  });
+
+  it("falls back to source_metadata columns and their key flags when schema_definition is empty", async () => {
+    mockFetch([
+      [
+        /^\/api\/vega-backend\/v1\/resources$/,
+        () => ({ entries: [{ id: "r-1", name: "orders" }] }),
+      ],
+      [
+        /^\/api\/vega-backend\/v1\/resources\/r-1$/,
+        () => ({
+          entries: [
+            {
+              id: "r-1",
+              name: "orders",
+              schema_definition: [],
+              source_metadata: {
+                columns: [
+                  { name: "order_id", type: "bigint", column_key: "PRI" },
+                  { name: "note", type: "text" },
+                ],
+              },
+            },
+          ],
+        }),
+      ],
+      ...catalogRoutes([]).slice(2),
+    ]);
+    const out = (await createFromCatalog(ctx, { catalogId: "c-1", name: "kn" })) as {
+      object_types: Array<{ name: string; pk: string }>;
+    };
+    expect(out.object_types).toEqual([{ name: "orders", pk: "order_id" }]);
   });
 
   it("accepts a schema-qualified --pk-map key for a bare catalog table name", async () => {

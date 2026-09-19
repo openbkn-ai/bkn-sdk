@@ -29,6 +29,7 @@ import {
 } from "../../src/api/vega.js";
 import { vega } from "../../src/resources/vega.js";
 import type { RequestContext } from "../../src/types.js";
+import { HttpError } from "../../src/utils/errors.js";
 import { verifiedContext } from "../setup/verified-context.js";
 
 const ctx = verifiedContext<RequestContext>({
@@ -192,6 +193,23 @@ describe("vega uses the vega-backend base path", () => {
     });
   });
 
+  it("explains a 404 from index-capabilities as an undocumented extension the deploy lacks", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ error_code: "NotFound" }), {
+            status: 404,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+    const error = await getIndexCapabilities(ctx).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(HttpError);
+    expect((error as HttpError).status).toBe(404);
+    expect((error as HttpError).hint).toMatch(/undocumented/);
+  });
+
   it("listCatalogs sends filters and sort params", async () => {
     const f = mockFetch();
     await listCatalogs(ctx, {
@@ -234,6 +252,29 @@ describe("vega uses the vega-backend base path", () => {
     mockFetch({ entries: [catalog] });
     await expect(getCatalog(ctx, "c-1")).resolves.toMatchObject({
       entries: [{ built_in: true, id: "c-1", update_time: 1720000000123 }],
+    });
+  });
+
+  it("parses an internal catalog whose connector_config is null", async () => {
+    // Live on 14.103.77.23: `vega catalog get` of a built-in (logical) catalog failed
+    // schema validation because the service answers connector_config: null.
+    mockFetch({
+      entries: [
+        {
+          id: "c-int",
+          name: "logical",
+          type: "logical",
+          enabled: false,
+          built_in: true,
+          connector_type: "",
+          connector_config: null,
+          metadata: {},
+          health_check_result: "",
+        },
+      ],
+    });
+    await expect(getCatalog(ctx, "c-int")).resolves.toMatchObject({
+      entries: [{ id: "c-int", connector_config: null }],
     });
   });
 
@@ -280,7 +321,7 @@ describe("vega uses the vega-backend base path", () => {
     await expect(getCatalog(ctx, "c-1")).rejects.toThrow();
   });
 
-  it("requires update_time on catalog responses used for optimistic updates", async () => {
+  it("accepts a catalog without update_time, which the contract leaves optional", async () => {
     mockFetch({
       entries: [
         {
@@ -293,7 +334,14 @@ describe("vega uses the vega-backend base path", () => {
       ],
       total_count: 1,
     });
-    await expect(listCatalogs(ctx)).rejects.toThrow(/update_time/);
+    await expect(listCatalogs(ctx)).resolves.toMatchObject({ entries: [{ id: "c-1" }] });
+  });
+
+  it("accepts a health-check schedule without update_time", async () => {
+    mockFetch({ catalog_id: "c-1", mode: "inherit", last_run: 0, next_run: 0 });
+    await expect(getCatalogHealthCheckSchedule(ctx, "c-1")).resolves.toMatchObject({
+      catalog_id: "c-1",
+    });
   });
 
   it("rejects an empty catalog detail envelope instead of returning an empty object", () => {
@@ -426,6 +474,24 @@ describe("createBuildTask", () => {
       total_count: 1,
     });
     expectTypeOf(tasks.entries[0]?.index_name).toEqualTypeOf<string | undefined>();
+  });
+
+  it("keeps a list whose task reports a status or mode this SDK does not know", async () => {
+    const summary = {
+      id: "t-1",
+      resource_id: "r-1",
+      catalog_id: "c-1",
+      status: "paused",
+      mode: "micro_batch",
+      execute_type: "delta",
+      total_count: 0,
+      synced_count: 0,
+      synced_mark: "",
+      creator: { id: "u-1", type: "user" },
+      create_time: 100,
+    };
+    mockFetch({ entries: [summary], total_count: 1 });
+    await expect(listBuildTasks(ctx)).resolves.toMatchObject({ entries: [summary] });
   });
 
   it("parses summaries without vectorized_count and preserves it from legacy responses", async () => {
@@ -697,18 +763,29 @@ describe("createCatalog", () => {
     expect(body.connector_config).toEqual({ host: "h" });
   });
 
-  it("uses built_in for the platform-owned catalog marker", async () => {
+  it("sends enabled explicitly, false when not asked for", async () => {
     const f = mockFetch({ id: "c-9" });
-    await createCatalog(ctx, {
-      name: "platform-catalog",
-      connectorType: "",
-      connectorConfig: {},
-      builtIn: true,
-    });
+    await createCatalog(ctx, { name: "my-cat", connectorType: "mysql", connectorConfig: {} });
+    expect(JSON.parse(firstCall(f)[1].body as string).enabled).toBe(false);
+  });
 
-    const body = JSON.parse(firstCall(f)[1].body as string);
-    expect(body).toMatchObject({ built_in: true });
-    expect(body).not.toHaveProperty("internal");
+  it("omits connector fields for a built-in catalog and marks it built_in", async () => {
+    const f = mockFetch({ id: "c-9" });
+    await createCatalog(ctx, { name: "logical", builtIn: true });
+    expect(JSON.parse(firstCall(f)[1].body as string)).toEqual({
+      name: "logical",
+      enabled: false,
+      built_in: true,
+    });
+  });
+
+  it("rejects a connector type on a built-in catalog before any request", async () => {
+    const f = mockFetch({ id: "c-9" });
+    await expect(
+      createCatalog(ctx, { name: "logical", builtIn: true, connectorType: "mysql" }),
+    ).rejects.toThrow(/built-in/);
+    await expect(createCatalog(ctx, { name: "physical" })).rejects.toThrow(/connectorType/);
+    expect((f as unknown as { mock: { calls: CallArgs[] } }).mock.calls).toHaveLength(0);
   });
 
   it("sends allow_unhealthy and an initial health-check schedule", async () => {
@@ -733,9 +810,57 @@ describe("createCatalog", () => {
   });
 });
 
+/** Serve a catalog detail read first, then `{}` for the write. */
+function mockCatalogReadThenWrite(catalog: Record<string, unknown>): typeof fetch {
+  const fn = vi.fn(async (_url: string, init: RequestInit = {}) =>
+    (init.method ?? "GET") === "GET"
+      ? new Response(JSON.stringify({ entries: [catalog] }), { status: 200 })
+      : new Response("{}", { status: 200 }),
+  );
+  vi.stubGlobal("fetch", fn);
+  return fn as unknown as typeof fetch;
+}
+
+const currentCatalog = {
+  id: "c-9",
+  name: "orders",
+  type: "physical",
+  enabled: true,
+  connector_type: "mysql",
+  tags: ["prod", "sales"],
+  description: "orders db",
+  update_time: 1720000000999,
+};
+
 describe("updateCatalog", () => {
+  it("keeps tags and description it was not given, and locks on the read update_time", async () => {
+    const f = mockCatalogReadThenWrite(currentCatalog);
+    await updateCatalog(ctx, "c-9", { name: "renamed" });
+    const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+    expect(calls.map(([, init]) => init.method ?? "GET")).toEqual(["GET", "PUT"]);
+    expect(JSON.parse(calls[1]?.[1].body as string)).toEqual({
+      id: "c-9",
+      name: "renamed",
+      connector_type: "mysql",
+      enabled: true,
+      tags: ["prod", "sales"],
+      description: "orders db",
+      expected_update_time: 1720000000999,
+    });
+  });
+
+  it("refuses to PUT without a lock version when the catalog carries no update_time", async () => {
+    const { update_time: _omit, ...withoutTime } = currentCatalog;
+    const f = mockCatalogReadThenWrite(withoutTime);
+    await expect(updateCatalog(ctx, "c-9", { name: "renamed" })).rejects.toThrow(
+      /expectedUpdateTime/,
+    );
+    const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+    expect(calls).toHaveLength(1);
+  });
+
   it("sends a full PUT body with the path id and allow_unhealthy", async () => {
-    const f = mockFetch();
+    const f = mockCatalogReadThenWrite(currentCatalog);
     await updateCatalog(
       ctx,
       "c-9",
@@ -750,7 +875,7 @@ describe("updateCatalog", () => {
       },
       { allowUnhealthy: true },
     );
-    const call = firstCall(f);
+    const call = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls[1] as CallArgs;
     const url = new URL(call[0]);
     expect(url.pathname).toBe("/api/vega-backend/v1/catalogs/c-9");
     expect(url.searchParams.get("allow_unhealthy")).toBe("true");

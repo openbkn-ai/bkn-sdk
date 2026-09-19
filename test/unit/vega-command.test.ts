@@ -33,6 +33,35 @@ function mockFetch(body: unknown = {}): ReturnType<typeof vi.fn> {
   return fetchMock;
 }
 
+const cliBase = ["--base-url", "https://demo.example.com", "--token", "t", "vega"];
+
+/** GET answers with one catalog; any write answers `{}`. */
+function mockCatalogReadThenWrite(): ReturnType<typeof vi.fn> {
+  const fetchMock = vi.fn(async (_url: string, init?: RequestInit) =>
+    (init?.method ?? "GET") === "GET"
+      ? new Response(
+          JSON.stringify({
+            entries: [
+              {
+                id: "c-1",
+                name: "orders",
+                type: "physical",
+                enabled: true,
+                connector_type: "mysql",
+                tags: ["prod"],
+                description: "orders db",
+                update_time: 1720000000999,
+              },
+            ],
+          }),
+          { status: 200 },
+        )
+      : new Response("{}", { status: 200 }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
 function suppressOutput(): void {
   vi.spyOn(process.stdout, "write").mockImplementation(() => true);
   vi.spyOn(process.stderr, "write").mockImplementation(() => true);
@@ -94,7 +123,7 @@ describe("vega resource list", () => {
         ],
         { from: "user" },
       ),
-    ).rejects.toThrow("boolean value must be true or false");
+    ).rejects.toThrow("--enabled must be one of: true | false");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
@@ -412,23 +441,6 @@ describe("vega optimistic updates", () => {
 
     await expect(
       cli().parseAsync(
-        [
-          ...base,
-          "catalog",
-          "update",
-          "c-1",
-          "--name",
-          "catalog",
-          "--connector-type",
-          "mysql",
-          "--enabled",
-          "false",
-        ],
-        { from: "user" },
-      ),
-    ).rejects.toThrow();
-    await expect(
-      cli().parseAsync(
         [...base, "catalog", "set-health-check-schedule", "c-1", "--mode", "disabled"],
         {
           from: "user",
@@ -482,7 +494,7 @@ describe("vega optimistic updates", () => {
   });
 
   it("forwards the catalog update version", async () => {
-    const fetchMock = mockFetch();
+    const fetchMock = mockCatalogReadThenWrite();
     suppressOutput();
 
     await cli().parseAsync(
@@ -507,9 +519,37 @@ describe("vega optimistic updates", () => {
       { from: "user" },
     );
 
-    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+    expect(JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string)).toMatchObject({
       expected_update_time: 1720000000123,
     });
+  });
+
+  it("updates only the fields given and keeps the rest of the catalog", async () => {
+    const fetchMock = mockCatalogReadThenWrite();
+    suppressOutput();
+    await cli().parseAsync(
+      [...cliBase, "catalog", "update", "c-1", "--description", "new description"],
+      { from: "user" },
+    );
+    expect(fetchMock.mock.calls.map(([, init]) => init?.method ?? "GET")).toEqual(["GET", "PUT"]);
+    expect(JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string)).toEqual({
+      id: "c-1",
+      name: "orders",
+      connector_type: "mysql",
+      enabled: true,
+      tags: ["prod"],
+      description: "new description",
+      expected_update_time: 1720000000999,
+    });
+  });
+
+  it("refuses a catalog update with nothing to change", async () => {
+    const fetchMock = mockCatalogReadThenWrite();
+    suppressOutput();
+    await expect(
+      cli().parseAsync([...cliBase, "catalog", "update", "c-1"], { from: "user" }),
+    ).rejects.toThrow(/at least one catalog field/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("forwards the health-check schedule update version", async () => {
@@ -1188,5 +1228,186 @@ describe("vega build-task list", () => {
       ).rejects.toThrow(message);
     }
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("vega flag validation against the contract enums", () => {
+  it.each([
+    [["catalog", "list", "--enabled", "foo"], /true or false/],
+    [["catalog", "list", "--type", "virtual"], /--type must be one of/],
+    [["catalog", "list", "--health-check-status", "ok"], /--health-check-status must be one of/],
+    [["catalog", "list", "--sort", "id"], /--sort must be one of/],
+    [["catalog", "list", "--direction", "up"], /--direction must be one of/],
+    [["catalog", "resources", "c-1", "--category", "view"], /--category must be one of/],
+    [["resource", "list", "--type", "view"], /--type must be one of/],
+    [["resource", "list", "--category", "view"], /--category must be one of/],
+    [["resource", "list", "--status", "gone"], /--status must be one of/],
+    [["resource", "list", "--sort", "id"], /--sort must be one of/],
+    [["resource", "list", "--direction", "up"], /--direction must be one of/],
+    [["build-task", "list", "--mode", "stream"], /--mode must be one of/],
+    [["sql", "--query", "SELECT 1", "--keep-alive-sec", "30"], /60 to 3600/],
+    [["sql", "--query", "SELECT 1", "--input-dialect", "oracle"], /--input-dialect must be one of/],
+    [["resource", "query", "r-1", "--keep-alive-sec", "4000"], /60 to 3600/],
+    [["resource", "query", "r-1", "--binary-mode", "raw"], /--binary-mode must be one of/],
+    [
+      [
+        "discover-schedule",
+        "create",
+        "--name",
+        "n",
+        "--catalog-id",
+        "c",
+        "--cron",
+        "0 * * * *",
+        "--start-time",
+        "-5",
+      ],
+      /--start-time must be an integer 0 or greater/,
+    ],
+  ])("rejects %j before any request", async (args, message) => {
+    const fetchMock = mockFetch();
+    suppressOutput();
+    await expect(cli().parseAsync([...cliBase, ...args], { from: "user" })).rejects.toThrow(
+      message,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("maps a valid catalog list filter set, including a real boolean", async () => {
+    const fetchMock = mockFetch({ entries: [], total_count: 0 });
+    suppressOutput();
+    await cli().parseAsync(
+      [
+        ...cliBase,
+        "catalog",
+        "list",
+        "--enabled",
+        "false",
+        "--type",
+        "logical",
+        "--health-check-status",
+        "healthy",
+      ],
+      { from: "user" },
+    );
+    const url = new URL(fetchMock.mock.calls[0]?.[0] as string);
+    expect(url.searchParams.get("enabled")).toBe("false");
+    expect(url.searchParams.get("type")).toBe("logical");
+    expect(url.searchParams.get("health_check_status")).toBe("healthy");
+  });
+
+  it("accepts tsql as a SQL input dialect", async () => {
+    const fetchMock = mockFetch({ entries: [] });
+    suppressOutput();
+    await cli().parseAsync(
+      [...cliBase, "sql", "--query", "SELECT TOP (1) * FROM {{r-1}}", "--input-dialect", "tsql"],
+      { from: "user" },
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+      input_dialect: "tsql",
+    });
+  });
+});
+
+describe("vega catalog create", () => {
+  it("creates a built-in catalog without connector fields and sends enabled", async () => {
+    const fetchMock = mockFetch({ id: "c-1" });
+    suppressOutput();
+    await cli().parseAsync([...cliBase, "catalog", "create", "--name", "logical", "--built-in"], {
+      from: "user",
+    });
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      name: "logical",
+      enabled: false,
+      built_in: true,
+    });
+  });
+
+  it("rejects connector flags with --built-in and requires a connector type otherwise", async () => {
+    const fetchMock = mockFetch({ id: "c-1" });
+    suppressOutput();
+    await expect(
+      cli().parseAsync(
+        [...cliBase, "catalog", "create", "--name", "x", "--built-in", "--connector-type", "mysql"],
+        { from: "user" },
+      ),
+    ).rejects.toThrow(/--built-in/);
+    await expect(
+      cli().parseAsync([...cliBase, "catalog", "create", "--name", "x"], { from: "user" }),
+    ).rejects.toThrow(/--connector-type is required/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("vega resource query", () => {
+  it("sends filter, sort, output fields, cursor paging and index options", async () => {
+    const fetchMock = mockFetch({ entries: [] });
+    suppressOutput();
+    await cli().parseAsync(
+      [
+        ...cliBase,
+        "resource",
+        "query",
+        "r-1",
+        "--filter",
+        '{"field":"status","operation":"==","value":"open","value_from":"const"}',
+        "--sort",
+        "create_time:desc,id",
+        "--output-fields",
+        "id,status",
+        "--paging-mode",
+        "cursor",
+        "--limit",
+        "10",
+        "--keep-alive-sec",
+        "120",
+        "--need-total",
+        "--binary-mode",
+        "content",
+        "--ignore-local-index",
+      ],
+      { from: "user" },
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      filter_condition: { field: "status", operation: "==", value: "open", value_from: "const" },
+      paging: { mode: "cursor", limit: 10, offset: 0, keep_alive_sec: 120 },
+      sort: [
+        { field: "create_time", direction: "desc" },
+        { field: "id", direction: "asc" },
+      ],
+      output_fields: ["id", "status"],
+      binary_mode: "content",
+      ignore_local_index: true,
+      need_total: true,
+    });
+  });
+
+  it("continues from a cursor alone, and refuses initial-query flags beside it", async () => {
+    const fetchMock = mockFetch({ entries: [] });
+    suppressOutput();
+    await cli().parseAsync([...cliBase, "resource", "query", "r-1", "--cursor", "cur-1"], {
+      from: "user",
+    });
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      paging: { cursor: "cur-1" },
+      need_total: false,
+    });
+    await expect(
+      cli().parseAsync(
+        [...cliBase, "resource", "query", "r-1", "--cursor", "cur-1", "--ignore-local-index"],
+        { from: "user" },
+      ),
+    ).rejects.toThrow(/--cursor cannot be combined .*--ignore-local-index/);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("defaults to a single page of 50 rows", async () => {
+    const fetchMock = mockFetch({ entries: [] });
+    suppressOutput();
+    await cli().parseAsync([...cliBase, "resource", "query", "r-1"], { from: "user" });
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      paging: { mode: "single", limit: 50, offset: 0 },
+      need_total: false,
+    });
   });
 });
