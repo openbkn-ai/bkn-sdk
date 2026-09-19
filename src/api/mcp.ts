@@ -24,6 +24,30 @@ export interface ListMcpServersOptions {
   all?: boolean;
 }
 
+/**
+ * One entry of `GET /mcp/list` (`MCPServerConfig`). Only the documented fields
+ * are typed; the rest (connection config, tool configs) pass through.
+ */
+export interface MCPServerConfig {
+  /**
+   * The caller's effective operations on this server, projected only on the
+   * management list. The service omits it when empty, so treat absent as `[]`.
+   */
+  operations?: Array<"view" | "modify" | "publish" | "unpublish" | "delete" | "authorize">;
+  mcp_id?: string;
+  /** Configuration version, incremented on each update. */
+  version?: number;
+  name?: string;
+  description?: string;
+  creation_type?: string;
+  status?: string;
+  source?: string;
+  is_internal?: boolean;
+  category?: string;
+  mode?: string;
+  [key: string]: unknown;
+}
+
 /** List MCP Servers visible to the current caller without reshaping their payload. */
 export function listMcpServers(
   ctx: RequestContext,

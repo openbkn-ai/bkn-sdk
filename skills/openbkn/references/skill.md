@@ -10,8 +10,8 @@
 | `set-status <id> <status>` | `published` \| `offline` only — the endpoint refuses `unpublish` / `editing`, which come from registering and editing. |
 | `register <dir> [--source custom\|internal] [--category <c>] [--extend-info <json>]` | Zip a local skill dir → multipart register. SKILL.md must have frontmatter (name/description). `--source` defaults to `custom`, matching the backend's own default (`default:"custom" validate:"oneof=custom internal"`), so the registered result is unchanged from omitting it. |
 | `download <id> [out.zip] [--draft]` / `install <id> [dir]` | Save archive / download + unzip. |
-| `update-metadata <id> --body <json>` / `update-package <id> <dir>` | Edit metadata / replace package (zip). |
-| `republish <id> --version <v>` / `publish-history <id> --version <v>` | Republish / publish a historical version. |
+| `update-metadata <id> --body <json>` / `update-package <id> <dir>` | Replace metadata / replace package (zip). Metadata is a full overwrite: `name`, `description`, `category` are required; `source` is `custom`\|`internal`; `extend_info` is an object. The CLI refuses anything else before sending. |
+| `republish <id> --version <v>` / `publish-history <id> --version <v>` | `republish` copies a historical version back into the **draft** and publishes nothing; `publish-history` publishes that version directly. |
 
 ## `--draft` — which version you read
 
@@ -29,9 +29,10 @@ from a laptop. `--raw` writes the file's own bytes to stdout instead, so
 `read-file <id> <path> --raw > file` reproduces the file byte for byte. Binary
 files are refused with a pointer to `install`, never dumped as mojibake.
 
-`--raw` and `--draft` compose. Draft reads are served inline by the backend in
-one request; published reads fall back to fetching the archive once per run and
-serving every later read from it.
+`--raw` and `--draft` compose. The CLI first asks for the body inline. Draft reads
+(`--draft`, the management routes) answer with the body inline; published reads
+answer with only a URL (verified on 14.103.77.23), so the CLI fetches the archive
+once per run and serves every later read from it.
 
 ## Running a skill
 

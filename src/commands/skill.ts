@@ -3,7 +3,12 @@
 
 /** `openbkn skill …` — skill registry and market. */
 import { Command } from "commander";
-import { SKILL_STATUSES, type SkillStatus } from "../api/skills.js";
+import {
+  SKILL_SOURCES,
+  SKILL_STATUSES,
+  type SkillStatus,
+  type UpdateSkillMetadataRequest,
+} from "../api/skills.js";
 import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
@@ -37,8 +42,35 @@ function sandboxExitCode(result: { mocked?: boolean; exit_code?: number } | unde
   return code > 255 ? 1 : code;
 }
 
-/** Backend contract: `validate:"oneof=custom internal"`. */
-const SKILL_SOURCES = ["custom", "internal"] as const;
+/**
+ * `update-metadata` replaces the metadata wholesale, so the service refuses a
+ * body missing `name`, `description` or `category`; `source` is an enum and
+ * `extend_info` an object. Say so before sending rather than after a 400.
+ */
+export function metadataBody(body: unknown): UpdateSkillMetadataRequest {
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    throw new InputError("update-metadata body must be a JSON object");
+  }
+  const b = body as Record<string, unknown>;
+  const missing = (["name", "description", "category"] as const).filter(
+    (k) => typeof b[k] !== "string" || (b[k] as string).length === 0,
+  );
+  if (missing.length > 0) {
+    throw new InputError(
+      `update-metadata replaces the metadata: ${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} required (non-empty string)`,
+    );
+  }
+  if (b.source !== undefined && !(SKILL_SOURCES as readonly unknown[]).includes(b.source)) {
+    throw new InputError(
+      `source must be one of: ${SKILL_SOURCES.join(" | ")} (got ${JSON.stringify(b.source)})`,
+    );
+  }
+  const ext = b.extend_info;
+  if (ext !== undefined && (ext === null || typeof ext !== "object" || Array.isArray(ext))) {
+    throw new InputError("extend_info must be a JSON object");
+  }
+  return b as UpdateSkillMetadataRequest;
+}
 
 function checkSource(source: string | undefined): string | undefined {
   if (source === undefined || (SKILL_SOURCES as readonly string[]).includes(source)) return source;
@@ -308,15 +340,17 @@ export function skillCommand(): Command {
     });
   cmd
     .command("update-metadata <skill-id>")
-    .description("Update a skill's metadata (--body / --body-file JSON)")
+    .description(
+      "Replace a skill's metadata (--body / --body-file JSON: name, description, category required)",
+    )
     .option(
       "--body <json>",
-      "metadata JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (execution-factory)",
+      "{name, description, category, source?: custom|internal, extend_info?} — a full overwrite",
     )
     .option("--body-file <path>", "read metadata JSON from a file")
     .action(async (skillId: string, opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).skills.updateMetadata(skillId, readBody(opts)),
+        await clientFrom(cmd).skills.updateMetadata(skillId, metadataBody(readBody(opts))),
         outputOptions(cmd),
       );
     });
@@ -329,14 +363,16 @@ export function skillCommand(): Command {
 
   cmd
     .command("republish <skill-id>")
-    .description("Republish a previous skill version")
-    .requiredOption("--version <v>", "version to republish")
+    .description(
+      "Copy a historical version back into the draft (publishes nothing; see publish-history)",
+    )
+    .requiredOption("--version <v>", "historical version to restore into the draft")
     .action(async (skillId: string, opts, cmd: Command) => {
       printJson(await clientFrom(cmd).skills.republish(skillId, opts.version), outputOptions(cmd));
     });
   cmd
     .command("publish-history <skill-id>")
-    .description("Publish a historical skill version")
+    .description("Publish a historical skill version directly")
     .requiredOption("--version <v>", "version to publish")
     .action(async (skillId: string, opts, cmd: Command) => {
       printJson(
@@ -381,7 +417,9 @@ PUBLISHED VS DRAFT
 
 AUTHORING
   register <dir> zips and registers; update-package replaces the files; update-metadata
-  changes only the metadata. set-status and republish move versions around.`,
+  changes only the metadata (a full overwrite: name, description, category required).
+  set-status publishes or takes down the current version. republish copies a historical
+  version back into the draft and publishes nothing; publish-history publishes one.`,
   );
   return group(cmd, "TOOLS & SKILLS");
 }

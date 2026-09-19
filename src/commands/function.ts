@@ -7,6 +7,7 @@ import { Command } from "commander";
 import {
   type DependencyInfo,
   FunctionAiGenerationType as FUNCTION_AI_GENERATION_TYPES,
+  FUNCTION_TEMPLATE_TYPES,
   type FunctionAiGenerationRequest,
   type FunctionAiGenerationType,
   type FunctionDefinition,
@@ -17,8 +18,6 @@ import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, oneOf, outputOptions, positiveInt } from "./_shared.js";
-
-const int = (v: string) => Number.parseInt(v, 10);
 
 /** Code from a path, or from stdin when the path is `-`. */
 export function readCode(file: string): string {
@@ -173,7 +172,7 @@ export function sandboxCommand(): Command {
     .command("run <file>")
     .description("Run a file (or `-` for stdin) in the sandbox; exits non-zero when the code does")
     .option("--event <json>", "the single argument handler() receives", "{}")
-    .option("--timeout <s>", "sandbox timeout in seconds", int)
+    .option("--timeout <s>", "sandbox timeout in seconds", positiveInt("--timeout"))
     .option("--dep <name@version>", "install a package first (repeatable)", collectDep)
     .option("--index-url <url>", "package index to install from (default PyPI)")
     .option(
@@ -235,7 +234,12 @@ export function sandboxCommand(): Command {
   cmd
     .command("template")
     .description("The handler() skeleton to start from")
-    .option("--type <t>", "template type (python)", "python")
+    .option(
+      "--type <t>",
+      "template type (python)",
+      oneOf("--type", FUNCTION_TEMPLATE_TYPES),
+      "python",
+    )
     .action(async (opts, cmd: Command) => {
       printJson(await clientFrom(cmd).functions.template(opts.type), outputOptions(cmd));
     });

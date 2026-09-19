@@ -11,6 +11,7 @@ import {
   type SkillFileEntry,
   type SkillStatus,
   type SkillView,
+  type UpdateSkillMetadataRequest,
   deleteSkill,
   downloadSkill,
   executeSkill,
@@ -109,11 +110,12 @@ function looksLossy(text: string): boolean {
 /**
  * File body, whatever the deploy supports.
  *
- * Preferred path: ask the backend to inline the content. Only the management
- * (draft) surface honours that today; the consumer surface answers with a
- * pre-signed object-store URL whose host resolves inside the cluster only, so
- * an outside caller can't follow it. When that happens, fall back to the
- * archive, which is served through the same ingress the CLI already reached.
+ * Preferred path: ask the backend to inline the content. `response_mode` on
+ * `files/read` is outside the documented contract, so no deploy is promised to
+ * honour it; one that doesn't answers with a pre-signed object-store URL whose
+ * host resolves inside the cluster only, so an outside caller can't follow it.
+ * When no content comes back, fall back to the archive, which is served
+ * through the same ingress the CLI already reached.
  */
 async function readFileText(
   cache: ArchiveCache,
@@ -196,8 +198,12 @@ export function skills(ctx: RequestContext) {
     fileManifest: manifest,
     history: (skillId: string) => getSkillHistory(ctx, skillId),
     setStatus: (skillId: string, status: SkillStatus) => setSkillStatus(ctx, skillId, status),
-    updateMetadata: (skillId: string, body: unknown) => updateSkillMetadata(ctx, skillId, body),
+    /** Replace a skill's metadata; `name`, `description` and `category` are required. */
+    updateMetadata: (skillId: string, body: UpdateSkillMetadataRequest) =>
+      updateSkillMetadata(ctx, skillId, body),
+    /** Copy a historical version back into the draft. Publishes nothing. */
     republish: (skillId: string, version: string) => republishSkillVersion(ctx, skillId, version),
+    /** Publish a historical version directly. */
     publishHistory: (skillId: string, version: string) =>
       publishSkillVersion(ctx, skillId, version),
     /** Zip a local skill directory and register it. */

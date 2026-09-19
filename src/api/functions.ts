@@ -71,11 +71,21 @@ export interface FunctionDefinition {
   dependenciesUrl?: string;
 }
 
-/** `FunctionDefinition` as the service spells it. */
+/** `FunctionDefinition` as the service spells it (`FunctionInput`, for create). */
 export function functionInputBody(def: FunctionDefinition): Record<string, unknown> {
   return {
     name: def.name,
     description: def.description ?? "",
+    ...functionInputEditBody(def),
+  };
+}
+
+/**
+ * The edit form (`FunctionInputEdit`) a tool update takes: `FunctionInput`
+ * without `name` / `description`, which travel at the top level of the update.
+ */
+export function functionInputEditBody(def: FunctionDefinition): Record<string, unknown> {
+  return {
     script_type: def.scriptType ?? "python",
     code: def.code,
     inputs: def.inputs ?? [],
@@ -100,6 +110,12 @@ export interface ExecuteFunctionOptions {
   /** Tracing marks written into the sandbox environment, not arguments. */
   source?: string;
   taskId?: string;
+  /** Tracing marks written into the sandbox environment. */
+  capabilityId?: string;
+  capabilityName?: string;
+  /** Tracing marks only — they play no part in authorization. */
+  userId?: string;
+  userName?: string;
   /**
    * The caller's credential, placed in the sandbox's `BKN_TOKEN` so code using
    * `sandbox_sdk.bkn` reaches BKN as the caller. Nothing else fills it — the
@@ -146,6 +162,10 @@ export function executeFunction(
       ...(opts.dependenciesUrl ? { dependencies_url: opts.dependenciesUrl } : {}),
       ...(opts.source ? { source: opts.source } : {}),
       ...(opts.taskId ? { task_id: opts.taskId } : {}),
+      ...(opts.capabilityId ? { capability_id: opts.capabilityId } : {}),
+      ...(opts.capabilityName ? { capability_name: opts.capabilityName } : {}),
+      ...(opts.userId ? { user_id: opts.userId } : {}),
+      ...(opts.userName ? { user_name: opts.userName } : {}),
       ...(opts.bknToken ? { bkn_token: opts.bknToken } : {}),
       ...(opts.conversationId ? { bkn_conversation_id: opts.conversationId } : {}),
       ...(opts.interactionId ? { bkn_interaction_id: opts.interactionId } : {}),
@@ -187,6 +207,9 @@ export function listDependencyVersions(
   });
 }
 
+/** Template types `GET /template/{template_type}` accepts; anything else is a 400. */
+export const FUNCTION_TEMPLATE_TYPES = ["python"] as const;
+
 /** The fill-in-the-blanks skeleton for a language. Only `python` today. */
 export function functionTemplate(ctx: RequestContext, templateType = "python"): Promise<unknown> {
   return request(ctx, `${PATH}/template/${encodeURIComponent(templateType)}`);
@@ -196,7 +219,8 @@ export function functionTemplate(ctx: RequestContext, templateType = "python"): 
  * How long a generation call waits by default. A model call routinely outlasts
  * the 30 s client default. The ingress in front of the service still applies
  * its own read timeout: ingress-nginx defaults to 60 s and the foundry charts
- * do not raise it (openbkn-ai/bkn-foundry#1641), so on such a deploy a longer
+ * do not raise it (noted in a comment on openbkn-ai/bkn-foundry#1641, which
+ * itself tracks the ~30 s toolbox-proxy cut), so on such a deploy a longer
  * generation answers 504 at 60 s. 300 s leaves room for deploys that raise it.
  */
 export const FUNCTION_GENERATION_TIMEOUT_MS = 300_000;

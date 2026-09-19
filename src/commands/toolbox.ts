@@ -4,14 +4,25 @@
 /** `openbkn toolbox …` and `openbkn tool …` — agent toolboxes + tools. */
 import { Command, Option } from "commander";
 import yaml from "js-yaml";
-import type { ToolMetadataType } from "../api/toolboxes.js";
+import {
+  type GlobalParameter,
+  IMPEX_TYPES,
+  TOOL_METADATA_TYPES,
+  type ToolMetadataType,
+} from "../api/toolboxes.js";
 import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
 import { MAX_PAGE_SIZE, clientFrom, oneOf, outputOptions, positiveInt } from "./_shared.js";
-import { type CodeFlags, definitionFlags, functionDefinitionFrom, readCode } from "./function.js";
+import {
+  type CodeFlags,
+  definitionFlags,
+  functionDefinitionFrom,
+  parseJsonObjectOption,
+  readCode,
+} from "./function.js";
 
 const SORT_ORDERS = ["asc", "desc"] as const;
 /** A toolbox's lifecycle, per the service. There is no `draft`. */
@@ -27,6 +38,37 @@ export function toolCallFailed(result: unknown): boolean {
   const { status_code: status, error } = result as { status_code?: unknown; error?: unknown };
   if (typeof status === "number" && status >= 400) return true;
   return typeof error === "string" ? error.length > 0 : error !== undefined && error !== null;
+}
+
+/**
+ * `--path` values fill URL path segments, and the contract types each one as a
+ * string. A number or object would reach the wire as something the service
+ * does not accept, so refuse it rather than stringify on the caller's behalf.
+ */
+export function pathParams(
+  parsed: Record<string, unknown> | undefined,
+): Record<string, string> | undefined {
+  if (parsed === undefined) return undefined;
+  for (const [k, v] of Object.entries(parsed)) {
+    if (typeof v !== "string") {
+      throw new InputError(
+        `--path values must be strings (path parameter '${k}' is ${v === null ? "null" : Array.isArray(v) ? "an array" : typeof v})`,
+      );
+    }
+  }
+  return parsed as Record<string, string>;
+}
+
+/** `--global-parameter`: one object, as the contract requires — not an array. */
+export function globalParameterOption(raw: string | undefined): GlobalParameter | undefined {
+  const parsed = parseJsonObjectOption(raw, "global-parameter");
+  if (parsed === undefined) return undefined;
+  for (const k of ["name", "description", "in", "type"]) {
+    if (typeof parsed[k] !== "string" || !parsed[k]) {
+      throw new InputError(`--global-parameter needs a non-empty string '${k}'`);
+    }
+  }
+  return parsed as unknown as GlobalParameter;
 }
 
 export function toolboxCommand(): Command {
@@ -97,6 +139,7 @@ export function toolboxCommand(): Command {
     .option("--service-url <url>", "where an openapi box proxies its tools; required for that type")
     .option("--type <t>", "openapi | function", "openapi")
     .option("--description <d>", "description")
+    .option("--category <c>", "box category (service default other_category)")
     .action(async (opts, cmd: Command) => {
       if (opts.type !== "openapi" && opts.type !== "function") {
         throw new InputError("--type must be openapi or function");
@@ -110,6 +153,7 @@ export function toolboxCommand(): Command {
           serviceUrl: opts.serviceUrl,
           description: opts.description,
           metadataType: opts.type,
+          category: opts.category,
         }),
         outputOptions(cmd),
       );
@@ -141,7 +185,12 @@ export function toolboxCommand(): Command {
     .command("export <box-id>")
     .description("Export a toolbox config to a local .adp file")
     .requiredOption("-o, --out <file>", "output .adp path")
-    .option("--type <t>", "impex type: toolbox | mcp | operator", "toolbox")
+    .option(
+      "--type <t>",
+      "impex type: toolbox | mcp | operator",
+      oneOf("--type", IMPEX_TYPES),
+      "toolbox",
+    )
     .action(async (boxId: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).toolboxes.export(boxId, opts.out, opts.type),
@@ -151,7 +200,12 @@ export function toolboxCommand(): Command {
   cmd
     .command("import <file>")
     .description("Import a toolbox config from a local .adp file")
-    .option("--type <t>", "impex type: toolbox | mcp | operator", "toolbox")
+    .option(
+      "--type <t>",
+      "impex type: toolbox | mcp | operator",
+      oneOf("--type", IMPEX_TYPES),
+      "toolbox",
+    )
     .option(
       "--mode <m>",
       "create (fail if it exists; service default) | upsert (update if it exists)",
@@ -331,7 +385,7 @@ function buildToolCommand(config: ToolCommandOptions): Command {
     body: opts.body ? parseBigIntJSON(opts.body) : undefined,
     header: parseJson(opts.header, "header"),
     query: parseJson(opts.query, "query"),
-    path: parseJson(opts.path, "path"),
+    path: pathParams(parseJson(opts.path, "path")),
     timeout: opts.timeout ? Number(opts.timeout) : undefined,
   });
 
@@ -369,7 +423,25 @@ function buildToolCommand(config: ToolCommandOptions): Command {
   interface ToolFlags extends CodeFlags {
     toolbox: string;
     useRule?: string;
+    globalParameter?: string;
+    extendInfo?: string;
   }
+
+  const commonToolFields = (opts: ToolFlags) => ({
+    useRule: opts.useRule,
+    globalParameters: globalParameterOption(opts.globalParameter),
+    extendInfo: parseJsonObjectOption(opts.extendInfo, "extend-info"),
+  });
+
+  /** Flags every create / update carries, whatever the tool is described by. */
+  const toolExtraFlags = (c: Command) =>
+    c
+      .option("--use-rule <s>", "usage rule carried onto the tool")
+      .option(
+        "--global-parameter <json>",
+        "one parameter fixed onto every call: {name,description,in,type,required?,value?}",
+      )
+      .option("--extend-info <json>", "extra metadata as a JSON object");
 
   /** What goes into a tool, from a code file or a spec file plus the shared flags. */
   const toolFrom = (file: string, opts: ToolFlags) => {
@@ -385,28 +457,29 @@ function buildToolCommand(config: ToolCommandOptions): Command {
           `${file} is not valid JSON or YAML: ${err instanceof Error ? err.message : err}`,
         );
       }
-      return { metadataType: "openapi" as const, data, useRule: opts.useRule };
+      return { metadataType: "openapi" as const, data, ...commonToolFields(opts) };
     }
     if (metadataType !== "function") throw new InputError("--type must be function or openapi");
     return {
       metadataType: "function" as const,
       function: functionDefinitionFrom(file, opts),
-      useRule: opts.useRule,
+      ...commonToolFields(opts),
     };
   };
 
   definitionFlags(
-    cmd
-      .command(`${config.createCommand} <file>`)
-      .description(
-        kind === "function"
-          ? "Register a Function Tool from code"
-          : kind === "openapi"
-            ? "Import OpenAPI Tools from a JSON or YAML specification"
-            : "Create a tool from code (or a spec)",
-      )
-      .requiredOption("--toolbox <box-id>", "target toolbox id")
-      .option("--use-rule <s>", "usage rule carried onto the tool"),
+    toolExtraFlags(
+      cmd
+        .command(`${config.createCommand} <file>`)
+        .description(
+          kind === "function"
+            ? "Register a Function Tool from code"
+            : kind === "openapi"
+              ? "Import OpenAPI Tools from a JSON or YAML specification"
+              : "Create a tool from code (or a spec)",
+        )
+        .requiredOption("--toolbox <box-id>", "target toolbox id"),
+    ),
     !kind,
     kind === "openapi" ? "openapi-import" : "all",
   ).action(async (file: string, opts: ToolFlags, cmd: Command) => {
@@ -433,15 +506,16 @@ function buildToolCommand(config: ToolCommandOptions): Command {
     });
 
   definitionFlags(
-    cmd
-      .command("update <tool-id> <file>")
-      .description(
-        kind
-          ? `Replace a ${kindName.slice(0, -1)} definition; the id survives and an enabled tool stays enabled`
-          : "Replace a tool's definition; the id survives and an enabled tool stays enabled",
-      )
-      .requiredOption("--toolbox <box-id>", "toolbox id")
-      .option("--use-rule <s>", "usage rule carried onto the tool"),
+    toolExtraFlags(
+      cmd
+        .command("update <tool-id> <file>")
+        .description(
+          kind
+            ? `Replace a ${kindName.slice(0, -1)} definition; the id survives and an enabled tool stays enabled`
+            : "Replace a tool's definition; the id survives and an enabled tool stays enabled",
+        )
+        .requiredOption("--toolbox <box-id>", "toolbox id"),
+    ),
     !kind,
     kind === "openapi" ? "openapi-update" : "all",
   ).action(async (toolId: string, file: string, opts: ToolFlags, cmd: Command) => {
@@ -479,7 +553,12 @@ function buildToolCommand(config: ToolCommandOptions): Command {
       .command("upload <file>")
       .description("Add tools from an OpenAPI file — `tool create` is the same endpoint, as JSON")
       .requiredOption("--toolbox <id>", "target toolbox id")
-      .option("--metadata-type <t>", "metadata type", "openapi")
+      .option(
+        "--metadata-type <t>",
+        "openapi | function",
+        oneOf("--metadata-type", TOOL_METADATA_TYPES),
+        "openapi",
+      )
       .action(async (file: string, opts, cmd: Command) => {
         printJson(
           await clientFrom(cmd).toolboxes.upload(opts.toolbox, file, opts.metadataType),
