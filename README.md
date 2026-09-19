@@ -124,8 +124,8 @@ where each id comes from; `--json` ships the same thing as data.
 ecosystem) that lets an AI drive the `openbkn` CLI from natural language. It
 ships a `SKILL.md` (trigger intents, `allowed-tools: Bash(openbkn *)`, a
 command-group map, examples, and cautions) plus per-domain cheat sheets under
-`references/` (auth, bkn, model, vega, resource, context, mcp,
-skill, toolbox, function, trace, admin, call) and two how-tos
+`references/` (auth, appkey, bkn, model, vega, resource, context, mcp,
+skill, toolbox, function, osdk, trace, admin, call) and two how-tos
 (build-a-KN, troubleshooting).
 
 A second skill, `skills/create-bkn/`, guides an AI through **authoring** a BKN

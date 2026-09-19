@@ -254,6 +254,10 @@ export interface ListResourcesOptions {
   /** Resource category, e.g. table | logicview. */
   category?: ResourceCategory;
   status?: ResourceStatus;
+  /** Whether the resource is enabled. */
+  enabled?: boolean;
+  /** Latest discovery result, for example updated or error. */
+  lastDiscoverStatus?: string;
   schema?: string;
   limit?: number;
   offset?: number;
@@ -271,6 +275,8 @@ export async function listResources(
       name: opts.name || undefined,
       category: opts.category || undefined,
       status: opts.status || undefined,
+      enabled: opts.enabled === undefined ? undefined : String(opts.enabled),
+      last_discover_status: opts.lastDiscoverStatus || undefined,
       schema: opts.schema || undefined,
       // Same `/resources` endpoint as `catalogResources`: limit=-1 (NO_LIMIT)
       // fetches every row; any other non-positive/invalid value uses the SDK

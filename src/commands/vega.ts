@@ -408,7 +408,7 @@ export function vegaCommand(): Command {
     .option("--tags <t1,t2>", "comma-separated tags")
     .option("--description <s>", "description")
     .option("--enabled", "create enabled (default: disabled)")
-    .option("--internal", "create an internal catalog")
+    .option("--built-in", "create a platform-owned catalog")
     .option("--allow-unhealthy", "save the catalog when its connection test fails")
     .option("--health-check-mode <mode>", "health schedule: inherit | enabled | disabled")
     .option("--health-check-cron <expr>", "cron expression for enabled health checks")
@@ -429,7 +429,7 @@ export function vegaCommand(): Command {
               : undefined,
             description: opts.description,
             enabled: opts.enabled ? true : undefined,
-            internal: opts.internal ? true : undefined,
+            builtIn: opts.builtIn ? true : undefined,
             healthCheckSchedule: healthCheckSchedule(opts.healthCheckMode, opts.healthCheckCron),
           },
           { allowUnhealthy: opts.allowUnhealthy ? true : undefined },
@@ -940,9 +940,12 @@ export function vegaCommand(): Command {
     .command("list")
     .description("List resources")
     .option("--catalog-id <id>", "filter by catalog id")
+    .option("--name <name>", "filter by name")
     .option("--type <category>", "resource category")
     .option("--category <category>", "alias of --type")
     .option("--status <status>", "filter by status")
+    .option("--enabled <bool>", "filter by enabled state", bool)
+    .option("--last-discover-status <status>", "filter by latest discovery status")
     .option("--schema <name>", "filter by source schema")
     .option("--limit <n>", "page size", int, DEFAULT_LIST_LIMIT)
     .option("--offset <n>", "page offset", int, 0)
@@ -952,8 +955,11 @@ export function vegaCommand(): Command {
       printJson(
         await clientFrom(cmd).resource.list({
           catalogId: opts.catalogId,
+          name: opts.name,
           category: opts.type ?? opts.category,
           status: opts.status,
+          enabled: opts.enabled,
+          lastDiscoverStatus: opts.lastDiscoverStatus,
           schema: opts.schema,
           limit: opts.limit,
           offset: opts.offset,

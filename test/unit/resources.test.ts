@@ -103,8 +103,11 @@ describe("listResources", () => {
     const f = mockFetch();
     await listResources(ctx, {
       catalogId: "ds-1",
+      name: "orders",
       category: "table",
       status: "active",
+      enabled: true,
+      lastDiscoverStatus: "updated",
       schema: "app",
       limit: 10,
       offset: 20,
@@ -114,8 +117,11 @@ describe("listResources", () => {
     const url = new URL(firstCall(f)[0]);
     expect(url.pathname).toBe("/api/vega-backend/v1/resources");
     expect(url.searchParams.get("catalog_id")).toBe("ds-1");
+    expect(url.searchParams.get("name")).toBe("orders");
     expect(url.searchParams.get("category")).toBe("table");
     expect(url.searchParams.get("status")).toBe("active");
+    expect(url.searchParams.get("enabled")).toBe("true");
+    expect(url.searchParams.get("last_discover_status")).toBe("updated");
     expect(url.searchParams.get("schema")).toBe("app");
     expect(url.searchParams.has("database")).toBe(false);
     expect(url.searchParams.get("limit")).toBe("10");

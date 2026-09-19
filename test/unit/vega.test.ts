@@ -221,18 +221,19 @@ describe("vega uses the vega-backend base path", () => {
       name: "orders",
       type: "physical",
       enabled: true,
+      built_in: true,
       connector_type: "mysql",
       update_time: 1720000000123,
     };
     mockFetch({ entries: [catalog], total_count: 1 });
     await expect(listCatalogs(ctx)).resolves.toMatchObject({
-      entries: [{ id: "c-1", update_time: 1720000000123 }],
+      entries: [{ built_in: true, id: "c-1", update_time: 1720000000123 }],
       total_count: 1,
     });
 
     mockFetch({ entries: [catalog] });
     await expect(getCatalog(ctx, "c-1")).resolves.toMatchObject({
-      entries: [{ id: "c-1", update_time: 1720000000123 }],
+      entries: [{ built_in: true, id: "c-1", update_time: 1720000000123 }],
     });
   });
 
@@ -694,6 +695,20 @@ describe("createCatalog", () => {
     const body = JSON.parse(call[1].body as string);
     expect(body.connector_type).toBe("mysql");
     expect(body.connector_config).toEqual({ host: "h" });
+  });
+
+  it("uses built_in for the platform-owned catalog marker", async () => {
+    const f = mockFetch({ id: "c-9" });
+    await createCatalog(ctx, {
+      name: "platform-catalog",
+      connectorType: "",
+      connectorConfig: {},
+      builtIn: true,
+    });
+
+    const body = JSON.parse(firstCall(f)[1].body as string);
+    expect(body).toMatchObject({ built_in: true });
+    expect(body).not.toHaveProperty("internal");
   });
 
   it("sends allow_unhealthy and an initial health-check schedule", async () => {

@@ -102,6 +102,42 @@ npm run build    # tsup → dist/（库 + openbkn bin）
 每个命令、子命令、孙命令都带分组 `--help`，列出各自的参数与位置参数，
 整棵命令树可端到端发现。`openbkn help all` 输出全深度的逐动作签名清单。
 
+## Agent 技能
+
+`skills/openbkn/` 是一个 Agent 技能（面向 Claude Code / [skills.sh](https://skills.sh)
+生态），让 AI 用自然语言驱动 `openbkn` CLI。它包含一份 `SKILL.md`（触发意图、
+`allowed-tools: Bash(openbkn *)`、命令组地图、示例与注意事项），`references/` 下
+按领域划分的速查表（auth、appkey、bkn、model、vega、resource、context、mcp、
+skill、toolbox、function、osdk、trace、admin、call），以及两篇操作指南
+（建知识网络、排障）。
+
+第二个技能 `skills/create-bkn/` 引导 AI **编写** BKN 定义目录（`network.bkn` +
+按类型分目录的 `object_types/` / `relation_types/` / `action_types/` /
+`concept_groups/` 文件，遵循 v2.0.1 规范），`references/` 下附格式规范、模板和
+完整示例。它与 `openbkn` 技能配合：产出的目录再由 `openbkn bkn validate` / `push`
+校验和导入。
+
+第三个技能 `skills/create-skill/` 引导 AI 为执行工厂**编写 Skill 包**——一份
+`SKILL.md`，声明它用到某个知识网络的哪些指标、函数、行动和 MCP 工具，以及 Agent
+该如何调用——并用 `bkn-osdk` 编写沙箱函数、注册成工具。`assets/` 与 `references/`
+下有模板和一个端到端验证过的示例。
+
+这些技能都不在 npm 包里，需要单独安装：
+
+```bash
+# 全局安装技能，然后用自然语言提问：
+npx skills add openbkn-ai/bkn-sdk@openbkn -g -y        # 操作平台
+npx skills add openbkn-ai/bkn-sdk@create-bkn -g -y     # 编写 .bkn 文件
+npx skills add openbkn-ai/bkn-sdk@create-skill -g -y   # 编写 Skill 包 / 函数工具
+
+#   "列出所有知识网络"
+#   "从 Vega catalog vcat-1 建一个名为 customers 的知识网络并构建索引"
+#   "帮我建一个描述订单域的 BKN 知识网络文件"
+```
+
+`openbkn` 技能假定已安装 `openbkn` CLI（`npm i -g @openbkn/bkn-sdk`）并已登录
+（`openbkn auth login`）。确切参数始终以实时 `openbkn <group> <sub> --help` 为准。
+
 ## 许可证
 
 BKN SDK 是 OpenBKN 项目的一部分，采用 **Apache License, Version 2.0**。
