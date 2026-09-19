@@ -350,7 +350,10 @@ def test_a_traced_read_earns_a_receipt(kn_id: str, object_type: Any) -> None:
 
     assert interaction.interaction_id
     assert page.receipt is not None
-    assert page.receipt.get("operation_id")
+    # A completed receipt is slim since foundry #1417: no operation or receipt id,
+    # only its status and the evidence events the operation recorded.
+    assert page.receipt.get("receipt_status") == "completed"
+    assert page.receipt.get("observed_evidence_refs")
 
 
 def test_one_scope_is_one_interaction(kn_id: str, object_type: Any) -> None:
@@ -361,7 +364,10 @@ def test_one_scope_is_one_interaction(kn_id: str, object_type: Any) -> None:
         interaction = current_interaction(scoped, kn_id)
 
     assert len(interaction.receipts) == 2
-    assert len({receipt["operation_id"] for receipt in interaction.receipts}) == 2
+    # Slim receipts carry no operation id; each operation records its own evidence
+    # events, so two operations leave two distinct evidence sets.
+    evidence = {tuple(receipt["observed_evidence_refs"]) for receipt in interaction.receipts}
+    assert len(evidence) == 2
 
 
 def test_the_platform_validates_the_two_ids_it_was_given(kn_id: str, object_type: Any) -> None:
