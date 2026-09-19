@@ -65,14 +65,15 @@ with bkn_osdk.session(traced=True, conversation_id=cid, interaction_id=iid):
 ```
 
 - 作用域加入这个 turn，不另开，也**不会替你 finish**；本轮照常以 `bkn_finish_interaction` 收尾。
-- `traced=True` 让类型化读改走 Context Loader 的 MCP 工具。带 `order_by` 或要总数
-  （`.count()`）的查询仍走 REST，因为那个工具不认 `sort` / `need_total`，但请求带着同一个 turn。
+- `traced=True` 让类型化读改走 Context Loader 的 MCP 工具，`order_by` 以 `sort` 一并发过去。
+  要总数（`.count()`）、传 `cursor` 或用了 `options(...)` 的查询仍走 REST，因为那个工具不接受
+  `need_total` / REST cursor / 这些查询参数，但请求带着同一个 turn。
 - 出错按硬门禁停下、原样报错，不要去掉 turn 重试。
 
 ## 沙箱里（agent 最常落地的地方）
 
 0.1.5 起，沙箱模板镜像预装 `bkn-osdk`，平台为每次执行注入 `BKN_BASE_URL`（集群内地址）、
-`BKN_TOKEN`、`BKN_CONVERSATION_ID`、`BKN_INTERACTION_ID`。代码里什么都不用配：
+`BKN_TOKEN`、`BKN_CONVERSATION_ID`、`BKN_INTERACTION_ID`、`BKN_PARENT_OPERATION_ID`。代码里什么都不用配：
 
 ```python
 from bkn_osdk import kn

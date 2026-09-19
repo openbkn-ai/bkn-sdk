@@ -46,10 +46,12 @@ class Deploy:
 
     def __init__(self) -> None:
         self.paths: list[str] = []
+        self.queries: list[dict[str, str]] = []
         self.bodies: list[dict[str, Any]] = []
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.paths.append(request.url.path)
+        self.queries.append(dict(request.url.params.multi_items()))
         self.bodies.append(json.loads(request.read()))
         return httpx.Response(200, json={"datas": [{"gmv": "14485.37", "channel_id": 1}]})
 
@@ -167,9 +169,47 @@ def test_a_half_open_window_is_refused(deploy: Deploy) -> None:
         Gmv.query(time={"start": 1, "step": "day"})
 
 
-def test_an_unknown_step_is_refused(deploy: Deploy) -> None:
-    with pytest.raises(InputError, match="`step` must be one of"):
-        Gmv.query(time={"start": 1, "end": 2, "step": "fortnight"})
+def test_a_step_outside_the_documented_values_is_sent_for_the_platform_to_judge(
+    deploy: Deploy,
+) -> None:
+    """`time.step` is a free string in the published schema, so the SDK does not
+    refuse a value the platform may accept."""
+    Gmv.query(time={**SERIES, "step": "hour"})
+
+    assert deploy.bodies[0]["time"]["step"] == "hour"
+
+
+@pytest.mark.parametrize("step", ["", "  ", 7])
+def test_an_empty_or_non_string_step_is_refused(deploy: Deploy, step: Any) -> None:
+    with pytest.raises(InputError, match="`step` must be a non-empty string"):
+        Gmv.query(time={**SERIES, "step": step})
+
+
+@pytest.mark.parametrize("limit", [0, -1, True, 1.5])
+def test_a_limit_below_one_is_refused(deploy: Deploy, limit: Any) -> None:
+    """The schema's `limit` has `minimum: 1`."""
+    with pytest.raises(InputError, match="limit must be a positive integer"):
+        Gmv.query(time=SERIES, limit=limit)
+
+    assert deploy.bodies == []
+
+
+def test_fill_null_and_a_non_main_branch_ride_the_query_string(
+    deploy: Deploy, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Gmv, "__branch__", "release")
+
+    Gmv.query(time=SERIES, fill_null=True)
+
+    assert deploy.queries[0] == {"branch": "release", "fill_null": "true"}
+    assert "fill_null" not in deploy.bodies[0]
+
+
+def test_a_main_branch_metric_sends_no_query_string(deploy: Deploy) -> None:
+    """`main` is the endpoint's default, so a main package sends what it always sent."""
+    Gmv.query(time=SERIES)
+
+    assert deploy.queries[0] == {}
 
 
 @pytest.mark.parametrize(

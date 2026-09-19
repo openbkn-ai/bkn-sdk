@@ -28,7 +28,7 @@ from urllib.parse import quote
 
 from .config import Context, resolve_context
 from .errors import BknError, InputError
-from .http import request
+from .http import QueryValue, request
 
 if TYPE_CHECKING:
     from .types import ObjectType, PropertyRef
@@ -135,10 +135,11 @@ class Composite(Filter):
 class Sort:
     """One ordering term.
 
-    Only the REST read path orders at all, and only under the key `sort` — two
-    plausible spellings were probed against the live platform and **silently
-    ignored**, so a wrong key yields unsorted results with no error. The runtime
-    therefore emits `sort` and never forwards a caller-supplied ordering dict.
+    Both read paths order under the key `sort` — the REST read and the traced
+    `query_object_instance` tool alike. Two other plausible spellings were probed
+    against the live platform and **silently ignored**, so a wrong key yields
+    unsorted results with no error. The runtime therefore emits `sort` and never
+    forwards a caller-supplied ordering dict.
     """
 
     field: str
@@ -236,12 +237,16 @@ DEFAULT_TAKE = 50
 #: round trip per page.
 DEFAULT_PAGE_SIZE = 500
 
-#: Keys the REST read understands and the MCP tool does not. `sort` and
-#: `need_total` are the capabilities the traced path gives up; sending them
-#: anyway would be ignored in silence, which is worse than dropping them here.
-#: `cursor` is REST's paging token — the tool pages by `offset` / `search_after`
-#: instead, so a cursor handed to it would restart at the first page.
-_REST_ONLY_ARGUMENTS = frozenset({"sort", "need_total", "cursor"})
+#: Keys the REST read understands and the MCP tool does not. `sort` is not one
+#: of them: `query_object_instance` documents it and the live catalog declares
+#: it. `need_total` is REST's switch for a total, which the tool does not take.
+#: `cursor` is REST's paging token (`paging.next_cursor`); the tool's own paging
+#: key is not the same field — its published schema names `search_after` beside
+#: `offset` — so a REST cursor handed to it would restart at the first page.
+_REST_ONLY_ARGUMENTS = frozenset({"need_total", "cursor"})
+
+#: What `exclude_system_properties` may name — the read's own enum.
+SYSTEM_PROPERTIES = frozenset({"_instance_id", "_instance_identity", "_display"})
 
 OT = TypeVar("OT", bound="ObjectType")
 
@@ -263,7 +268,8 @@ class Page(Generic[OT]):
     #: The opaque cursor for the page after this one — `paging.next_cursor` on
     #: the REST read, or its compatibility twin `cursor`. `None` means this is
     #: the last page. Pass it back as `page(cursor=...)`. Always `None` on a
-    #: traced read, whose MCP tool pages by `offset` instead.
+    #: traced read: the MCP tool does not return REST's cursor, and this runtime
+    #: pages it by `offset`.
     next_cursor: str | None = None
 
 
@@ -276,6 +282,11 @@ class ObjectSet(Generic[OT]):
     sorts: tuple[Sort, ...] = ()
     properties: tuple[str, ...] | None = None
     context: Context | None = None
+    #: Query-string flags of the REST read; see `options`.
+    include_type_info: bool = False
+    include_logic_params: bool = False
+    exclude_system_properties: tuple[str, ...] = ()
+    ignoring_store_cache: bool = False
 
     # ---- refinement ----
 
@@ -303,6 +314,37 @@ class ObjectSet(Generic[OT]):
     def with_context(self, context: Context) -> ObjectSet[OT]:
         """Pin credentials explicitly, for callers who prefer no ambient state."""
         return replace(self, context=context)
+
+    def options(
+        self,
+        *,
+        include_type_info: bool | None = None,
+        include_logic_params: bool | None = None,
+        exclude_system_properties: Sequence[str] | None = None,
+        ignoring_store_cache: bool | None = None,
+    ) -> ObjectSet[OT]:
+        """Set the read's documented query-string flags.
+
+        `include_type_info` adds the object type to the response,
+        `include_logic_params` the computation parameters of logic properties,
+        `exclude_system_properties` drops `_instance_id`, `_instance_identity`
+        or `_display` from each row, and `ignoring_store_cache` reads the store
+        rather than the index. The MCP tool takes none of them, so a set that
+        sets one reads over REST even inside a traced scope — carrying the
+        scope's turn, as a count does.
+        """
+        changes: dict[str, Any] = {}
+        if include_type_info is not None:
+            changes["include_type_info"] = include_type_info
+        if include_logic_params is not None:
+            changes["include_logic_params"] = include_logic_params
+        if exclude_system_properties is not None:
+            changes["exclude_system_properties"] = checked_system_properties(
+                exclude_system_properties
+            )
+        if ignoring_store_cache is not None:
+            changes["ignoring_store_cache"] = ignoring_store_cache
+        return replace(self, **changes)
 
     # ---- execution ----
 
@@ -441,10 +483,35 @@ class ObjectSet(Generic[OT]):
 
     # ---- internals ----
 
-    @staticmethod
-    def _via_tool(context: Context, keys: Any) -> bool:
+    def _via_tool(self, context: Context, keys: Any) -> bool:
         """Whether a body with these keys goes to the traced MCP tool rather than REST."""
-        return context.traced and not _REST_ONLY_ARGUMENTS & set(keys)
+        # The tool takes no `branch`, so a package generated for another branch
+        # reads over REST, which carries it; otherwise the traced read would
+        # silently answer from main.
+        return (
+            context.traced
+            and not _REST_ONLY_ARGUMENTS & set(keys)
+            and not self._uses_query_flags()
+            and branch_param(self.object_type.__branch__) is None
+        )
+
+    def _uses_query_flags(self) -> bool:
+        return bool(
+            self.include_type_info
+            or self.include_logic_params
+            or self.exclude_system_properties
+            or self.ignoring_store_cache
+        )
+
+    def _query(self) -> dict[str, QueryValue]:
+        """The REST read's query string: the generated branch, and any flags set."""
+        return {
+            "branch": branch_param(self.object_type.__branch__),
+            "include_type_info": self.include_type_info or None,
+            "include_logic_params": self.include_logic_params or None,
+            "exclude_system_properties": [*self.exclude_system_properties] or None,
+            "ignoring_store_cache": self.ignoring_store_cache or None,
+        }
 
     def _send(self, body: dict[str, Any], context: Context) -> Any:
         from .meta import ensure_schema_checked
@@ -453,11 +520,6 @@ class ObjectSet(Generic[OT]):
         # exactly once per network per process.
         ensure_schema_checked(context, self.object_type.__kn_id__)
         if self._via_tool(context, body.keys()):
-            # The tool accepts `sort` and `need_total` and honours neither, so a
-            # query needing either goes over REST even inside a traced scope —
-            # carrying the scope's turn, so the read is still recorded. Handing
-            # back an unsorted page, or a count of zero for a set with matches,
-            # would be a wrong answer bought with a receipt.
             return self._send_traced(context, body)
         from .lifecycle import with_context_retry
 
@@ -466,10 +528,15 @@ class ObjectSet(Generic[OT]):
             f"/object-types/{quote(self.object_type.__bkn_id__, safe='')}"
         )
 
+        query = self._query()
+
         def send(bkn_context: dict[str, str] | None) -> Any:
+            # `bkn_context` is not in the ontology-query request schemas; it is
+            # sent where a turn exists so a deploy that files REST reads against
+            # the turn can, and one that does not ignores it.
             payload = body if bkn_context is None else {**body, "bkn_context": bkn_context}
             # A read, semantically — the body is what makes it a POST.
-            return request(context, path, body=payload, method_override="GET")
+            return request(context, path, body=payload, query=query, method_override="GET")
 
         # Deploys differ on whether the REST surface enforces the lifecycle
         # contract; the first attempt finds out, and a session is opened only
@@ -479,10 +546,11 @@ class ObjectSet(Generic[OT]):
     def _send_traced(self, context: Context, body: dict[str, Any]) -> tuple[Any, Any]:
         """The same query through MCP, inside the scope's managed interaction.
 
-        Slower — a transport session plus a tool call — and it can neither sort
-        nor total, because the tool accepts neither key and ignores them in
-        silence. What it buys is the receipt: the operation, its normalised
-        inputs, and the properties it touched, landed in the evidence chain.
+        Slower — a transport session plus a tool call — and it takes neither
+        `need_total`, REST's cursor nor the REST query-string flags; a query
+        needing one of those reads over REST, carrying the scope's turn. What it
+        buys is the receipt: its status, evidence durability and the business
+        refs it touched, landed in the evidence chain.
         """
         from .lifecycle import current_interaction
         from .mcp import call_tool
@@ -562,6 +630,24 @@ class ObjectSet(Generic[OT]):
             parts = values
         equalities = [Comparison("==", part, value) for part, value in zip(key, parts, strict=True)]
         return reduce(operator.and_, equalities)
+
+
+def checked_system_properties(names: Sequence[str]) -> tuple[str, ...]:
+    """`exclude_system_properties`, refused where it names a field outside the enum."""
+    excluded = tuple(names)
+    unknown = [name for name in excluded if name not in SYSTEM_PROPERTIES]
+    if unknown:
+        raise InputError(
+            f"exclude_system_properties takes {', '.join(sorted(SYSTEM_PROPERTIES))}; "
+            f"got {', '.join(unknown)}."
+        )
+    return excluded
+
+
+def branch_param(branch: str) -> str | None:
+    """The `branch` query value: omitted for `main`, the endpoint's own default,
+    so a package generated from main sends exactly what it always sent."""
+    return branch if branch and branch != "main" else None
 
 
 def _next_cursor(payload: dict[str, Any]) -> str | None:

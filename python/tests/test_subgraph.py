@@ -112,6 +112,7 @@ class Deploy:
     def __init__(self, payload: dict[str, Any] | None = None) -> None:
         self.payload = SUBGRAPH if payload is None else payload
         self.paths: list[str] = []
+        self.queries: list[list[tuple[str, str]]] = []
         self.bodies: list[dict[str, Any]] = []
 
     def handle(self, request: httpx.Request) -> httpx.Response:
@@ -145,6 +146,7 @@ class Deploy:
             )
 
         self.paths.append(path)
+        self.queries.append(list(request.url.params.multi_items()))
         self.bodies.append(json.loads(request.read()))
         return httpx.Response(200, json=self.payload)
 
@@ -259,6 +261,39 @@ def test_the_network_id_is_encoded_in_the_path(
     AwardWinners.team.then(Teams.confederation).of(seed())
 
     assert raw[0] == "/api/ontology-query/v1/knowledge-networks/kn%2Fa%20b/subgraph"
+
+
+def test_the_branch_and_read_flags_ride_the_query_string(
+    deploy: Deploy, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(AwardWinners, "__branch__", "release")
+
+    AwardWinners.team.then(Teams.confederation).of(
+        seed(),
+        include_logic_params=True,
+        exclude_system_properties=["_display", "_instance_id"],
+        ignoring_store_cache=True,
+    )
+
+    assert deploy.queries[0] == [
+        ("branch", "release"),
+        ("include_logic_params", "true"),
+        ("exclude_system_properties", "_display"),
+        ("exclude_system_properties", "_instance_id"),
+        ("ignoring_store_cache", "true"),
+    ]
+
+
+def test_a_walk_with_no_options_sends_no_query_string(deploy: Deploy) -> None:
+    AwardWinners.team.then(Teams.confederation).of(seed())
+
+    assert deploy.queries[0] == []
+
+
+def test_an_unknown_system_property_is_refused(deploy: Deploy) -> None:
+    with pytest.raises(InputError, match="exclude_system_properties"):
+        AwardWinners.team.then(Teams.confederation).of(seed(), exclude_system_properties=["_score"])
+    assert deploy.bodies == []
 
 
 def test_no_managed_session_is_opened_for_a_walk(deploy: Deploy) -> None:

@@ -181,16 +181,16 @@ Order.order_user.then(User.user_address).of(order, step_limit=20)
 
 ## 证据链
 
-`session(traced=True)` 下的读走 MCP，落在一个受管交互里 —— 第一次读时打开，之后复用，退出时关闭 —— 并带回执：操作 id、归一化输入哈希、精确到属性粒度的业务引用。
+`session(traced=True)` 下的读走 MCP，落在一个受管交互里 —— 第一次读时打开，之后复用，退出时关闭 —— 并带回执：状态、证据持久性、证据引用、精确到属性粒度的业务引用。这是 foundry #1417 之后已完成调用携带的精简回执；完整记录留在 Core，用 `openbkn trace interactions operations <interaction-id>` 读取。状态为 `failed` 的回执抛 `ToolError("receipt_failed")`；`pending` 的回执不带值返回。
 
 ```python
 with bkn_osdk.session(traced=True):
     page = Order.objects().page(limit=10)
-    page.receipt["operation_id"]
+    page.receipt["receipt_status"]
     page.rows[0].__receipt__  # 同一份回执，挂在它所解释的每一行上
 ```
 
-那个工具收下 `sort` 和 `need_total` 但两个都不认，所以需要其中任一个的查询**即使在 traced 作用域里也走 REST** —— 带着该作用域的 turn，所以照样被记录，只是拿不到随包回执。反过来把这两个键丢掉，会返回一个没排序的页，或者给一个有匹配的集合报 0 —— 那是用回执换来的错答案。不带 traced 的读全程走 REST，更快，不带回执。
+`order_by` 以 `sort` 发给工具。工具不接受 `need_total`、REST 的 cursor 和 REST 查询参数（`options(...)`），需要其中任一个的查询**即使在 traced 作用域里也走 REST** —— 带着该作用域的 turn，所以照样被记录，只是拿不到随包回执。不带 traced 的读全程走 REST，更快，不带回执。
 
 **哪些调用需要 turn，取决于"面"，不取决于工具。** 能力面 —— MCP 工具和它们在 `/kn/` 下的 REST 孪生 —— 拒绝没有上下文的调用：catalog 里除两个生命周期工具外，每个都把 `bkn_context` 标成 required。所以 `search`、`search_instances` 以及任何直接的 `call_tool` 第一次就带上 turn：作用域里有就用它的，没有就开一个短命的。`ontology-query` 下的读路由 —— 实例、子图、指标 —— 接受裸请求，所以先裸发、不凭空造 turn；只有拒绝它的部署才会为重试开一个。
 

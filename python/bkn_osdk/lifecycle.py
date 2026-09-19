@@ -12,10 +12,8 @@ One interaction per scope, not per query: opening one per read would cost a
 round trip each time and shatter the evidence chain into unrelated turns, which
 is the opposite of the point.
 
-The deploy this was built against speaks the contract where
-`bkn_start_interaction` alone mints both ids — there is no separate
-`bkn_create_conversation` in its catalog. Ordinary reads carry those two ids;
-Function reads also carry the parent operation supplied by the host.
+`bkn_start_interaction` alone mints both ids. Ordinary reads carry those two
+ids; Function reads also carry the parent operation supplied by the host.
 """
 
 from __future__ import annotations
@@ -28,7 +26,15 @@ from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
 from .config import Context
-from .errors import BknError, HttpError, ToolError, required_action
+from .errors import (
+    LIFECYCLE_ACTIONS,
+    LIFECYCLE_CODES,
+    BknError,
+    HttpError,
+    ToolError,
+    error_code,
+    required_action,
+)
 from .mcp import call_tool, tool_catalog
 
 __all__ = [
@@ -43,9 +49,6 @@ T = TypeVar("T")
 
 START_TOOL = "bkn_start_interaction"
 FINISH_TOOL = "bkn_finish_interaction"
-#: The other contract in the wild: a conversation is created before an
-#: interaction is started inside it.
-CREATE_TOOL = "bkn_create_conversation"
 
 DEFAULT_QUESTION = "bkn-osdk read"
 #: Display-only attribution, so an SDK-opened turn is identifiable in Trace.
@@ -153,14 +156,6 @@ def _start(ctx: Context, kn_id: str, question: str = DEFAULT_QUESTION) -> Intera
             f"This deploy's tool catalog has no {START_TOOL}, so no managed interaction can "
             "be opened. Read without `traced=True`; the REST path needs no session."
         )
-    if catalog.known and CREATE_TOOL in tools:
-        # The older contract mints the conversation separately. Nothing here has
-        # been able to test it, so it is refused rather than guessed at.
-        raise BknError(
-            f"This deploy speaks the {CREATE_TOOL} lifecycle contract, which this runtime "
-            "does not implement yet. Read without `traced=True`."
-        )
-
     result = _opened(
         ctx,
         kn_id,
@@ -208,6 +203,7 @@ def _opened(ctx: Context, kn_id: str, arguments: dict[str, Any]) -> Any:
             required_action=error.required_action,
             retryable=error.retryable,
             retry_after_ms=error.retry_after_ms,
+            receipt=error.receipt,
         ) from error
 
 
@@ -285,16 +281,16 @@ def _has_turn(ctx: Context) -> bool:
 
 def _needs_context(error: HttpError | ToolError) -> bool:
     """Whether this refusal is the lifecycle middleware asking for a session."""
+    code: str | None
+    action: str | None
     if isinstance(error, ToolError):
-        return error.code in _LIFECYCLE_ACTIONS or error.required_action in _LIFECYCLE_ACTIONS
-    return required_action(error.body) in _LIFECYCLE_ACTIONS
-
-
-#: What a deploy answers when it wants a `bkn_context`. The two contracts name
-#: different actions for the same requirement, so both are recognised.
-_LIFECYCLE_ACTIONS = frozenset(
-    {"conversation_required", "create_conversation", "start_interaction", START_TOOL}
-)
+        code, action = error.code, error.required_action
+    else:
+        # The lifecycle envelope nests `code` / `required_action` under `error`;
+        # a flat `ErrorCompact`-style body carries them at the top level.
+        code, action = error_code(error.body), required_action(error.body)
+    # A deploy may name the missing session in either field.
+    return bool({code, action} & (LIFECYCLE_CODES | LIFECYCLE_ACTIONS))
 
 
 def finish(ctx: Context, interaction: Interaction, outcome: str, answer: str | None) -> None:

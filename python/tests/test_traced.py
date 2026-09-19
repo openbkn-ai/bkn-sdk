@@ -4,9 +4,8 @@
 """The traced read path: one interaction per scope, and the receipt it earns.
 
 Recorded against `https://10.211.55.4` on 2026-08-12, whose catalog carries
-`bkn_start_interaction` and `bkn_finish_interaction` and no
-`bkn_create_conversation` — the contract where one call mints both ids and
-`bkn_context` accepts only those two.
+`bkn_start_interaction` and `bkn_finish_interaction` — one call mints both ids.
+Receipts are the slim shape a completed call carries since foundry #1417.
 """
 
 from __future__ import annotations
@@ -29,9 +28,9 @@ KN = "worldcup_vega_catalog_bkn"
 PLATFORM = "https://platform.example"
 
 RECEIPT = {
-    "operation_id": "op_1",
-    "operation_key": "mcp:bbfbe454a6a9faf22b99afd572c65c26",
-    "payload_hash": "sha256:…",
+    "receipt_status": "completed",
+    "evidence_durability": "durable",
+    "observed_evidence_refs": ["ev_1"],
     "business_refs": [
         {"ref_type": "object_type", "ref_id": f"object:{KN}:tournaments"},
     ],
@@ -313,9 +312,8 @@ def test_the_query_arguments_name_the_network_and_object_type(deploy: Deploy) ->
 
 
 def test_a_query_the_tool_cannot_answer_takes_the_rest_path(deploy: Deploy) -> None:
-    """The tool accepts `sort` and `need_total` and honours neither. Dropping them
-    would answer an unsorted page, or a count of zero for a set with matches —
-    so the query goes over REST instead, carrying the scope's turn."""
+    """The tool takes no `need_total`, so a count goes over REST instead, carrying
+    the scope's turn — with its ordering intact."""
     with session(traced=True):
         Tournaments.objects().order_by(Tournaments.tournament_id.desc()).count()
 
@@ -324,6 +322,40 @@ def test_a_query_the_tool_cannot_answer_takes_the_rest_path(deploy: Deploy) -> N
     assert read["sort"] == [{"field": "tournament_id", "direction": "desc"}]
     assert read["need_total"] is True
     assert read["bkn_context"]["interaction_id"] == "int_1"
+
+
+def test_a_sorted_traced_read_goes_over_the_tool_with_its_sort(deploy: Deploy) -> None:
+    """`query_object_instance` documents `sort` and the live catalog declares it, so
+    ordering no longer costs a traced read its receipt."""
+    with session(traced=True):
+        page = Tournaments.objects().order_by(Tournaments.tournament_id.desc()).page(limit=1)
+
+    arguments = tool_calls(deploy, "query_object_instance")[0]
+    assert arguments["sort"] == [{"field": "tournament_id", "direction": "desc"}]
+    assert deploy.rest_bodies == []
+    assert page.receipt == RECEIPT
+
+
+def test_a_package_from_another_branch_reads_over_rest_when_traced(
+    deploy: Deploy, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The tool takes no `branch`; over it a release-2 package read main in silence."""
+    monkeypatch.setattr(Tournaments, "__branch__", "release-2")
+    with session(traced=True):
+        Tournaments.objects().page(limit=1)
+
+    assert tool_calls(deploy, "query_object_instance") == []
+    assert deploy.rest_bodies[-1]["bkn_context"]["interaction_id"] == "int_1"
+
+
+def test_a_read_flag_takes_the_rest_path_even_when_traced(deploy: Deploy) -> None:
+    """The tool takes none of the REST query-string flags; ignoring one in silence
+    would hand back rows the caller asked to shape differently."""
+    with session(traced=True):
+        Tournaments.objects().options(ignoring_store_cache=True).page(limit=1)
+
+    assert tool_calls(deploy, "query_object_instance") == []
+    assert deploy.rest_bodies[-1]["bkn_context"]["interaction_id"] == "int_1"
 
 
 def test_a_query_the_tool_can_answer_still_goes_over_it(deploy: Deploy) -> None:
@@ -373,19 +405,6 @@ def test_a_deploy_without_the_lifecycle_tool_says_to_read_untraced(
         Tournaments.objects().page(limit=1)
 
 
-def test_the_older_two_step_contract_is_refused_rather_than_guessed_at(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """`bkn_create_conversation` is a contract this runtime has never exercised."""
-    stub = Deploy(tools=("bkn_create_conversation", "bkn_start_interaction"))
-    _serve(monkeypatch, stub)
-    monkeypatch.setenv("BKN_BASE_URL", PLATFORM)
-    monkeypatch.setenv("BKN_TOKEN", "t-1")
-
-    with pytest.raises(BknError, match="bkn_create_conversation"), session(traced=True):
-        Tournaments.objects().page(limit=1)
-
-
 def test_a_json_rpc_error_with_a_string_code_is_a_tool_error() -> None:
     """A gateway that refuses before dispatch answers at the JSON-RPC layer; it is
     still the server refusing the call, so it keeps its code like `isError` does."""
@@ -430,6 +449,13 @@ def test_a_json_rpc_error_with_only_a_numeric_code_is_still_a_tool_error() -> No
     assert excinfo.value.code == "rpc_error"
     assert "bad" in str(excinfo.value)
     assert not lifecycle_module._needs_context(excinfo.value)
+
+
+def test_conversation_required_in_required_action_still_reopens_a_turn() -> None:
+    """The earlier action set held it; splitting codes from actions must not drop it."""
+    refusal = ToolError("tool_error", "x", required_action="conversation_required")
+
+    assert lifecycle_module._needs_context(refusal)
 
 
 def test_the_traced_tool_is_asked_for_json(deploy: Deploy) -> None:
@@ -994,3 +1020,104 @@ def test_function_parent_does_not_cross_explicit_turn_override(
         "conversation_id": "other-conv",
         "interaction_id": "other-int",
     }
+
+
+# ---- receipts and flat errors ------------------------------------------------
+
+
+def _tool_result(
+    structured: dict[str, Any], *, text: Any = None, is_error: bool = False
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "content": [{"type": "text", "text": json.dumps(text if text is not None else {})}],
+        "structuredContent": structured,
+    }
+    if is_error:
+        result["isError"] = True
+    return {"jsonrpc": "2.0", "id": 1, "result": result}
+
+
+def test_a_failed_receipt_without_is_error_raises() -> None:
+    """The operation was recorded as failed; its payload is not an answer."""
+    failed = {"receipt_status": "failed", "receipt_id": "r1"}
+
+    with pytest.raises(ToolError) as excinfo:
+        mcp_module._unwrap(_tool_result({"bkn_receipt": failed}, text={"datas": [ROW]}))
+
+    assert excinfo.value.code == "receipt_failed"
+    assert excinfo.value.receipt == failed
+
+
+def test_a_pending_receipt_raises_rather_than_reading_as_empty() -> None:
+    """A None value became an empty page, indistinguishable from "no match"."""
+    pending = {"receipt_status": "pending", "receipt_id": "r1"}
+
+    with pytest.raises(ToolError) as excinfo:
+        mcp_module._unwrap(_tool_result({"bkn_receipt": pending}, text={"datas": [ROW]}))
+
+    assert excinfo.value.code == "receipt_pending"
+    assert excinfo.value.receipt == pending
+
+
+def test_a_completed_slim_receipt_returns_the_value() -> None:
+    result = mcp_module._unwrap(_tool_result({"bkn_receipt": RECEIPT}, text={"datas": [ROW]}))
+
+    assert result.value == {"datas": [ROW]}
+    assert result.receipt == RECEIPT
+
+
+def test_an_is_error_result_keeps_its_receipt_on_the_error() -> None:
+    failed = {"receipt_status": "failed"}
+    structured = {"bkn_receipt": failed, "error": {"code": "interaction_terminal"}}
+
+    with pytest.raises(ToolError) as excinfo:
+        mcp_module._unwrap(_tool_result(structured, is_error=True))
+
+    assert excinfo.value.code == "interaction_terminal"
+    assert excinfo.value.receipt == failed
+
+
+def test_a_top_level_error_compact_keeps_its_code() -> None:
+    """`ErrorCompact` puts `code` / `description` at the top level; reading only a
+    nested `error` turned the code that drives retries into `tool_error`."""
+    structured = {
+        "code": "conversation_required",
+        "description": "conversation_id is required",
+        "required_action": "bkn_start_interaction",
+        "retryable": False,
+    }
+
+    with pytest.raises(ToolError) as excinfo:
+        mcp_module._unwrap(_tool_result(structured, is_error=True))
+
+    assert excinfo.value.code == "conversation_required"
+    assert excinfo.value.message == "conversation_id is required"
+    assert excinfo.value.required_action == "bkn_start_interaction"
+    assert lifecycle_module._needs_context(excinfo.value)
+
+
+def test_a_top_level_error_in_the_text_payload_is_read_too() -> None:
+    result = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+            "isError": True,
+            "content": [{"type": "text", "text": json.dumps({"code": "interaction_required"})}],
+        },
+    }
+
+    with pytest.raises(ToolError) as excinfo:
+        mcp_module._unwrap(result)
+
+    assert excinfo.value.code == "interaction_required"
+    assert lifecycle_module._needs_context(excinfo.value)
+
+
+def test_a_flat_rest_refusal_is_recognised_as_wanting_a_turn() -> None:
+    from bkn_osdk import HttpError
+
+    flat = HttpError(400, "Bad Request", json.dumps({"code": "conversation_required"}))
+    unrelated = HttpError(400, "Bad Request", json.dumps({"code": "Public.BadRequest"}))
+
+    assert lifecycle_module._needs_context(flat)
+    assert not lifecycle_module._needs_context(unrelated)

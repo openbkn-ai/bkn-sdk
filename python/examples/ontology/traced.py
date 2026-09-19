@@ -37,7 +37,7 @@ def main() -> None:
 
         page = Order.objects().with_context(scoped).page(limit=2)
         receipt = page.receipt or {}
-        print(f"read receipt {receipt.get('operation_id')}")
+        print(f"read receipt {receipt.get('receipt_status')}")
         print(f"  refs {[ref['ref_id'] for ref in receipt.get('business_refs', [])][:3]}")
 
         # The receipt rides on each row too, so citing one instance does not mean

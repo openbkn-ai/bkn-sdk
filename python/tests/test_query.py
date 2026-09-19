@@ -524,3 +524,50 @@ def test_the_set_is_immutable_so_a_refinement_cannot_leak(replay: Replay) -> Non
 
     assert "condition" in replay.sent[0]
     assert "condition" not in replay.sent[1]
+
+
+# ---- branch and query-string flags -------------------------------------------
+
+
+def test_a_main_package_sends_no_query_string(replay: Replay) -> None:
+    """`main` is the endpoint's default, so the wire is what it always was."""
+    orders().take(1)
+
+    assert "?" not in replay.paths[0]
+
+
+def test_a_package_from_another_branch_queries_that_branch(
+    replay: Replay, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A package generated for a branch used to read main in silence."""
+    monkeypatch.setattr(Order, "__branch__", "release-2")
+
+    orders().take(1)
+
+    assert replay.paths[0].endswith("/object-types/order?branch=release-2")
+
+
+def test_read_flags_ride_the_query_string(replay: Replay) -> None:
+    orders().options(
+        include_type_info=True,
+        include_logic_params=True,
+        exclude_system_properties=["_display"],
+        ignoring_store_cache=True,
+    ).take(1)
+
+    assert replay.paths[0].split("?", 1)[1] == (
+        "include_type_info=true&include_logic_params=true"
+        "&exclude_system_properties=_display&ignoring_store_cache=true"
+    )
+    assert "ignoring_store_cache" not in replay.sent[0]
+
+
+def test_options_can_be_switched_back_off(replay: Replay) -> None:
+    orders().options(ignoring_store_cache=True).options(ignoring_store_cache=False).take(1)
+
+    assert "?" not in replay.paths[0]
+
+
+def test_an_unknown_system_property_is_refused() -> None:
+    with pytest.raises(InputError, match="exclude_system_properties"):
+        orders().options(exclude_system_properties=["_score"])

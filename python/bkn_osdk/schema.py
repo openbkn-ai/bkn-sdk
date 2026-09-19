@@ -21,9 +21,11 @@ as a monorepo-refactor alias kept only until external callers move off it.
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import quote
 
 from .config import Context
 from .http import QueryValue, request
@@ -105,6 +107,12 @@ class RelationTypeDef:
     mapping_rules: tuple[tuple[str, str], ...] = ()
     display_name: str | None = None
     description: str | None = None
+    #: Canonical JSON of an object-shaped `mapping_rules` — an `indirect`
+    #: relation's backing resource and its two mapping lists, or a
+    #: `filtered_cross_join`'s conditions. Empty for a direct relation, whose
+    #: rules are the pairs above. Nothing is emitted from it; it is fingerprinted
+    #: so that editing such a relation's rules still reads as drift.
+    mapping_detail: str = ""
 
 
 @dataclass(frozen=True)
@@ -154,6 +162,9 @@ def fingerprint(schema: KnSchema) -> str:
         digest.update(f"rt:{relation.bkn_id}:{relation.source}:{relation.target}\n".encode())
         for source_property, target_property in sorted(relation.mapping_rules):
             digest.update(f"map:{source_property}:{target_property}\n".encode())
+        if relation.mapping_detail:
+            # Only where present, so a direct relation's hash is unchanged.
+            digest.update(f"mapdetail:{relation.mapping_detail}\n".encode())
 
     return digest.hexdigest()
 
@@ -170,7 +181,7 @@ def fetch_schema(ctx: Context, kn_id: str, branch: str = "main") -> KnSchema:
     "everything"). Everything is fetched before anything is parsed, so a failure
     half-way cannot produce a schema that silently omits an object type.
     """
-    base = f"{ONTOLOGY_BASE}/{kn_id}"
+    base = f"{ONTOLOGY_BASE}/{quote(kn_id, safe='')}"
     listing: dict[str, QueryValue] = {"branch": branch, "limit": -1}
     network = request(ctx, base, query={"branch": branch})
     object_types = request(ctx, f"{base}/object-types", query=listing)
@@ -263,20 +274,36 @@ def _property(prop: Mapping[str, Any]) -> PropertyDef:
 
 
 def _relation_type(entry: Mapping[str, Any]) -> RelationTypeDef:
-    return RelationTypeDef(
-        bkn_id=_text(entry.get("id")) or "",
-        source=_text(entry.get("source_object_type_id")) or "",
-        target=_text(entry.get("target_object_type_id")) or "",
-        mapping_rules=tuple(
+    """One relation type.
+
+    `mapping_rules` is a list of property pairs on a direct relation, and an
+    object on `indirect` (a backing resource plus two mapping lists) and
+    `filtered_cross_join` (two conditions). Only the list form is a join a hop
+    can make; the object form is kept as canonical JSON for the fingerprint.
+    A null or missing value is no rules.
+    """
+    rules = entry.get("mapping_rules")
+    pairs: tuple[tuple[str, str], ...] = ()
+    detail = ""
+    if isinstance(rules, list):
+        pairs = tuple(
             (
                 _text(_nested(rule, "source_property", "name")) or "",
                 _text(_nested(rule, "target_property", "name")) or "",
             )
-            for rule in entry.get("mapping_rules", [])
+            for rule in rules
             if isinstance(rule, Mapping)
-        ),
+        )
+    elif isinstance(rules, Mapping):
+        detail = json.dumps(rules, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return RelationTypeDef(
+        bkn_id=_text(entry.get("id")) or "",
+        source=_text(entry.get("source_object_type_id")) or "",
+        target=_text(entry.get("target_object_type_id")) or "",
+        mapping_rules=pairs,
         display_name=_text(entry.get("name")),
         description=_text(entry.get("comment")),
+        mapping_detail=detail,
     )
 
 

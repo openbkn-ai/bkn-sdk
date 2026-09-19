@@ -49,6 +49,10 @@ def _response_for(request: httpx.Request) -> httpx.Response:
                 }
             },
         )
+    if request.url.path == "/toon":
+        return httpx.Response(
+            200, text="datas[1]{id}:\n  1", headers={"content-type": "application/toon"}
+        )
     if request.url.path == "/empty":
         return httpx.Response(204, content=b"")
     if request.url.path == "/gateway":
@@ -274,3 +278,8 @@ def test_a_cross_host_redirect_does_not_replay_the_token(
     http_module.request(Context(base_url="https://platform.example", token="secret"), "/x")
 
     assert seen == [("platform.example", "Bearer secret"), ("elsewhere.example", None)]
+
+
+def test_a_toon_body_comes_back_as_text(record: list[httpx.Request]) -> None:
+    """Generated capability routes accept `response_format="toon"`; that answer is not JSON."""
+    assert http_module.request(ctx(), "/toon") == "datas[1]{id}:\n  1"
