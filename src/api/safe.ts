@@ -27,14 +27,66 @@ export function notOnSafe(operation: string): never {
 
 // ── users ──────────────────────────────────────────────────────────────────
 
-/** GET /admin/users?search=&offset=&limit= — list/search (account/name substring). */
+/** Server cap on one `GET /admin/users` page. */
+export const USER_PAGE_MAX = 500;
+/** Server cap on one flat `GET /admin/departments` page. */
+export const DEPARTMENT_PAGE_MAX = 1000;
+/** Upper bound on pages followed when reading a whole directory list. */
+const DIRECTORY_PAGE_CAP = 200;
+
+/**
+ * GET /admin/users?search=&department_id=&offset=&limit= — list/search
+ * (account/name substring; `department_id` = direct members of that department).
+ */
 export function listUsersSafe(
   ctx: RequestContext,
-  opts: { search?: string; offset?: number; limit?: number } = {},
+  opts: { search?: string; departmentId?: string; offset?: number; limit?: number } = {},
 ): Promise<unknown> {
   return request(ctx, `${ADMIN}/users`, {
-    query: { search: opts.search || undefined, offset: opts.offset, limit: opts.limit },
+    query: {
+      search: opts.search || undefined,
+      department_id: opts.departmentId || undefined,
+      offset: opts.offset,
+      limit: opts.limit,
+    },
   });
+}
+
+/**
+ * Read a paged directory list until `done` says stop, the server returns a short
+ * or empty page, `total` is reached, or the page cap is hit.
+ */
+export async function pageDirectory<T>(
+  fetchPage: (offset: number, limit: number) => Promise<unknown>,
+  key: "users" | "departments",
+  pageSize: number,
+  done: (rows: T[]) => boolean = () => false,
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let page = 0; page < DIRECTORY_PAGE_CAP; page += 1) {
+    const res = (await fetchPage(rows.length, pageSize)) as
+      | ({ total?: number | bigint } & Record<string, unknown>)
+      | T[]
+      | undefined;
+    const batch = (Array.isArray(res) ? res : ((res?.[key] as T[] | undefined) ?? [])) as T[];
+    rows.push(...batch);
+    const total = Array.isArray(res) ? undefined : res?.total;
+    // `done` sees every page, including the last one.
+    const satisfied = done(rows);
+    if (satisfied || batch.length === 0 || batch.length < pageSize) break;
+    if (total !== undefined && rows.length >= Number(total)) break;
+  }
+  return rows;
+}
+
+/**
+ * GET /api/safe/v1/me — the caller's own directory record ({id, account, name,
+ * email, roles, ...}). Any logged-in user may read it, so identity display
+ * uses this instead of the admin-only `/admin/users/:id`, which answers a
+ * non-admin with a 403 that bkn-safe writes to the audit trail as a refusal.
+ */
+export function getMeSafe(ctx: RequestContext): Promise<unknown> {
+  return request(ctx, "/api/safe/v1/me");
 }
 
 /** GET /admin/users/:id — detail (incl. roles + departments). */
@@ -47,7 +99,10 @@ export interface CreateUserSafeInput {
   password: string;
   name?: string;
   email?: string;
+  telephone?: string;
   accountType?: string;
+  /** Initial department membership; unknown ids fail the create with 400. */
+  departmentIds?: string[];
   id?: string;
 }
 
@@ -63,7 +118,9 @@ export function createUserSafe(
       password: input.password,
       ...(input.name ? { name: input.name } : {}),
       ...(input.email ? { email: input.email } : {}),
+      ...(input.telephone ? { telephone: input.telephone } : {}),
       ...(input.accountType ? { account_type: input.accountType } : {}),
+      ...(input.departmentIds?.length ? { department_ids: input.departmentIds } : {}),
       ...(input.id ? { id: input.id } : {}),
     },
   }) as Promise<{ id: string }>;
@@ -75,6 +132,8 @@ export interface UpdateUserSafeInput {
   telephone?: string;
   enabled?: boolean;
   accountType?: string;
+  /** Replaces the user's department membership. */
+  departmentIds?: string[];
 }
 
 /** PUT /admin/users/:id — partial update (only provided fields). */
@@ -91,6 +150,7 @@ export function updateUserSafe(
       ...(input.telephone !== undefined ? { telephone: input.telephone } : {}),
       ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
       ...(input.accountType !== undefined ? { account_type: input.accountType } : {}),
+      ...(input.departmentIds !== undefined ? { department_ids: input.departmentIds } : {}),
     },
   });
 }
@@ -197,7 +257,33 @@ export interface CreateDeptSafeInput {
   name: string;
   parentId?: string;
   type?: string;
+  managerId?: string;
+  code?: string;
+  email?: string;
+  remark?: string;
   id?: string;
+}
+
+/** PUT /admin/departments/:id body — present fields change (empty string clears). */
+export type UpdateDeptSafeInput = Partial<Omit<CreateDeptSafeInput, "id">>;
+
+function departmentBody(input: UpdateDeptSafeInput, keepEmpty: boolean): Record<string, string> {
+  const body: Record<string, string> = {};
+  const fields: Array<[keyof UpdateDeptSafeInput, string]> = [
+    ["name", "name"],
+    ["parentId", "parent_id"],
+    ["type", "type"],
+    ["managerId", "manager_id"],
+    ["code", "code"],
+    ["email", "email"],
+    ["remark", "remark"],
+  ];
+  for (const [field, wire] of fields) {
+    const value = input[field];
+    if (value === undefined || (!keepEmpty && value === "")) continue;
+    body[wire] = value;
+  }
+  return body;
 }
 
 /** POST /admin/departments → 201 {id}. */
@@ -208,9 +294,8 @@ export function createDepartmentSafe(
   return request(ctx, `${ADMIN}/departments`, {
     method: "POST",
     body: {
+      ...departmentBody(input, false),
       name: input.name,
-      ...(input.parentId ? { parent_id: input.parentId } : {}),
-      ...(input.type ? { type: input.type } : {}),
       ...(input.id ? { id: input.id } : {}),
     },
   }) as Promise<{ id: string }>;
@@ -220,15 +305,11 @@ export function createDepartmentSafe(
 export function updateDepartmentSafe(
   ctx: RequestContext,
   deptId: string,
-  input: { name?: string; parentId?: string; type?: string },
+  input: UpdateDeptSafeInput,
 ): Promise<unknown> {
   return request(ctx, `${ADMIN}/departments/${encodeURIComponent(deptId)}`, {
     method: "PUT",
-    body: {
-      ...(input.name !== undefined ? { name: input.name } : {}),
-      ...(input.parentId !== undefined ? { parent_id: input.parentId } : {}),
-      ...(input.type !== undefined ? { type: input.type } : {}),
-    },
+    body: departmentBody(input, true),
   });
 }
 
@@ -248,12 +329,13 @@ interface DeptNode {
   [k: string]: unknown;
 }
 
-/** Build a nested department tree from the flat `GET /admin/departments` list. */
+/** Build a nested department tree from the flat `GET /admin/departments` list (all pages). */
 export async function buildDepartmentTree(ctx: RequestContext): Promise<unknown[]> {
-  const res = (await listDepartmentsSafe(ctx, { limit: 1000 })) as
-    | { departments?: DeptNode[] }
-    | DeptNode[];
-  const flat = Array.isArray(res) ? res : (res.departments ?? []);
+  const flat = await pageDirectory<DeptNode>(
+    (offset, limit) => listDepartmentsSafe(ctx, { offset, limit }),
+    "departments",
+    DEPARTMENT_PAGE_MAX,
+  );
   const byId = new Map<string, DeptNode>();
   for (const d of flat) if (d.id) byId.set(d.id, { ...d, children: [] });
   const roots: DeptNode[] = [];

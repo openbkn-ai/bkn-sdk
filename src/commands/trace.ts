@@ -27,28 +27,31 @@ function renderPayload(payload: PayloadEnvelope | undefined): string {
 }
 
 export function renderTechnicalTraceDetail(detail: TechnicalTraceDetail): string {
+  // The contract declares no required field here: render what arrived.
+  const summary = detail?.summary;
   const lines = [
-    `Trace: ${detail.summary.trace_id}`,
-    `Status: ${detail.summary.status}`,
-    `Request: ${detail.summary.request_id || "-"}`,
-    `Question: ${detail.summary.question_preview || "-"}`,
-    `Result: ${detail.summary.result_preview || "-"}`,
-    `Service: ${detail.summary.root_service || "-"}`,
-    `Spans: ${detail.graph?.data.nodes.length ?? 0}`,
+    `Trace: ${summary?.trace_id || detail?.graph?.trace_id || "-"}`,
+    `Status: ${summary?.status || detail?.graph?.status || "-"}`,
+    `Request: ${summary?.request_id || "-"}`,
+    `Question: ${summary?.question_preview || "-"}`,
+    `Result: ${summary?.result_preview || "-"}`,
+    `Service: ${summary?.root_service || "-"}`,
+    `Spans: ${detail?.graph?.data?.nodes?.length ?? 0}`,
   ];
-  if (detail.partial) {
+  if (detail?.partial) {
     lines.push(`Partial: ${(detail.partial_reasons ?? []).join(", ") || "yes"}`);
   }
-  for (const operation of detail.operations) {
+  for (const operation of detail?.operations ?? []) {
+    const fact = operation?.fact ?? {};
     lines.push(
       "",
-      `${operation.fact.tool_name} · ${operation.fact.operation_id} · attempt ${operation.fact.attempt} · ${operation.state}`,
-      `Source: ${operation.fact.protocol}/${operation.fact.source_module}`,
-      `Input: ${renderPayload(operation.fact.input)}`,
+      `${fact.tool_name ?? "-"} · ${fact.operation_id ?? "-"} · attempt ${fact.attempt ?? "-"} · ${operation?.state ?? "-"}`,
+      `Source: ${fact.protocol ?? "-"}/${fact.source_module ?? "-"}`,
+      `Input: ${renderPayload(fact.input)}`,
     );
-    if (operation.fact.output) lines.push(`Output: ${renderPayload(operation.fact.output)}`);
-    if (operation.fact.error) lines.push(`Error: ${renderPayload(operation.fact.error)}`);
-    if (operation.partial_reasons?.length) {
+    if (fact.output) lines.push(`Output: ${renderPayload(fact.output)}`);
+    if (fact.error) lines.push(`Error: ${renderPayload(fact.error)}`);
+    if (operation?.partial_reasons?.length) {
       lines.push(`Partial: ${operation.partial_reasons.join(", ")}`);
     }
   }

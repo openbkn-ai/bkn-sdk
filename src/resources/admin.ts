@@ -8,10 +8,12 @@ import type {
   CreateUserInput,
   ListRolesOptions,
   MemberType,
+  OrgMembersOptions,
   UpdateOrgInput,
   UpdateUserInput,
 } from "../api/admin.js";
 import {
+  USER_PAGE_MAX,
   activateLicenseSafe,
   assignRoleSafe,
   buildDepartmentTree,
@@ -34,6 +36,7 @@ import {
   listDepartmentsSafe,
   listRolesSafe,
   listUsersSafe,
+  pageDirectory,
   removeLicenseSafe,
   removeRoleSafe,
   roleMembersSafe,
@@ -44,12 +47,19 @@ import {
   updateUserSafe,
 } from "../api/safe.js";
 import type { RequestContext } from "../types.js";
+import { InputError } from "../utils/errors.js";
 
 /**
  * Admin (operator) resource surface, on bkn-safe's token-gated
  * `/api/safe/v1/admin/*` API. See docs/exec-plans/admin-bkn-safe-migration.md.
  */
-const DEFAULT_NEW_USER_PASSWORD = "openbkn"; // platform initial password (forced-change on first login)
+
+/** Slice `rows` by a client-side offset/limit; `total` counts rows before slicing. */
+function pageRows<T>(rows: T[], offset?: number, limit?: number): { rows: T[]; total: number } {
+  const start = Math.max(0, offset ?? 0);
+  const end = limit === undefined ? undefined : start + Math.max(0, limit);
+  return { rows: rows.slice(start, end), total: rows.length };
+}
 
 export function admin(ctx: RequestContext) {
   return {
@@ -57,17 +67,40 @@ export function admin(ctx: RequestContext) {
     orgList: (opts?: AdminListOptions) =>
       listDepartmentsSafe(ctx, { search: opts?.name, offset: opts?.offset, limit: opts?.limit }),
     orgGet: (deptId: string) => getDepartmentSafe(ctx, deptId),
-    orgTree: (_role?: string) => buildDepartmentTree(ctx),
-    orgMembers: (deptId: string, _opts?: unknown) => getDepartmentMembersSafe(ctx, deptId),
+    orgTree: () => buildDepartmentTree(ctx),
+    orgMembers: async (deptId: string, opts: OrgMembersOptions = {}) => {
+      const res = (await getDepartmentMembersSafe(ctx, deptId)) as { users?: unknown[] };
+      if (opts.offset === undefined && opts.limit === undefined) return res;
+      const { rows, total } = pageRows(res?.users ?? [], opts.offset, opts.limit);
+      return { ...res, users: rows, total };
+    },
     orgCreate: (input: CreateOrgInput) =>
-      createDepartmentSafe(ctx, { name: input.name, parentId: input.parentId }),
+      createDepartmentSafe(ctx, {
+        name: input.name,
+        parentId: input.parentId,
+        managerId: input.managerID,
+        code: input.code,
+        remark: input.remark,
+        email: input.email,
+      }),
     orgUpdate: (deptId: string, input: UpdateOrgInput) =>
-      updateDepartmentSafe(ctx, deptId, { name: input.name }),
+      updateDepartmentSafe(ctx, deptId, {
+        name: input.name,
+        managerId: input.managerID,
+        code: input.code,
+        remark: input.remark,
+        email: input.email,
+      }),
     orgDelete: (deptId: string) => deleteDepartmentSafe(ctx, deptId),
 
     // ── users ──
     userList: (opts?: AdminListOptions) =>
-      listUsersSafe(ctx, { search: opts?.name, offset: opts?.offset, limit: opts?.limit }),
+      listUsersSafe(ctx, {
+        search: opts?.name,
+        departmentId: opts?.orgId,
+        offset: opts?.offset,
+        limit: opts?.limit,
+      }),
     userGet: (userId: string) => getUserSafe(ctx, userId),
     userRoles: async (userId: string) => {
       // role-bindings returns ids only — enrich with names from the role list.
@@ -81,18 +114,27 @@ export function admin(ctx: RequestContext) {
       );
       return { roles: ids.map((id) => ({ name: nameById.get(id) ?? id, id })) };
     },
-    userCreate: (input: CreateUserInput) =>
-      createUserSafe(ctx, {
+    userCreate: async (input: CreateUserInput) => {
+      if (!input.password) {
+        throw new InputError(
+          "A new user needs an initial password: pass it explicitly (there is no default).",
+        );
+      }
+      return createUserSafe(ctx, {
         account: input.loginName,
-        password: DEFAULT_NEW_USER_PASSWORD,
+        password: input.password,
         name: input.displayName,
         email: input.email,
-      }),
+        telephone: input.telNumber,
+        departmentIds: input.departmentIds,
+      });
+    },
     userUpdate: (userId: string, input: UpdateUserInput) =>
       updateUserSafe(ctx, userId, {
         name: input.displayName,
         email: input.email,
         telephone: input.telNumber,
+        departmentIds: input.departmentIds,
       }),
     userDelete: (userId: string) => deleteUserSafe(ctx, userId),
     userResetPassword: (userId: string, newPassword: string) =>
@@ -117,19 +159,28 @@ export function admin(ctx: RequestContext) {
       return { roles: matched.slice(offset, end), total: matched.length };
     },
     roleGet: (roleId: string) => getRoleSafe(ctx, roleId),
-    roleMembers: async (roleId: string, _opts?: unknown) => {
-      // members are accessor ids — enrich with account names from the user list.
-      const [mem, users] = await Promise.all([
-        roleMembersSafe(ctx, roleId),
-        listUsersSafe(ctx, { limit: 500 }),
-      ]);
-      const ids = (mem as { accessor_ids?: string[] }).accessor_ids ?? [];
-      const nameById = new Map(
-        (
-          (users as { users?: Array<{ id: string; account?: string; name?: string }> }).users ?? []
-        ).map((u) => [u.id, u.account ?? u.name ?? u.id] as const),
-      );
-      return { members: ids.map((id) => ({ account: nameById.get(id) ?? id, id })) };
+    roleMembers: async (roleId: string, opts: { offset?: number; limit?: number } = {}) => {
+      // Members are accessor ids — enrich with account names from the user
+      // list, paging until every member is named or the directory runs out.
+      const mem = (await roleMembersSafe(ctx, roleId)) as { accessor_ids?: string[] };
+      const { rows: ids, total } = pageRows(mem?.accessor_ids ?? [], opts.offset, opts.limit);
+      const pending = new Set(ids);
+      const nameById = new Map<string, string>();
+      if (pending.size > 0) {
+        await pageDirectory<{ id: string; account?: string; name?: string }>(
+          (offset, limit) => listUsersSafe(ctx, { offset, limit }),
+          "users",
+          USER_PAGE_MAX,
+          (users) => {
+            for (const u of users) {
+              if (!pending.has(u.id) || nameById.has(u.id)) continue;
+              nameById.set(u.id, u.account ?? u.name ?? u.id);
+            }
+            return nameById.size >= pending.size;
+          },
+        );
+      }
+      return { members: ids.map((id) => ({ account: nameById.get(id) ?? id, id })), total };
     },
     addRoleMember: (roleId: string, id: string, _type: MemberType = "user") =>
       assignRoleSafe(ctx, id, roleId),

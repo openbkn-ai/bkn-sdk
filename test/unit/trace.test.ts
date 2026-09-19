@@ -1,18 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  emitEvidenceArtifact,
-  emitEvidenceEvents,
-  getBusinessGraph,
-  getEvidenceArtifact,
-  getEvidenceChain,
-  getInteractionSummary,
-  getRequestSummary,
-  getRequestTraces,
-  getSnapshotPreview,
   getSpansByConversation,
   getTechnicalTrace,
   getTraceGraph,
-  listRequestSummaries,
   listTechnicalTraces,
 } from "../../src/api/trace.js";
 import type { RawSpan } from "../../src/api/trace.js";
@@ -99,7 +89,7 @@ describe("typed technical Trace APIs", () => {
     if (!c) throw new Error("no call");
     expect(new URL(c[0]).pathname).toBe("/api/agent-observability/v1/traces/trace%2F1");
     expect(c[1].method).toBe("GET");
-    expect(detail.summary.trace_id).toBe("trace/1");
+    expect(detail.summary?.trace_id).toBe("trace/1");
   });
 
   it("preserves unsafe nanosecond values in trace details", async () => {
@@ -131,253 +121,6 @@ describe("typed technical Trace APIs", () => {
       listTechnicalTraces(ctx, { query: { term: { traceId: "trace-1" } } } as never),
     ).toThrow("Unknown technical Trace query field");
     expect(calls(f)).toHaveLength(0);
-  });
-});
-
-describe("emitEvidenceEvents", () => {
-  it("POSTs a phase-two evidence event batch", async () => {
-    const f = mockFetchSeq([
-      {
-        trace_id: "8c0d0000000000000000000000000001",
-        "bkn.request.id": "req_phase2_001",
-        "bkn.trace.schema.version": "2.0.0",
-        accepted_event_count: 1,
-        claim_count: 1,
-        evidence_ref_count: 0,
-        business_ref_count: 0,
-      },
-    ]);
-    const result = await emitEvidenceEvents(ctx, {
-      "bkn.trace.schema.version": "2.0.0",
-      trace: {
-        trace_id: "8c0d0000000000000000000000000001",
-        traceparent: "00-8c0d0000000000000000000000000001-1f12000000000001-01",
-        "bkn.request.id": "req_phase2_001",
-        "bkn.account.id": "acct_demo",
-        "bkn.account.type": "app",
-      },
-      events: [
-        {
-          event_id: "evt_claim",
-          event_type: "claim.created",
-          "bkn.trace.schema.version": "2.0.0",
-          observed_at: "2026-07-22T04:00:00.000000000Z",
-          emitted_at: "2026-07-22T04:00:00.001000000Z",
-          producer_module: "third-party-agent",
-          trace_id: "8c0d0000000000000000000000000001",
-          span_id: "1f12000000000001",
-          "bkn.request.id": "req_phase2_001",
-          "bkn.operation.name": "agent.answer",
-          payload: {
-            claim_id: "claim_001",
-            claim_type: "answer",
-            claim_hash: "sha256:claim",
-            visibility: "visible",
-            version_status: "versioned",
-          },
-        },
-      ],
-    });
-
-    const c = calls(f)[0];
-    if (!c) throw new Error("no call");
-    expect(new URL(c[0]).pathname).toBe("/api/agent-observability/v1/evidence/events");
-    expect(c[1].method).toBe("POST");
-    expect(JSON.parse(c[1].body as string).events[0].event_type).toBe("claim.created");
-    expect(result.accepted_event_count).toBe(1);
-  });
-});
-
-describe("BKN Trace 2.2 business runs and artifacts", () => {
-  it("sends the dedicated ingest token only to evidence write endpoints", async () => {
-    const ingestCtx = verifiedContext({
-      ...ctx,
-      evidenceIngestToken: "producer-ingest-token",
-    });
-    const artifact = {
-      artifact_id: "art_auth_001",
-      artifact_type: "question" as const,
-      "bkn.request.id": "req_auth_001",
-      trace_id: "11111111111111111111111111111111",
-      content_type: "application/json",
-      schema_version: "2.2.0" as const,
-      observed_at: "2026-07-27T09:00:00Z",
-      content_hash: `sha256:${"1".repeat(64)}`,
-      content: "test",
-      "bkn.account.id": "account_1",
-      "bkn.account.type": "app",
-    };
-    const f = mockFetchSeq([{ artifact_id: artifact.artifact_id, created: true }, artifact]);
-
-    await emitEvidenceArtifact(ingestCtx, artifact);
-    await getEvidenceArtifact(ingestCtx, artifact.artifact_id);
-
-    const [writeCall, readCall] = calls(f);
-    if (!writeCall || !readCall) throw new Error("missing calls");
-    expect(new Headers(writeCall[1].headers).get("x-bkn-trace-ingest-token")).toBe(
-      "producer-ingest-token",
-    );
-    expect(writeCall[1].redirect).toBe("manual");
-    expect(new Headers(readCall[1].headers).get("x-bkn-trace-ingest-token")).toBeNull();
-    expect(readCall[1].redirect).toBeUndefined();
-  });
-
-  it("writes an artifact and reads it back through authorized endpoints", async () => {
-    const artifact = {
-      artifact_id: "art_question_001",
-      artifact_type: "question" as const,
-      "bkn.request.id": "req_business_001",
-      trace_id: "11111111111111111111111111111111",
-      content_type: "application/json",
-      schema_version: "2.2.0" as const,
-      observed_at: "2026-07-27T09:00:00Z",
-      content_hash: `sha256:${"1".repeat(64)}`,
-      content: "客户 A 的风险为什么上升？",
-      "bkn.account.id": "account_1",
-      "bkn.account.type": "app",
-    };
-    const f = mockFetchSeq([{ artifact_id: artifact.artifact_id, created: true }, artifact]);
-
-    await emitEvidenceArtifact(ctx, artifact);
-    const loaded = await getEvidenceArtifact(ctx, artifact.artifact_id);
-
-    const [writeCall, readCall] = calls(f);
-    if (!writeCall || !readCall) throw new Error("missing calls");
-    expect(new URL(writeCall[0]).pathname).toBe("/api/agent-observability/v1/evidence/artifacts");
-    expect(writeCall[1].method).toBe("POST");
-    expect(new URL(readCall[0]).pathname).toBe(
-      "/api/agent-observability/v1/evidence/artifacts/art_question_001",
-    );
-    expect(loaded.content).toBe("客户 A 的风险为什么上升？");
-    expect(new URL(readCall[0]).search).toBe("");
-  });
-
-  it("reads an artifact through an authorized interaction when one is given", async () => {
-    const f = mockFetchSeq([{ artifact_id: "art/1", content: "x" }]);
-
-    await getEvidenceArtifact(ctx, "art/1", { interactionId: "int-1" });
-
-    const c = calls(f)[0];
-    if (!c) throw new Error("no call");
-    const url = new URL(c[0]);
-    expect(url.pathname).toBe("/api/agent-observability/v1/evidence/artifacts/art%2F1");
-    expect(Object.fromEntries(url.searchParams)).toEqual({ interaction_id: "int-1" });
-  });
-
-  it("lists business requests and follows request-to-trace links", async () => {
-    const f = mockFetchSeq([
-      {
-        entries: [
-          {
-            request_id: "req_business_001",
-            status: "completed",
-            evidence_completeness: "complete",
-            action_summary: {},
-            trace_count: 1,
-          },
-        ],
-        total: 1,
-      },
-      {
-        request_id: "req_business_001",
-        status: "completed",
-        evidence_completeness: "complete",
-        action_summary: {},
-        trace_count: 1,
-      },
-      {
-        entries: [
-          {
-            trace_id: "trace_001",
-            request_id: "req_business_001",
-            status: "completed",
-            span_count: 7,
-          },
-        ],
-        total: 1,
-      },
-    ]);
-
-    const page = await listRequestSummaries(ctx, {
-      evidenceCompleteness: "complete",
-      keyword: "客户 A",
-      knowledgeNetwork: "customer-risk-network",
-      limit: 30,
-      status: "completed",
-    });
-    const summary = await getRequestSummary(ctx, "req_business_001");
-    const traces = await getRequestTraces(ctx, "req_business_001", { limit: 30 });
-
-    const [listCall, summaryCall, tracesCall] = calls(f);
-    if (!listCall || !summaryCall || !tracesCall) throw new Error("missing calls");
-    const listURL = new URL(listCall[0]);
-    expect(listURL.pathname).toBe("/api/agent-observability/v1/business-provenance/requests");
-    expect(listURL.searchParams.get("keyword")).toBe("客户 A");
-    expect(listURL.searchParams.get("status")).toBe("completed");
-    expect(listURL.searchParams.get("knowledge_network")).toBe("customer-risk-network");
-    expect(listURL.searchParams.get("evidence_completeness")).toBe("complete");
-    expect(new URL(summaryCall[0]).pathname).toBe(
-      "/api/agent-observability/v1/business-provenance/requests/req_business_001",
-    );
-    expect(new URL(tracesCall[0]).pathname).toBe(
-      "/api/agent-observability/v1/business-provenance/requests/req_business_001/traces",
-    );
-    expect(page.entries[0]?.request_id).toBe("req_business_001");
-    expect(summary.request_id).toBe("req_business_001");
-    expect(traces.entries[0]?.request_id).toBe("req_business_001");
-  });
-
-  it("reads an interaction aggregate and filters requests by lifecycle ids", async () => {
-    const f = mockFetchSeq([
-      {
-        entries: [],
-        total: 0,
-      },
-      {
-        interaction_id: "interaction_june_forecast",
-        conversation_id: "conversation_supply_chain",
-        status: "completed",
-        requests: [
-          {
-            request_id: "req_schema",
-            conversation_id: "conversation_supply_chain",
-            interaction_id: "interaction_june_forecast",
-            status: "completed",
-            evidence_completeness: "complete",
-            action_summary: {},
-            trace_count: 1,
-          },
-        ],
-        traces: [
-          {
-            trace_id: "trace_schema",
-            request_id: "req_schema",
-            conversation_id: "conversation_supply_chain",
-            interaction_id: "interaction_june_forecast",
-            status: "completed",
-            span_count: 4,
-          },
-        ],
-      },
-    ]);
-
-    await listRequestSummaries(ctx, {
-      conversationId: "conversation_supply_chain",
-      interactionId: "interaction_june_forecast",
-    });
-    const interaction = await getInteractionSummary(ctx, "interaction_june_forecast");
-
-    const [listCall, interactionCall] = calls(f);
-    if (!listCall || !interactionCall) throw new Error("missing calls");
-    const listURL = new URL(listCall[0]);
-    expect(listURL.searchParams.get("conversation_id")).toBe("conversation_supply_chain");
-    expect(listURL.searchParams.get("interaction_id")).toBe("interaction_june_forecast");
-    expect(new URL(interactionCall[0]).pathname).toBe(
-      "/api/agent-observability/v1/business-provenance/interactions/interaction_june_forecast",
-    );
-    expect(interaction.conversation_id).toBe("conversation_supply_chain");
-    expect(interaction.requests[0]?.interaction_id).toBe("interaction_june_forecast");
-    expect(interaction.traces[0]?.conversation_id).toBe("conversation_supply_chain");
   });
 });
 
@@ -447,6 +190,30 @@ describe("trace Community resource", () => {
   });
 });
 
+describe("trace resource with sparse details", () => {
+  it("diagnoses and scans a conversation whose detail omits summary and operations", async () => {
+    mockFetchSeq([
+      { entries: [{ trace_id: "t-1" }] },
+      {
+        graph: {
+          trace_id: "t-1",
+          data: { nodes: [{ span_id: "s-1", name: "a", kind: "CLIENT", status: "ok" }], edges: [] },
+        },
+      },
+    ]);
+
+    const report = await trace(ctx).diagnose("conv-1");
+    expect(report.traceId).toBe("t-1");
+
+    mockFetchSeq([{ entries: [{ trace_id: "t-1" }] }, { operations: [{ receipt: {} }] }]);
+    const scan = await trace(ctx).scan(["conv-1"]);
+    expect(scan.reports[0]).toEqual({
+      conversationId: "conv-1",
+      error: "No spans found for conversation: conv-1",
+    });
+  });
+});
+
 describe("typed BKN Trace graph APIs", () => {
   it("GETs trace graph by trace id", async () => {
     const f = mockFetchSeq([
@@ -463,64 +230,6 @@ describe("typed BKN Trace graph APIs", () => {
     expect(new URL(c[0]).pathname).toBe("/api/agent-observability/v1/traces/trace_1");
     expect(c[1].method).toBe("GET");
     expect(result.trace_id).toBe("trace_1");
-  });
-
-  it("GETs evidence chain and business graph with optional limit", async () => {
-    const f = mockFetchSeq([
-      { trace_id: "trace_1", data: { claims: [], evidence_refs: [], business_refs: [] } },
-      { trace_id: "trace_1", data: { nodes: [], edges: [] } },
-    ]);
-    await getEvidenceChain(ctx, "trace_1", { limit: 50 });
-    await getBusinessGraph(ctx, "trace_1", { limit: 50 });
-    const [evidenceCall, graphCall] = calls(f);
-    if (!evidenceCall || !graphCall) throw new Error("missing calls");
-    const evidenceURL = new URL(evidenceCall[0]);
-    const graphURL = new URL(graphCall[0]);
-    expect(evidenceURL.pathname).toBe(
-      "/api/agent-observability/v1/business-provenance/traces/trace_1/evidence-chain",
-    );
-    expect(evidenceURL.searchParams.get("limit")).toBe("50");
-    expect(graphURL.pathname).toBe(
-      "/api/agent-observability/v1/business-provenance/traces/trace_1/business-graph",
-    );
-    expect(graphURL.searchParams.get("limit")).toBe("50");
-  });
-
-  it("GETs request scoped evidence chain and snapshot preview", async () => {
-    const f = mockFetchSeq([
-      { "bkn.request.id": "req_1", data: { claims: [], evidence_refs: [], business_refs: [] } },
-      { "bkn.request.id": "req_1", data: { nodes: [], edges: [] } },
-      { "bkn.request.id": "req_1", snapshot_ref: { mode: "preview" }, manifest: {} },
-    ]);
-    await getEvidenceChain(ctx, { requestId: "req_1" });
-    await getBusinessGraph(ctx, { requestId: "req_1" });
-    await getSnapshotPreview(ctx, { requestId: "req_1" });
-    const [evidenceCall, graphCall, snapshotCall] = calls(f);
-    if (!evidenceCall || !graphCall || !snapshotCall) throw new Error("missing calls");
-    const evidenceURL = new URL(evidenceCall[0]);
-    const graphURL = new URL(graphCall[0]);
-    const snapshotURL = new URL(snapshotCall[0]);
-    expect(evidenceURL.pathname).toBe(
-      "/api/agent-observability/v1/business-provenance/requests/req_1/evidence-chain",
-    );
-    expect(graphURL.pathname).toBe(
-      "/api/agent-observability/v1/business-provenance/requests/req_1/business-graph",
-    );
-    expect(snapshotURL.pathname).toBe(
-      "/api/agent-observability/v1/business-provenance/requests/req_1/snapshot-preview",
-    );
-  });
-
-  it("does not serialize a NaN limit", async () => {
-    const f = mockFetchSeq([
-      { trace_id: "trace_1", data: { claims: [], evidence_refs: [], business_refs: [] } },
-    ]);
-
-    await getEvidenceChain(ctx, "trace_1", { limit: Number.NaN });
-
-    const c = calls(f)[0];
-    if (!c) throw new Error("no call");
-    expect(new URL(c[0]).searchParams.has("limit")).toBe(false);
   });
 });
 
@@ -740,5 +449,85 @@ describe("getSpansByConversation (two-hop)", () => {
     const spans = await getSpansByConversation(ctx, "conv-1");
     expect(calls(f)).toHaveLength(1);
     expect(spans).toEqual([]);
+  });
+
+  it("pages through next_cursor with a page size clamped to 1..200", async () => {
+    const f = mockFetchSeq([
+      { entries: [{ trace_id: "t-1" }], next_cursor: "c-2", truncated: true },
+      { entries: [{ trace_id: "t-2" }], truncated: false },
+      {
+        summary: { trace_id: "t-1" },
+        operations: [],
+        graph: {
+          data: { nodes: [{ span_id: "s-1", name: "a", kind: "CLIENT", status: "ok" }], edges: [] },
+        },
+      },
+      {
+        summary: { trace_id: "t-2" },
+        graph: {
+          data: { nodes: [{ span_id: "s-2", name: "b", kind: "CLIENT", status: "ok" }], edges: [] },
+        },
+      },
+    ]);
+
+    const spans = await getSpansByConversation(ctx, "conv-1", { maxTraceIds: 500 });
+
+    const urls = calls(f).map((c) => new URL(c[0]));
+    expect(urls[0]?.searchParams.get("limit")).toBe("200");
+    expect(urls[0]?.searchParams.has("cursor")).toBe(false);
+    expect(urls[1]?.searchParams.get("cursor")).toBe("c-2");
+    expect(urls[1]?.searchParams.get("limit")).toBe("200");
+    expect(urls.slice(2).map((u) => u.pathname)).toEqual([
+      "/api/agent-observability/v1/traces/t-1",
+      "/api/agent-observability/v1/traces/t-2",
+    ]);
+    expect(spans.map((span) => span.spanId)).toEqual(["s-1", "s-2"]);
+  });
+
+  it("stops at maxTraceIds and never sends a limit below 1", async () => {
+    const f = mockFetchSeq([
+      { entries: [{ trace_id: "t-1" }, { trace_id: "t-2" }], next_cursor: "c-2" },
+      { summary: { trace_id: "t-1" } },
+    ]);
+
+    await getSpansByConversation(ctx, "conv-1", { maxTraceIds: 0 });
+
+    const urls = calls(f).map((c) => new URL(c[0]));
+    expect(urls[0]?.searchParams.get("limit")).toBe("1");
+    expect(urls.map((u) => u.pathname)).toEqual([
+      "/api/agent-observability/v1/traces",
+      "/api/agent-observability/v1/traces/t-1",
+    ]);
+  });
+
+  it("stops following a cursor the server repeats", async () => {
+    const f = mockFetchSeq([{ entries: [], next_cursor: "same" }]);
+
+    await getSpansByConversation(ctx, "conv-1");
+
+    expect(calls(f)).toHaveLength(2);
+  });
+
+  it("tolerates a detail with no summary, operations, receipt, or fact input", async () => {
+    mockFetchSeq([
+      { entries: [{ trace_id: "t-1" }] },
+      {
+        graph: {
+          trace_id: "t-1",
+          data: { nodes: [{ span_id: "s-1", name: "a", kind: "CLIENT", status: "ok" }], edges: [] },
+        },
+        operations: [
+          { fact: { operation_id: "op-1", attempt: 1, tool_name: "run_sql", status: "failed" } },
+          { state: "pending" },
+        ],
+      },
+    ]);
+
+    const spans = await getSpansByConversation(ctx, "conv-1");
+
+    expect(spans.map((span) => [span.traceId, span.spanId])).toEqual([
+      ["t-1", "s-1"],
+      ["t-1", "op-1:attempt:1"],
+    ]);
   });
 });

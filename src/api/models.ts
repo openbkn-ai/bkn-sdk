@@ -24,13 +24,16 @@ export interface ListModelsOptions {
   modelType?: string;
 }
 
-function listQuery(opts: ListModelsOptions) {
+function listQuery(opts: ListModelsOptions, nameParam: "name" | "model_name") {
   // mf-model-manager paginates with page + size (NOT limit) — verified live.
+  // Filters are sent only when set: the server defaults each to "" anyway, and
+  // an empty `model_type=` in the URL reads like a filter that matches nothing.
+  // The llm list names its filter `name`; the small-model list, `model_name`.
   return {
     page: String(opts.page ?? 1),
     size: String(opts.limit ?? 30),
-    name: opts.name ?? "",
-    model_type: opts.modelType ?? "",
+    ...(opts.name ? { [nameParam]: opts.name } : {}),
+    ...(opts.modelType ? { model_type: opts.modelType } : {}),
   };
 }
 
@@ -38,7 +41,7 @@ function listQuery(opts: ListModelsOptions) {
 // precision, so every management read keeps unsafe integers as bigint.
 export function listLlmModels(ctx: RequestContext, opts: ListModelsOptions = {}): Promise<unknown> {
   return request(ctx, `${MANAGER}/llm/list`, {
-    query: listQuery(opts),
+    query: listQuery(opts, "name"),
     responseParser: parseBigIntJSON,
   });
 }
@@ -53,7 +56,7 @@ export function listSmallModels(
   opts: ListModelsOptions = {},
 ): Promise<unknown> {
   return request(ctx, `${MANAGER}/small-model/list`, {
-    query: listQuery(opts),
+    query: listQuery(opts, "model_name"),
     responseParser: parseBigIntJSON,
   });
 }
@@ -135,9 +138,8 @@ export async function resolveSmallModel(
 /**
  * Find a small model's id from its name.
  *
- * There is no lookup-by-name endpoint, and the `name` query parameter is
- * ignored — a deploy answering it returns every model whatever is asked for —
- * so the match happens here. Paged rather than asked for in one go: `size` is
+ * There is no lookup-by-name endpoint, and the list's `model_name` filter is a
+ * substring match rather than an exact one, so the match happens here. Paged rather than asked for in one go: `size` is
  * the backend's own bound and `limit: -1` is not a value it takes, answering
  * `ModelFactory.Router.ParamError.FormatError` instead. A name the platform
  * does not have is the caller's own typo and says so; anything else (auth,

@@ -3,7 +3,7 @@
 
 /** `openbkn auth …` — login / session / token (store-backed). */
 import { Command } from "commander";
-import { changePasswordSafe, getUserSafe } from "../api/safe.js";
+import { changePasswordSafe, getMeSafe } from "../api/safe.js";
 import { configureVersionCheck, ensureCompatible } from "../api/version-check.js";
 import { decodeJwt } from "../auth/jwt.js";
 import { credentialDeviceLogin, deviceLogin, isHeadless, openBrowser } from "../auth/oauth.js";
@@ -19,13 +19,16 @@ import { outputOptions, retryOptionsFrom } from "./_shared.js";
 
 /** Best-effort: resolve the logged-in user's account name from their token. */
 async function resolveAccount(ctx: RequestContext, idToken?: string): Promise<string | undefined> {
-  const sub = decodeJwt(idToken ?? ctx.token)?.sub;
-  if (!sub) return undefined;
+  const claims = decodeJwt(idToken ?? ctx.token);
+  if (claims?.preferred_username) return claims.preferred_username;
+  if (!claims?.sub) return undefined;
   try {
-    const u = (await getUserSafe(ctx, sub)) as {
+    // Self-service read: works for every user. The admin-only user detail
+    // would 403 for a non-admin and leave an audit refusal behind.
+    const u = (await getMeSafe(ctx)) as {
       account?: string;
     };
-    return u.account; // needs admin; ignored on 403 for non-admins
+    return u?.account;
   } catch {
     return undefined;
   }
@@ -221,23 +224,22 @@ export function registerAuthLeaves(cmd: Command): void {
   cmd
     .command("whoami [url]")
     .description("Show current user identity (from the token)")
-    .option("--no-lookup", "skip the backend identity fallback (eacp/user/get)")
+    .option("--no-lookup", "skip the backend identity lookup (bkn-safe /me)")
     .action(async (_url: string | undefined, opts, cmd: Command) => {
       const g = cmd.optsWithGlobals();
       const me = auth.whoami({ user: g.user });
       // The device-flow id_token carries only `sub` (a UUID), so the token
       // alone can't say *who* you are. Resolve the account name from the
-      // backend (needs admin; best-effort — skipped with --no-lookup).
+      // caller's own record (any user may read it; best-effort — skipped with
+      // --no-lookup). Never the admin-only user detail: for a non-admin that
+      // is a 403 bkn-safe records as an audit refusal on every whoami.
       if (opts.lookup !== false && me.baseUrl && me.sub) {
         try {
-          const u = (await getUserSafe(
-            {
-              baseUrl: me.baseUrl,
-              token: auth.currentToken({ user: g.user }),
-              insecure: g.insecure ?? auth.sessionInsecure({ user: g.user }),
-            },
-            me.sub,
-          )) as { account?: string; name?: string };
+          const u = (await getMeSafe({
+            baseUrl: me.baseUrl,
+            token: auth.currentToken({ user: g.user }),
+            insecure: g.insecure ?? auth.sessionInsecure({ user: g.user }),
+          })) as { account?: string; name?: string };
           if (u.account) me.username = u.account;
           if (u.name) me.name = u.name;
         } catch {

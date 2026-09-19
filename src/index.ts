@@ -138,13 +138,11 @@ export { vega } from "./resources/vega.js";
 export * as auth from "./resources/auth.js";
 
 export type {
-  ActionSummary,
   GraphPage,
   TraceExecutionSummary,
   TraceGraphEdge,
   TraceGraphNode,
   TraceGraphResponse,
-  VisibilitySummary,
 } from "./api/trace.js";
 
 // Skill execution + file-read types are part of the public contract.

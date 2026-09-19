@@ -20,8 +20,6 @@ export interface ClientOptions {
   retry?: boolean;
   /** Called before each such retry; the CLI prints one line to stderr. */
   onRetry?: (notice: RetryNotice) => void;
-  /** Dedicated producer credential, sent only to BKN Trace evidence write endpoints. */
-  evidenceIngestToken?: string;
   /** Optional BKN Trace phase-one context for request correlation. */
   trace?: TraceContextOptions;
   /**
@@ -83,8 +81,6 @@ export interface RequestContext {
    * then says so — otherwise a fresh login looks broken for no visible reason.
    */
   tokenFromEnv?: boolean;
-  /** Dedicated producer credential; never sent to read or non-Trace endpoints. */
-  evidenceIngestToken?: string;
   /** Stable per-client BKN Trace context propagated on outbound requests. */
   trace?: TraceContext;
   /**

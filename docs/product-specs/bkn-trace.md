@@ -50,7 +50,11 @@ Operation Receipt 中的 `observed_evidence_refs` 只是证据引用 ID 候选�
 
 `diagnose` 只执行当前 typed Trace 事实能够支撑的规则。缺少 LLM、retrieval 或状态属性时，报告通过 `skippedRules` 和 `partialReasons` 明确说明不可评估范围，不能把“没有数据”解释成“没有问题”。Managed Trace 能稳定评估的基础范围是 Operation 工具调用事实；更丰富规则须由 Trace 生产者提供对应属性。
 
-Community 制品不分发 2.x Evidence 写入 Session、Artifact 正文读写、业务证据链、业务语义图或快照解释实现。业务解释与内容 Resolver 属于受许可 EE 扩展；2.x 数据只作为服务端历史读取与迁移对象。
+SDK 不包含 2.x Evidence 批量写入（`POST /evidence/events` 的 2.x batch、`x-bkn-trace-ingest-token`）、Evidence Artifact 读写或 `/business-provenance/*` 读取；这些实现从未导出、也没有 CLI 入口，已删除（`ClientOptions.evidenceIngestToken` 同步移除）。业务解释与内容 Resolver 属于受许可 EE 扩展；2.x 数据只作为服务端历史读取与迁移对象。
+
+`client.trace.get` / `trace detail` 按契约容忍稀疏详情：`summary`、`operations`、operation 的 `fact`/`receipt`/`state` 以及 `fact.input` 均可缺失，读取方不会因此抛出 TypeError。`client.trace.spans` / `trace get|spans` 以每页 1..200 条分页读取 `/traces?conversation_id=`，沿 `next_cursor` 继续，直至达到 `maxTraceIds`（默认 100）、服务端不再返回 cursor 或达到 50 页上限。
+
+`lifecycle.completeOperationAttempt` / `failOperationAttempt` 的 `request_id`、`trace_id` 为契约必填：未在输入中提供且客户端上下文没有 trace 时抛出 `InputError`，不发送请求。
 
 ## CLI
 
@@ -81,7 +85,7 @@ Receipt 时返回稳定的 `receipt_missing` 错误，不能据此假定业务�
 
 Interaction 终止 manifest 和 Operation retry fencing 字段通过受保护的 `--body-file` 提交。manifest 中的 `claims` 是 Claim ID 字符串数组（`["claim-1"]`），不是 Claim 对象。lease token 不进入命令行参数，避免出现在 shell history 或进程列表。
 
-动态 JSON 证据值中的不安全十进制整数会保留为原生 `bigint`；Trace Session 的 JSON clone 与 CLI JSON 输出不会把它们转为 `number` 或导致序列化失败。
+动态 JSON 证据值中的不安全十进制整数会保留为原生 `bigint`；CLI JSON 输出不会把它们转为 `number` 或导致序列化失败。
 
 ## 完成标准
 

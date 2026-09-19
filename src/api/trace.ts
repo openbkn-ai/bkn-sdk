@@ -11,15 +11,6 @@ import { parseBigIntJSON, stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { request } from "./http.js";
 import type { OperationCallFact, OperationReceipt } from "./trace-lifecycle.js";
 
-const EVIDENCE_EVENTS = "/api/agent-observability/v1/evidence/events";
-const EVIDENCE_ARTIFACTS = "/api/agent-observability/v1/evidence/artifacts";
-// EE-only since foundry 0.1.4: the OSS agent-observability build dropped the
-// public registration for these business-provenance summaries (the handlers
-// survive as EE overlay building blocks). Calls 404 on an OSS-only deploy.
-const BUSINESS_PROVENANCE = "/api/agent-observability/v1/business-provenance";
-const BUSINESS_PROVENANCE_TRACES = `${BUSINESS_PROVENANCE}/traces`;
-const REQUESTS = `${BUSINESS_PROVENANCE}/requests`;
-const INTERACTIONS = `${BUSINESS_PROVENANCE}/interactions`;
 const TRACES = "/api/agent-observability/v1/traces";
 
 /** A span flattened to the fields the diagnose rules read. */
@@ -33,130 +24,6 @@ export interface RawSpan {
   status?: { code?: string };
   attributes?: Record<string, unknown>;
   events?: Array<{ name?: string; time?: string; attributes?: Record<string, unknown> }>;
-}
-
-export interface EvidenceTraceContext {
-  trace_id: string;
-  traceparent: string;
-  "bkn.request.id": string;
-  "bkn.conversation.id"?: string;
-  "bkn.account.id": string;
-  "bkn.account.type": string;
-}
-
-export type BusinessEvidenceEventType =
-  | "agent.interaction.started"
-  | "retrieval.completed"
-  | "knowledge.read.observed"
-  | "data.query.observed"
-  | "logic.execution.observed"
-  | "model.call.observed"
-  | "tool.called"
-  | "tool.result.observed"
-  | "claim.created"
-  | "evidence.refs.created"
-  | "business.refs.resolved"
-  | "action.recommended"
-  | "action.approval_requested"
-  | "action.approved"
-  | "action.rejected"
-  | "action.executed"
-  | "action.result_recorded";
-
-export interface EvidenceEvent {
-  event_id: string;
-  event_type: BusinessEvidenceEventType | (string & {});
-  "bkn.trace.schema.version": string;
-  observed_at: string;
-  emitted_at: string;
-  producer_module: string;
-  trace_id: string;
-  span_id: string;
-  "bkn.request.id": string;
-  "bkn.operation.name": string;
-  interaction_id?: string;
-  operation_id?: string;
-  causation_event_id?: string;
-  claim_id?: string;
-  attempt?: number;
-  payload: Record<string, unknown>;
-}
-
-export interface EvidenceIngestRequest {
-  "bkn.trace.schema.version": "2.0.0" | "2.1.0" | "2.2.0";
-  trace: EvidenceTraceContext;
-  events: EvidenceEvent[];
-}
-
-export type EvidenceArtifactType =
-  | "action_input"
-  | "action_result"
-  | "data_result"
-  | "logic_execution"
-  | "query"
-  | "question"
-  | "result";
-
-export interface EvidenceArtifact {
-  artifact_id: string;
-  artifact_type: EvidenceArtifactType;
-  "bkn.request.id": string;
-  trace_id?: string;
-  interaction_id?: string;
-  operation_id?: string;
-  claim_id?: string;
-  source_ref?: string;
-  business_refs?: string[];
-  content_type: string;
-  schema_version: "2.2.0";
-  observed_at: string;
-  as_of?: string;
-  source_version?: string;
-  content_hash: string;
-  content?: unknown;
-  snapshot_ref?: string;
-  "bkn.account.id": string;
-  "bkn.account.type": string;
-  initiator?: string;
-  agent_or_app?: string;
-}
-
-export interface EvidenceArtifactIngestResponse {
-  artifact_id: string;
-  artifact_type: EvidenceArtifactType;
-  "bkn.request.id": string;
-  trace_id?: string;
-  content_hash: string;
-  created: boolean;
-}
-
-export interface ActionSummary {
-  recommended: number;
-  approved: number;
-  executed: number;
-  completed: number;
-  last_status?: string;
-}
-
-export interface RequestSummary {
-  request_id: string;
-  conversation_id?: string;
-  interaction_id?: string;
-  started_at?: string;
-  completed_at?: string;
-  initiator?: string;
-  agent_or_app?: string;
-  knowledge_networks?: string[];
-  question_preview?: string;
-  result_preview?: string;
-  status: string;
-  evidence_completeness: string;
-  partial_reasons?: string[];
-  business_refs?: string[];
-  action_summary: Partial<ActionSummary>;
-  trace_count: number;
-  duration_ms?: number;
-  error_summary?: string;
 }
 
 export interface TraceExecutionSummary {
@@ -220,63 +87,23 @@ export interface TechnicalTraceQuery {
   interactionId?: string;
 }
 
+/**
+ * The contract declares no required field on an operation: Span nodes can
+ * appear without Operation facts, and a fact may arrive without its input.
+ */
 export interface TechnicalTraceOperation {
-  fact: OperationCallFact;
-  receipt: OperationReceipt;
-  state: string;
+  fact?: Partial<OperationCallFact>;
+  receipt?: OperationReceipt;
+  state?: string;
   partial_reasons?: string[];
 }
 
 export interface TechnicalTraceDetail {
-  summary: TraceExecutionSummary;
+  summary?: TraceExecutionSummary;
   graph?: TraceGraphResponse;
-  operations: TechnicalTraceOperation[];
-  partial: boolean;
+  operations?: TechnicalTraceOperation[];
+  partial?: boolean;
   partial_reasons?: string[];
-}
-
-export interface RequestSummaryQuery {
-  limit?: number;
-  cursor?: string;
-  from?: string;
-  to?: string;
-  status?: string;
-  agentOrApp?: string;
-  conversationId?: string;
-  interactionId?: string;
-  knowledgeNetwork?: string;
-  evidenceCompleteness?: string;
-  keyword?: string;
-}
-
-export interface InteractionSummary {
-  interaction_id: string;
-  conversation_id?: string;
-  started_at?: string;
-  completed_at?: string;
-  status: string;
-  duration_ms?: number;
-  requests: RequestSummary[];
-  traces: TraceExecutionSummary[];
-}
-
-export interface EvidenceIngestResponse {
-  trace_id: string;
-  "bkn.request.id": string;
-  "bkn.trace.schema.version": string;
-  accepted_event_count: number;
-  claim_count: number;
-  evidence_ref_count: number;
-  business_ref_count: number;
-}
-
-export interface VisibilitySummary {
-  authorized_ref_count: number;
-  redacted_ref_count: number;
-  hidden_ref_count: number;
-  omitted_ref_count: number;
-  unresolved_ref_count: number;
-  unauthorized_ref_count?: number;
 }
 
 export interface GraphPage {
@@ -317,52 +144,6 @@ export interface TraceGraphResponse {
     nodes: TraceGraphNode[];
     edges: TraceGraphEdge[];
   };
-}
-
-export interface EvidenceChainResponse {
-  trace_id: string;
-  "bkn.request.id": string;
-  partial: boolean;
-  partial_reason: string[];
-  visibility_summary: VisibilitySummary;
-  page: GraphPage;
-  data: {
-    claims: Array<Record<string, unknown>>;
-    evidence_refs: Array<Record<string, unknown>>;
-    business_refs: Array<Record<string, unknown>>;
-  };
-}
-
-export interface BusinessGraphResponse {
-  trace_id: string;
-  "bkn.request.id": string;
-  partial: boolean;
-  partial_reason: string[];
-  visibility_summary: VisibilitySummary;
-  page: GraphPage;
-  data: {
-    nodes: Array<Record<string, unknown>>;
-    edges: Array<Record<string, unknown>>;
-  };
-}
-
-export interface SnapshotPreviewResponse {
-  trace_id: string;
-  "bkn.request.id": string;
-  partial: boolean;
-  partial_reason: string[];
-  visibility_summary: VisibilitySummary;
-  snapshot_ref: {
-    snapshot_id: string;
-    mode: "preview" | string;
-    uri?: string;
-  };
-  manifest: Record<string, unknown>;
-}
-
-export type TraceScope = string | { traceId: string } | { requestId: string };
-export interface TraceQueryOptions {
-  limit?: number;
 }
 
 function isoToNanos(iso: string): string | undefined {
@@ -442,85 +223,6 @@ export function getTechnicalTrace(
   });
 }
 
-/** Submit BKN Trace phase-two claim/evidence/business events. */
-export function emitEvidenceEvents(
-  ctx: RequestContext,
-  body: EvidenceIngestRequest,
-): Promise<EvidenceIngestResponse> {
-  return request<EvidenceIngestResponse>(ctx, EVIDENCE_EVENTS, {
-    method: "POST",
-    body,
-    headers: evidenceWriteHeaders(ctx),
-    redirect: "manual",
-  });
-}
-
-/** Store authorized BKN Trace 2.2 business content separately from core events. */
-export function emitEvidenceArtifact(
-  ctx: RequestContext,
-  body: EvidenceArtifact,
-): Promise<EvidenceArtifactIngestResponse> {
-  return request<EvidenceArtifactIngestResponse>(ctx, EVIDENCE_ARTIFACTS, {
-    method: "POST",
-    body,
-    headers: evidenceWriteHeaders(ctx),
-    redirect: "manual",
-  });
-}
-
-function evidenceWriteHeaders(ctx: RequestContext): Record<string, string> | undefined {
-  return ctx.evidenceIngestToken
-    ? { "x-bkn-trace-ingest-token": ctx.evidenceIngestToken }
-    : undefined;
-}
-
-/** Read one authorized BKN Trace 2.2 artifact by opaque id. */
-export function getEvidenceArtifact(
-  ctx: RequestContext,
-  artifactId: string,
-  opts: { interactionId?: string } = {},
-): Promise<EvidenceArtifact> {
-  return request<EvidenceArtifact>(ctx, `${EVIDENCE_ARTIFACTS}/${encodeURIComponent(artifactId)}`, {
-    // An authorized Interaction lets a reader reach the artifact through that
-    // Interaction's scope instead of the artifact's own record scope.
-    query: opts.interactionId ? { interaction_id: opts.interactionId } : undefined,
-    responseParser: parseBigIntJSON,
-  });
-}
-
-/** List product-facing business request summaries. */
-export function listRequestSummaries(
-  ctx: RequestContext,
-  query: RequestSummaryQuery = {},
-): Promise<SummaryPage<RequestSummary>> {
-  return request<SummaryPage<RequestSummary>>(ctx, REQUESTS, {
-    query: summaryQuery(query),
-  });
-}
-
-export function getRequestSummary(ctx: RequestContext, requestId: string): Promise<RequestSummary> {
-  return request<RequestSummary>(ctx, `${REQUESTS}/${encodeURIComponent(requestId)}`);
-}
-
-export function getInteractionSummary(
-  ctx: RequestContext,
-  interactionId: string,
-): Promise<InteractionSummary> {
-  return request<InteractionSummary>(ctx, `${INTERACTIONS}/${encodeURIComponent(interactionId)}`);
-}
-
-export function getRequestTraces(
-  ctx: RequestContext,
-  requestId: string,
-  query: Pick<RequestSummaryQuery, "cursor" | "limit"> = {},
-): Promise<SummaryPage<TraceExecutionSummary>> {
-  return request<SummaryPage<TraceExecutionSummary>>(
-    ctx,
-    `${REQUESTS}/${encodeURIComponent(requestId)}/traces`,
-    { query: summaryQuery(query) },
-  );
-}
-
 export async function getTraceGraph(
   ctx: RequestContext,
   traceId: string,
@@ -530,77 +232,91 @@ export async function getTraceGraph(
   return detail.graph;
 }
 
-export function getEvidenceChain(
-  ctx: RequestContext,
-  scope: TraceScope,
-  opts: TraceQueryOptions = {},
-): Promise<EvidenceChainResponse> {
-  const target = traceTarget(scope, "evidence-chain");
-  return request<EvidenceChainResponse>(ctx, target.path, {
-    query: queryWithLimit(target.query, opts),
-    responseParser: parseBigIntJSON,
-  });
-}
-
-export function getBusinessGraph(
-  ctx: RequestContext,
-  scope: TraceScope,
-  opts: TraceQueryOptions = {},
-): Promise<BusinessGraphResponse> {
-  const target = traceTarget(scope, "business-graph");
-  return request<BusinessGraphResponse>(ctx, target.path, {
-    query: queryWithLimit(target.query, opts),
-    responseParser: parseBigIntJSON,
-  });
-}
-
-export function getSnapshotPreview(
-  ctx: RequestContext,
-  scope: TraceScope,
-  opts: TraceQueryOptions = {},
-): Promise<SnapshotPreviewResponse> {
-  const target = traceTarget(scope, "snapshot-preview");
-  return request<SnapshotPreviewResponse>(ctx, target.path, {
-    query: queryWithLimit(target.query, opts),
-    responseParser: parseBigIntJSON,
-  });
-}
+/** The spec bounds one `/traces` page to 1..200 entries. */
+const TRACE_PAGE_MAX = 200;
+/** Stop following cursors after this many pages, whatever the server says. */
+const TRACE_PAGE_CAP = 50;
 
 /**
  * Fetch normalized spans for a conversation through typed Trace list/detail APIs.
+ * `maxTraceIds` is the number of traces read in total (default 100); the list
+ * is paged at no more than 200 per page and `next_cursor` is followed until
+ * that many traces are listed, the server stops returning a cursor, or the
+ * page cap is reached.
  */
 export async function getSpansByConversation(
   ctx: RequestContext,
   conversationId: string,
   opts: { maxTraceIds?: number; maxSpans?: number } = {},
 ): Promise<Array<Record<string, unknown>>> {
-  const page = await listTechnicalTraces(ctx, {
-    conversationId,
-    limit: opts.maxTraceIds ?? 100,
-  });
+  const maxTraces = clampInt(opts.maxTraceIds ?? 100, 1, Number.MAX_SAFE_INTEGER);
+  const traceIds = await listConversationTraceIds(ctx, conversationId, maxTraces);
   const spans: Array<Record<string, unknown>> = [];
   const maxSpans = opts.maxSpans ?? 2000;
-  for (const entry of page.entries) {
+  for (const traceId of traceIds) {
     if (spans.length >= maxSpans) break;
-    spans.push(...normalizedDetailSpans(await getTechnicalTrace(ctx, entry.trace_id)));
+    spans.push(...normalizedDetailSpans(await getTechnicalTrace(ctx, traceId), traceId));
   }
   return spans.slice(0, maxSpans);
 }
 
-function normalizedDetailSpans(detail: TechnicalTraceDetail): Array<Record<string, unknown>> {
-  const operationsBySpan = new Map<string, TechnicalTraceOperation[]>();
-  for (const operation of detail.operations) {
+async function listConversationTraceIds(
+  ctx: RequestContext,
+  conversationId: string,
+  maxTraces: number,
+): Promise<string[]> {
+  const ids: string[] = [];
+  const seenCursors = new Set<string>();
+  let cursor: string | undefined;
+  for (let page = 0; page < TRACE_PAGE_CAP && ids.length < maxTraces; page += 1) {
+    const result = await listTechnicalTraces(ctx, {
+      conversationId,
+      limit: clampInt(maxTraces - ids.length, 1, TRACE_PAGE_MAX),
+      ...(cursor ? { cursor } : {}),
+    });
+    for (const entry of result?.entries ?? []) {
+      if (ids.length >= maxTraces) break;
+      if (entry?.trace_id) ids.push(entry.trace_id);
+    }
+    const next = result?.next_cursor ?? undefined;
+    // A page without a cursor is the last one, truncated or not; a repeated
+    // cursor would loop forever.
+    if (!next || seenCursors.has(next)) break;
+    seenCursors.add(next);
+    cursor = next;
+  }
+  return ids;
+}
+
+function clampInt(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, Math.trunc(value)));
+}
+
+type OperationWithFact = TechnicalTraceOperation & { fact: Partial<OperationCallFact> };
+
+function normalizedDetailSpans(
+  detail: TechnicalTraceDetail,
+  requestedTraceId?: string,
+): Array<Record<string, unknown>> {
+  // The contract declares no required field on a detail: guard every read.
+  const detailTraceId = detail?.summary?.trace_id ?? detail?.graph?.trace_id ?? requestedTraceId;
+  const operations = (detail?.operations ?? []).filter(
+    (operation): operation is OperationWithFact => Boolean(operation?.fact),
+  );
+  const operationsBySpan = new Map<string, OperationWithFact[]>();
+  for (const operation of operations) {
     const spanId = operation.fact.span_id;
     if (!spanId) continue;
     operationsBySpan.set(spanId, [...(operationsBySpan.get(spanId) ?? []), operation]);
   }
   const representedAttempts = new Set<string>();
-  const graphSpans = (detail.graph?.data.nodes ?? []).map((node) => {
+  const graphSpans = (detail?.graph?.data?.nodes ?? []).map((node) => {
     const matchingOperations = operationsBySpan.get(node.span_id) ?? [];
     const operation = matchingOperations.length === 1 ? matchingOperations[0] : undefined;
     if (operation) representedAttempts.add(operationAttemptKey(operation));
     return compactRecord({
-      traceId: detail.summary.trace_id,
+      traceId: detailTraceId,
       spanId: node.span_id,
       parentSpanId: node.parent_span_id ?? "",
       name: node.name,
@@ -614,16 +330,18 @@ function normalizedDetailSpans(detail: TechnicalTraceDetail): Array<Record<strin
       },
     });
   });
-  const operationSpans = detail.operations
+  const operationSpans = operations
     .filter((operation) => !representedAttempts.has(operationAttemptKey(operation)))
     .map((operation) =>
       compactRecord({
-        traceId: operation.fact.trace_id ?? detail.summary.trace_id,
+        traceId: operation.fact.trace_id ?? detailTraceId,
         spanId: operationAttemptKey(operation),
         parentSpanId: "",
         name: operation.fact.tool_name,
         kind: "CLIENT",
-        startTimeUnixNano: isoToNanos(operation.fact.started_at),
+        startTimeUnixNano: operation.fact.started_at
+          ? isoToNanos(operation.fact.started_at)
+          : undefined,
         endTimeUnixNano: operation.fact.finished_at
           ? isoToNanos(operation.fact.finished_at)
           : undefined,
@@ -636,12 +354,12 @@ function normalizedDetailSpans(detail: TechnicalTraceDetail): Array<Record<strin
   return [...graphSpans, ...operationSpans];
 }
 
-function operationAttemptKey(operation: TechnicalTraceOperation): string {
+function operationAttemptKey(operation: OperationWithFact): string {
   return `${operation.fact.operation_id}:attempt:${operation.fact.attempt}`;
 }
 
-function operationAttributes(operation: TechnicalTraceOperation): Record<string, unknown> {
-  const input = operation.fact.input.mode === "inline" ? operation.fact.input.inline : undefined;
+function operationAttributes(operation: OperationWithFact): Record<string, unknown> {
+  const input = operation.fact.input?.mode === "inline" ? operation.fact.input.inline : undefined;
   const error = operation.fact.error;
   const errorValue = error?.mode === "inline" ? error.inline : undefined;
   return compactRecord({
@@ -676,49 +394,6 @@ function safeNanoString(value: unknown): string | undefined {
 
 function compactRecord(value: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
-}
-
-function traceTarget(
-  scope: TraceScope,
-  subresource: "evidence-chain" | "business-graph" | "snapshot-preview",
-): { path: string; query?: Record<string, string> } {
-  if (typeof scope === "string") {
-    return { path: `${BUSINESS_PROVENANCE_TRACES}/${encodeURIComponent(scope)}/${subresource}` };
-  }
-  if ("traceId" in scope) {
-    return {
-      path: `${BUSINESS_PROVENANCE_TRACES}/${encodeURIComponent(scope.traceId)}/${subresource}`,
-    };
-  }
-  return {
-    path: `${REQUESTS}/${encodeURIComponent(scope.requestId)}/${subresource}`,
-  };
-}
-
-function queryWithLimit(
-  query: Record<string, string> | undefined,
-  opts: TraceQueryOptions,
-): Record<string, string | number> | undefined {
-  if (opts.limit === undefined || !Number.isFinite(opts.limit)) return query;
-  return { ...(query ?? {}), limit: opts.limit };
-}
-
-function summaryQuery(query: RequestSummaryQuery): Record<string, string | number> | undefined {
-  const result: Record<string, string | number> = {};
-  if (query.limit !== undefined && Number.isFinite(query.limit)) result.limit = query.limit;
-  if (query.cursor) result.cursor = query.cursor;
-  if (query.from) result.from = query.from;
-  if (query.to) result.to = query.to;
-  if (query.status) result.status = query.status;
-  if (query.agentOrApp) result.agent_or_app = query.agentOrApp;
-  if (query.conversationId) result.conversation_id = query.conversationId;
-  if (query.interactionId) result.interaction_id = query.interactionId;
-  if (query.knowledgeNetwork) result.knowledge_network = query.knowledgeNetwork;
-  if (query.evidenceCompleteness) {
-    result.evidence_completeness = query.evidenceCompleteness;
-  }
-  if (query.keyword) result.keyword = query.keyword;
-  return Object.keys(result).length ? result : undefined;
 }
 
 function technicalTraceQuery(
