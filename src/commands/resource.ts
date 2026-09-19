@@ -46,6 +46,7 @@ export function addResourceListOptions(cmd: Command, categoryFlag: "--category" 
   const alias = categoryFlag === "--category" ? "--type" : "--category";
   return cmd
     .option("--catalog-id <id>", "filter by catalog id")
+    .option("--name <name>", "filter by name")
     .option(
       `${categoryFlag} <category>`,
       `resource category: ${ResourceCategory.options.join(" | ")}`,
@@ -61,6 +62,12 @@ export function addResourceListOptions(cmd: Command, categoryFlag: "--category" 
       `filter by status: ${ResourceStatus.options.join(" | ")}`,
       oneOf("--status", ResourceStatus.options),
     )
+    .option(
+      "--enabled <bool>",
+      "filter by enabled state: true | false",
+      oneOf("--enabled", ["true", "false"] as const),
+    )
+    .option("--last-discover-status <status>", "filter by latest discovery status")
     .option("--schema <name>", "filter by source schema")
     .option("--limit <n>", "page size", int("--limit"), DEFAULT_LIST_LIMIT)
     .option("--offset <n>", "page offset", nonNegativeInt("--offset"), 0)
@@ -79,8 +86,11 @@ export function addResourceListOptions(cmd: Command, categoryFlag: "--category" 
 export function resourceListOptionsFrom(opts: Record<string, unknown>): ListResourcesOptions {
   return {
     catalogId: opts.catalogId as string | undefined,
+    name: opts.name as string | undefined,
     category: (opts.category ?? opts.type) as ListResourcesOptions["category"],
     status: opts.status as ListResourcesOptions["status"],
+    enabled: opts.enabled === undefined ? undefined : opts.enabled === "true",
+    lastDiscoverStatus: opts.lastDiscoverStatus as string | undefined,
     schema: opts.schema as string | undefined,
     limit: opts.limit as number,
     offset: opts.offset as number,

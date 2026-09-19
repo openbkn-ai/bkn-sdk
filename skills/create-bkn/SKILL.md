@@ -31,7 +31,7 @@ BKN is Markdown + YAML frontmatter for schema; one file per definition under typ
 ├── relation_types/
 ├── action_types/
 ├── concept_groups/
-└── data/                    # optional CSV instance data
+└── data/                    # optional sample data; not read by `openbkn bkn validate`/`push`
 ```
 
 ## Workflow
@@ -52,9 +52,9 @@ BKN is Markdown + YAML frontmatter for schema; one file per definition under typ
 
 ## Import (openbkn CLI)
 
-Requires the `openbkn` CLI from `@openbkn/bkn-sdk` (`npm install -g @openbkn/bkn-sdk`; Node.js 22+). `push` uses `tar`; on macOS `COPYFILE_DISABLE=1` is set by the tool.
+Requires the `openbkn` CLI from `@openbkn/bkn-sdk` (`npm install -g @openbkn/bkn-sdk`; Node.js 22.19.0+). `push` uses `tar`; on macOS `COPYFILE_DISABLE=1` is set by the tool.
 
-- **Platform auth** — If you already have a valid token for the target platform (`openbkn auth status`), **do not** run `openbkn auth login` again. If not authenticated, run `openbkn auth login <platform-url>` first.
+- **Platform auth** — Don't pre-check with `openbkn auth status`; run `openbkn bkn push` directly (`validate` is offline and needs no login). Only when it fails with 401 / not authorized, run `openbkn auth login <platform-url>` and retry.
 - **BKN validation** — If workflow step 12 (`openbkn bkn validate <dir>`) **already succeeded** for this directory, **do not** repeat validate before `push` unless you changed `.bkn` files. If you have **not** validated yet, run `validate` before `push`.
 
 ```bash
@@ -89,7 +89,7 @@ Full rules and optional sections: [references/SPECIFICATION.llm.md](references/S
 
 ## Business rules placement
 
-Rules must sit in spec-defined places so import persists them. Full wording: [references/SPECIFICATION.llm.md](references/SPECIFICATION.llm.md#输出规则).
+Rules must sit in spec-defined places so import persists them. Full wording: [references/SPECIFICATION.llm.md](references/SPECIFICATION.llm.md#输出规则必须遵守).
 
 - **Network-level** — prose in `network.bkn` right after `# {title}` (before structured sections like `## Network Overview`)
 - **Type-level** — prose in each type file after `## ObjectType:` / `## RelationType:` / … and **before** the first `###`; never in frontmatter

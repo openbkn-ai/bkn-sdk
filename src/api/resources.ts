@@ -257,6 +257,10 @@ export interface ListResourcesOptions {
   /** Resource category, e.g. table | logicview. */
   category?: ResourceCategory;
   status?: ResourceStatus;
+  /** Whether the resource is enabled. */
+  enabled?: boolean;
+  /** Latest discovery result, for example updated or error. */
+  lastDiscoverStatus?: string;
   schema?: string;
   limit?: number;
   offset?: number;
@@ -274,6 +278,8 @@ export async function listResources(
       name: opts.name || undefined,
       category: opts.category || undefined,
       status: opts.status || undefined,
+      enabled: opts.enabled === undefined ? undefined : String(opts.enabled),
+      last_discover_status: opts.lastDiscoverStatus || undefined,
       schema: opts.schema || undefined,
       // The `/resources` contract documents neither a maximum page size nor
       // `-1`. -1 is still forwarded for deployments that honour it; any other

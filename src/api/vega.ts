@@ -162,9 +162,9 @@ export const Catalog = z
     description: z.string().optional(),
     type: z.string(),
     enabled: z.boolean(),
-    internal: z.boolean().optional(),
+    built_in: z.boolean().optional(),
     connector_type: z.string(),
-    // An internal (logical) catalog has no connector: the service answers
+    // A built-in (logical) catalog has no connector: the service answers
     // `connector_config: null` there, so null must parse.
     connector_config: z.record(z.unknown()).nullish(),
     metadata: z.record(z.unknown()).nullish(),
@@ -597,19 +597,19 @@ export function firstCatalog(result: BatchCatalogsResponse): Catalog {
 export interface CreateCatalogRequest {
   name: string;
   /**
-   * Required for a physical catalog. Must be omitted with `internal: true`: the
-   * backend rejects an internal (logical) catalog that names a connector type.
+   * Required for a physical catalog. Must be omitted with `builtIn: true`: the
+   * backend rejects a built-in (logical) catalog that names a connector type.
    */
   connectorType?: string;
-  /** Connector configuration; not sent for an internal catalog. */
+  /** Connector configuration; not sent for a built-in catalog. */
   connectorConfig?: Record<string, unknown>;
   tags?: string[];
   description?: string;
   /** Sent explicitly; the backend reads an omitted value as `false`. */
   enabled?: boolean;
   id?: string;
-  /** Create a logical catalog. Only valid without a connector type. */
-  internal?: boolean;
+  /** Create a built-in logical catalog. Only valid without a connector type. */
+  builtIn?: boolean;
   healthCheckSchedule?: CatalogHealthCheckScheduleConfig | null;
 }
 
@@ -637,14 +637,14 @@ export async function createCatalog(
   req: CreateCatalogRequest,
   opts: CatalogWriteOptions = {},
 ): Promise<CatalogRef> {
-  if (req.internal) {
+  if (req.builtIn) {
     if (req.connectorType || req.connectorConfig !== undefined) {
       throw new InputError(
-        "an internal catalog is logical: omit connectorType and connectorConfig (the backend rejects them)",
+        "a built-in catalog is logical: omit connectorType and connectorConfig (the backend rejects them)",
       );
     }
   } else if (!req.connectorType) {
-    throw new InputError("connectorType is required unless internal is true");
+    throw new InputError("connectorType is required unless builtIn is true");
   }
   return request<unknown>(ctx, `${VEGA_BASE}/catalogs`, {
     method: "POST",
@@ -654,14 +654,14 @@ export async function createCatalog(
     body: {
       ...(req.id ? { id: req.id } : {}),
       name: req.name,
-      ...(req.internal ? {} : { connector_type: req.connectorType }),
-      ...(!req.internal && req.connectorConfig !== undefined
+      ...(req.builtIn ? {} : { connector_type: req.connectorType }),
+      ...(!req.builtIn && req.connectorConfig !== undefined
         ? { connector_config: req.connectorConfig }
         : {}),
       ...(req.tags !== undefined ? { tags: req.tags } : {}),
       ...(req.description !== undefined ? { description: req.description } : {}),
       enabled: req.enabled ?? false,
-      ...(req.internal !== undefined ? { internal: req.internal } : {}),
+      ...(req.builtIn !== undefined ? { built_in: req.builtIn } : {}),
       ...(req.healthCheckSchedule !== undefined
         ? {
             health_check_schedule:

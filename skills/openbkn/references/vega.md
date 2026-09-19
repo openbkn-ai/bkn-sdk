@@ -3,7 +3,7 @@
 | Command | Notes |
 |---------|-------|
 | `catalog list [--name] [--tag] [--type physical\|logical] [--connector-type] [--enabled true\|false] [--health-check-status healthy\|degraded\|unhealthy\|offline\|unchecked] [--sort name\|create_time\|update_time] [--direction asc\|desc] [--limit] [--offset]` / `catalog get <id>` | Catalogs. Enum and boolean flags are checked before any request. |
-| `catalog create --name <s> --connector-type <t> --connector-config <json> [--enabled]` / `catalog create --name <s> --internal` | Physical catalogs need a connector; `--internal` creates a logical catalog and takes no connector flags. `enabled` is always sent (`false` unless `--enabled`). |
+| `catalog create --name <s> --connector-type <t> --connector-config <json> [--enabled]` / `catalog create --name <s> --built-in` | Physical catalogs need a connector; `--built-in` creates a built-in logical catalog (`built_in: true`) and takes no connector flags. `enabled` is always sent (`false` unless `--enabled`). |
 | `catalog update <id> [--name] [--tags] [--description] [--connector-type] [--connector-config <json>] [--expected-update-time <ms>]` | Reads the catalog, then sends the full PUT with your fields laid over it — fields you omit keep their values. The lock version defaults to the `update_time` just read. `enabled` cannot change here; use `catalog enable\|disable <id>`. |
 | `catalog test-connection <id>` / `catalog test-connection-config --connector-type <t> --connector-config <json>` / `catalog health-check-schedule\|set-health-check-schedule <id>` | Connection probes and the health-check schedule. |
 | `catalog stats [--name <s>]` | Count visible catalogs by catalog type and connector type. |

@@ -77,4 +77,31 @@ describe("resourceCommand", () => {
       /field\[:asc\|desc\]/,
     );
   });
+
+  it("forwards the enabled filter as a boolean", async () => {
+    const fetchMock = await run(["resource", "list", "--enabled", "false"]);
+    expect(new URL(fetchMock.mock.calls[0]?.[0] as string).searchParams.get("enabled")).toBe(
+      "false",
+    );
+  });
+
+  it("rejects invalid enabled filters before requesting resources", async () => {
+    await expect(run(["resource", "list", "--enabled", "invalid"])).rejects.toThrow(
+      "--enabled must be one of: true | false",
+    );
+  });
+
+  it("forwards name and last discover status filters", async () => {
+    const fetchMock = await run([
+      "resource",
+      "list",
+      "--name",
+      "orders",
+      "--last-discover-status",
+      "succeeded",
+    ]);
+    const q = new URL(fetchMock.mock.calls[0]?.[0] as string).searchParams;
+    expect(q.get("name")).toBe("orders");
+    expect(q.get("last_discover_status")).toBe("succeeded");
+  });
 });

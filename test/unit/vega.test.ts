@@ -239,23 +239,24 @@ describe("vega uses the vega-backend base path", () => {
       name: "orders",
       type: "physical",
       enabled: true,
+      built_in: true,
       connector_type: "mysql",
       update_time: 1720000000123,
     };
     mockFetch({ entries: [catalog], total_count: 1 });
     await expect(listCatalogs(ctx)).resolves.toMatchObject({
-      entries: [{ id: "c-1", update_time: 1720000000123 }],
+      entries: [{ built_in: true, id: "c-1", update_time: 1720000000123 }],
       total_count: 1,
     });
 
     mockFetch({ entries: [catalog] });
     await expect(getCatalog(ctx, "c-1")).resolves.toMatchObject({
-      entries: [{ id: "c-1", update_time: 1720000000123 }],
+      entries: [{ built_in: true, id: "c-1", update_time: 1720000000123 }],
     });
   });
 
   it("parses an internal catalog whose connector_config is null", async () => {
-    // Live on 14.103.77.23: `vega catalog get` of an --internal catalog failed
+    // Live on 14.103.77.23: `vega catalog get` of a built-in (logical) catalog failed
     // schema validation because the service answers connector_config: null.
     mockFetch({
       entries: [
@@ -264,7 +265,7 @@ describe("vega uses the vega-backend base path", () => {
           name: "logical",
           type: "logical",
           enabled: false,
-          internal: true,
+          built_in: true,
           connector_type: "",
           connector_config: null,
           metadata: {},
@@ -768,21 +769,21 @@ describe("createCatalog", () => {
     expect(JSON.parse(firstCall(f)[1].body as string).enabled).toBe(false);
   });
 
-  it("omits connector fields for an internal catalog", async () => {
+  it("omits connector fields for a built-in catalog and marks it built_in", async () => {
     const f = mockFetch({ id: "c-9" });
-    await createCatalog(ctx, { name: "logical", internal: true });
+    await createCatalog(ctx, { name: "logical", builtIn: true });
     expect(JSON.parse(firstCall(f)[1].body as string)).toEqual({
       name: "logical",
       enabled: false,
-      internal: true,
+      built_in: true,
     });
   });
 
-  it("rejects a connector type on an internal catalog before any request", async () => {
+  it("rejects a connector type on a built-in catalog before any request", async () => {
     const f = mockFetch({ id: "c-9" });
     await expect(
-      createCatalog(ctx, { name: "logical", internal: true, connectorType: "mysql" }),
-    ).rejects.toThrow(/internal/);
+      createCatalog(ctx, { name: "logical", builtIn: true, connectorType: "mysql" }),
+    ).rejects.toThrow(/built-in/);
     await expect(createCatalog(ctx, { name: "physical" })).rejects.toThrow(/connectorType/);
     expect((f as unknown as { mock: { calls: CallArgs[] } }).mock.calls).toHaveLength(0);
   });

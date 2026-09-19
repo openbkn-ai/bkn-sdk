@@ -448,24 +448,24 @@ export function vegaCommand(): Command {
     .command("create")
     .description("Create a catalog (data source)")
     .requiredOption("--name <s>", "catalog name")
-    .option("--connector-type <s>", "connector type (e.g. mysql); required unless --internal")
-    .option("--connector-config <json>", "connector config JSON; not allowed with --internal")
+    .option("--connector-type <s>", "connector type (e.g. mysql); required unless --built-in")
+    .option("--connector-config <json>", "connector config JSON; not allowed with --built-in")
     .option("--id <id>", "explicit catalog id")
     .option("--tags <t1,t2>", "comma-separated tags")
     .option("--description <s>", "description")
     .option("--enabled", "create enabled (default: disabled)")
-    .option("--internal", "create an internal (logical) catalog, with no connector")
+    .option("--built-in", "create a built-in (logical) catalog, with no connector")
     .option("--allow-unhealthy", "save the catalog when its connection test fails")
     .option("--health-check-mode <mode>", "health schedule: inherit | enabled | disabled")
     .option("--health-check-cron <expr>", "cron expression for enabled health checks")
     .action(async (opts, cmd: Command) => {
-      if (opts.internal && (opts.connectorType || opts.connectorConfig)) {
+      if (opts.builtIn && (opts.connectorType || opts.connectorConfig)) {
         throw new InputError(
-          "--internal creates a logical catalog: omit --connector-type and --connector-config",
+          "--built-in creates a logical catalog: omit --connector-type and --connector-config",
         );
       }
-      if (!opts.internal && !opts.connectorType) {
-        throw new InputError("--connector-type is required unless --internal");
+      if (!opts.builtIn && !opts.connectorType) {
+        throw new InputError("--connector-type is required unless --built-in");
       }
       const connectorConfig =
         opts.connectorConfig === undefined
@@ -486,7 +486,7 @@ export function vegaCommand(): Command {
               : undefined,
             description: opts.description,
             enabled: Boolean(opts.enabled),
-            internal: opts.internal ? true : undefined,
+            builtIn: opts.builtIn ? true : undefined,
             healthCheckSchedule: healthCheckSchedule(opts.healthCheckMode, opts.healthCheckCron),
           },
           { allowUnhealthy: opts.allowUnhealthy ? true : undefined },

@@ -103,6 +103,31 @@ describe("vega catalog delete", () => {
   });
 });
 
+describe("vega resource list", () => {
+  it("rejects an invalid enabled filter before requesting resources", async () => {
+    const fetchMock = mockFetch({ entries: [], total_count: 0 });
+    suppressOutput();
+
+    await expect(
+      cli().parseAsync(
+        [
+          "--base-url",
+          "https://demo.example.com",
+          "--token",
+          "t",
+          "vega",
+          "resource",
+          "list",
+          "--enabled",
+          "invalid",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow("--enabled must be one of: true | false");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("vega resource document input", () => {
   it("preserves unsafe integers in document-create data", async () => {
     const fetchMock = mockFetch({ id: "doc-1" });
@@ -1285,28 +1310,28 @@ describe("vega flag validation against the contract enums", () => {
 });
 
 describe("vega catalog create", () => {
-  it("creates an internal catalog without connector fields and sends enabled", async () => {
+  it("creates a built-in catalog without connector fields and sends enabled", async () => {
     const fetchMock = mockFetch({ id: "c-1" });
     suppressOutput();
-    await cli().parseAsync([...cliBase, "catalog", "create", "--name", "logical", "--internal"], {
+    await cli().parseAsync([...cliBase, "catalog", "create", "--name", "logical", "--built-in"], {
       from: "user",
     });
     expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
       name: "logical",
       enabled: false,
-      internal: true,
+      built_in: true,
     });
   });
 
-  it("rejects connector flags with --internal and requires a connector type otherwise", async () => {
+  it("rejects connector flags with --built-in and requires a connector type otherwise", async () => {
     const fetchMock = mockFetch({ id: "c-1" });
     suppressOutput();
     await expect(
       cli().parseAsync(
-        [...cliBase, "catalog", "create", "--name", "x", "--internal", "--connector-type", "mysql"],
+        [...cliBase, "catalog", "create", "--name", "x", "--built-in", "--connector-type", "mysql"],
         { from: "user" },
       ),
-    ).rejects.toThrow(/--internal/);
+    ).rejects.toThrow(/--built-in/);
     await expect(
       cli().parseAsync([...cliBase, "catalog", "create", "--name", "x"], { from: "user" }),
     ).rejects.toThrow(/--connector-type is required/);
