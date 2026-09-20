@@ -84,6 +84,13 @@ describe("openbkn bkn flags", () => {
     });
   });
 
+  it("refuses --offset together with --search-after", async () => {
+    // The deploy turns the pair into a 500 (openbkn-ai/bkn-foundry#1669).
+    await expect(
+      run("action-log", "list", "kn-1", "--search-after", "1,abc", "--offset", "10"),
+    ).rejects.toThrow(/--offset cannot be combined with --search-after/);
+  });
+
   it("action-log list takes search_after paging and time filters", async () => {
     await run(
       "action-log",
