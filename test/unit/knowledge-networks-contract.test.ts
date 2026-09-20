@@ -300,7 +300,6 @@ describe("action logs", () => {
       keyword: "abc",
       startTimeFrom: 1,
       startTimeTo: 2,
-      offset: 3,
       needTotal: true,
       triggerType: "scheduled",
       searchAfter: [1704067200000, "cqq2g8h4d2fg00fvm8dg"],
@@ -309,10 +308,25 @@ describe("action logs", () => {
     expect(q.get("keyword")).toBe("abc");
     expect(q.get("start_time_from")).toBe("1");
     expect(q.get("start_time_to")).toBe("2");
-    expect(q.get("offset")).toBe("3");
     expect(q.get("need_total")).toBe("true");
     expect(q.get("trigger_type")).toBe("scheduled");
     expect(q.get("search_after")).toBe("1704067200000,cqq2g8h4d2fg00fvm8dg");
+  });
+
+  it("drops offset once a cursor is sent, and keeps it otherwise", async () => {
+    // A non-zero `from` beside `search_after` fails the OpenSearch search phase,
+    // which the deploy reports as a 500 (openbkn-ai/bkn-foundry#1669).
+    const f = mockFetch();
+    await listActionLogs(ctx, "kn-1", { offset: 3, searchAfter: "1704067200000,abc" });
+    let q = lastCall(f).url.searchParams;
+    expect(q.has("offset")).toBe(false);
+    expect(q.get("search_after")).toBe("1704067200000,abc");
+
+    // A blank cursor is no cursor: the offset still pages.
+    await listActionLogs(ctx, "kn-1", { offset: 3, searchAfter: "  " });
+    q = lastCall(f).url.searchParams;
+    expect(q.get("offset")).toBe("3");
+    expect(q.has("search_after")).toBe(false);
   });
 
   it("keeps an empty search_after component in its slot, and omits a blank cursor", async () => {

@@ -619,10 +619,19 @@ An older deploy answers without paging — resend the query with "offset" instea
     .option("--start-time-from <ms>", "start time lower bound, epoch milliseconds", int)
     .option("--start-time-to <ms>", "start time upper bound, epoch milliseconds", int)
     .option("--limit <n>", "page size, 1–1000", positiveInt("--limit", 1000), DEFAULT_LIST_LIMIT)
-    .option("--offset <n>", "page offset (ignored with --search-after)", int)
+    .option(
+      "--offset <n>",
+      "page offset; not allowed with --search-after",
+      nonNegativeInt("--offset"),
+    )
     .option("--need-total", "also return total_count")
     .option("--search-after <cursor>", "deep-paging cursor from the previous page (comma-joined)")
     .action(async (knId: string, opts, cmd: Command) => {
+      // Two paging strategies, one request: the deploy answers 500 when both
+      // arrive (openbkn-ai/bkn-foundry#1669), so refuse the pair here.
+      if (opts.searchAfter !== undefined && opts.offset !== undefined) {
+        throw new InputError("--offset cannot be combined with --search-after; use one of them");
+      }
       printJson(
         await clientFrom(cmd).kn.actionLogs(knId, {
           status: opts.status,

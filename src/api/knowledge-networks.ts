@@ -263,7 +263,11 @@ export interface ActionLogListOptions {
   startTimeFrom?: number;
   startTimeTo?: number;
   limit?: number;
-  /** Ignored by the backend once `searchAfter` is set. */
+  /**
+   * Page offset. Mutually exclusive with `searchAfter`: OpenSearch refuses a
+   * non-zero `from` together with `search_after` and the deploy answers 500
+   * (openbkn-ai/bkn-foundry#1669), so a cursor read drops it.
+   */
   offset?: number;
   needTotal?: boolean;
   /** Deep-paging cursor from the previous page; a list is comma-joined. */
@@ -275,6 +279,7 @@ export function listActionLogs(
   knId: string,
   opts: ActionLogListOptions = {},
 ): Promise<unknown> {
+  const cursor = searchAfterParam(opts.searchAfter);
   return request(ctx, `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/action-logs`, {
     query: {
       action_type_id: opts.actionTypeId || undefined,
@@ -284,9 +289,11 @@ export function listActionLogs(
       start_time_from: opts.startTimeFrom,
       start_time_to: opts.startTimeTo,
       limit: opts.limit ?? 30,
-      offset: opts.offset,
+      // Never both: a non-zero offset alongside search_after makes OpenSearch
+      // fail the search phase, which the deploy reports as a 500.
+      offset: cursor === undefined ? opts.offset : undefined,
       need_total: opts.needTotal ? "true" : undefined,
-      search_after: searchAfterParam(opts.searchAfter),
+      search_after: cursor,
     },
     responseParser: parseBigIntJSON,
   });
