@@ -28,16 +28,31 @@ Incremental Key:
 
 #### {logic_property_name}
 
-- **Display**: {显示名}
-- **Type**: metric 或 operator
-- **Source**: {source_id} (metric) 或 {source_id} (operator)
-- **Description**: {描述}
+**Meta**
 
-| Parameter | Type | Source | Binding | Description |
-|-----------|------|--------|---------|-------------|
-| {param} | string | property | {property_name} | {说明} |
-| {param} | array | input | - | {说明} |
-| {param} | number | const | {value} | {说明} |
+| Display Name | Type | Description |
+|--------------|------|-------------|
+| {显示名} | metric | {描述} |
+
+**Source**
+
+| Source Type | Source ID | Source Name |
+|-------------|-----------|-------------|
+| metric | {metric_id} | {指标名} |
+
+<!-- Source Type 为 tool 时改用 6 列，box_id / tool_id 缺一不可：
+| Source Type | Source ID | Source Name | BoxID | ToolID | ResultPath |
+|-------------|-----------|-------------|-------|--------|------------|
+| tool |  | {工具名} | {box_id} | {tool_id} | $.result.rate_pct |
+-->
+
+**Parameters**
+
+| Name | Type | Source | Operation | ValueFrom | Value | Description |
+|------|------|--------|-----------|-----------|-------|-------------|
+| {param} | string | property |  | {property_name} |  | {说明} |
+| {param} | array | input |  |  |  | {说明} |
+| {param} | number | const |  |  | {value} | {说明} |
 
 -->
 
