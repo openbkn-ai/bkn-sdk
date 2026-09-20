@@ -28,17 +28,32 @@ Incremental Key:
 
 #### {logic_property_name}
 
-- **Display**: {显示名}
-- **Type**: metric 或 operator
-- **Source**: {source_id} (metric) 或 {source_id} (operator)
-- **Description**: {描述}
+**Meta**
 
-| Parameter | Type | Source | Binding | Description |
-|-----------|------|--------|---------|-------------|
-| {param} | string | property | {property_name} | {说明} |
-| {param} | array | input | - | {说明} |
-| {param} | number | const | {value} | {说明} |
+| Display Name | Type | Description |
+|--------------|------|-------------|
+| {显示名} | metric | {描述} |
 
+**Source**
+
+| Source Type | Source ID | Source Name |
+|-------------|-----------|-------------|
+| metric | {metric_id} | {指标名} |
+
+**Parameters**
+
+| Name | Type | Source | Operation | ValueFrom | Value | Description |
+|------|------|--------|-----------|-----------|-------|-------------|
+| {param} | string | property |  | {property_name} |  | {说明} |
+| {param} | array | input |  |  |  | {说明} |
+| {param} | number | const |  |  | {value} | {说明} |
+
+-->
+
+<!-- Source Type 为 tool 时，上面的 Source 表要多三列：BoxID、ToolID、ResultPath
+     （表头写成 Source Type / Source ID / Source Name / BoxID / ToolID / ResultPath）。
+     box_id 与 tool_id 缺一不可，否则后端返回 400 LogicPropertyToolSourceRequired；
+     Source ID 留空，ResultPath 形如 $.result.rate_pct。示例见 references/SPECIFICATION.llm.md。
 -->
 
 <!-- 可选：无数据源绑定时省略整个 Data Source 节 -->
