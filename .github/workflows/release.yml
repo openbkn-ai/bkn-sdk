@@ -28,7 +28,7 @@ jobs:
             echo "::error file=VERSION::VERSION must be a stable X.Y.Z version; received $BASE_VERSION"
             exit 1
           fi
-          if [[ "$TAG_VERSION" != "$BASE_VERSION" && "$TAG_VERSION" != "$BASE_VERSION-"* ]]; then
+          if [[ "$TAG_VERSION" != "$BASE_VERSION" && ! "$TAG_VERSION" =~ ^"$BASE_VERSION"-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*$ ]]; then
             echo "::error file=VERSION::tag v$TAG_VERSION must equal VERSION ($BASE_VERSION) or use it as a prerelease prefix"
             exit 1
           fi
