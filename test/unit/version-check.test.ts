@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import pkg from "../../package.json" with { type: "json" };
 import { rawCall } from "../../src/api/call.js";
 import { request } from "../../src/api/http.js";
 import {
@@ -14,6 +15,8 @@ import {
 } from "../../src/api/version-check.js";
 import { readVersionCheckCache, writeVersionCheckCache } from "../../src/config/store.js";
 import type { RequestContext } from "../../src/types.js";
+
+const sdkVersion = pkg.version;
 
 function ctx(
   mode: "memory" | "cli" = "memory",
@@ -82,7 +85,10 @@ describe("platform version preflight", () => {
 
     const error = await request(ctx(), "/api/x").catch((reason) => reason);
     expect(error).toBeInstanceOf(VersionCompatibilityError);
-    expect((error as Error).message).toMatch(/SDK version 0\.1\.5-rc\.1.*platform version 0\.1\.4/);
+    // The SDK version comes from package.json: a release bump must not fail this.
+    expect((error as Error).message).toMatch(
+      new RegExp(`SDK version ${sdkVersion.replace(/\./g, "\\.")}.*platform version 0\\.1\\.4`),
+    );
     expect(fetch).toHaveBeenCalledOnce();
     expect(new URL(String(fetch.mock.calls[0]?.[0])).pathname).toBe("/api/bkn-backend/v1/health");
   });
