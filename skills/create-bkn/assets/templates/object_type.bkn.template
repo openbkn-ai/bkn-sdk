@@ -40,12 +40,6 @@ Incremental Key:
 |-------------|-----------|-------------|
 | metric | {metric_id} | {指标名} |
 
-<!-- Source Type 为 tool 时改用 6 列，box_id / tool_id 缺一不可：
-| Source Type | Source ID | Source Name | BoxID | ToolID | ResultPath |
-|-------------|-----------|-------------|-------|--------|------------|
-| tool |  | {工具名} | {box_id} | {tool_id} | $.result.rate_pct |
--->
-
 **Parameters**
 
 | Name | Type | Source | Operation | ValueFrom | Value | Description |
@@ -54,6 +48,12 @@ Incremental Key:
 | {param} | array | input |  |  |  | {说明} |
 | {param} | number | const |  |  | {value} | {说明} |
 
+-->
+
+<!-- Source Type 为 tool 时，上面的 Source 表要多三列：BoxID、ToolID、ResultPath
+     （表头写成 Source Type / Source ID / Source Name / BoxID / ToolID / ResultPath）。
+     box_id 与 tool_id 缺一不可，否则后端返回 400 LogicPropertyToolSourceRequired；
+     Source ID 留空，ResultPath 形如 $.result.rate_pct。示例见 references/SPECIFICATION.llm.md。
 -->
 
 <!-- 可选：无数据源绑定时省略整个 Data Source 节 -->
