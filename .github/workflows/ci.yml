@@ -25,6 +25,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Version consistency
+        run: npm run check:version
       # A package must never depend on itself: `npm install <own-name>` inside the
       # repo self-installs at the current version and ships a stale copy to every
       # consumer. npm does not reject it, so this gate does. Also runs inside

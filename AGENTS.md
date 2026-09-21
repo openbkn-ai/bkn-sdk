@@ -37,6 +37,7 @@ Read this first, then load the relevant repository documents below. Before worki
 - Conventional Commits: `type(scope): subject` (`feat` / `fix` / `chore` / `refactor` / `docs` / `test`; scope = service name).
 - Branch from the Issue's "Create a branch"; one PR per Issue, kept small.
 - Branch names must use a valid type prefix and at most two path segments after it: `<type>/<description>`, `<type>/<issue-number>-<description>`, or `<type>/<module>/<description>`; segments start with lowercase letters or digits and may contain `-`, `.`, or `_`.
+- Release branches are the sole exception: use `release/X.Y.Z` with a stable version that exactly matches root `VERSION`; RCs are `vX.Y.Z-rc*` tags, not release branch suffixes.
 
 ---
 

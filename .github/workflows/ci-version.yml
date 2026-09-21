@@ -23,6 +23,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - run: node scripts/check-version.mjs
       - name: Verify Git reference
         shell: bash
         env:
@@ -31,10 +32,8 @@ jobs:
           REF_TYPE: ${{ github.ref_type }}
         run: |
           set -euo pipefail
-          base="$(tr -d '[:space:]' < VERSION)"
           if [[ "$REF_TYPE" == tag ]]; then
             tag="${REF_NAME#v}"
-            [[ "$tag" == "$base" || "$tag" =~ ^"$base"-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*$ ]] || { echo "::error::tag v$tag is outside VERSION $base"; exit 1; }
             package="$(node -p "require('./package.json').version")"
             [[ "$package" == "$tag" ]] || { echo "::error::package.json version must equal tag v$tag"; exit 1; }
           else
@@ -42,7 +41,7 @@ jobs:
             # The source branch is validated against its own VERSION on push.
             ref="${BASE_REF:-$REF_NAME}"
             if [[ "$ref" == release/* ]]; then
+              base="$(tr -d '[:space:]' < VERSION)"
               [[ "${ref#release/}" == "$base" ]] || { echo "::error::branch $ref disagrees with VERSION $base"; exit 1; }
             fi
           fi
-      - run: node scripts/check-version.mjs
