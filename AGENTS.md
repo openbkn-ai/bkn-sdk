@@ -1,18 +1,17 @@
 # AGENTS.md
 
 Entry point for AI agents (Claude Code / Codex / others) working in this repo.
-Read this first, then load the rules under [`rules/`](rules/). Before working in any subdirectory, locate and read every `AGENTS.md` from the repository root through that target directory; rules in the more specific (deeper) file take precedence.
+Read this first, then load the relevant repository documents below. Before working in any subdirectory, locate and read every `AGENTS.md` from the repository root through that target directory; rules in the more specific (deeper) file take precedence.
 
 ## Read before doing anything
 
 | Topic | File |
 | --- | --- |
-| How we collaborate (humans + Agents) | [rules/WORKFLOW.md](rules/WORKFLOW.md) |
-| Contribution guide (branches, commits, style) | [rules/CONTRIBUTING.md](rules/CONTRIBUTING.md) |
-| Architecture & module boundaries | [rules/ARCHITECTURE.md](rules/ARCHITECTURE.md) |
-| API / HTTP / error conventions | [rules/DEVELOPMENT.md](rules/DEVELOPMENT.md) |
-| Testing conventions | [rules/TESTING.md](rules/TESTING.md) |
-| Module owners (review routing) | [.github/CODEOWNERS](.github/CODEOWNERS) |
+| Architecture & module boundaries | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| Reliability conventions | [docs/RELIABILITY.md](docs/RELIABILITY.md) |
+| Security conventions | [docs/SECURITY.md](docs/SECURITY.md) |
+| Testing and quality expectations | [docs/QUALITY_SCORE.md](docs/QUALITY_SCORE.md) |
+| Non-trivial development workflow | [docs/superpowers/workflow.md](docs/superpowers/workflow.md) |
 | Issue templates (bug / feature / task) | [.github/ISSUE_TEMPLATE/](.github/ISSUE_TEMPLATE/) |
 | Pull request template | [.github/pull_request_template.md](.github/pull_request_template.md) |
 
@@ -38,6 +37,7 @@ Read this first, then load the rules under [`rules/`](rules/). Before working in
 - Conventional Commits: `type(scope): subject` (`feat` / `fix` / `chore` / `refactor` / `docs` / `test`; scope = service name).
 - Branch from the Issue's "Create a branch"; one PR per Issue, kept small.
 - Branch names must use a valid type prefix and at most two path segments after it: `<type>/<description>`, `<type>/<issue-number>-<description>`, or `<type>/<module>/<description>`; segments start with lowercase letters or digits and may contain `-`, `.`, or `_`.
+- Release branches are the sole exception: use `release/X.Y.Z` with a stable version that exactly matches root `VERSION`; RCs are `vX.Y.Z-rc*` tags, not release branch suffixes.
 
 ---
 

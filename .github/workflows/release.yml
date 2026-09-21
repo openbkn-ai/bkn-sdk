@@ -17,6 +17,17 @@ jobs:
           node-version: 24.19.0
           cache: npm
           registry-url: https://registry.npmjs.org
+      - name: Verify release tag and package version
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/check-version.mjs
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          if [[ "$PACKAGE_VERSION" != "$TAG_VERSION" ]]; then
+            echo "::error file=package.json::package.json version ($PACKAGE_VERSION) must equal tag v$TAG_VERSION"
+            exit 1
+          fi
       # Keep npm current for Trusted Publishing (OIDC) and release tooling.
       - run: npm install -g npm@latest
       - run: npm ci
