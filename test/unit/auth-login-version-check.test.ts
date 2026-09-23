@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import pkg from "../../package.json" with { type: "json" };
 
 vi.mock("../../src/auth/oauth.js", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../src/auth/oauth.js")>();
@@ -25,7 +26,7 @@ const previousConfigDir = process.env.BKN_CONFIG_DIR;
 const previousUser = process.env.BKN_USER;
 let configDir: string;
 
-function health(version = "0.1.5") {
+function health(version = pkg.version) {
   return vi.fn(
     async (_input: string | URL, _init?: RequestInit) =>
       new Response(JSON.stringify({ ServerVersion: version }), { status: 200 }),

@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import pkg from "../../package.json" with { type: "json" };
 
 import { vegaCommand } from "../../src/commands/vega.js";
 import { writeVersionCheckCache } from "../../src/config/store.js";
@@ -22,7 +23,7 @@ afterEach(() => {
 // covered independently, so their business-endpoint mocks use a fresh CLI cache.
 beforeEach(() => {
   writeVersionCheckCache("https://demo.example.com", {
-    serverVersion: "0.1.5",
+    serverVersion: pkg.version,
     checkedAt: new Date().toISOString(),
   });
 });

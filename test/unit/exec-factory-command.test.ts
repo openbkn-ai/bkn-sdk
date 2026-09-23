@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import pkg from "../../package.json" with { type: "json" };
 import { skillCommand } from "../../src/commands/skill.js";
 import {
   apiToolCommand,
@@ -50,7 +51,7 @@ const query = (m: { calls: CallArgs[] }) =>
   Object.fromEntries(new URL((m.calls[0] as CallArgs)[0]).searchParams);
 
 beforeEach(() => {
-  writeVersionCheckCache(BASE, { serverVersion: "0.1.5", checkedAt: new Date().toISOString() });
+  writeVersionCheckCache(BASE, { serverVersion: pkg.version, checkedAt: new Date().toISOString() });
   vi.spyOn(process.stdout, "write").mockImplementation(() => true);
   vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 });

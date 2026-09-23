@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import pkg from "../../package.json" with { type: "json" };
 
 import { runCli } from "../../src/cli-run.js";
 import { writeVersionCheckCache } from "../../src/config/store.js";
@@ -19,7 +20,7 @@ const ARGS = [
 
 beforeEach(() => {
   writeVersionCheckCache("https://demo.example.com", {
-    serverVersion: "0.1.5",
+    serverVersion: pkg.version,
     checkedAt: new Date().toISOString(),
   });
 });

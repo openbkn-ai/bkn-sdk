@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import pkg from "../../package.json" with { type: "json" };
 import type { OperationReceipt } from "../../src/api/trace-lifecycle.js";
 import { buildProgram } from "../../src/cli-program.js";
 import { renderTechnicalTraceDetail, traceCommand } from "../../src/commands/trace.js";
@@ -9,7 +10,10 @@ describe("trace search filters through the complete CLI", () => {
   const base = "https://trace-filter.example.com";
 
   beforeEach(() => {
-    writeVersionCheckCache(base, { serverVersion: "0.1.5", checkedAt: new Date().toISOString() });
+    writeVersionCheckCache(base, {
+      serverVersion: pkg.version,
+      checkedAt: new Date().toISOString(),
+    });
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
   });
 
@@ -276,7 +280,7 @@ describe("trace search CLI query mapping", () => {
 
   beforeEach(() => {
     writeVersionCheckCache("https://demo.example.com", {
-      serverVersion: "0.1.5",
+      serverVersion: pkg.version,
       checkedAt: new Date().toISOString(),
     });
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);

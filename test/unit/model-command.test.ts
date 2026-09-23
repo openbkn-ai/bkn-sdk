@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import pkg from "../../package.json" with { type: "json" };
 import { listLlmModels, listSmallModels } from "../../src/api/models.js";
 import { buildProgram } from "../../src/cli-program.js";
 import { writeVersionCheckCache } from "../../src/config/store.js";
@@ -11,7 +12,7 @@ import { verifiedContext } from "../setup/verified-context.js";
 const base = "https://model-cli.example.com";
 
 beforeEach(() => {
-  writeVersionCheckCache(base, { serverVersion: "0.1.5", checkedAt: new Date().toISOString() });
+  writeVersionCheckCache(base, { serverVersion: pkg.version, checkedAt: new Date().toISOString() });
   vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 });
 

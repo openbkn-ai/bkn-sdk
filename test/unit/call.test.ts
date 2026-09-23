@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import pkg from "../../package.json" with { type: "json" };
 import { parseFormField, parseHeader, rawCall } from "../../src/api/call.js";
 import type { RequestContext } from "../../src/types.js";
 import { verifiedContext } from "../setup/verified-context.js";
@@ -45,7 +46,7 @@ describe("rawCall refresh-on-401", () => {
     let persisted: string | undefined;
     const f = vi.fn(async (url: string, init?: RequestInit) => {
       if (String(url).endsWith("/api/bkn-backend/v1/health")) {
-        return new Response(JSON.stringify({ ServerVersion: "0.1.5" }), { status: 200 });
+        return new Response(JSON.stringify({ ServerVersion: pkg.version }), { status: 200 });
       }
       if (String(url).endsWith("/oauth2/token")) {
         return new Response(JSON.stringify({ access_token: "NEW" }), { status: 200 });
@@ -79,7 +80,7 @@ describe("rawCall refresh-on-401", () => {
   it("does not retry a 401 without stored refresh credentials", async () => {
     const f = vi.fn(async (url: string) =>
       String(url).endsWith("/api/bkn-backend/v1/health")
-        ? new Response(JSON.stringify({ ServerVersion: "0.1.5" }), { status: 200 })
+        ? new Response(JSON.stringify({ ServerVersion: pkg.version }), { status: 200 })
         : new Response("denied", { status: 401 }),
     );
     vi.stubGlobal("fetch", f);

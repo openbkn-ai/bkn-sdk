@@ -3,6 +3,7 @@
 
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import pkg from "../../package.json" with { type: "json" };
 import type { BuildTask } from "../../src/api/vega.js";
 import { vegaCommand } from "../../src/commands/vega.js";
 import { writeVersionCheckCache } from "../../src/config/store.js";
@@ -143,7 +144,10 @@ describe("waitForBuild", () => {
 
 describe("vega build-task get --wait", () => {
   beforeEach(() => {
-    writeVersionCheckCache(BASE, { serverVersion: "0.1.5", checkedAt: new Date().toISOString() });
+    writeVersionCheckCache(BASE, {
+      serverVersion: pkg.version,
+      checkedAt: new Date().toISOString(),
+    });
   });
 
   function run(...args: string[]) {

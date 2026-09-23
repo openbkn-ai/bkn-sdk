@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import pkg from "../../package.json" with { type: "json" };
 import { bknCommand } from "../../src/commands/bkn.js";
 import { writeVersionCheckCache } from "../../src/config/store.js";
 import { kn } from "../../src/resources/knowledge-networks.js";
@@ -91,7 +92,7 @@ function server(...listResponses: Response[]): ReturnType<typeof vi.fn> {
 }
 
 beforeEach(() => {
-  writeVersionCheckCache(BASE, { serverVersion: "0.1.5", checkedAt: new Date().toISOString() });
+  writeVersionCheckCache(BASE, { serverVersion: pkg.version, checkedAt: new Date().toISOString() });
 });
 
 afterEach(() => {
