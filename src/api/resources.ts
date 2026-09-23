@@ -220,6 +220,7 @@ export const Resource = z
     index_name: z.string().optional(),
     column_count: z.number().optional(),
     row_count: z.number().optional(),
+    estimated_row_count: z.number().optional(),
     logic_type: z.string().optional(),
     logic_definition: z.unknown().optional(),
     creator: ResourceAccountInfo,
@@ -236,6 +237,7 @@ export const ResourceSummary = Resource.omit({
   source_metadata: true,
   schema_definition: true,
   index_config: true,
+  estimated_row_count: true,
   logic_definition: true,
 });
 export type ResourceSummary = z.infer<typeof ResourceSummary>;
