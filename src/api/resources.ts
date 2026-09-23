@@ -137,13 +137,11 @@ const ResourceAccountInfo = z
  * `resource get` failed on nearly every id on both reference deploys, and why
  * update flows, whose first act is that same read, could never run.
  *
- * Applied only where a null was actually observed, which is not everywhere it
- * could be: scanning all 368 resources on one deploy found exactly three, all
- * inside `schema_definition` — `attributes` 3578 times, `features` 4304, and a
- * feature's `config` 501. Every other optional came back omitted the ordinary
- * way, so the backend is selective rather than uniform about this, and a guard
- * placed where no null has been seen is a guard no fixture can hold up. If one
- * surfaces elsewhere, wrapping that field is the whole fix.
+ * Applied where a null was observed or where an optional source-derived value
+ * may encode unavailability as null. The observed cases were all inside
+ * `schema_definition` — `attributes` 3578 times, `features` 4304, and a
+ * feature's `config` 501. The backend is selective rather than uniform, so do
+ * not widen every optional field preemptively.
  *
  * Normalizing here rather than widening the types keeps "absent" a single shape
  * for callers, so `?? []` and `?.` keep meaning what they already meant.
@@ -220,6 +218,7 @@ export const Resource = z
     index_name: z.string().optional(),
     column_count: z.number().optional(),
     row_count: z.number().optional(),
+    estimated_row_count: nullAsAbsent(z.number()),
     logic_type: z.string().optional(),
     logic_definition: z.unknown().optional(),
     creator: ResourceAccountInfo,
@@ -236,6 +235,7 @@ export const ResourceSummary = Resource.omit({
   source_metadata: true,
   schema_definition: true,
   index_config: true,
+  estimated_row_count: true,
   logic_definition: true,
 });
 export type ResourceSummary = z.infer<typeof ResourceSummary>;

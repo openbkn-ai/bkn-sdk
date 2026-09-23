@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
+  type Resource,
   type ResourceSummary,
   createResource,
   createResourceDocument,
@@ -67,6 +68,7 @@ describe("ResourceLocalStatus", () => {
     expectTypeOf<ResourceIndexConfig["default_keyword_ignore_above"]>().toEqualTypeOf<
       number | undefined
     >();
+    expectTypeOf<Resource["estimated_row_count"]>().toEqualTypeOf<number | undefined>();
   });
 });
 
@@ -75,6 +77,7 @@ describe("listResources", () => {
     expectTypeOf<ResourceSummary["source_metadata"]>().toEqualTypeOf<unknown>();
     expectTypeOf<ResourceSummary["schema_definition"]>().toEqualTypeOf<unknown>();
     expectTypeOf<ResourceSummary["index_config"]>().toEqualTypeOf<unknown>();
+    expectTypeOf<ResourceSummary["estimated_row_count"]>().toEqualTypeOf<unknown>();
     expectTypeOf<ResourceSummary["logic_definition"]>().toEqualTypeOf<unknown>();
 
     mockFetch({
@@ -170,6 +173,25 @@ describe("listResources", () => {
     const { local_status: _omitted, ...withoutLocalStatus } = resourceFixture();
     mockFetch({ entries: [withoutLocalStatus], total_count: 1 });
     await expect(listResources(ctx)).resolves.toMatchObject({ entries: [{ id: "r-1" }] });
+  });
+
+  it("parses estimated row counts from resource detail responses", async () => {
+    mockFetch({
+      entries: [resourceFixture({ row_count: 100, estimated_row_count: 120 })],
+    });
+
+    await expect(getResource(ctx, "r-1")).resolves.toMatchObject({
+      entries: [{ row_count: 100, estimated_row_count: 120 }],
+    });
+  });
+
+  it("normalizes a null estimated row count and rejects non-numeric values", async () => {
+    mockFetch({ entries: [resourceFixture({ estimated_row_count: null })] });
+    const withoutEstimate = firstResource(await getResource(ctx, "r-1"));
+    expect(withoutEstimate.estimated_row_count).toBeUndefined();
+
+    mockFetch({ entries: [resourceFixture({ estimated_row_count: "120" })] });
+    await expect(getResource(ctx, "r-1")).rejects.toThrow();
   });
 
   it("rejects an empty resource detail envelope", () => {
