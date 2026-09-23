@@ -1,5 +1,7 @@
 # @openbkn/bkn-sdk
 
+🌐 **Website:** [openbkn.ai](https://openbkn.ai)
+
 Unified TypeScript SDK + CLI for the **BKN** (Business Knowledge Network) platform.
 One toolkit, two surfaces: the importable SDK and the `openbkn` CLI — both backed
 by the same domain logic. A single unified CLI for the BKN platform, with the

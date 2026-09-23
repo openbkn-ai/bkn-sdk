@@ -1,5 +1,7 @@
 # @openbkn/bkn-sdk
 
+🌐 **官网：**[openbkn.ai](https://openbkn.ai)
+
 BKN（Business Knowledge Network）平台的统一 TypeScript SDK + CLI。一套工具、两个入口：
 可 import 的 SDK 与 `openbkn` 命令行——共享同一套领域逻辑。面向 BKN 平台的
 统一命令行工具，运维面收进 `openbkn admin` 子命令。纯后端，无 Web UI。
