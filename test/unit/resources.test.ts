@@ -185,6 +185,15 @@ describe("listResources", () => {
     });
   });
 
+  it("normalizes a null estimated row count and rejects non-numeric values", async () => {
+    mockFetch({ entries: [resourceFixture({ estimated_row_count: null })] });
+    const withoutEstimate = firstResource(await getResource(ctx, "r-1"));
+    expect(withoutEstimate.estimated_row_count).toBeUndefined();
+
+    mockFetch({ entries: [resourceFixture({ estimated_row_count: "120" })] });
+    await expect(getResource(ctx, "r-1")).rejects.toThrow();
+  });
+
   it("rejects an empty resource detail envelope", () => {
     expect(() => firstResource({ entries: [] })).toThrow(
       "resource detail response contains no entries",
