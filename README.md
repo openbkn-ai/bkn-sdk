@@ -98,8 +98,8 @@ const raw = await bkn.call("/api/...", { method: "GET" });
 
 Importing the package has no side effects; `createClient` resolves config explicitly.
 
-Before the first request to a platform, the SDK checks that the platform's version matches its own,
-and throws `VersionCompatibilityError` without sending anything when it does not. Set
+Before the first request to a platform, the SDK checks that the platform's version matches its own.
+When it does not, the call fails before anything is sent, with an error naming both versions. Set
 `BKN_SKIP_VERSION_CHECK=1` to send the request anyway — for a deployment that reports a placeholder
 or a development build, which no release can match. It is the environment variable that serves a
 library caller; the CLI has `--skip-version-check` as well.
