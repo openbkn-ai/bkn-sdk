@@ -17,6 +17,9 @@ import { readVersionCheckCache, writeVersionCheckCache } from "../../src/config/
 import type { RequestContext } from "../../src/types.js";
 
 const sdkVersion = pkg.version;
+/* A platform reports a stable version, so the fixtures standing in for one must not carry this
+ * package's prerelease suffix: appending another one would make baseVersion strip both. */
+const stableVersion = baseVersion(sdkVersion) ?? sdkVersion;
 
 function ctx(
   mode: "memory" | "cli" = "memory",
@@ -31,7 +34,7 @@ function ctx(
   return context;
 }
 
-function route(version = sdkVersion, business = { ok: true }) {
+function route(version = stableVersion, business = { ok: true }) {
   return vi.fn(async (input: string | URL, _init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
     if (path === "/api/bkn-backend/v1/health")
@@ -59,8 +62,8 @@ describe("platform version preflight", () => {
   });
 
   it("treats the SDK prerelease as compatible with its stable base version", async () => {
-    expect(baseVersion(`${sdkVersion}-rc.1`)).toBe(sdkVersion);
-    const fetch = route(sdkVersion);
+    expect(baseVersion(`${stableVersion}-rc.1`)).toBe(stableVersion);
+    const fetch = route(stableVersion);
     vi.stubGlobal("fetch", fetch);
 
     await expect(request(ctx(), "/api/x")).resolves.toEqual({ ok: true });
@@ -70,7 +73,7 @@ describe("platform version preflight", () => {
     const fetch = vi.fn(async (input: string | URL) => {
       const body =
         new URL(String(input)).pathname === "/api/bkn-backend/v1/health"
-          ? { data: { ServerVersion: sdkVersion } }
+          ? { data: { ServerVersion: stableVersion } }
           : { ok: true };
       return new Response(JSON.stringify(body), { status: 200 });
     });
@@ -156,12 +159,12 @@ describe("platform version preflight", () => {
     await request(ctx("cli"), "/api/two");
 
     expect(fetch).toHaveBeenCalledTimes(3); // health once, then two business requests
-    expect(readVersionCheckCache("https://demo.example.com")?.serverVersion).toBe(sdkVersion);
+    expect(readVersionCheckCache("https://demo.example.com")?.serverVersion).toBe(stableVersion);
   });
 
   it("rechecks the CLI version after its cache expires", async () => {
     writeVersionCheckCache("https://demo.example.com", {
-      serverVersion: sdkVersion,
+      serverVersion: stableVersion,
       checkedAt: new Date(Date.now() - 60_001).toISOString(),
     });
     const fetch = route();
