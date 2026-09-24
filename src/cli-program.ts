@@ -58,6 +58,11 @@ export function buildProgram(): Command {
       "fail at once on a refused/dropped connection or a 429/502/503, instead of retrying 3 times",
     )
     .option("--dry-run", "print the request this command would send, and send nothing")
+    .option(
+      "--skip-version-check",
+      "send the request even if the platform version does not match this SDK " +
+        "(env: BKN_SKIP_VERSION_CHECK=1)",
+    )
     // The pointer that replaces the full-help dump is installed for every
     // command by `installGroupedHelp`, which knows each one's path.
     .showHelpAfterError();

@@ -96,6 +96,31 @@ describe("platform version preflight", () => {
     expect(new URL(String(fetch.mock.calls[0]?.[0])).pathname).toBe("/api/bkn-backend/v1/health");
   });
 
+  it.each(["1", "true", "yes", " YES "])(
+    "skips the preflight when BKN_SKIP_VERSION_CHECK is %j",
+    async (value) => {
+      process.env.BKN_SKIP_VERSION_CHECK = value;
+      // A version this SDK can never match, so only the switch can let it through.
+      const fetch = route("0.1.4");
+      vi.stubGlobal("fetch", fetch);
+
+      await expect(request(ctx(), "/api/x")).resolves.toEqual({ ok: true });
+      expect(fetch).toHaveBeenCalledOnce();
+      expect(new URL(String(fetch.mock.calls[0]?.[0])).pathname).toBe("/api/x");
+    },
+  );
+
+  it.each(["0", "false", "no", "", "maybe"])(
+    "keeps the preflight when BKN_SKIP_VERSION_CHECK is %j",
+    async (value) => {
+      process.env.BKN_SKIP_VERSION_CHECK = value;
+      const fetch = route("0.1.4");
+      vi.stubGlobal("fetch", fetch);
+
+      await expect(request(ctx(), "/api/x")).rejects.toBeInstanceOf(VersionCompatibilityError);
+    },
+  );
+
   it("blocks when health does not return a valid server version", async () => {
     const fetch = vi.fn(
       async () => new Response(JSON.stringify({ status: "ok" }), { status: 200 }),

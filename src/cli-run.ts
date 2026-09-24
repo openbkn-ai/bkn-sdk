@@ -3,6 +3,7 @@
 
 /** CLI execution and graceful process-exit handling. */
 import { releaseLifecycleSessions } from "./api/lifecycle.js";
+import { skipVersionCheck } from "./api/version-check.js";
 import { buildProgram } from "./cli-program.js";
 import { DryRunSignal, enableDryRun } from "./utils/dry-run.js";
 import { formatError, toExitCode } from "./utils/errors.js";
@@ -17,9 +18,10 @@ import { formatError, toExitCode } from "./utils/errors.js";
 export async function runCli(argv = process.argv): Promise<void> {
   const program = buildProgram();
 
-  // The flag has to be read before commander parses, because the switch must be
-  // on by the time a resource builds its first request.
+  // The flags have to be read before commander parses, because each switch must
+  // be on by the time a resource builds its first request.
   if (argv.includes("--dry-run")) enableDryRun();
+  if (argv.includes("--skip-version-check")) skipVersionCheck();
 
   try {
     await program.parseAsync(argv);

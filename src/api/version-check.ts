@@ -25,6 +25,37 @@ interface VersionCheckState {
 // that uses the low-level public APIs must not be able to forge `verified`.
 const states = new WeakMap<RequestContext, VersionCheckState>();
 
+/**
+ * `--skip-version-check` / `BKN_SKIP_VERSION_CHECK` — send the request anyway.
+ *
+ * Compatibility is exact at patch level, so a deployment whose reported version
+ * this SDK release does not match is unreachable: every command fails before
+ * the wire, and no published SDK may exist for that version yet. A deployment
+ * that reports a placeholder or a dev build is unreachable for the same reason.
+ * Without a sanctioned way out, the only recourse is forging the CLI's cache
+ * file, which lasts 60 seconds and is not something to document.
+ *
+ * The switch is process-wide, like `--dry-run`. Unlike `--dry-run` the SDK can
+ * turn it on too, through the environment variable: a library caller hitting a
+ * mismatched platform has no CLI flag to reach for.
+ */
+let skipped = false;
+
+/** Turn off the preflight for this process. */
+export function skipVersionCheck(): void {
+  skipped = true;
+}
+
+/**
+ * Only an explicit affirmative counts. A switch that disables a safety check
+ * must not be turned on by `BKN_SKIP_VERSION_CHECK=0` or by a stray value.
+ */
+function skipRequested(): boolean {
+  if (skipped) return true;
+  const value = process.env.BKN_SKIP_VERSION_CHECK?.trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes";
+}
+
 /** Register the request mode while constructing an SDK or CLI context. */
 export function configureVersionCheck(ctx: RequestContext, mode: VersionCheckMode): void {
   states.set(ctx, { mode });
@@ -63,8 +94,11 @@ export async function ensureCompatible(ctx: RequestContext, target: URL): Promis
 
   // Low-level public APIs also accept manually constructed contexts. Their
   // first request uses the default in-memory mode.
+  // The origin guard above still applies when the preflight is skipped: it
+  // keeps this platform's credentials from travelling to a different server,
+  // which has nothing to do with version compatibility.
   const state = stateFor(ctx);
-  if (state.verified || isDryRun() || isVersionUrl(target)) return;
+  if (state.verified || skipRequested() || isDryRun() || isVersionUrl(target)) return;
   if (state.verifying) return state.verifying;
 
   const checking = checkCompatibility(ctx);
