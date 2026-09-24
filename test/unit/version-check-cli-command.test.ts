@@ -3,6 +3,7 @@
 
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import pkg from "../../package.json" with { type: "json" };
 import { adminCommand } from "../../src/commands/admin.js";
 import { authCommand } from "../../src/commands/auth.js";
 import { callCommand } from "../../src/commands/call.js";
@@ -22,7 +23,10 @@ function cli(): Command {
 }
 
 beforeEach(() => {
-  writeVersionCheckCache(BASE, { serverVersion: "0.1.5", checkedAt: new Date().toISOString() });
+  writeVersionCheckCache(BASE, {
+    serverVersion: pkg.version,
+    checkedAt: new Date().toISOString(),
+  });
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),

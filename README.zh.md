@@ -86,6 +86,11 @@ const raw = await bkn.call("/api/...", { method: "GET" });
 
 import 本包无副作用；`createClient` 显式解析配置。
 
+首次向某个平台发请求前，SDK 会校验平台版本与自身是否一致。不一致时调用在发出任何请求前
+就失败，错误信息里同时给出两边的版本。设 `BKN_SKIP_VERSION_CHECK=1` 可照常发送 ——
+用于平台报占位版本号或开发构建、任何发布版都匹配不上的情况。库调用方用这个环境变量，
+CLI 另有 `--skip-version-check`。
+
 Vega 和本体查询等动态数据响应中，超出 JavaScript 安全整数范围的值可能是原生 `bigint`。
 序列化这类结果时，请使用导出的 `stringifyBigIntJSON()`，不要使用原生
 `JSON.stringify()`。

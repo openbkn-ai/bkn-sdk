@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import pkg from "../../package.json" with { type: "json" };
 import { queryObjectInstance } from "../../src/api/context-loader.js";
 import { buildProgram } from "../../src/cli-program.js";
 import { context } from "../../src/resources/context-loader.js";
@@ -283,7 +284,7 @@ describe("query_object_instance argument validation", () => {
       return new Response(
         JSON.stringify(
           path.endsWith("/health")
-            ? { ServerVersion: "0.1.5" }
+            ? { ServerVersion: pkg.version }
             : { entries: [{ id: "ot-1", data_properties: [{ name: "name" }] }] },
         ),
         { status: 200 },

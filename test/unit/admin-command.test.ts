@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import pkg from "../../package.json" with { type: "json" };
 import { adminCommand } from "../../src/commands/admin.js";
 import { writeVersionCheckCache } from "../../src/config/store.js";
 
@@ -31,7 +32,7 @@ const urlOf = (fetchMock: ReturnType<typeof vi.fn>, index = 0) =>
   new URL(fetchMock.mock.calls[index]?.[0] as string);
 
 beforeEach(() => {
-  writeVersionCheckCache(BASE, { serverVersion: "0.1.5", checkedAt: new Date().toISOString() });
+  writeVersionCheckCache(BASE, { serverVersion: pkg.version, checkedAt: new Date().toISOString() });
   vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 });
 

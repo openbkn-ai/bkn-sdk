@@ -1,13 +1,14 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
-// Argument defaults the context-loader contract expects on every tool call:
-// `response_format: "json"` (the MCP schemas default to toon) and `kn_id` in the
-// body (run_cypher / search_capabilities require it there, not only as a header).
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+// Argument defaults the context-loader contract expects on every tool call:
+// `response_format: "json"` (the MCP schemas default to toon) and `kn_id` in the
+// body (run_cypher / search_capabilities require it there, not only as a header).
+import pkg from "../../package.json" with { type: "json" };
 import { callTool, searchCapabilities, searchSchema } from "../../src/api/context-loader.js";
 import { lifecycleHint } from "../../src/api/http.js";
 import { resetLifecycleCaches } from "../../src/api/lifecycle.js";
@@ -35,7 +36,8 @@ function mockDeploy(text: string): Array<{ name: string; arguments: Record<strin
       const url = String(input);
       const headers = { "mcp-session-id": "s1" };
       // The CLI's version preflight; SDK-level calls here are already verified.
-      if (url.endsWith("/health")) return new Response(JSON.stringify({ ServerVersion: "0.1.5" }));
+      if (url.endsWith("/health"))
+        return new Response(JSON.stringify({ ServerVersion: pkg.version }));
       if (url.endsWith("/mcp/info")) {
         return new Response(JSON.stringify({ tools: [{ name: "search_schema" }] }));
       }
