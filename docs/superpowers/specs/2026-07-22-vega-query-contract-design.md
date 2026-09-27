@@ -20,7 +20,10 @@ introduced by bkn-foundry commit `ef1e90f8`.
 
 `api/vega.ts` owns a discriminated TypeScript request union. `vega.sql()`
 continues to expose it without CLI concerns. SQL input defaults to the backend
-`postgres` dialect when omitted; DSL callers must explicitly use `opensearch`.
+`mysql` dialect when omitted (changed from `postgres` for Foundry 0.2.0); DSL
+callers must explicitly use `opensearch`.
+The CLI also accepts `mariadb`, `oracle`, and `generic` for SQL; these values
+require a backend that includes [the Foundry dialect update](https://github.com/openbkn-ai/bkn-foundry/pull/1880).
 The CLI emits a SQL initial request from flags, accepts complete advanced JSON,
 and emits a minimal cursor continuation body when `--cursor` is supplied.
 
