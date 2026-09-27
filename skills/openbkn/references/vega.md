@@ -51,7 +51,7 @@ connector that isn't configured. **Always use the placeholder.**
 ### Usage
 
 ```bash
-# SQL; query_format=sql is added by the CLI. input_dialect defaults to postgres.
+# SQL; query_format=sql is added by the CLI. input_dialect defaults to mysql.
 openbkn vega sql --query "SELECT * FROM {{d7nicrcjto2s73d9g67g}} LIMIT 10"
 
 # First cursor page. Use a deterministic ORDER BY with a unique tiebreaker.
@@ -74,7 +74,7 @@ openbkn vega sql -d '{"query":"SELECT ... FROM {{<res-id>}}","query_format":"sql
 | --- | :---: | --- | --- |
 | `--query` / body `query` | ✅ for first page | — | SQL string or an OpenSearch DSL object. SQL references tables as `{{<resource-id>}}`; DSL includes top-level `resource_id`. |
 | body `query_format` | ✅ for first page | — | `sql` or `dsl`; the CLI sets `sql` for `--query`. |
-| `--input-dialect` / `input_dialect` | SQL optional; DSL required | SQL: `postgres` | SQL supports `postgres`, `mysql`, `trino`, `duckdb`, or `tsql` (SQL Server; other dialects are converted to T-SQL for a SQL Server catalog); DSL must be `opensearch`. |
+| `--input-dialect` / `input_dialect` | SQL optional; DSL required | SQL: `mysql` | SQL supports `postgres`, `mysql`, `mariadb` (parsed as `mysql`), `trino`, `duckdb`, `tsql`, `oracle`, or `generic` (SQLGlot's generic dialect); DSL must be `opensearch`. Input SQL is converted to the Catalog's target dialect where needed. |
 | `--paging-mode`, `--limit`, `--offset`, `--keep-alive-sec` / `paging` | optional | `single`, server-default limit | `cursor` requires `limit`; keep-alive is 60–3600 seconds. Always set `--limit` rather than relying on the server default. |
 | `--cursor` / `paging.cursor` | continuation only | — | Opaque cursor from `paging.next_cursor`; no initial-query fields may accompany it. |
 | `--query-timeout-sec` / `query_timeout_sec` | optional | 60 | Seconds, 1–3600; initial request only. |

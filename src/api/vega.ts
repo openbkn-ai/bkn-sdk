@@ -510,8 +510,16 @@ interface RawQueryInitialBase {
 export interface SqlRawQueryRequest extends RawQueryInitialBase {
   query: string;
   query_format: "sql";
-  /** SQL input dialect; defaults to postgres server-side. */
-  input_dialect?: "postgres" | "mysql" | "trino" | "duckdb" | "tsql";
+  /** SQL input dialect; defaults to mysql server-side. */
+  input_dialect?:
+    | "postgres"
+    | "mysql"
+    | "mariadb"
+    | "trino"
+    | "duckdb"
+    | "tsql"
+    | "oracle"
+    | "generic";
 }
 
 export interface DslRawQueryRequest extends RawQueryInitialBase {

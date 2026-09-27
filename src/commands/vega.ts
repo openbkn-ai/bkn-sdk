@@ -952,8 +952,17 @@ export function vegaCommand(): Command {
     )
     .option(
       "--input-dialect <dialect>",
-      "SQL input dialect: postgres | mysql | trino | duckdb | tsql",
-      oneOf("--input-dialect", ["postgres", "mysql", "trino", "duckdb", "tsql"] as const),
+      "SQL input dialect: postgres | mysql | mariadb | trino | duckdb | tsql | oracle | generic",
+      oneOf("--input-dialect", [
+        "postgres",
+        "mysql",
+        "mariadb",
+        "trino",
+        "duckdb",
+        "tsql",
+        "oracle",
+        "generic",
+      ] as const),
     )
     .option(
       "--paging-mode <mode>",
