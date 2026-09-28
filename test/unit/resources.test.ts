@@ -19,7 +19,11 @@ import {
   updateResource,
   upsertResourceDocument,
 } from "../../src/api/resources.js";
-import type { ResourceIndexConfig, ResourceLocalStatus } from "../../src/index.js";
+import type {
+  CreateResourceRequest,
+  ResourceIndexConfig,
+  ResourceLocalStatus,
+} from "../../src/index.js";
 import type { RequestContext } from "../../src/types.js";
 import { InputError } from "../../src/utils/errors.js";
 import { verifiedContext } from "../setup/verified-context.js";
@@ -352,15 +356,47 @@ describe("queryResource", () => {
 });
 
 describe("typed Resource and document APIs", () => {
-  it("requires logicType when creating a logic view", async () => {
+  it("rejects incomplete or server-owned logic view input before sending a request", async () => {
+    const fetchMock = mockFetch({ id: "view-1" });
+    const valid: CreateResourceRequest = {
+      catalogId: "c-1",
+      name: "view",
+      category: "logicview",
+      logicType: "derived",
+      logicDefinition: { source_resource_id: "source-1" },
+      schemaDefinition: [{ name: "id", original_name: "ID", type: "integer" }],
+    };
     await expect(
       createResource(ctx, {
         catalogId: "c-1",
         name: "view",
         category: "logicview",
         logicDefinition: { source_resource_id: "source-1" },
+      } as unknown as CreateResourceRequest),
+    ).rejects.toThrow("logicType must be derived");
+    await expect(createResource(ctx, { ...valid, schemaDefinition: [] })).rejects.toThrow(
+      "non-empty schemaDefinition",
+    );
+    await expect(
+      createResource(ctx, { ...valid, logicDefinition: { source_resource_id: " " } }),
+    ).rejects.toThrow("source_resource_id");
+    await expect(
+      createResource(ctx, {
+        ...valid,
+        schemaDefinition: [{ name: "id", original_name: "", type: "integer" }],
       }),
-    ).rejects.toThrow("logicType is required");
+    ).rejects.toThrow("original_name");
+    await expect(
+      createResource(ctx, { ...valid, sourceMetadata: {} } as unknown as CreateResourceRequest),
+    ).rejects.toThrow("server-owned");
+    expect((fetchMock as unknown as { mock: { calls: CallArgs[] } }).mock.calls).toHaveLength(0);
+
+    await expect(createResource(ctx, valid)).resolves.toEqual({ id: "view-1" });
+    expect(JSON.parse(firstCall(fetchMock)[1].body as string)).toMatchObject({
+      logic_type: "derived",
+      logic_definition: { source_resource_id: "source-1" },
+      schema_definition: [{ name: "id", original_name: "ID", type: "integer" }],
+    });
   });
 
   it("creates a typed dataset resource", async () => {

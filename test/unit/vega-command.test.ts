@@ -289,6 +289,38 @@ describe("vega resource discovery commands", () => {
 });
 
 describe("vega resource writes", () => {
+  it("rejects incomplete derived views without sending a request", async () => {
+    const fetchMock = mockFetch({ id: "view-1" });
+    suppressOutput();
+    const args = [
+      ...cliBase,
+      "resource",
+      "create",
+      "--catalog-id",
+      "c-1",
+      "--name",
+      "view",
+      "--category",
+      "logicview",
+      "--logic-type",
+      "derived",
+    ];
+    await expect(cli().parseAsync(args, { from: "user" })).rejects.toThrow("--schema-definition");
+    await expect(
+      cli().parseAsync(
+        [...args, "--schema-definition", '[{"name":"id","original_name":"ID","type":"integer"}]'],
+        { from: "user" },
+      ),
+    ).rejects.toThrow("--logic-definition");
+    await expect(
+      cli().parseAsync(
+        [...args, "--schema-definition", '[{"name":"id","original_name":42,"type":"integer"}]'],
+        { from: "user" },
+      ),
+    ).rejects.toThrow("original_name");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("creates a derived logic view with an object definition and explicit schema", async () => {
     const fetchMock = mockFetch({ id: "view-1" });
     suppressOutput();

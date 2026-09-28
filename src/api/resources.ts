@@ -319,29 +319,79 @@ export function createResourceRaw(ctx: RequestContext, body: unknown): Promise<u
   return request(ctx, BASE, { method: "POST", body });
 }
 
-export interface CreateResourceRequest {
+interface CreateResourceBase {
   catalogId: string;
   name: string;
-  category: Extract<ResourceCategory, "dataset" | "logicview">;
   id?: string;
   tags?: string[];
   description?: string;
   status?: ResourceStatus;
-  schema?: string;
-  sourceIdentifier?: string;
-  sourceMetadata?: Record<string, unknown>;
-  schemaDefinition?: ResourceProperty[];
   indexConfig?: ResourceIndexConfig;
-  logicDefinition?: unknown;
-  logicType?: "derived" | "composite";
 }
+
+export type CreateResourceRequest =
+  | (CreateResourceBase & {
+      category: "dataset";
+      schema?: string;
+      sourceIdentifier?: string;
+      sourceMetadata?: Record<string, unknown>;
+      schemaDefinition?: ResourceProperty[];
+      logicDefinition?: never;
+      logicType?: never;
+    })
+  | (CreateResourceBase & {
+      category: "logicview";
+      logicType: "derived";
+      logicDefinition: { source_resource_id: string; filter_condition?: unknown };
+      schemaDefinition: (ResourceProperty & { original_name: string; type: string })[];
+      schema?: never;
+      sourceIdentifier?: never;
+      sourceMetadata?: never;
+    });
 
 export async function createResource(
   ctx: RequestContext,
   req: CreateResourceRequest,
 ): Promise<ResourceRef> {
-  if (req.category === "logicview" && !req.logicType) {
-    throw new InputError("logicType is required for logicview resources");
+  if (req.category === "logicview") {
+    if (req.logicType !== "derived") {
+      throw new InputError("logicType must be derived for logicview resources");
+    }
+    if (
+      req.schema !== undefined ||
+      req.sourceIdentifier !== undefined ||
+      req.sourceMetadata !== undefined
+    ) {
+      throw new InputError(
+        "schema, sourceIdentifier, and sourceMetadata are server-owned for logicview resources",
+      );
+    }
+    if (
+      !req.logicDefinition ||
+      typeof req.logicDefinition !== "object" ||
+      Array.isArray(req.logicDefinition) ||
+      typeof req.logicDefinition.source_resource_id !== "string" ||
+      !req.logicDefinition.source_resource_id.trim()
+    ) {
+      throw new InputError(
+        "logicDefinition.source_resource_id is required for logicview resources",
+      );
+    }
+    if (!Array.isArray(req.schemaDefinition) || req.schemaDefinition.length === 0) {
+      throw new InputError("non-empty schemaDefinition is required for logicview resources");
+    }
+    for (const field of req.schemaDefinition) {
+      if (
+        !field ||
+        [field.name, field.original_name, field.type].some(
+          (value) => typeof value !== "string" || !value.trim(),
+        )
+      ) {
+        throw new InputError(
+          "logicview schemaDefinition fields require name, original_name, and type",
+        );
+      }
+    }
   }
   const result = await createResourceRaw(ctx, {
     ...(req.id !== undefined ? { id: req.id } : {}),
