@@ -1051,15 +1051,22 @@ export function vegaCommand(): Command {
     .requiredOption("--catalog-id <id>", "catalog id")
     .requiredOption("--name <s>", "resource name")
     .requiredOption("--category <category>", "resource category: dataset | logicview")
+    .option("--logic-type <type>", "logic view type: derived")
     .option("--id <id>", "explicit resource id")
     .option("--tags <t1,t2>", "comma-separated tags")
     .option("--description <s>", "description")
     .option("--schema-definition <json>", "schema_definition JSON array")
     .option("--index-config <json>", "index_config JSON object")
-    .option("--logic-definition <json>", "logic_definition JSON array")
+    .option("--logic-definition <json>", "derived logic_definition JSON object")
     .action(async (opts, cmd: Command) => {
       if (opts.category !== "dataset" && opts.category !== "logicview") {
         throw new InputError("--category must be dataset or logicview");
+      }
+      if (opts.category === "logicview" && opts.logicType !== "derived") {
+        throw new InputError("--logic-type derived is required for logicview");
+      }
+      if (opts.category === "dataset" && opts.logicType !== undefined) {
+        throw new InputError("--logic-type is only valid for logicview");
       }
       printJson(
         await clientFrom(cmd).resource.create({
@@ -1067,6 +1074,7 @@ export function vegaCommand(): Command {
           catalogId: opts.catalogId,
           name: opts.name,
           category: opts.category,
+          ...(opts.logicType !== undefined ? { logicType: opts.logicType } : {}),
           ...(opts.tags !== undefined ? { tags: csv(opts.tags) ?? [] } : {}),
           description: opts.description,
           ...(opts.schemaDefinition !== undefined
@@ -1083,7 +1091,7 @@ export function vegaCommand(): Command {
               }
             : {}),
           ...(opts.logicDefinition !== undefined
-            ? { logicDefinition: parseJsonArray(opts.logicDefinition, "--logic-definition") }
+            ? { logicDefinition: parseJsonObject(opts.logicDefinition, "--logic-definition") }
             : {}),
         }),
         outputOptions(cmd),
@@ -1097,7 +1105,7 @@ export function vegaCommand(): Command {
     .option("--description <s>", "description")
     .option("--schema-definition <json>", "replacement schema_definition JSON array")
     .option("--index-config <json>", "replacement index_config JSON object")
-    .option("--logic-definition <json>", "replacement logic_definition JSON array")
+    .option("--logic-definition <json>", "replacement derived logic_definition JSON object")
     .option("--expected-update-time <ms>", "optimistic-lock update time", expectedUpdateTime)
     .action(async (id: string, opts, cmd: Command) => {
       const hasPatch = [
@@ -1128,7 +1136,7 @@ export function vegaCommand(): Command {
               }
             : {}),
           ...(opts.logicDefinition !== undefined
-            ? { logicDefinition: parseJsonArray(opts.logicDefinition, "--logic-definition") }
+            ? { logicDefinition: parseJsonObject(opts.logicDefinition, "--logic-definition") }
             : {}),
           expectedUpdateTime: opts.expectedUpdateTime,
         }),

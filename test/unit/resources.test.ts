@@ -202,6 +202,24 @@ describe("listResources", () => {
 });
 
 describe("updateResource", () => {
+  it("preserves logic_type on a logic view PUT", async () => {
+    const f = mockFetch({
+      entries: [
+        resourceFixture({
+          category: "logicview",
+          logic_type: "derived",
+          logic_definition: { source_resource_id: "source-1" },
+          schema_definition: [{ name: "alias", original_name: "ID", type: "string" }],
+        }),
+      ],
+    });
+    await updateResource(ctx, "r-1", { name: "renamed" });
+    const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+    const body = JSON.parse(calls[1]?.[1].body as string);
+    expect(body.logic_type).toBe("derived");
+    expect(body.logic_definition).toEqual({ source_resource_id: "source-1" });
+  });
+
   it("merges required resource fields before PUT update", async () => {
     const f = mockFetch({
       entries: [
@@ -334,6 +352,17 @@ describe("queryResource", () => {
 });
 
 describe("typed Resource and document APIs", () => {
+  it("requires logicType when creating a logic view", async () => {
+    await expect(
+      createResource(ctx, {
+        catalogId: "c-1",
+        name: "view",
+        category: "logicview",
+        logicDefinition: { source_resource_id: "source-1" },
+      }),
+    ).rejects.toThrow("logicType is required");
+  });
+
   it("creates a typed dataset resource", async () => {
     const f = mockFetch({ id: "r-1" });
     await expect(

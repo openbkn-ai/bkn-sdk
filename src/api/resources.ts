@@ -121,6 +121,7 @@ export interface ResourceLike {
   schema_definition?: ResourceProperty[];
   index_config?: ResourceIndexConfig;
   logic_definition?: unknown;
+  logic_type?: string;
   update_time?: number;
 }
 
@@ -332,12 +333,16 @@ export interface CreateResourceRequest {
   schemaDefinition?: ResourceProperty[];
   indexConfig?: ResourceIndexConfig;
   logicDefinition?: unknown;
+  logicType?: "derived" | "composite";
 }
 
 export async function createResource(
   ctx: RequestContext,
   req: CreateResourceRequest,
 ): Promise<ResourceRef> {
+  if (req.category === "logicview" && !req.logicType) {
+    throw new InputError("logicType is required for logicview resources");
+  }
   const result = await createResourceRaw(ctx, {
     ...(req.id !== undefined ? { id: req.id } : {}),
     catalog_id: req.catalogId,
@@ -352,6 +357,7 @@ export async function createResource(
     ...(req.schemaDefinition !== undefined ? { schema_definition: req.schemaDefinition } : {}),
     ...(req.indexConfig !== undefined ? { index_config: req.indexConfig } : {}),
     ...(req.logicDefinition !== undefined ? { logic_definition: req.logicDefinition } : {}),
+    ...(req.logicType !== undefined ? { logic_type: req.logicType } : {}),
   });
   return ResourceRef.parse(result);
 }
@@ -412,6 +418,7 @@ function resourceUpdateBody(
     ),
     index_config: patch.indexConfig === undefined ? current.index_config : patch.indexConfig,
     logic_definition: patch.logicDefinition ?? current.logic_definition,
+    ...(current.category === "logicview" ? { logic_type: current.logic_type } : {}),
   };
   const expectedUpdateTime = patch.expectedUpdateTime ?? current.update_time;
   if (expectedUpdateTime !== undefined) {
