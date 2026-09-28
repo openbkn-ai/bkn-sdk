@@ -614,8 +614,17 @@ function validateRowFilterPolicy(policy: RowFilterPolicy): void {
     throw new InputError("A row-filter policy requires 1 to 5 conditions.");
   }
   for (const condition of policy.conditions) {
-    if (!propertyNamePattern.test(condition.propertyName)) {
+    if (!condition || typeof condition !== "object") {
+      throw new InputError("Each row-filter condition must be an object.");
+    }
+    if (
+      typeof condition.propertyName !== "string" ||
+      !propertyNamePattern.test(condition.propertyName)
+    ) {
       throw new InputError(`Invalid row-filter property name '${condition.propertyName}'.`);
+    }
+    if (!["in", "not_in", "gt", "gte", "lt", "lte", "between"].includes(condition.operator)) {
+      throw new InputError(`Invalid row-filter operator '${condition.operator}'.`);
     }
     if (
       !Array.isArray(condition.values) ||

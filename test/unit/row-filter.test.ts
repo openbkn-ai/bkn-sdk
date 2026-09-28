@@ -4,6 +4,7 @@ import {
   getRowFilterPolicySafe,
   patchRowFilterPolicySafe,
 } from "../../src/api/safe.js";
+import type { RowFilterPolicy } from "../../src/api/safe.js";
 import type { RequestContext } from "../../src/types.js";
 import { verifiedContext } from "../setup/verified-context.js";
 
@@ -176,6 +177,24 @@ describe("row-filter management API", () => {
         reason: "Invalid range",
       }),
     ).rejects.toThrow(/lower value/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects wire-shaped conditions before omitting an undefined property name", async () => {
+    const fetchMock = mockFetch(snapshotWire);
+    const wireShapedPolicy = {
+      relation: "and",
+      conditions: [{ property_name: "region", operator: "in", values: ["east"] }],
+    } as unknown as RowFilterPolicy;
+
+    await expect(
+      patchRowFilterPolicySafe(ctx, {
+        ...target,
+        expectedRevision: null,
+        policy: wireShapedPolicy,
+        reason: "Reject malformed SDK input",
+      }),
+    ).rejects.toThrow(/property name/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
