@@ -289,6 +289,76 @@ describe("vega resource discovery commands", () => {
 });
 
 describe("vega resource writes", () => {
+  it("rejects incomplete derived views without sending a request", async () => {
+    const fetchMock = mockFetch({ id: "view-1" });
+    suppressOutput();
+    const args = [
+      ...cliBase,
+      "resource",
+      "create",
+      "--catalog-id",
+      "c-1",
+      "--name",
+      "view",
+      "--category",
+      "logicview",
+      "--logic-type",
+      "derived",
+    ];
+    await expect(cli().parseAsync(args, { from: "user" })).rejects.toThrow("--schema-definition");
+    await expect(
+      cli().parseAsync(
+        [...args, "--schema-definition", '[{"name":"id","original_name":"ID","type":"integer"}]'],
+        { from: "user" },
+      ),
+    ).rejects.toThrow("--logic-definition");
+    await expect(
+      cli().parseAsync(
+        [...args, "--schema-definition", '[{"name":"id","original_name":42,"type":"integer"}]'],
+        { from: "user" },
+      ),
+    ).rejects.toThrow("original_name");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("creates a derived logic view with an object definition and explicit schema", async () => {
+    const fetchMock = mockFetch({ id: "view-1" });
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "resource",
+        "create",
+        "--catalog-id",
+        "c-1",
+        "--name",
+        "orders_view",
+        "--category",
+        "logicview",
+        "--logic-type",
+        "derived",
+        "--schema-definition",
+        '[{"name":"order_id","original_name":"ID","type":"integer"}]',
+        "--logic-definition",
+        '{"source_resource_id":"source-1"}',
+      ],
+      { from: "user" },
+    );
+
+    const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
+    expect(body.logic_definition).toEqual({ source_resource_id: "source-1" });
+    expect(body.logic_type).toBe("derived");
+    expect(body.schema_definition).toEqual([
+      { name: "order_id", original_name: "ID", type: "integer" },
+    ]);
+    expect(body.source_metadata).toBeUndefined();
+  });
+
   it("creates a dataset with schema and index configuration", async () => {
     const fetchMock = mockFetch({ id: "r-1" });
     suppressOutput();

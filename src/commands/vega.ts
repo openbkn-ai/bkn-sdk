@@ -1051,41 +1051,88 @@ export function vegaCommand(): Command {
     .requiredOption("--catalog-id <id>", "catalog id")
     .requiredOption("--name <s>", "resource name")
     .requiredOption("--category <category>", "resource category: dataset | logicview")
+    .option("--logic-type <type>", "logic view type: derived")
     .option("--id <id>", "explicit resource id")
     .option("--tags <t1,t2>", "comma-separated tags")
     .option("--description <s>", "description")
     .option("--schema-definition <json>", "schema_definition JSON array")
     .option("--index-config <json>", "index_config JSON object")
-    .option("--logic-definition <json>", "logic_definition JSON array")
+    .option("--logic-definition <json>", "derived logic_definition JSON object")
     .action(async (opts, cmd: Command) => {
       if (opts.category !== "dataset" && opts.category !== "logicview") {
         throw new InputError("--category must be dataset or logicview");
       }
+      if (opts.category === "logicview" && opts.logicType !== "derived") {
+        throw new InputError("--logic-type derived is required for logicview");
+      }
+      if (opts.category === "dataset" && opts.logicType !== undefined) {
+        throw new InputError("--logic-type is only valid for logicview");
+      }
+      const schemaDefinition =
+        opts.schemaDefinition !== undefined
+          ? parseResourceProperties(opts.schemaDefinition)
+          : undefined;
+      const logicDefinition =
+        opts.logicDefinition !== undefined
+          ? parseJsonObject(opts.logicDefinition, "--logic-definition")
+          : undefined;
+      if (opts.category === "logicview") {
+        if (!schemaDefinition?.length) {
+          throw new InputError("--schema-definition requires at least one field for logicview");
+        }
+        for (const field of schemaDefinition) {
+          if (
+            typeof field.original_name !== "string" ||
+            !field.original_name.trim() ||
+            typeof field.type !== "string" ||
+            !field.type.trim()
+          ) {
+            throw new InputError("logicview fields require name, original_name, and type");
+          }
+        }
+        if (
+          typeof logicDefinition?.source_resource_id !== "string" ||
+          !logicDefinition.source_resource_id.trim()
+        ) {
+          throw new InputError("--logic-definition requires source_resource_id for logicview");
+        }
+      } else if (logicDefinition !== undefined) {
+        throw new InputError("--logic-definition is only valid for logicview");
+      }
+      const common = {
+        id: opts.id,
+        catalogId: opts.catalogId,
+        name: opts.name,
+        ...(opts.tags !== undefined ? { tags: csv(opts.tags) ?? [] } : {}),
+        description: opts.description,
+        ...(opts.indexConfig !== undefined
+          ? {
+              indexConfig: parseJsonObject(
+                opts.indexConfig,
+                "--index-config",
+              ) as ResourceIndexConfig,
+            }
+          : {}),
+      };
       printJson(
-        await clientFrom(cmd).resource.create({
-          id: opts.id,
-          catalogId: opts.catalogId,
-          name: opts.name,
-          category: opts.category,
-          ...(opts.tags !== undefined ? { tags: csv(opts.tags) ?? [] } : {}),
-          description: opts.description,
-          ...(opts.schemaDefinition !== undefined
+        await clientFrom(cmd).resource.create(
+          opts.category === "logicview"
             ? {
-                schemaDefinition: parseResourceProperties(opts.schemaDefinition),
+                ...common,
+                category: "logicview",
+                logicType: "derived",
+                schemaDefinition: schemaDefinition as (ResourceProperty & {
+                  original_name: string;
+                  type: string;
+                })[],
+                logicDefinition: logicDefinition as { source_resource_id: string },
               }
-            : {}),
-          ...(opts.indexConfig !== undefined
-            ? {
-                indexConfig: parseJsonObject(
-                  opts.indexConfig,
-                  "--index-config",
-                ) as ResourceIndexConfig,
-              }
-            : {}),
-          ...(opts.logicDefinition !== undefined
-            ? { logicDefinition: parseJsonArray(opts.logicDefinition, "--logic-definition") }
-            : {}),
-        }),
+            : {
+                ...common,
+                category: "dataset",
+                ...(schemaDefinition !== undefined ? { schemaDefinition } : {}),
+              },
+        ),
         outputOptions(cmd),
       );
     });
@@ -1097,7 +1144,7 @@ export function vegaCommand(): Command {
     .option("--description <s>", "description")
     .option("--schema-definition <json>", "replacement schema_definition JSON array")
     .option("--index-config <json>", "replacement index_config JSON object")
-    .option("--logic-definition <json>", "replacement logic_definition JSON array")
+    .option("--logic-definition <json>", "replacement derived logic_definition JSON object")
     .option("--expected-update-time <ms>", "optimistic-lock update time", expectedUpdateTime)
     .action(async (id: string, opts, cmd: Command) => {
       const hasPatch = [
@@ -1128,7 +1175,7 @@ export function vegaCommand(): Command {
               }
             : {}),
           ...(opts.logicDefinition !== undefined
-            ? { logicDefinition: parseJsonArray(opts.logicDefinition, "--logic-definition") }
+            ? { logicDefinition: parseJsonObject(opts.logicDefinition, "--logic-definition") }
             : {}),
           expectedUpdateTime: opts.expectedUpdateTime,
         }),
@@ -1426,6 +1473,12 @@ QUERYING DIRECTLY
   {{<resource-id>}} placeholder rather than the physical table it happens to have.
   resource query <id> reads rows through the resource: --filter, --sort, --output-fields,
   cursor paging, and --ignore-local-index to bypass a table's local index.
+
+CREATING A DERIVED VIEW
+  resource create --category logicview requires --logic-type derived, a --logic-definition
+  object with source_resource_id, and a non-empty --schema-definition array. Each output
+  field needs name (alias), original_name (source field), and type (matching the source).
+  Source metadata, schema, and source identifier are generated by the server.
 
 BUILDING AN INDEX
   resource update <resource-id> saves schema_definition and index_config. Then resource build
