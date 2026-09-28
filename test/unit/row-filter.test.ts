@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  applyRowFilterPolicySafe,
   explainRowFilterPolicySafe,
   getRowFilterPolicySafe,
   patchRowFilterPolicySafe,
@@ -119,6 +120,23 @@ describe("row-filter management API", () => {
       policy: null,
     });
   });
+
+  it.each([null, 0, false])(
+    "rejects a non-object apply policy %j before requesting",
+    async (policy) => {
+      const fetchMock = mockFetch(snapshotWire);
+
+      await expect(
+        applyRowFilterPolicySafe(ctx, {
+          ...target,
+          expectedRevision: null,
+          policy: policy as unknown as RowFilterPolicy,
+          reason: "Apply a restriction",
+        }),
+      ).rejects.toThrow(/non-null JSON object/);
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
 
   it("maps effective predicates and role policy sources from explain", async () => {
     mockFetch({

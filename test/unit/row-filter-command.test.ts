@@ -105,6 +105,30 @@ describe("admin row-filter command", () => {
     });
   });
 
+  it.each(["null", "0", "false"])(
+    "apply rejects a non-object body %s instead of deleting the policy",
+    async (body) => {
+      const fetchMock = mockFetch(emptySnapshot);
+
+      await expect(
+        run([
+          "apply",
+          "--object-type",
+          "sales/order",
+          "--subject-type",
+          "user",
+          "--subject-id",
+          "user-1",
+          "--reason",
+          "Apply a restriction",
+          "--body",
+          body,
+        ]),
+      ).rejects.toThrow(/non-null row-filter policy JSON object/);
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
   it("delete sends policy null instead of inventing a deny-all policy", async () => {
     const fetchMock = mockFetch(emptySnapshot);
 

@@ -89,6 +89,7 @@ export {
 // Resource namespaces (advanced: use with a resolved RequestContext).
 export { admin } from "./resources/admin.js";
 export type {
+  ApplyRowFilterPolicyInput,
   PatchRowFilterPolicyInput,
   RowFilterAvailableField,
   RowFilterCondition,

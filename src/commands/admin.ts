@@ -466,12 +466,15 @@ Read a snapshot first and carry its revision into apply/delete. Omit
       if (opts.body !== undefined && opts.bodyFile !== undefined) {
         throw new InputError("--body and --body-file cannot be combined.");
       }
-      const policy = readBody(opts) as RowFilterPolicy;
+      const policy = readBody(opts);
+      if (policy === null || typeof policy !== "object" || Array.isArray(policy)) {
+        throw new InputError("--body must contain a non-null row-filter policy JSON object.");
+      }
       printJson(
         await clientFrom(cmd).admin.rowFilterApply({
           ...targetFrom(opts),
           expectedRevision: opts.expectedRevision ?? null,
-          policy,
+          policy: policy as RowFilterPolicy,
           reason: opts.reason,
         }),
         outputOptions(cmd),

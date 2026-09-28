@@ -472,6 +472,10 @@ export interface PatchRowFilterPolicyInput extends RowFilterTarget {
   reason: string;
 }
 
+export type ApplyRowFilterPolicyInput = Omit<PatchRowFilterPolicyInput, "policy"> & {
+  policy: RowFilterPolicy;
+};
+
 export interface RowFilterPredicate {
   kind: "true" | "false" | RowFilterOperator | RowFilterRelation;
   property?: string;
@@ -675,6 +679,12 @@ function validateRowFilterPolicy(policy: RowFilterPolicy): void {
   }
 }
 
+function assertRowFilterPolicyObject(policy: unknown): asserts policy is RowFilterPolicy {
+  if (policy === null || typeof policy !== "object" || Array.isArray(policy)) {
+    throw new InputError("Row-filter policy must be a non-null JSON object.");
+  }
+}
+
 function rowFilterPolicyToWire(policy: RowFilterPolicy): RowFilterPolicyWire {
   validateRowFilterPolicy(policy);
   return {
@@ -751,17 +761,27 @@ export async function patchRowFilterPolicySafe(
   if (input.expectedRevision !== null && input.expectedRevision.length === 0) {
     throw new InputError("expectedRevision must be null or a non-empty opaque revision.");
   }
+  if (input.policy !== null) assertRowFilterPolicyObject(input.policy);
   const response = await request<unknown>(ctx, `${ADMIN}/row-filter-policies`, {
     method: "PATCH",
     body: {
       object_type_ref: input.objectTypeRef,
       subject: input.subject,
       expected_revision: input.expectedRevision,
-      policy: input.policy ? rowFilterPolicyToWire(input.policy) : null,
+      policy: input.policy === null ? null : rowFilterPolicyToWire(input.policy),
       reason: input.reason,
     },
   });
   return rowFilterSnapshotFromWire(rowFilterSnapshotWireSchema.parse(response));
+}
+
+/** Apply always requires a policy object; deletion has a separate resource method. */
+export async function applyRowFilterPolicySafe(
+  ctx: RequestContext,
+  input: ApplyRowFilterPolicyInput,
+): Promise<RowFilterSnapshot> {
+  assertRowFilterPolicyObject(input.policy);
+  return patchRowFilterPolicySafe(ctx, input);
 }
 
 /** POST /admin/row-filter-policies/explain — current user/role rule sources. */

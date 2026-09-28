@@ -15,6 +15,7 @@ import type {
 import {
   USER_PAGE_MAX,
   activateLicenseSafe,
+  applyRowFilterPolicySafe,
   assignRoleSafe,
   buildDepartmentTree,
   createDepartmentSafe,
@@ -49,7 +50,7 @@ import {
   updateRoleSafe,
   updateUserSafe,
 } from "../api/safe.js";
-import type { PatchRowFilterPolicyInput, RowFilterTarget } from "../api/safe.js";
+import type { ApplyRowFilterPolicyInput, RowFilterTarget } from "../api/safe.js";
 import type { RequestContext } from "../types.js";
 import { InputError } from "../utils/errors.js";
 
@@ -204,7 +205,7 @@ export function admin(ctx: RequestContext) {
 
     // ── Enterprise fixed-condition row filtering ──
     rowFilterGet: (target: RowFilterTarget) => getRowFilterPolicySafe(ctx, target),
-    rowFilterApply: (input: PatchRowFilterPolicyInput) => patchRowFilterPolicySafe(ctx, input),
+    rowFilterApply: (input: ApplyRowFilterPolicyInput) => applyRowFilterPolicySafe(ctx, input),
     rowFilterDelete: (
       input: RowFilterTarget & { expectedRevision: string | null; reason: string },
     ) => patchRowFilterPolicySafe(ctx, { ...input, policy: null }),
