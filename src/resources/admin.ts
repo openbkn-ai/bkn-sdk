@@ -23,12 +23,14 @@ import {
   deleteDepartmentSafe,
   deleteRoleSafe,
   deleteUserSafe,
+  explainRowFilterPolicySafe,
   getAuditLogSafe,
   getDepartmentMembersSafe,
   getDepartmentSafe,
   getLicenseFingerprintSafe,
   getLicenseSafe,
   getRoleSafe,
+  getRowFilterPolicySafe,
   getUserRolesSafe,
   getUserSafe,
   importLicenseSafe,
@@ -37,6 +39,7 @@ import {
   listRolesSafe,
   listUsersSafe,
   pageDirectory,
+  patchRowFilterPolicySafe,
   removeLicenseSafe,
   removeRoleSafe,
   roleMembersSafe,
@@ -46,6 +49,7 @@ import {
   updateRoleSafe,
   updateUserSafe,
 } from "../api/safe.js";
+import type { PatchRowFilterPolicyInput, RowFilterTarget } from "../api/safe.js";
 import type { RequestContext } from "../types.js";
 import { InputError } from "../utils/errors.js";
 
@@ -197,6 +201,14 @@ export function admin(ctx: RequestContext) {
       resourceId: string,
       operations: string[],
     ) => setRolePermissionSafe(ctx, roleId, grant, { resourceType, resourceId, operations }),
+
+    // ── Enterprise fixed-condition row filtering ──
+    rowFilterGet: (target: RowFilterTarget) => getRowFilterPolicySafe(ctx, target),
+    rowFilterApply: (input: PatchRowFilterPolicyInput) => patchRowFilterPolicySafe(ctx, input),
+    rowFilterDelete: (
+      input: RowFilterTarget & { expectedRevision: string | null; reason: string },
+    ) => patchRowFilterPolicySafe(ctx, { ...input, policy: null }),
+    rowFilterExplain: (target: RowFilterTarget) => explainRowFilterPolicySafe(ctx, target),
 
     // ── audit trail (management mutations and token-gate refusals) ──
     auditList: (opts?: AuditListOptions) => listAuditLogsSafe(ctx, opts),

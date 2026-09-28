@@ -9,10 +9,11 @@
 import { readFileSync } from "node:fs";
 import { Command, Option } from "commander";
 import { rawCall } from "../api/call.js";
+import type { RowFilterPolicy } from "../api/safe.js";
 import { AUDIT_LOG_MAX_LIMIT } from "../api/safe.js";
 import { resolveContext } from "../config/resolve.js";
 import { activePlatform, setActivePlatform } from "../config/store.js";
-import { group, groupChildren } from "../help/grouped-help.js";
+import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { trimTrailingSlashes } from "../utils/base-url.js";
 import { InputError } from "../utils/errors.js";
@@ -20,7 +21,7 @@ import { parseBigIntJSON } from "../utils/json-bigint.js";
 import { renderOrgTree } from "../utils/org-tree.js";
 import { printJson } from "../utils/output.js";
 import { promptLine } from "../utils/prompt.js";
-import { clientFrom, csv, outputOptions, readBody, retryOptionsFrom } from "./_shared.js";
+import { clientFrom, csv, oneOf, outputOptions, readBody, retryOptionsFrom } from "./_shared.js";
 import { registerAuthLeaves } from "./auth.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
@@ -418,6 +419,95 @@ export function adminCommand(): Command {
       });
   }
 
+  const rowFilter = admin
+    .command("row-filter")
+    .description("Enterprise fixed-condition row filtering for object queries");
+  guide(
+    rowFilter,
+    `Row filters only narrow rows after base query_data authorization succeeds.
+Read a snapshot first and carry its revision into apply/delete. Omit
+--expected-revision only when creating a new policy or deleting one known to be absent.`,
+  );
+  const rowFilterTarget = (command: Command): Command =>
+    command
+      .requiredOption(
+        "--object-type <kn/object>",
+        "canonical knowledge-network/object-type reference",
+      )
+      .requiredOption(
+        "--subject-type <type>",
+        "policy subject: user or role",
+        oneOf("--subject-type", ["user", "role"] as const),
+      )
+      .requiredOption("--subject-id <id>", "user or role id");
+  const targetFrom = (opts: {
+    objectType: string;
+    subjectType: "user" | "role";
+    subjectId: string;
+  }) => ({
+    objectTypeRef: opts.objectType,
+    subject: { type: opts.subjectType, id: opts.subjectId },
+  });
+
+  rowFilterTarget(
+    rowFilter.command("get").description("Get the direct policy, revision, and available fields"),
+  ).action(async (opts, cmd: Command) => {
+    printJson(await clientFrom(cmd).admin.rowFilterGet(targetFrom(opts)), outputOptions(cmd));
+  });
+
+  rowFilterTarget(
+    rowFilter.command("apply").description("Create or replace a fixed-condition policy from JSON"),
+  )
+    .option("--expected-revision <revision>", "revision returned by get; omit only for create")
+    .requiredOption("--reason <text>", "audit reason, 1-512 characters")
+    .option("--body <json>", "policy JSON: {relation, conditions}")
+    .option("--body-file <path>", "read policy JSON from a file")
+    .action(async (opts, cmd: Command) => {
+      if (opts.body !== undefined && opts.bodyFile !== undefined) {
+        throw new InputError("--body and --body-file cannot be combined.");
+      }
+      const policy = readBody(opts) as RowFilterPolicy;
+      printJson(
+        await clientFrom(cmd).admin.rowFilterApply({
+          ...targetFrom(opts),
+          expectedRevision: opts.expectedRevision ?? null,
+          policy,
+          reason: opts.reason,
+        }),
+        outputOptions(cmd),
+      );
+    });
+
+  rowFilterTarget(
+    rowFilter
+      .command("delete")
+      .description("Delete the direct policy so the subject inherits other applicable rules"),
+  )
+    .option(
+      "--expected-revision <revision>",
+      "revision returned by get; omit only if no policy exists",
+    )
+    .requiredOption("--reason <text>", "audit reason, 1-512 characters")
+    .action(async (opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).admin.rowFilterDelete({
+          ...targetFrom(opts),
+          expectedRevision: opts.expectedRevision ?? null,
+          reason: opts.reason,
+        }),
+        outputOptions(cmd),
+      );
+    });
+
+  rowFilterTarget(
+    rowFilter
+      .command("explain")
+      .description("Explain the selected subject's currently effective rule sources"),
+  ).action(async (opts, cmd: Command) => {
+    printJson(await clientFrom(cmd).admin.rowFilterExplain(targetFrom(opts)), outputOptions(cmd));
+  });
+  groupChildren(rowFilter, { READ: ["get", "explain"], WRITE: ["apply", "delete"] });
+
   // Models management reuses the (validated) mf-model-manager client. Granular
   // flags assemble the request body; `--body`/`--body-file` override wins.
   const modelBody = (opts: Record<string, unknown>): unknown => {
@@ -690,7 +780,18 @@ export function adminCommand(): Command {
     });
 
   groupChildren(admin, {
-    GROUPS: ["org", "user", "role", "llm", "small-model", "license", "audit", "auth", "config"],
+    GROUPS: [
+      "org",
+      "user",
+      "role",
+      "row-filter",
+      "llm",
+      "small-model",
+      "license",
+      "audit",
+      "auth",
+      "config",
+    ],
     RUN: ["call"],
   });
 
