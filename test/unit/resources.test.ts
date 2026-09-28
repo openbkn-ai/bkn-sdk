@@ -417,6 +417,24 @@ describe("typed Resource and document APIs", () => {
     });
   });
 
+  it("rejects logic view fields on a dataset before sending a request", async () => {
+    const fetchMock = mockFetch({ id: "r-1" });
+    const dataset = { catalogId: "c-1", name: "documents", category: "dataset" };
+    await expect(
+      createResource(ctx, {
+        ...dataset,
+        logicDefinition: { source_resource_id: "source-1" },
+      } as unknown as CreateResourceRequest),
+    ).rejects.toThrow("logicDefinition is only valid for logicview");
+    await expect(
+      createResource(ctx, {
+        ...dataset,
+        logicType: "derived",
+      } as unknown as CreateResourceRequest),
+    ).rejects.toThrow("logicType is only valid for logicview");
+    expect((fetchMock as unknown as { mock: { calls: CallArgs[] } }).mock.calls).toHaveLength(0);
+  });
+
   it("creates and upserts a single document", async () => {
     const createFetch = mockFetch({ id: "d-1" });
     await expect(createResourceDocument(ctx, "r/1", { title: "created" })).resolves.toEqual({

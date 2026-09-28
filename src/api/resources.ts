@@ -392,6 +392,13 @@ export async function createResource(
         );
       }
     }
+  } else {
+    if (req.logicDefinition !== undefined) {
+      throw new InputError("logicDefinition is only valid for logicview resources");
+    }
+    if (req.logicType !== undefined) {
+      throw new InputError("logicType is only valid for logicview resources");
+    }
   }
   const result = await createResourceRaw(ctx, {
     ...(req.id !== undefined ? { id: req.id } : {}),
