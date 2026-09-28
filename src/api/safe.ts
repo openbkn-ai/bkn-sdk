@@ -1,6 +1,8 @@
 // Copyright (c) 2026 OpenBKN. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
+import { z } from "zod";
+
 /**
  * bkn-safe admin API (`/api/safe/v1/admin/*`, token-gated; the gateway-exposed
  * replacement for the retired ISF UserManagement / Authorization / EACP). The
@@ -421,6 +423,400 @@ export async function setRolePermissionSafe(
     },
   });
   return { ok: true };
+}
+
+// ── Enterprise row-filter policy management ────────────────────────────────
+
+export type RowFilterSubjectType = "user" | "role";
+export type RowFilterValueType = "string" | "integer" | "boolean";
+export type RowFilterRelation = "and" | "or";
+export type RowFilterOperator = "in" | "not_in" | "gt" | "gte" | "lt" | "lte" | "between";
+export type RowFilterValue = string | number | boolean;
+
+export interface RowFilterSubject {
+  type: RowFilterSubjectType;
+  id: string;
+}
+
+export interface RowFilterTarget {
+  objectTypeRef: string;
+  subject: RowFilterSubject;
+}
+
+export interface RowFilterCondition {
+  propertyName: string;
+  operator: RowFilterOperator;
+  values: RowFilterValue[];
+}
+
+export interface RowFilterPolicy {
+  relation: RowFilterRelation;
+  conditions: RowFilterCondition[];
+}
+
+export interface RowFilterAvailableField {
+  displayName?: string;
+  name: string;
+  type: RowFilterValueType;
+}
+
+export interface RowFilterSnapshot extends RowFilterTarget {
+  policy: RowFilterPolicy | null;
+  revision: string | null;
+  availableFields: RowFilterAvailableField[];
+}
+
+export interface PatchRowFilterPolicyInput extends RowFilterTarget {
+  expectedRevision: string | null;
+  policy: RowFilterPolicy | null;
+  reason: string;
+}
+
+export type ApplyRowFilterPolicyInput = Omit<PatchRowFilterPolicyInput, "policy"> & {
+  policy: RowFilterPolicy;
+};
+
+export interface RowFilterPredicate {
+  kind: "true" | "false" | RowFilterOperator | RowFilterRelation;
+  property?: string;
+  values?: RowFilterValue[];
+  predicates?: RowFilterPredicate[];
+}
+
+export interface RowFilterPolicySource {
+  subject: RowFilterSubject;
+  policy: RowFilterPolicy;
+}
+
+export interface RowFilterExplanation {
+  snapshot: RowFilterSnapshot;
+  rolePolicyOnly: boolean;
+  effectivePredicate?: RowFilterPredicate;
+  effectiveRowFilterDigest?: string;
+  directPolicy?: RowFilterPolicy;
+  rolePolicies?: RowFilterPolicySource[];
+}
+
+const objectTypeRefPattern = /^[a-z0-9][a-z0-9_-]{0,39}\/[a-z0-9][a-z0-9_-]{0,39}$/;
+const propertyNamePattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,39}$/;
+const rowFilterScalarSchema = z.union([
+  z.string(),
+  z.number().int().refine(Number.isSafeInteger, "must be a safe integer"),
+  z.boolean(),
+]);
+const rowFilterSubjectWireSchema = z
+  .object({ type: z.enum(["user", "role"]), id: z.string().min(1).max(128) })
+  .passthrough();
+const rowFilterConditionWireSchema = z
+  .object({
+    property_name: z.string(),
+    operator: z.enum(["in", "not_in", "gt", "gte", "lt", "lte", "between"]),
+    values: z.array(rowFilterScalarSchema),
+  })
+  .passthrough();
+const rowFilterPolicyWireSchema = z
+  .object({
+    relation: z.enum(["and", "or"]),
+    conditions: z.array(rowFilterConditionWireSchema),
+  })
+  .passthrough();
+const rowFilterSnapshotWireSchema = z
+  .object({
+    object_type_ref: z.string(),
+    subject: rowFilterSubjectWireSchema,
+    policy: rowFilterPolicyWireSchema.nullable(),
+    revision: z.string().nullable(),
+    available_fields: z.array(
+      z
+        .object({
+          display_name: z.string().optional(),
+          name: z.string(),
+          type: z.enum(["string", "integer", "boolean"]),
+        })
+        .passthrough(),
+    ),
+  })
+  .passthrough();
+
+interface RowFilterPredicateWire {
+  kind: RowFilterPredicate["kind"];
+  property?: string;
+  values?: RowFilterValue[];
+  predicates?: RowFilterPredicateWire[];
+}
+
+const rowFilterPredicateWireSchema: z.ZodType<RowFilterPredicateWire> = z.lazy(() =>
+  z
+    .object({
+      kind: z.enum([
+        "true",
+        "false",
+        "in",
+        "not_in",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "between",
+        "and",
+        "or",
+      ]),
+      property: z.string().optional(),
+      values: z.array(rowFilterScalarSchema).optional(),
+      predicates: z.array(rowFilterPredicateWireSchema).optional(),
+    })
+    .passthrough(),
+);
+
+const rowFilterExplanationWireSchema = z
+  .object({
+    snapshot: rowFilterSnapshotWireSchema,
+    role_policy_only: z.boolean(),
+    effective_predicate: rowFilterPredicateWireSchema.optional(),
+    effective_row_filter_digest: z.string().optional(),
+    direct_policy: rowFilterPolicyWireSchema.optional(),
+    role_policies: z
+      .array(
+        z
+          .object({ subject: rowFilterSubjectWireSchema, policy: rowFilterPolicyWireSchema })
+          .passthrough(),
+      )
+      .optional(),
+  })
+  .passthrough();
+
+type RowFilterPolicyWire = z.infer<typeof rowFilterPolicyWireSchema>;
+type RowFilterSnapshotWire = z.infer<typeof rowFilterSnapshotWireSchema>;
+
+function validateRowFilterTarget(target: RowFilterTarget): void {
+  if (!objectTypeRefPattern.test(target.objectTypeRef)) {
+    throw new InputError(
+      "objectTypeRef must be a canonical <knowledge-network-id>/<object-type-id> reference.",
+    );
+  }
+  if (
+    (target.subject.type !== "user" && target.subject.type !== "role") ||
+    !target.subject.id ||
+    target.subject.id.trim() !== target.subject.id ||
+    target.subject.id.length > 128
+  ) {
+    throw new InputError(
+      "Row-filter subject must have type 'user' or 'role' and a non-padding id of at most 128 characters.",
+    );
+  }
+}
+
+function validateRowFilterPolicy(policy: RowFilterPolicy): void {
+  if (policy.relation !== "and" && policy.relation !== "or") {
+    throw new InputError("Row-filter relation must be 'and' or 'or'.");
+  }
+  if (
+    !Array.isArray(policy.conditions) ||
+    policy.conditions.length < 1 ||
+    policy.conditions.length > 5
+  ) {
+    throw new InputError("A row-filter policy requires 1 to 5 conditions.");
+  }
+  for (const condition of policy.conditions) {
+    if (!condition || typeof condition !== "object") {
+      throw new InputError("Each row-filter condition must be an object.");
+    }
+    if (
+      typeof condition.propertyName !== "string" ||
+      !propertyNamePattern.test(condition.propertyName)
+    ) {
+      throw new InputError(`Invalid row-filter property name '${condition.propertyName}'.`);
+    }
+    if (!["in", "not_in", "gt", "gte", "lt", "lte", "between"].includes(condition.operator)) {
+      throw new InputError(`Invalid row-filter operator '${condition.operator}'.`);
+    }
+    if (
+      !Array.isArray(condition.values) ||
+      condition.values.length < 1 ||
+      condition.values.length > 100
+    ) {
+      throw new InputError(`${condition.operator} requires 1 to 100 values.`);
+    }
+    const kinds = new Set(
+      condition.values.map((value) =>
+        typeof value === "number" && Number.isSafeInteger(value) ? "number" : typeof value,
+      ),
+    );
+    if (
+      kinds.has("number") &&
+      condition.values.some((value) => typeof value === "number" && !Number.isSafeInteger(value))
+    ) {
+      throw new InputError("Row-filter integer values must be safe integers.");
+    }
+    if (
+      [...kinds].some((kind) => kind !== "string" && kind !== "number" && kind !== "boolean") ||
+      kinds.size !== 1
+    ) {
+      throw new InputError("Values in one row-filter condition must have one scalar type.");
+    }
+    if (
+      ["gt", "gte", "lt", "lte"].includes(condition.operator) &&
+      (kinds.has("number") === false || condition.values.length !== 1)
+    ) {
+      throw new InputError(`${condition.operator} requires exactly one integer value.`);
+    }
+    if (condition.operator === "between") {
+      if (!kinds.has("number") || condition.values.length !== 2) {
+        throw new InputError("between requires exactly two integer values.");
+      }
+      const [lower, upper] = condition.values as number[];
+      if ((lower ?? 0) > (upper ?? 0)) {
+        throw new InputError("between lower value must not exceed the upper value.");
+      }
+    }
+    if (kinds.has("boolean") && condition.operator !== "in") {
+      throw new InputError("Boolean row-filter values support only the 'in' operator.");
+    }
+    const serialized = condition.values.map((value) => JSON.stringify(value));
+    if (new Set(serialized).size !== serialized.length) {
+      throw new InputError(`${condition.operator} contains duplicate values.`);
+    }
+  }
+}
+
+function assertRowFilterPolicyObject(policy: unknown): asserts policy is RowFilterPolicy {
+  if (policy === null || typeof policy !== "object" || Array.isArray(policy)) {
+    throw new InputError("Row-filter policy must be a non-null JSON object.");
+  }
+}
+
+function rowFilterPolicyToWire(policy: RowFilterPolicy): RowFilterPolicyWire {
+  validateRowFilterPolicy(policy);
+  return {
+    relation: policy.relation,
+    conditions: policy.conditions.map((condition) => ({
+      property_name: condition.propertyName,
+      operator: condition.operator,
+      values: condition.values,
+    })),
+  };
+}
+
+function rowFilterPolicyFromWire(policy: RowFilterPolicyWire): RowFilterPolicy {
+  return {
+    relation: policy.relation,
+    conditions: policy.conditions.map((condition) => ({
+      propertyName: condition.property_name,
+      operator: condition.operator,
+      values: condition.values,
+    })),
+  };
+}
+
+function rowFilterSnapshotFromWire(snapshot: RowFilterSnapshotWire): RowFilterSnapshot {
+  return {
+    objectTypeRef: snapshot.object_type_ref,
+    subject: snapshot.subject,
+    policy: snapshot.policy ? rowFilterPolicyFromWire(snapshot.policy) : null,
+    revision: snapshot.revision,
+    availableFields: snapshot.available_fields.map((field) => ({
+      ...(field.display_name ? { displayName: field.display_name } : {}),
+      name: field.name,
+      type: field.type,
+    })),
+  };
+}
+
+function rowFilterPredicateFromWire(predicate: RowFilterPredicateWire): RowFilterPredicate {
+  return {
+    kind: predicate.kind,
+    ...(predicate.property ? { property: predicate.property } : {}),
+    ...(predicate.values ? { values: predicate.values } : {}),
+    ...(predicate.predicates
+      ? { predicates: predicate.predicates.map(rowFilterPredicateFromWire) }
+      : {}),
+  };
+}
+
+/** GET /admin/row-filter-policies — one explicit policy plus configurable fields. */
+export async function getRowFilterPolicySafe(
+  ctx: RequestContext,
+  target: RowFilterTarget,
+): Promise<RowFilterSnapshot> {
+  validateRowFilterTarget(target);
+  const response = await request<unknown>(ctx, `${ADMIN}/row-filter-policies`, {
+    query: {
+      object_type_ref: target.objectTypeRef,
+      subject_type: target.subject.type,
+      subject_id: target.subject.id,
+    },
+  });
+  return rowFilterSnapshotFromWire(rowFilterSnapshotWireSchema.parse(response));
+}
+
+/** PATCH /admin/row-filter-policies — optimistic create, replace, or delete. */
+export async function patchRowFilterPolicySafe(
+  ctx: RequestContext,
+  input: PatchRowFilterPolicyInput,
+): Promise<RowFilterSnapshot> {
+  validateRowFilterTarget(input);
+  if (!input.reason || input.reason.trim() !== input.reason || input.reason.length > 512) {
+    throw new InputError("Row-filter change reason must contain 1 to 512 non-padding characters.");
+  }
+  if (input.expectedRevision !== null && input.expectedRevision.length === 0) {
+    throw new InputError("expectedRevision must be null or a non-empty opaque revision.");
+  }
+  if (input.policy !== null) assertRowFilterPolicyObject(input.policy);
+  const response = await request<unknown>(ctx, `${ADMIN}/row-filter-policies`, {
+    method: "PATCH",
+    body: {
+      object_type_ref: input.objectTypeRef,
+      subject: input.subject,
+      expected_revision: input.expectedRevision,
+      policy: input.policy === null ? null : rowFilterPolicyToWire(input.policy),
+      reason: input.reason,
+    },
+  });
+  return rowFilterSnapshotFromWire(rowFilterSnapshotWireSchema.parse(response));
+}
+
+/** Apply always requires a policy object; deletion has a separate resource method. */
+export async function applyRowFilterPolicySafe(
+  ctx: RequestContext,
+  input: ApplyRowFilterPolicyInput,
+): Promise<RowFilterSnapshot> {
+  assertRowFilterPolicyObject(input.policy);
+  return patchRowFilterPolicySafe(ctx, input);
+}
+
+/** POST /admin/row-filter-policies/explain — current user/role rule sources. */
+export async function explainRowFilterPolicySafe(
+  ctx: RequestContext,
+  target: RowFilterTarget,
+): Promise<RowFilterExplanation> {
+  validateRowFilterTarget(target);
+  const response = rowFilterExplanationWireSchema.parse(
+    await request<unknown>(ctx, `${ADMIN}/row-filter-policies/explain`, {
+      method: "POST",
+      body: { object_type_ref: target.objectTypeRef, subject: target.subject },
+    }),
+  );
+  return {
+    snapshot: rowFilterSnapshotFromWire(response.snapshot),
+    rolePolicyOnly: response.role_policy_only,
+    ...(response.effective_predicate
+      ? { effectivePredicate: rowFilterPredicateFromWire(response.effective_predicate) }
+      : {}),
+    ...(response.effective_row_filter_digest
+      ? { effectiveRowFilterDigest: response.effective_row_filter_digest }
+      : {}),
+    ...(response.direct_policy
+      ? { directPolicy: rowFilterPolicyFromWire(response.direct_policy) }
+      : {}),
+    ...(response.role_policies
+      ? {
+          rolePolicies: response.role_policies.map((source) => ({
+            subject: source.subject,
+            policy: rowFilterPolicyFromWire(source.policy),
+          })),
+        }
+      : {}),
+  };
 }
 
 // ── audit logs (bkn-safe/audit.yaml) ─────────────────────────────────────────

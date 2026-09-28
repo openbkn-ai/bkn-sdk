@@ -9,7 +9,7 @@ description: >-
   导入导出、调用）、BKN Trace（第三方 Agent 受管
   Conversation / Interaction / Operation、拉取 spans、用符号
   规则 + LLM rubric 判定诊断一条 trace、scan、eval-set 构建、schema 校验）、
-  以及运营面（`openbkn admin`：组织/用户/角色 CRUD、审计、模型管理）与认证
+  以及运营面（`openbkn admin`：组织/用户/角色 CRUD、行过滤策略、审计、模型管理）与认证
   （token + OAuth 密码/浏览器）。
   当用户提到：知识网络 / 知识图谱 / 对象类 / 关系 / 行动 / 指标 metric /
   语义搜索 / 建索引 / create-from-catalog / 大模型 / 小模型 /
@@ -95,7 +95,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 | `api` | 已注册的 OpenAPI 工具（`--type openapi` 箱子） | `import <spec> --toolbox <id>`（JSON/YAML，`failure_count` 非零则非零退出）/`list`/`get`/`update`/`delete`、`enable`/`disable`、`debug`/`execute`。流程 import → enable → `toolbox publish` → execute |
 | `tool` | 类型无关的高级入口（兼容旧自动化） | `create <file> --toolbox <id> [--type openapi]`/`upload <spec>`/`list`/`get`/`update`/`delete`、`enable`/`disable`、`execute`/`debug`；新流程优先用 `function` / `api` |
 | `trace` | BKN Trace | `get`、`search`、`diagnose <conv> [--llm]`（符号规则 + LLM rubric + synthesizer）、`scan <conv,…>`、`eval-set build <queries>`、`schema validate <file>` |
-| `admin` | 运营 | `org/user/role …` CRUD + `reset-password`、`license show/import/receipt/activate/remove/fingerprint`（集群授权）、`audit list`、`llm/small-model …`、`auth …`、`config`、`call` |
+| `admin` | 运营 | `org/user/role …` CRUD + `reset-password`、`row-filter get/apply/delete/explain`（企业版行过滤策略）、`license show/import/receipt/activate/remove/fingerprint`（集群授权）、`audit list`、`llm/small-model …`、`auth …`、`config`、`call` |
 | `call`（别名 `curl`） | 通用 API 透传 | `call <url> [-X POST] [-d '<json>']` |
 
 **按需深入**：需要某命令的完整参数时运行 `openbkn <group> <sub> --help`，或读对应的速查参考。
@@ -132,7 +132,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 | Sandbox / Function（代码→函数工具） | [function.md](references/function.md) |
 | Python 里读知识网络（bkn-osdk） | [osdk.md](references/osdk.md) |
 | BKN Trace（diagnose / eval-set） | [trace.md](references/trace.md) |
-| 运营（org/user/role/audit） | [admin.md](references/admin.md) |
+| 运营（org/user/role/row-filter/audit） | [admin.md](references/admin.md) |
 | 通用 API 透传 | [call.md](references/call.md) |
 
 ## 操作指南

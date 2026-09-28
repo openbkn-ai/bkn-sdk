@@ -88,6 +88,24 @@ export {
 
 // Resource namespaces (advanced: use with a resolved RequestContext).
 export { admin } from "./resources/admin.js";
+export type {
+  ApplyRowFilterPolicyInput,
+  PatchRowFilterPolicyInput,
+  RowFilterAvailableField,
+  RowFilterCondition,
+  RowFilterExplanation,
+  RowFilterOperator,
+  RowFilterPolicy,
+  RowFilterPolicySource,
+  RowFilterPredicate,
+  RowFilterRelation,
+  RowFilterSnapshot,
+  RowFilterSubject,
+  RowFilterSubjectType,
+  RowFilterTarget,
+  RowFilterValue,
+  RowFilterValueType,
+} from "./api/safe.js";
 export { context } from "./resources/context-loader.js";
 export {
   ManagedToolError,

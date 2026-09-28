@@ -388,6 +388,15 @@
       "source"
     ],
     "admin role members": ["members"],
+    "admin row-filter get": ["availableFields", "objectTypeRef", "policy", "revision", "subject"],
+    "admin row-filter explain": [
+      "directPolicy",
+      "effectivePredicate",
+      "effectiveRowFilterDigest",
+      "rolePolicies",
+      "rolePolicyOnly",
+      "snapshot"
+    ],
     "admin llm list": ["count", "data"],
     "admin llm get": [
       "max_model_len",
