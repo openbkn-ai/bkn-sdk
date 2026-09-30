@@ -546,6 +546,7 @@ describe("deleteResource", () => {
     const url = new URL(call[0]);
     expect(url.pathname).toBe("/api/vega-backend/v1/resources/r%209,r-10");
     expect(url.searchParams.get("ignore_missing")).toBe("true");
+    expect(url.searchParams.has("only_if_stale")).toBe(false);
   });
 
   it("guards a batch delete with only_if_stale", async () => {
