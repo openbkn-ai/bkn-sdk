@@ -464,6 +464,31 @@ describe("vega resource writes", () => {
     expect(url.pathname).toBe("/api/vega-backend/v1/resources/r-1,r-2");
     expect(url.searchParams.get("ignore_missing")).toBe("true");
   });
+
+  it("forwards --only-if-stale for resource deletion", async () => {
+    const fetchMock = mockFetch();
+    suppressOutput();
+
+    await cli().parseAsync([...cliBase, "resource", "delete", "r-1", "--only-if-stale"], {
+      from: "user",
+    });
+
+    const url = new URL(fetchMock.mock.calls[0]?.[0] as string);
+    expect(url.searchParams.get("only_if_stale")).toBe("true");
+  });
+
+  it("rejects --only-if-stale with --ignore-missing before deletion", async () => {
+    const fetchMock = mockFetch();
+    suppressOutput();
+
+    await expect(
+      cli().parseAsync(
+        [...cliBase, "resource", "delete", "r-1", "--only-if-stale", "--ignore-missing"],
+        { from: "user" },
+      ),
+    ).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("vega read-only capability commands", () => {

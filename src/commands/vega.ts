@@ -1186,9 +1186,13 @@ export function vegaCommand(): Command {
     .command("delete <ids...>")
     .description("Delete one or more resources")
     .option("--ignore-missing", "ignore missing resource ids")
+    .option("--only-if-stale", "delete only if every resource is stale and source-missing")
     .action(async (ids: string[], opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).resource.delete(ids, { ignoreMissing: opts.ignoreMissing }),
+        await clientFrom(cmd).resource.delete(ids, {
+          ignoreMissing: opts.ignoreMissing,
+          onlyIfStale: opts.onlyIfStale,
+        }),
         outputOptions(cmd),
       );
     });

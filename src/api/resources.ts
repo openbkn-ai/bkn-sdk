@@ -521,18 +521,24 @@ export function firstResource<T extends object = Resource>(result: BatchResource
 
 export interface DeleteResourceOptions {
   ignoreMissing?: boolean;
+  /** Delete only when every resource is stale and missing in the latest discovery. */
+  onlyIfStale?: boolean;
 }
 
-export function deleteResource(
+export async function deleteResource(
   ctx: RequestContext,
   id: string | string[],
   opts: DeleteResourceOptions = {},
 ): Promise<unknown> {
+  if (opts.ignoreMissing && opts.onlyIfStale) {
+    throw new InputError("onlyIfStale cannot be combined with ignoreMissing");
+  }
   const ids = Array.isArray(id) ? id : [id];
   return request(ctx, `${BASE}/${ids.map(encodeURIComponent).join(",")}`, {
     method: "DELETE",
     query: {
       ignore_missing: opts.ignoreMissing === undefined ? undefined : String(opts.ignoreMissing),
+      only_if_stale: opts.onlyIfStale === undefined ? undefined : String(opts.onlyIfStale),
     },
   });
 }

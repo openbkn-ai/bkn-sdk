@@ -105,4 +105,11 @@ describe("resourceCommand", () => {
     expect(q.get("name")).toBe("orders");
     expect(q.get("last_discover_status")).toBe("succeeded");
   });
+
+  it("forwards --only-if-stale for resource deletion", async () => {
+    const fetchMock = await run(["resource", "delete", "r-1", "--only-if-stale"]);
+    const url = new URL(fetchMock.mock.calls[0]?.[0] as string);
+
+    expect(url.searchParams.get("only_if_stale")).toBe("true");
+  });
 });

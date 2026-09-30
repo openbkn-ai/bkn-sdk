@@ -547,6 +547,25 @@ describe("deleteResource", () => {
     expect(url.pathname).toBe("/api/vega-backend/v1/resources/r%209,r-10");
     expect(url.searchParams.get("ignore_missing")).toBe("true");
   });
+
+  it("guards a batch delete with only_if_stale", async () => {
+    const f = mockFetch({});
+    await deleteResource(ctx, ["r-1", "r-2"], { onlyIfStale: true });
+
+    const url = new URL(firstCall(f)[0]);
+    expect(url.pathname).toBe("/api/vega-backend/v1/resources/r-1,r-2");
+    expect(url.searchParams.get("only_if_stale")).toBe("true");
+    expect(url.searchParams.has("ignore_missing")).toBe(false);
+  });
+
+  it("rejects incompatible delete options before sending a request", async () => {
+    const f = mockFetch({});
+
+    await expect(
+      deleteResource(ctx, "r-1", { ignoreMissing: true, onlyIfStale: true }),
+    ).rejects.toThrow(InputError);
+    expect(f).not.toHaveBeenCalled();
+  });
 });
 
 describe("findResource", () => {
