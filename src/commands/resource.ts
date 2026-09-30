@@ -258,8 +258,12 @@ export function resourceCommand(): Command {
     .command("delete <id>")
     .description("Delete a resource")
     .option("-y, --yes", "skip confirmation")
-    .action(async (id: string, _opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).resource.delete(id), outputOptions(cmd));
+    .option("--only-if-stale", "delete only if the resource is stale and source-missing")
+    .action(async (id: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).resource.delete(id, { onlyIfStale: opts.onlyIfStale }),
+        outputOptions(cmd),
+      );
     });
 
   groupChildren(cmd, {
