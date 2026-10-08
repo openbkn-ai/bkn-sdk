@@ -197,6 +197,8 @@ export const Resource = z
     enabled: z.boolean().default(true),
     status_message: z.string().optional(),
     last_discover_status: z.string().optional(),
+    last_discover_time: z.number().optional(),
+    row_count_time: z.number().optional(),
     schema: z.string().optional(),
     source_identifier: z.string(),
     source_metadata: z.record(z.unknown()).optional(),
@@ -218,8 +220,8 @@ export const Resource = z
     local_status: ResourceLocalStatus.optional(),
     index_name: z.string().optional(),
     column_count: z.number().optional(),
-    row_count: z.number().optional(),
-    estimated_row_count: nullAsAbsent(z.number()),
+    row_count: z.union([z.number(), z.bigint()]).optional(),
+    estimated_row_count: nullAsAbsent(z.union([z.number(), z.bigint()])),
     logic_type: z.string().optional(),
     logic_definition: z.unknown().optional(),
     creator: ResourceAccountInfo,
@@ -233,6 +235,7 @@ export type Resource = z.infer<typeof Resource>;
 
 /** Resource fields returned by list endpoints; extended JSON fields require a detail read. */
 export const ResourceSummary = Resource.omit({
+  row_count_time: true,
   source_metadata: true,
   schema_definition: true,
   index_config: true,
@@ -307,6 +310,7 @@ export async function getResource(
 ): Promise<BatchResourcesResponse> {
   const ids = Array.isArray(id) ? id : [id];
   const result = await request<unknown>(ctx, `${BASE}/${ids.map(encodeURIComponent).join(",")}`, {
+    responseParser: parseBigIntJSON,
     query: {
       ignore_missing: opts.ignoreMissing === undefined ? undefined : String(opts.ignoreMissing),
     },

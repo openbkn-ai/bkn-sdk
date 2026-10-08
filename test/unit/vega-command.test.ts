@@ -4,6 +4,7 @@ import pkg from "../../package.json" with { type: "json" };
 
 import { vegaCommand } from "../../src/commands/vega.js";
 import { writeVersionCheckCache } from "../../src/config/store.js";
+import { InputError, toExitCode } from "../../src/utils/errors.js";
 
 function cli(): Command {
   const root = new Command("openbkn")
@@ -241,7 +242,7 @@ describe("vega resource document input", () => {
 });
 
 describe("vega resource discovery commands", () => {
-  it("triggers a resource discovery task without a strategy body", async () => {
+  it("defaults resource discovery to full_sync", async () => {
     const fetchMock = mockFetch({ id: "t-1" });
     suppressOutput();
 
@@ -262,7 +263,9 @@ describe("vega resource discovery commands", () => {
     expect(new URL(fetchMock.mock.calls[0]?.[0] as string).pathname).toBe(
       "/api/vega-backend/v1/resources/r%2F1/discover",
     );
-    expect(fetchMock.mock.calls[0]?.[1]?.body).toBeUndefined();
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      strategy: "full_sync",
+    });
   });
 
   it("forwards resource enabled-state actions and task resource filters", async () => {
@@ -1530,6 +1533,35 @@ describe("vega resource query", () => {
     expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
       paging: { mode: "single", limit: 50, offset: 0 },
       need_total: false,
+    });
+  });
+});
+
+describe("vega resource exact count", () => {
+  it("rejects an invalid strategy as an input error without sending a request", async () => {
+    const fetchMock = mockFetch();
+    let caught: unknown;
+    try {
+      await cli().parseAsync([...cliBase, "resource", "discover", "r-1", "--strategy", "invalid"], {
+        from: "user",
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(InputError);
+    expect(toExitCode(caught)).toBe(2);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sends count_only without a new endpoint", async () => {
+    const fetchMock = mockFetch({ id: "task-1" });
+    suppressOutput();
+    await cli().parseAsync(
+      [...cliBase, "resource", "discover", "r-1", "--strategy", "count_only"],
+      { from: "user" },
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      strategy: "count_only",
     });
   });
 });

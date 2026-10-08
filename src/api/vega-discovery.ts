@@ -13,7 +13,7 @@ export const VegaAccountInfo = z
   .passthrough();
 export type VegaAccountInfo = z.infer<typeof VegaAccountInfo>;
 
-export const DiscoverStrategy = z.enum(["full_sync", "create_only", "cleanup_only"]);
+export const DiscoverStrategy = z.enum(["full_sync", "create_only", "cleanup_only", "count_only"]);
 export type DiscoverStrategy = z.infer<typeof DiscoverStrategy>;
 
 export const VegaTaskStatus = z.enum(["pending", "running", "completed", "failed", "cancelled"]);
@@ -195,6 +195,7 @@ export const DiscoverResult = z
     updated_count: z.number().optional(),
     restored_count: z.number().optional(),
     failed_count: z.number().optional(),
+    skipped_count: z.number().optional(),
     message: z.string(),
   })
   .passthrough();
@@ -229,6 +230,7 @@ const DiscoverTaskResultSummary = DiscoverResult.omit({ message: true }).extend(
   updated_count: z.number(),
   restored_count: z.number(),
   failed_count: z.number(),
+  skipped_count: z.number().optional(),
 });
 
 export const DiscoverTaskSummary = DiscoverTask.omit({ message: true, result: true }).extend({
@@ -318,11 +320,12 @@ export async function discoverCatalog(
 export async function discoverResource(
   ctx: RequestContext,
   resourceId: string,
+  req: { strategy?: "full_sync" | "count_only" } = {},
 ): Promise<{ id: string }> {
   const result = await request<unknown>(
     ctx,
     `${VEGA_BASE}/resources/${encodeURIComponent(resourceId)}/discover`,
-    { method: "POST" },
+    { method: "POST", ...(req.strategy ? { body: { strategy: req.strategy } } : {}) },
   );
   return IdResponse.parse(result);
 }
