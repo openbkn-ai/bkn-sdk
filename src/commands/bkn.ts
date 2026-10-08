@@ -1128,13 +1128,11 @@ not bound until you attach it (\`capability list\` counts it under boxes[].unmou
     .option("--branch <name>", "target branch", "main")
     .option(
       "--import-mode <mode>",
-      "sent as import_mode: normal (default) | overwrite | ignore — 0.1.5 deploys accept but do not apply it yet",
+      "import behavior: overwrite (compatibility default) | normal | ignore",
       oneOf("--import-mode", ["normal", "overwrite", "ignore"]),
     )
-    .option(
-      "--no-strict-mode",
-      "send strict_mode=false (skip dependency checks) — 0.1.5 deploys accept but do not apply it yet",
-    )
+    .option("--strict-mode", "require complete definitions and validate dependencies")
+    .option("--no-strict-mode", "use non-strict archive import (compatibility default)")
     .option(
       "--binding-policy <policy>",
       "environment-local bindings: preserve (default) | detach",
@@ -1145,7 +1143,7 @@ not bound until you attach it (\`capability list\` counts it under boxes[].unmou
       const result = await clientFrom(cmd).kn.push(dir, {
         branch: opts.branch,
         importMode: opts.importMode,
-        strictMode: opts.strictMode === false ? false : undefined,
+        strictMode: typeof opts.strictMode === "boolean" ? opts.strictMode : undefined,
         bindingPolicy: opts.bindingPolicy,
         verifyIntegrity: true,
         onIntegrityWarning: (warning) => process.stderr.write(`warning: ${warning}\n`),
