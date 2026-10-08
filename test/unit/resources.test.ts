@@ -72,7 +72,10 @@ describe("ResourceLocalStatus", () => {
     expectTypeOf<ResourceIndexConfig["default_keyword_ignore_above"]>().toEqualTypeOf<
       number | undefined
     >();
-    expectTypeOf<Resource["estimated_row_count"]>().toEqualTypeOf<number | undefined>();
+    expectTypeOf<Resource["row_count_time"]>().toEqualTypeOf<number | undefined>();
+    expectTypeOf<ResourceSummary["row_count_time"]>().toEqualTypeOf<unknown>();
+    expectTypeOf<Resource["row_count"]>().toEqualTypeOf<number | bigint | undefined>();
+    expectTypeOf<Resource["estimated_row_count"]>().toEqualTypeOf<number | bigint | undefined>();
   });
 });
 
@@ -81,6 +84,7 @@ describe("listResources", () => {
     expectTypeOf<ResourceSummary["source_metadata"]>().toEqualTypeOf<unknown>();
     expectTypeOf<ResourceSummary["schema_definition"]>().toEqualTypeOf<unknown>();
     expectTypeOf<ResourceSummary["index_config"]>().toEqualTypeOf<unknown>();
+    expectTypeOf<ResourceSummary["row_count"]>().toEqualTypeOf<unknown>();
     expectTypeOf<ResourceSummary["estimated_row_count"]>().toEqualTypeOf<unknown>();
     expectTypeOf<ResourceSummary["logic_definition"]>().toEqualTypeOf<unknown>();
 
@@ -88,6 +92,7 @@ describe("listResources", () => {
       entries: [
         resourceFixture({
           future_field: "preserved",
+          last_discover_time: 1000,
           index_config: { primary_key_fields: ["id"], incremental_fields: ["updated_at"] },
           source_metadata: { properties: { row_count: 1 } },
         }),
@@ -99,6 +104,7 @@ describe("listResources", () => {
       entries: [
         {
           future_field: "preserved",
+          last_discover_time: 1000,
           index_config: { primary_key_fields: ["id"], incremental_fields: ["updated_at"] },
           source_metadata: { properties: { row_count: 1 } },
         },
@@ -181,11 +187,64 @@ describe("listResources", () => {
 
   it("parses estimated row counts from resource detail responses", async () => {
     mockFetch({
-      entries: [resourceFixture({ row_count: 100, estimated_row_count: 120 })],
+      entries: [
+        resourceFixture({
+          row_count: 0,
+          estimated_row_count: 120,
+          last_discover_time: 1000,
+          row_count_time: 2000,
+        }),
+      ],
     });
 
     await expect(getResource(ctx, "r-1")).resolves.toMatchObject({
-      entries: [{ row_count: 100, estimated_row_count: 120 }],
+      entries: [
+        { row_count: 0, estimated_row_count: 120, last_discover_time: 1000, row_count_time: 2000 },
+      ],
+    });
+  });
+
+  it("uses independent detail statistics without falling back to legacy metadata", async () => {
+    const source_metadata = { properties: { row_count: 999, row_count_time: 888 } };
+    mockFetch({
+      entries: [resourceFixture({ row_count: 0, row_count_time: 2000, source_metadata })],
+    });
+    const current = firstResource(await getResource(ctx, "r-1"));
+    expect(current.row_count).toBe(0);
+    expect(current.row_count_time).toBe(2000);
+
+    mockFetch({ entries: [resourceFixture({ source_metadata })] });
+    const unknown = firstResource(await getResource(ctx, "r-1"));
+    expect(unknown.row_count).toBeUndefined();
+    expect(unknown.row_count_time).toBeUndefined();
+
+    mockFetch({ entries: [resourceFixture({ row_count: 42 })] });
+    const legacy = firstResource(await getResource(ctx, "r-1"));
+    expect(legacy.row_count).toBe(42);
+    expect(legacy.row_count_time).toBeUndefined();
+  });
+
+  it.each([
+    ["9007199254740991", 9007199254740991],
+    ["9007199254740992", 9007199254740992n],
+    ["9007199254740993", 9007199254740993n],
+    ["9223372036854775807", 9223372036854775807n],
+  ])("preserves count JSON integer %s", async (literal, expected) => {
+    const wire = JSON.stringify({ entries: [resourceFixture()] }).replace(
+      '"entries":[{',
+      `"entries":[{"row_count":${literal},"estimated_row_count":${literal},"row_count_time":2000,"source_metadata":{"properties":{"row_count":${literal}}},`,
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(wire, { status: 200 })),
+    );
+
+    const result = await getResource(ctx, "r-1");
+    expect(result.entries[0]).toMatchObject({
+      row_count: expected,
+      estimated_row_count: expected,
+      row_count_time: 2000,
+      source_metadata: { properties: { row_count: expected } },
     });
   });
 

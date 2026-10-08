@@ -48,3 +48,5 @@ Update this table as each signal changes (e.g. live-parity count as commands are
   suggesting a new login.
   `test/unit/query-object-instance-dry-run.test.ts` checks that the query preview
   sends nothing, including schema reads and MCP handshakes.
+
+- `test/unit/resources.test.ts` verifies independent top-level exact statistics, valid zero counts, unknown collection times, and no fallback to legacy metadata statistics. Type assertions ensure resource summaries do not declare exact or estimated counts or count collection times.

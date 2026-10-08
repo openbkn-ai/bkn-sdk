@@ -163,3 +163,56 @@ describe("DiscoverTask APIs", () => {
     expect(url.searchParams.get("ignore_missing")).toBe("true");
   });
 });
+
+describe("exact count strategy", () => {
+  it("forwards count_only for resource, catalog and schedule requests", async () => {
+    for (const trigger of [
+      () => discoverResource(ctx, "r-1", { strategy: "count_only" }),
+      () => discoverCatalog(ctx, "c-1", { strategy: "count_only" }),
+      () =>
+        createDiscoverSchedule(ctx, {
+          name: "count",
+          catalogId: "c-1",
+          cronExpr: "0 * * * *",
+          enabled: true,
+          strategy: "count_only",
+        }),
+    ]) {
+      const f = mockFetch({ id: "task-1" });
+      await trigger();
+      expect(JSON.parse(calls(f)[0]?.[1].body as string).strategy).toBe("count_only");
+    }
+  });
+
+  it("preserves skipped counts in failed exact count task summaries", async () => {
+    mockFetch({
+      entries: [
+        {
+          id: "task-1",
+          schedule_id: "",
+          catalog_id: "c-1",
+          strategy: "count_only",
+          trigger_type: "manual",
+          status: "failed",
+          progress: 100,
+          creator: account,
+          create_time: 10,
+          result: {
+            catalog_id: "c-1",
+            new_count: 0,
+            stale_count: 0,
+            unchanged_count: 0,
+            updated_count: 0,
+            restored_count: 0,
+            failed_count: 0,
+            skipped_count: 2,
+          },
+        },
+      ],
+      total_count: 1,
+    });
+    await expect(listDiscoverTasks(ctx)).resolves.toMatchObject({
+      entries: [{ strategy: "count_only", result: { updated_count: 0, skipped_count: 2 } }],
+    });
+  });
+});

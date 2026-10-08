@@ -1198,9 +1198,15 @@ export function vegaCommand(): Command {
     });
   resource
     .command("discover <id>")
-    .description("Trigger metadata discovery for a resource")
-    .action(async (id: string, _opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).vega.discoverResource(id), outputOptions(cmd));
+    .description("Refresh resource metadata or its exact row count")
+    .option("--strategy <strategy>", "full_sync|count_only", "full_sync")
+    .action(async (id: string, opts, cmd: Command) => {
+      if (opts.strategy !== "full_sync" && opts.strategy !== "count_only")
+        throw new InputError("Resource strategy must be full_sync or count_only");
+      printJson(
+        await clientFrom(cmd).vega.discoverResource(id, { strategy: opts.strategy }),
+        outputOptions(cmd),
+      );
     });
   for (const action of ["enable", "disable"] as const) {
     resource

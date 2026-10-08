@@ -98,7 +98,8 @@ export function vega(ctx: RequestContext) {
       updateCatalogHealthCheckSchedule(ctx, id, req),
     discoverCatalog: (catalogId: string, req?: Parameters<typeof discoverCatalog>[2]) =>
       discoverCatalog(ctx, catalogId, req),
-    discoverResource: (resourceId: string) => discoverResource(ctx, resourceId),
+    discoverResource: (resourceId: string, req?: Parameters<typeof discoverResource>[2]) =>
+      discoverResource(ctx, resourceId, req),
     catalogResources: (id: string, category?: string, limit?: number, offset?: number) =>
       listCatalogResources(ctx, id, category, limit, offset),
     catalogHealth: (id: string) => catalogHealthStatus(ctx, id),
