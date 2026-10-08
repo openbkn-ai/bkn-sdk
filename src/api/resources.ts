@@ -235,6 +235,7 @@ export type Resource = z.infer<typeof Resource>;
 
 /** Resource fields returned by list endpoints; extended JSON fields require a detail read. */
 export const ResourceSummary = Resource.omit({
+  row_count: true,
   row_count_time: true,
   source_metadata: true,
   schema_definition: true,

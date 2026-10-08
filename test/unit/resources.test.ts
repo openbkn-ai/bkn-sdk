@@ -84,6 +84,7 @@ describe("listResources", () => {
     expectTypeOf<ResourceSummary["source_metadata"]>().toEqualTypeOf<unknown>();
     expectTypeOf<ResourceSummary["schema_definition"]>().toEqualTypeOf<unknown>();
     expectTypeOf<ResourceSummary["index_config"]>().toEqualTypeOf<unknown>();
+    expectTypeOf<ResourceSummary["row_count"]>().toEqualTypeOf<unknown>();
     expectTypeOf<ResourceSummary["estimated_row_count"]>().toEqualTypeOf<unknown>();
     expectTypeOf<ResourceSummary["logic_definition"]>().toEqualTypeOf<unknown>();
 
@@ -201,6 +202,26 @@ describe("listResources", () => {
         { row_count: 0, estimated_row_count: 120, last_discover_time: 1000, row_count_time: 2000 },
       ],
     });
+  });
+
+  it("uses independent detail statistics without falling back to legacy metadata", async () => {
+    const source_metadata = { properties: { row_count: 999, row_count_time: 888 } };
+    mockFetch({
+      entries: [resourceFixture({ row_count: 0, row_count_time: 2000, source_metadata })],
+    });
+    const current = firstResource(await getResource(ctx, "r-1"));
+    expect(current.row_count).toBe(0);
+    expect(current.row_count_time).toBe(2000);
+
+    mockFetch({ entries: [resourceFixture({ source_metadata })] });
+    const unknown = firstResource(await getResource(ctx, "r-1"));
+    expect(unknown.row_count).toBeUndefined();
+    expect(unknown.row_count_time).toBeUndefined();
+
+    mockFetch({ entries: [resourceFixture({ row_count: 42 })] });
+    const legacy = firstResource(await getResource(ctx, "r-1"));
+    expect(legacy.row_count).toBe(42);
+    expect(legacy.row_count_time).toBeUndefined();
   });
 
   it.each([
