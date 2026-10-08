@@ -1128,13 +1128,10 @@ not bound until you attach it (\`capability list\` counts it under boxes[].unmou
     .option("--branch <name>", "target branch", "main")
     .option(
       "--import-mode <mode>",
-      "sent as import_mode: normal (default) | overwrite | ignore — 0.1.5 deploys accept but do not apply it yet",
+      "import behavior: normal (default) | overwrite | ignore",
       oneOf("--import-mode", ["normal", "overwrite", "ignore"]),
     )
-    .option(
-      "--no-strict-mode",
-      "send strict_mode=false (skip dependency checks) — 0.1.5 deploys accept but do not apply it yet",
-    )
+    .option("--no-strict-mode", "skip strict validation and dependency checks")
     .option(
       "--binding-policy <policy>",
       "environment-local bindings: preserve (default) | detach",
