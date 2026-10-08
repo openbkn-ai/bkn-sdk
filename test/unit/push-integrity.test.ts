@@ -102,6 +102,26 @@ afterEach(() => {
 });
 
 describe("bkn push integrity verification", () => {
+  it("preserves omitted compatibility defaults and forwards explicit strict mode", async () => {
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    const defaultFetch = server(Response.json(before), Response.json(before));
+    await cli(packageDir());
+    const defaultUpload = defaultFetch.mock.calls
+      .map(([url]) => new URL(String(url)))
+      .find((url) => url.pathname === uploadPath);
+    expect(defaultUpload?.searchParams.has("import_mode")).toBe(false);
+    expect(defaultUpload?.searchParams.has("strict_mode")).toBe(false);
+
+    const strictFetch = server(Response.json(before), Response.json(before));
+    await cli(packageDir(), ["--import-mode", "normal", "--strict-mode"]);
+    const strictUpload = strictFetch.mock.calls
+      .map(([url]) => new URL(String(url)))
+      .find((url) => url.pathname === uploadPath);
+    expect(strictUpload?.searchParams.get("import_mode")).toBe("normal");
+    expect(strictUpload?.searchParams.get("strict_mode")).toBe("true");
+  });
+
   it("warns on lost binding and operators after the upload", async () => {
     const fetch = server(
       Response.json(before),
