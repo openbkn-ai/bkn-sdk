@@ -50,3 +50,7 @@ Update this table as each signal changes (e.g. live-parity count as commands are
   sends nothing, including schema reads and MCP handshakes.
 
 - `test/unit/resources.test.ts` verifies independent top-level exact statistics, valid zero counts, unknown collection times, and no fallback to legacy metadata statistics. Type assertions ensure resource summaries do not declare exact or estimated counts or count collection times.
+
+- `knowledge-networks-contract.test.ts` and `bkn-command-flags.test.ts` verify
+  `ignore_local_index` / `--ignore-local-index` forwarding. Python query tests
+  verify the source bypass option and the actual `Page.query_source` response.

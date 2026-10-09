@@ -172,6 +172,22 @@ def test_the_query_string_and_the_body_go_where_the_spec_says(deploy: Deploy) ->
     assert "kn_id" not in deploy.bodies[0]
 
 
+@pytest.mark.parametrize("cursor", [None, "opaque-next-page"])
+def test_object_instance_cursor_is_sent_only_in_the_body(
+    deploy: Deploy, cursor: str | None
+) -> None:
+    kn.query_object_instance(KN, "order", cursor=cursor, context=CONTEXT)
+
+    body = deploy.bodies[0]
+    if cursor is None:
+        assert "cursor" not in body
+    else:
+        assert body["cursor"] == cursor
+    assert "cursor" not in deploy.queries[0]
+    assert "search_after" not in body
+    assert "search_after" not in deploy.queries[0]
+
+
 def test_a_call_carries_a_turn_without_being_asked(deploy: Deploy) -> None:
     kn.list_resources(KN, context=CONTEXT)
 

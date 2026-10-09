@@ -477,7 +477,7 @@ export function bknCommand(): Command {
       "--exclude-system-properties <list>",
       "drop system fields: _instance_id,_instance_identity,_display",
     )
-    .option("--ignoring-store-cache", "skip the index and read the store directly")
+    .option("--ignore-local-index", "bypass the table resource local index and query its source")
     .addHelpText(
       "after",
       `
@@ -498,7 +498,7 @@ An older deploy answers without paging — resend the query with "offset" instea
           includeTypeInfo: opts.includeTypeInfo,
           includeLogicParams: opts.includeLogicParams,
           excludeSystemProperties,
-          ignoringStoreCache: opts.ignoringStoreCache,
+          ignoreLocalIndex: opts.ignoreLocalIndex,
         }),
         outputOptions(cmd),
       );
@@ -579,7 +579,7 @@ An older deploy answers without paging — resend the query with "offset" instea
       "--exclude-system-properties <list>",
       "drop system fields: _instance_id,_instance_identity,_display",
     )
-    .option("--ignoring-store-cache", "skip the index and read the store directly")
+    .option("--ignore-local-index", "bypass the table resource local index and query its source")
     .action(async (knId: string, opts, cmd: Command) => {
       const excludeSystemProperties = systemProperties(opts.excludeSystemProperties);
       printJson(
@@ -588,7 +588,7 @@ An older deploy answers without paging — resend the query with "offset" instea
           branch: opts.branch,
           includeLogicParams: opts.includeLogicParams,
           excludeSystemProperties,
-          ignoringStoreCache: opts.ignoringStoreCache,
+          ignoreLocalIndex: opts.ignoreLocalIndex,
         }),
         outputOptions(cmd),
       );

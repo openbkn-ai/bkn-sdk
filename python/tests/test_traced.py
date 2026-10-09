@@ -352,7 +352,7 @@ def test_a_read_flag_takes_the_rest_path_even_when_traced(deploy: Deploy) -> Non
     """The tool takes none of the REST query-string flags; ignoring one in silence
     would hand back rows the caller asked to shape differently."""
     with session(traced=True):
-        Tournaments.objects().options(ignoring_store_cache=True).page(limit=1)
+        Tournaments.objects().options(ignore_local_index=True).page(limit=1)
 
     assert tool_calls(deploy, "query_object_instance") == []
     assert deploy.rest_bodies[-1]["bkn_context"]["interaction_id"] == "int_1"

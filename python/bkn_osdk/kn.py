@@ -911,7 +911,7 @@ def query_object_instance(
     limit: int | None = None,
     properties: list[Any] | None = None,
     sort: list[Any] | None = None,
-    search_after: list[Any] | None = None,
+    cursor: str | None = None,
     offset: int | None = None,
     context: Context | None = None,
 ) -> Any:
@@ -941,9 +941,8 @@ def query_object_instance(
     **总数**：响应的 `total_count` 为满足过滤条件的实例总数，不受 `limit` 限制，
     无需请求方开启。判断「一共多少条」读它即可，不必翻页累加。三态要分清： - 有值且大于
     0：真实总数。 - 值为 `0`：真实零命中（字段存在）。 -
-    **字段缺失**：本次没有计算总数，不能推断为 0。用 `search_after` 翻页时
-    第二页起即如此（下游在游标非空时强制关闭总数计算）。要总数就回到不带 `search_after`
-    的首次查询。
+    **字段缺失**：本次没有计算总数，不能推断为 0。用 `cursor` 翻页时
+    第二页起即如此（下游在游标非空时强制关闭总数计算）。要总数就回到不带 `cursor` 的首次查询。
 
     Args:
         condition: 过滤条件。逻辑算子（`and` / `or`）用 `sub_conditions` 组合子条件； 叶子条件用
@@ -955,11 +954,12 @@ def query_object_instance(
         properties: 指定返回的属性字段；不传返回全部属性。
         sort: 排序字段，按数组顺序依次比较。不传时默认序不保证语义，需要「最新 / 最大 / 最小的前 N
             条」时必须显式指定。 元素字段: direction, field。
-        search_after: 游标翻页：上一页响应返回的 `search_after` 原样回传。首次查询留空。 与
+        cursor: 游标翻页：上一页响应返回的 `cursor` 原样回传，不透明字符串。首次查询留空。 与
             `offset` 互斥。
-        offset: 偏移翻页：适用于资源（vega 表源）路径，可跳页。与 `search_after` 互斥。
+        offset: 偏移翻页：适用于资源（vega 表源）路径，可跳页。与 `cursor` 互斥。
 
-    Returns the platform's own payload: datas, search_after, total_count.
+    Returns the platform's own payload: cursor, datas, effective_permissions, query_source,
+    row_filter_applied, total_count.
     """
     return _send(
         "/api/agent-retrieval/v1/kn/query_object_instance",
@@ -976,7 +976,7 @@ def query_object_instance(
             "limit": limit,
             "properties": properties,
             "sort": sort,
-            "search_after": search_after,
+            "cursor": cursor,
             "offset": offset,
         },
         context,

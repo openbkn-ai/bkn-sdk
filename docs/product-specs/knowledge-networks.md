@@ -117,3 +117,16 @@ A KN is the schema/ontology layer; it **references** already-built Catalog resou
   when serializing a result.
 - Push of a non-normalized `.bkn` with non-UTF-8 content must warn or normalize per flags.
 - Re-push should be idempotent.
+
+## Local index query controls
+
+Instance and subgraph reads use `ignoreLocalIndex` (`--ignore-local-index` in the CLI,
+`ignore_local_index` on the wire). The default uses an available table resource local
+index; true bypasses it and queries the original source. Full-text and vector
+conditions cannot execute on that source channel and return 400 with guidance.
+Object responses report Vega's actual `query_source` as `local_index` or `source`;
+page continuation always follows the cursor.
+
+These names require the Foundry #844 cleanup and the SDK update to roll out together.
+`ignoringStoreCache` / `--ignoring-store-cache` / `ignoring_store_cache` and
+`search_from_index` are removed without aliases. Restart pre-upgrade cursors.

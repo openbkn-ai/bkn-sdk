@@ -73,6 +73,22 @@ afterEach(() => {
 });
 
 describe("openbkn bkn flags", () => {
+  it("forwards the effective local-index bypass flag on object and subgraph reads", async () => {
+    await run("object-type", "query", "kn-1", "ot-1", "--ignore-local-index", "--body", "{}");
+    expect(kn.objectTypeQuery).toHaveBeenCalledWith(
+      "kn-1",
+      "ot-1",
+      {},
+      expect.objectContaining({ ignoreLocalIndex: true }),
+    );
+    await run("subgraph", "kn-1", "--ignore-local-index", "--body", "{}");
+    expect(kn.subgraph).toHaveBeenCalledWith(
+      "kn-1",
+      {},
+      expect.objectContaining({ ignoreLocalIndex: true }),
+    );
+  });
+
   it("resources passes keyword and paging", async () => {
     await run("resources", "--keyword", "ord", "--limit", "5", "--direction", "asc");
     expect(kn.bknResources).toHaveBeenCalledWith({

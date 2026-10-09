@@ -389,6 +389,20 @@ Six runnable scripts under [`examples/`](examples): [`credentials.py`](examples/
 (explore, query, evidence) and two under `platform/` (the tool surface, the
 sandbox).
 
+Instance and subgraph query options use `ignore_local_index=True` to bypass a
+Table resource local index and read its original source. The default remains
+`False`; full-text and vector conditions require the index and return 400 when
+bypassed. `Page.query_source` reports `"local_index"`, `"source"`, or `None` if no
+resource was queried. It replaces `Page.search_from_index`; the old
+`ignoring_store_cache` option is removed. Upgrade with the matching Foundry #844
+server change and restart cursors created before the upgrade.
+
+The generated `kn.query_object_instance(...)` also replaces `search_after` with
+`cursor`: pass the previous response's opaque `cursor` string unchanged for the
+next page. On the first page, omit `cursor` or pass `cursor=None`. Remove any
+`search_after` argument, including `search_after=None`; that keyword is no longer
+accepted. `cursor` and `offset` are mutually exclusive.
+
 ## Upgrades
 
 | What moves | You run | Guard |
