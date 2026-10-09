@@ -6,8 +6,10 @@
  * Re-exports the client factory, resource namespaces, and shared types.
  * No external side effects on import; required runtime APIs are validated synchronously.
  */
-export { createClient, type BknClient } from "./client.js";
+export { createAuthenticatedClient, createClient, type BknClient } from "./client.js";
 export type {
+  AccountPasswordAuth,
+  AuthenticatedClientOptions,
   ClientOptions,
   DataPropertyDefinition,
   DataPropertyMaskRule,

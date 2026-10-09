@@ -59,6 +59,25 @@ export interface ClientOptions {
   versionCheckMode?: "memory" | "cli";
 }
 
+/** Account credentials used to establish an OAuth session for a Node.js service. */
+export interface AccountPasswordAuth {
+  username: string;
+  password: string;
+}
+
+/**
+ * Options for {@link createAuthenticatedClient}. Unlike {@link ClientOptions},
+ * this factory establishes a new OAuth session before creating the client.
+ */
+export interface AuthenticatedClientOptions extends Omit<ClientOptions, "baseUrl" | "token"> {
+  /** Platform origin to authenticate against. */
+  baseUrl: string;
+  /** Account credentials for the headless OAuth device flow. */
+  auth: AccountPasswordAuth;
+  /** Called when the client refreshes its in-memory OAuth credentials. */
+  onTokenRefresh?: (tokens: RefreshableTokens) => void;
+}
+
 /** Fully resolved request context — every field is known. */
 export interface RefreshableTokens {
   accessToken: string;
