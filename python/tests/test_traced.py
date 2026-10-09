@@ -1125,7 +1125,7 @@ def test_a_flat_rest_refusal_is_recognised_as_wanting_a_turn() -> None:
 
 
 def test_traced_iterate_follows_tool_cursor_and_preserves_receipts(deploy: Deploy) -> None:
-    answers = iter(
+    answers: Iterator[dict[str, Any]] = iter(
         [
             {"datas": [ROW], "cursor": "c-2"},
             {"datas": [ROW]},
