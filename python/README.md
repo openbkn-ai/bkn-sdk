@@ -272,8 +272,9 @@ with bkn_osdk.session(traced=True):
     page.rows[0].__receipt__  # the same receipt, on each row it accounts for
 ```
 
-`order_by` travels to the tool as `sort`. The tool takes no `need_total`, no
-REST cursor and none of the REST query flags (`options(...)`), so a query
+`order_by` travels to the tool as `sort`; opaque `cursor` continuation also
+stays on MCP and keeps receipts. The tool takes no `need_total` and none of
+the REST query flags (`options(...)`), so a query
 wanting one of those takes the REST path even inside a traced scope — carrying
 the scope's turn, so it is still recorded, but answering without an in-band
 receipt. Untraced reads take REST throughout, which is faster, and carry no

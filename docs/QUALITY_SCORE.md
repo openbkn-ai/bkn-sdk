@@ -55,3 +55,7 @@ Update this table as each signal changes (e.g. live-parity count as commands are
 - `knowledge-networks-contract.test.ts` and `bkn-command-flags.test.ts` verify
   `ignore_local_index` / `--ignore-local-index` forwarding. Python query tests
   verify the source bypass option and the actual `Page.query_source` response.
+
+- Python traced-query tests verify opaque cursor continuation and multi-page
+  iteration stay on MCP, preserve the interaction and row receipts, and send
+  no REST requests.

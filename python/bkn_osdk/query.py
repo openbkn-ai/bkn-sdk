@@ -237,13 +237,10 @@ DEFAULT_TAKE = 50
 #: round trip per page.
 DEFAULT_PAGE_SIZE = 500
 
-#: Keys the REST read understands and the MCP tool does not. `sort` is not one
-#: of them: `query_object_instance` documents it and the live catalog declares
-#: it. `need_total` is REST's switch for a total, which the tool does not take.
-#: `cursor` is REST's paging token (`paging.next_cursor`); the tool's own paging
-#: key is not the same field — its published schema names `search_after` beside
-#: `offset` — so a REST cursor handed to it would restart at the first page.
-_REST_ONLY_ARGUMENTS = frozenset({"need_total", "cursor"})
+#: `need_total` is REST's explicit total-count switch, which MCP does not take.
+#: Both current MCP and REST instance-query contracts accept `sort` and the
+#: opaque `cursor`; traced cursor continuation stays on MCP and keeps receipts.
+_REST_ONLY_ARGUMENTS = frozenset({"need_total"})
 
 #: What `exclude_system_properties` may name — the read's own enum.
 SYSTEM_PROPERTIES = frozenset({"_instance_id", "_instance_identity", "_display"})
@@ -545,7 +542,7 @@ class ObjectSet(Generic[OT]):
         """The same query through MCP, inside the scope's managed interaction.
 
         Slower — a transport session plus a tool call — and it takes neither
-        `need_total`, REST's cursor nor the REST query-string flags; a query
+        `need_total` nor the REST query-string flags; a query
         needing one of those reads over REST, carrying the scope's turn. What it
         buys is the receipt: its status, evidence durability and the business
         refs it touched, landed in the evidence chain.
