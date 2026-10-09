@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
 import { type RawCallOptions, type RawCallResult, rawCall } from "./api/call.js";
+import { credentialDeviceLogin } from "./auth/oauth.js";
 import { resolveContext } from "./config/resolve.js";
 import { admin } from "./resources/admin.js";
 import { appKeys } from "./resources/app-keys.js";
@@ -24,7 +25,13 @@ import { vega } from "./resources/vega.js";
  *
  * Resolving the context here (not at import) keeps `import` side-effect free.
  */
-import type { ClientOptions, RequestContext } from "./types.js";
+import type {
+  AuthenticatedClientOptions,
+  ClientOptions,
+  RefreshableTokens,
+  RequestContext,
+} from "./types.js";
+import { InputError } from "./utils/errors.js";
 
 export interface BknClient {
   readonly ctx: RequestContext;
@@ -46,6 +53,41 @@ export interface BknClient {
 
 export function createClient(opts: ClientOptions = {}): BknClient {
   const ctx = resolveContext(opts);
+  return clientForContext(ctx);
+}
+
+/**
+ * Establish an account-backed OAuth session and return a refreshable SDK client.
+ *
+ * This is intended for Node.js services that cannot rely on a prior CLI login
+ * or a session stored in `~/.bkn`. Credentials are used only to establish the
+ * OAuth session and are never written to disk by the SDK.
+ */
+export async function createAuthenticatedClient(
+  opts: AuthenticatedClientOptions,
+): Promise<BknClient> {
+  const { auth, baseUrl, onTokenRefresh, ...clientOptions } = opts;
+  if (!auth.username || !auth.password) {
+    throw new InputError("Account authentication requires a non-empty username and password.");
+  }
+
+  const tokens = await credentialDeviceLogin(baseUrl, auth.username, auth.password, {
+    insecure: clientOptions.insecure,
+  });
+  const client = createClient({ ...clientOptions, baseUrl, token: tokens.accessToken });
+
+  if (tokens.refreshToken) {
+    client.ctx.refresh = {
+      refreshToken: tokens.refreshToken,
+      ...(tokens.expiresAt ? { expiresAt: tokens.expiresAt } : {}),
+      persist: (next: RefreshableTokens) => onTokenRefresh?.(next),
+    };
+  }
+
+  return client;
+}
+
+function clientForContext(ctx: RequestContext): BknClient {
   return {
     ctx,
     kn: kn(ctx),

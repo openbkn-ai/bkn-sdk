@@ -100,6 +100,29 @@ const raw = await bkn.call("/api/...", { method: "GET" });
 
 Importing the package has no side effects; `createClient` resolves config explicitly.
 
+### Account authentication for services
+
+For a Node.js service that should establish its own account session instead of
+reusing a prior CLI login, use the asynchronous authenticated factory. The SDK
+keeps the OAuth session in memory and refreshes it automatically. It never
+writes account credentials or tokens to `~/.bkn/`; use `onTokenRefresh` only
+when the application intentionally persists refreshed credentials in its own
+secret store.
+
+```ts
+import { createAuthenticatedClient } from "@openbkn/bkn-sdk";
+
+const bkn = await createAuthenticatedClient({
+  baseUrl: process.env.BKN_BASE_URL!,
+  auth: {
+    username: process.env.BKN_USERNAME!,
+    password: process.env.BKN_PASSWORD!,
+  },
+});
+
+const networks = await bkn.kn.list({ limit: 10 });
+```
+
 Before the first request to a platform, the SDK checks that the platform's version matches its own.
 When it does not, the call fails before anything is sent, with an error naming both versions. Set
 `BKN_SKIP_VERSION_CHECK=1` to send the request anyway — for a deployment that reports a placeholder
