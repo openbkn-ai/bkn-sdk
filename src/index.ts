@@ -17,6 +17,7 @@ export type {
   EmailMaskRule,
   FixedMaskRule,
   PartialMaskRule,
+  RefreshableTokens,
   RequestContext,
   RoundMaskRule,
 } from "./types.js";
