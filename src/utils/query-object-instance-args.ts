@@ -14,10 +14,8 @@ const QUERY_KEYS = new Set([
   "filters",
   "limit",
   "sort",
-  // The live MCP tool pages by `cursor`; the REST contract names the same thing
-  // `search_after` (object-instance.yaml). Both are accepted and passed through.
+  // MCP and REST both use an opaque cursor; legacy search_after is rejected.
   "cursor",
-  "search_after",
   "offset",
   "properties",
   "bkn_context",
@@ -114,6 +112,11 @@ export function validateQueryObjectInstanceArgs(
 ): void {
   if (!object(args)) throw new InputError("query-object-instance --args must be a JSON object");
   for (const key of Object.keys(args)) {
+    if (key === "search_after") {
+      throw new InputError(
+        "query-object-instance search_after is no longer supported; use cursor with the previous response's opaque cursor string",
+      );
+    }
     if (key === "knn") {
       throw new InputError(
         "Unknown query_object_instance argument knn; put vector search in condition.operation=knn",

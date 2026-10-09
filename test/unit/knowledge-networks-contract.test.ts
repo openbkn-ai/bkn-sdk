@@ -375,7 +375,7 @@ describe("ontology-query read flags", () => {
         branch: "dev",
         includeLogicParams: true,
         excludeSystemProperties: ["_instance_identity"],
-        ignoringStoreCache: true,
+        ignoreLocalIndex: true,
       },
     );
     const q = lastCall(f).url.searchParams;
@@ -383,7 +383,7 @@ describe("ontology-query read flags", () => {
     expect(q.get("branch")).toBe("dev");
     expect(q.get("include_logic_params")).toBe("true");
     expect(q.getAll("exclude_system_properties")).toEqual(["_instance_identity"]);
-    expect(q.get("ignoring_store_cache")).toBe("true");
+    expect(q.get("ignore_local_index")).toBe("true");
   });
 
   it("subgraph sends no query string by default", async () => {
@@ -399,12 +399,14 @@ describe("ontology-query read flags", () => {
       "kn-1",
       "ot-1",
       { limit: 1 },
-      { includeTypeInfo: true, includeLogicParams: true, branch: "dev" },
+      { includeTypeInfo: true, includeLogicParams: true, branch: "dev", ignoreLocalIndex: true },
     );
     const q = lastCall(f).url.searchParams;
     expect(q.get("include_type_info")).toBe("true");
     expect(q.get("include_logic_params")).toBe("true");
     expect(q.get("branch")).toBe("dev");
+    expect(q.get("ignore_local_index")).toBe("true");
+    expect(q.has("ignoring_store_cache")).toBe(false);
   });
 
   it("execute and metric reads pass branch and fill_null", async () => {

@@ -31,6 +31,7 @@ describe("query_object_instance argument validation", () => {
   it.each([
     [{ ot_id: "ot-1", knn: { field: "embedding" } }, "condition.operation=knn"],
     [{ ot_id: "ot-1", sort_by: "created_at" }, "sort_by"],
+    [{ ot_id: "ot-1", search_after: ["id-9"] }, "use cursor"],
     [
       { ot_id: "ot-1", condition: { operation: "and", conditions: [] } },
       "condition.sub_conditions",
@@ -73,13 +74,14 @@ describe("query_object_instance argument validation", () => {
 
   it.each([
     { ot_id: "ot-1", cursor: "next-page" },
-    { ot_id: "ot-1", search_after: ["2026-01-01", "id-9"] },
-  ])("accepts both paging keys, the MCP cursor and the REST search_after: %j", (args) => {
+    { ot_id: "ot-1", offset: 30 },
+  ])("accepts cursor or offset paging: %j", (args) => {
     expect(() => validateQueryObjectInstanceArgs(args, "kn-1")).not.toThrow();
   });
 
   it.each([
     ['{"ot_id":"ot-1","knn":{"field":"embedding"}}', "condition.operation=knn"],
+    ['{"ot_id":"ot-1","search_after":["id-9"]}', "use cursor"],
     [
       '{"ot_id":"ot-1","condition":{"operation":"and","conditions":[]}}',
       "condition.sub_conditions",

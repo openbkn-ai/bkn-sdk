@@ -352,7 +352,7 @@ def test_a_read_flag_takes_the_rest_path_even_when_traced(deploy: Deploy) -> Non
     """The tool takes none of the REST query-string flags; ignoring one in silence
     would hand back rows the caller asked to shape differently."""
     with session(traced=True):
-        Tournaments.objects().options(ignoring_store_cache=True).page(limit=1)
+        Tournaments.objects().options(ignore_local_index=True).page(limit=1)
 
     assert tool_calls(deploy, "query_object_instance") == []
     assert deploy.rest_bodies[-1]["bkn_context"]["interaction_id"] == "int_1"
@@ -499,14 +499,15 @@ def test_a_traced_iterate_pages_the_tool_by_offset(deploy: Deploy) -> None:
     ]
 
 
-def test_a_cursor_takes_the_rest_path_even_when_traced(deploy: Deploy) -> None:
-    """The tool has no `cursor`; handed one, it would restart at page one."""
+def test_a_traced_cursor_continues_through_the_tool(deploy: Deploy) -> None:
+    """The current MCP instance-query contract accepts an opaque cursor."""
     with session(traced=True):
         Tournaments.objects().page(limit=1, cursor="c-2")
 
-    assert tool_calls(deploy, "query_object_instance") == []
-    assert deploy.rest_bodies[-1]["cursor"] == "c-2"
-    assert "response_format" not in deploy.rest_bodies[-1]
+    arguments = tool_calls(deploy, "query_object_instance")[0]
+    assert arguments["cursor"] == "c-2"
+    assert arguments["response_format"] == "json"
+    assert deploy.rest_bodies == []
 
 
 def test_a_tool_error_keeps_its_structured_code(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1121,3 +1122,32 @@ def test_a_flat_rest_refusal_is_recognised_as_wanting_a_turn() -> None:
 
     assert lifecycle_module._needs_context(flat)
     assert not lifecycle_module._needs_context(unrelated)
+
+
+def test_traced_iterate_follows_tool_cursor_and_preserves_receipts(deploy: Deploy) -> None:
+    answers: Iterator[dict[str, Any]] = iter(
+        [
+            {"datas": [ROW], "cursor": "c-2"},
+            {"datas": [ROW]},
+        ]
+    )
+    original = deploy._respond
+
+    def respond(name: str) -> httpx.Response:
+        if name != "query_object_instance":
+            return original(name)
+        return deploy._rpc(next(answers), receipt=RECEIPT)
+
+    deploy._respond = respond  # type: ignore[method-assign]
+    with session(traced=True):
+        rows = list(Tournaments.objects().iterate(page_size=1))
+
+    calls = tool_calls(deploy, "query_object_instance")
+    assert len(rows) == 2
+    assert len(calls) == 2
+    assert "cursor" not in calls[0]
+    assert calls[1]["cursor"] == "c-2"
+    assert calls[0]["limit"] == calls[1]["limit"] == 1
+    assert calls[0]["bkn_context"] == calls[1]["bkn_context"]
+    assert all(row.__receipt__ == RECEIPT for row in rows)
+    assert deploy.rest_bodies == []

@@ -237,13 +237,10 @@ DEFAULT_TAKE = 50
 #: round trip per page.
 DEFAULT_PAGE_SIZE = 500
 
-#: Keys the REST read understands and the MCP tool does not. `sort` is not one
-#: of them: `query_object_instance` documents it and the live catalog declares
-#: it. `need_total` is REST's switch for a total, which the tool does not take.
-#: `cursor` is REST's paging token (`paging.next_cursor`); the tool's own paging
-#: key is not the same field — its published schema names `search_after` beside
-#: `offset` — so a REST cursor handed to it would restart at the first page.
-_REST_ONLY_ARGUMENTS = frozenset({"need_total", "cursor"})
+#: `need_total` is REST's explicit total-count switch, which MCP does not take.
+#: Both current MCP and REST instance-query contracts accept `sort` and the
+#: opaque `cursor`; traced cursor continuation stays on MCP and keeps receipts.
+_REST_ONLY_ARGUMENTS = frozenset({"need_total"})
 
 #: What `exclude_system_properties` may name — the read's own enum.
 SYSTEM_PROPERTIES = frozenset({"_instance_id", "_instance_identity", "_display"})
@@ -259,10 +256,8 @@ class Page(Generic[OT]):
     #: `total_count`, present only when `need_total` was asked for — and absent
     #: even then when nothing matched, so `count()` reads `None` as zero.
     total: int | None = None
-    #: Deprecated. The backend's hint that an index served the query, returned by
-    #: deploys that predate cursor paging and absent from the current contract,
-    #: where it reads False. Paging decisions follow `next_cursor`, not this.
-    search_from_index: bool = False
+    #: Actual Vega query channel: "local_index" or "source"; absent if no resource was queried.
+    query_source: str | None = None
     #: Present on a traced read: the evidence-chain entry for the operation.
     receipt: dict[str, Any] | None = None
     #: The opaque cursor for the page after this one — `paging.next_cursor` on
@@ -286,7 +281,7 @@ class ObjectSet(Generic[OT]):
     include_type_info: bool = False
     include_logic_params: bool = False
     exclude_system_properties: tuple[str, ...] = ()
-    ignoring_store_cache: bool = False
+    ignore_local_index: bool = False
 
     # ---- refinement ----
 
@@ -321,16 +316,16 @@ class ObjectSet(Generic[OT]):
         include_type_info: bool | None = None,
         include_logic_params: bool | None = None,
         exclude_system_properties: Sequence[str] | None = None,
-        ignoring_store_cache: bool | None = None,
+        ignore_local_index: bool | None = None,
     ) -> ObjectSet[OT]:
         """Set the read's documented query-string flags.
 
         `include_type_info` adds the object type to the response,
         `include_logic_params` the computation parameters of logic properties,
         `exclude_system_properties` drops `_instance_id`, `_instance_identity`
-        or `_display` from each row, and `ignoring_store_cache` reads the store
-        rather than the index. The MCP tool takes none of them, so a set that
-        sets one reads over REST even inside a traced scope — carrying the
+        or `_display` from each row, and `ignore_local_index` bypasses the table
+        resource local index and queries its original source. The MCP tool takes none
+        of them, so a set that sets one reads over REST even inside a traced scope — carrying the
         scope's turn, as a count does.
         """
         changes: dict[str, Any] = {}
@@ -342,8 +337,8 @@ class ObjectSet(Generic[OT]):
             changes["exclude_system_properties"] = checked_system_properties(
                 exclude_system_properties
             )
-        if ignoring_store_cache is not None:
-            changes["ignoring_store_cache"] = ignoring_store_cache
+        if ignore_local_index is not None:
+            changes["ignore_local_index"] = ignore_local_index
         return replace(self, **changes)
 
     # ---- execution ----
@@ -500,7 +495,7 @@ class ObjectSet(Generic[OT]):
             self.include_type_info
             or self.include_logic_params
             or self.exclude_system_properties
-            or self.ignoring_store_cache
+            or self.ignore_local_index
         )
 
     def _query(self) -> dict[str, QueryValue]:
@@ -510,7 +505,7 @@ class ObjectSet(Generic[OT]):
             "include_type_info": self.include_type_info or None,
             "include_logic_params": self.include_logic_params or None,
             "exclude_system_properties": [*self.exclude_system_properties] or None,
-            "ignoring_store_cache": self.ignoring_store_cache or None,
+            "ignore_local_index": self.ignore_local_index or None,
         }
 
     def _send(self, body: dict[str, Any], context: Context) -> Any:
@@ -547,7 +542,7 @@ class ObjectSet(Generic[OT]):
         """The same query through MCP, inside the scope's managed interaction.
 
         Slower — a transport session plus a tool call — and it takes neither
-        `need_total`, REST's cursor nor the REST query-string flags; a query
+        `need_total` nor the REST query-string flags; a query
         needing one of those reads over REST, carrying the scope's turn. What it
         buys is the receipt: its status, evidence durability and the business
         refs it touched, landed in the evidence chain.
@@ -598,7 +593,7 @@ class ObjectSet(Generic[OT]):
         return Page(
             rows=instances,
             total=total if isinstance(total, int) else None,
-            search_from_index=bool(payload.get("search_from_index")),
+            query_source=payload.get("query_source"),
             receipt=receipt,
             next_cursor=_next_cursor(payload),
         )

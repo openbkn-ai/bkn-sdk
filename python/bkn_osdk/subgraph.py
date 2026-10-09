@@ -91,7 +91,7 @@ class RelationPath:
         step_limit: int = DEFAULT_STEP_LIMIT,
         include_logic_params: bool = False,
         exclude_system_properties: Sequence[str] | None = None,
-        ignoring_store_cache: bool = False,
+        ignore_local_index: bool = False,
         context: Context | None = None,
     ) -> list[Any]:
         """Walk the chain from one instance, returning the far end's instances.
@@ -101,7 +101,7 @@ class RelationPath:
         each SKU once.
 
         `include_logic_params`, `exclude_system_properties` and
-        `ignoring_store_cache` are the endpoint's documented query flags, as on
+        `ignore_local_index` are the endpoint's documented query flags, as on
         `ObjectSet.options`. `query_type` is not offered: this walk always sends
         the seed-based body, and `relation_path` expects a different one.
         A row returned without `_instance_identity` cannot start a further walk.
@@ -138,7 +138,7 @@ class RelationPath:
             "branch": branch_param(type(instance).__branch__),
             "include_logic_params": include_logic_params or None,
             "exclude_system_properties": [*excluded] or None,
-            "ignoring_store_cache": ignoring_store_cache or None,
+            "ignore_local_index": ignore_local_index or None,
         }
 
         def send(bkn_context: dict[str, str] | None) -> Any:

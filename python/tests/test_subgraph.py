@@ -272,7 +272,7 @@ def test_the_branch_and_read_flags_ride_the_query_string(
         seed(),
         include_logic_params=True,
         exclude_system_properties=["_display", "_instance_id"],
-        ignoring_store_cache=True,
+        ignore_local_index=True,
     )
 
     assert deploy.queries[0] == [
@@ -280,7 +280,7 @@ def test_the_branch_and_read_flags_ride_the_query_string(
         ("include_logic_params", "true"),
         ("exclude_system_properties", "_display"),
         ("exclude_system_properties", "_instance_id"),
-        ("ignoring_store_cache", "true"),
+        ("ignore_local_index", "true"),
     ]
 
 

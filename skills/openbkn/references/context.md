@@ -261,8 +261,8 @@ openbkn context query-object-instance <kn> --args '{
   ]},
   "limit": 5
 }'
-# Page with `cursor` (what the live MCP tool returns) or `offset`, never both.
-# The REST contract names the cursor `search_after`; it is passed through unchanged.
+# Page with the previous response's opaque `cursor` or `offset`, never both.
+# Both MCP and REST use `cursor`; legacy `search_after` is rejected.
 
 # query-instance-subgraph: n-hop path = n+1 object_types and n relation_types, in path order.
 # Every object type needs `condition` and `limit`; `operation: "and"` with no

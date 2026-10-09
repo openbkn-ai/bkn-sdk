@@ -370,14 +370,14 @@ def test_a_null_next_cursor_is_the_last_page(replay: Replay) -> None:
     page = orders().page(limit=2)
 
     assert page.next_cursor is None
-    assert page.search_from_index is False  # absent from the current contract
+    assert page.query_source is None
 
 
-def test_the_legacy_index_hint_is_still_read(replay: Replay) -> None:
-    """Deploys built before cursor paging still return `search_from_index`."""
-    replay.queue_response({"datas": [], "search_from_index": True})
+@pytest.mark.parametrize("source", ["source", "local_index"])
+def test_the_actual_query_source_is_read(replay: Replay, source: str) -> None:
+    replay.queue_response({"datas": [], "query_source": source})
 
-    assert orders().page(limit=2).search_from_index is True
+    assert orders().page(limit=2).query_source == source
 
 
 def test_paging_follows_the_cursor_until_it_is_null(replay: Replay) -> None:
@@ -552,18 +552,18 @@ def test_read_flags_ride_the_query_string(replay: Replay) -> None:
         include_type_info=True,
         include_logic_params=True,
         exclude_system_properties=["_display"],
-        ignoring_store_cache=True,
+        ignore_local_index=True,
     ).take(1)
 
     assert replay.paths[0].split("?", 1)[1] == (
         "include_type_info=true&include_logic_params=true"
-        "&exclude_system_properties=_display&ignoring_store_cache=true"
+        "&exclude_system_properties=_display&ignore_local_index=true"
     )
-    assert "ignoring_store_cache" not in replay.sent[0]
+    assert "ignore_local_index" not in replay.sent[0]
 
 
 def test_options_can_be_switched_back_off(replay: Replay) -> None:
-    orders().options(ignoring_store_cache=True).options(ignoring_store_cache=False).take(1)
+    orders().options(ignore_local_index=True).options(ignore_local_index=False).take(1)
 
     assert "?" not in replay.paths[0]
 

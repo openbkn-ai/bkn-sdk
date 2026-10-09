@@ -40,7 +40,8 @@ Update this table as each signal changes (e.g. live-parity count as commands are
 - `test/unit/query-object-instance.test.ts` checks the real CLI and SDK wrapper
   reject unknown argument names, malformed nested conditions, extra filter or
   sort keys, combined `condition`/`filters`, `cursor`/`offset`, and mismatched
-  `kn_id` before any request. It verifies
+  `kn_id` before any request. Legacy `search_after` is rejected with cursor migration
+  guidance at both the SDK and CLI entry points, without sending requests. It verifies
   that a nonempty `properties` list triggers one schema GET and missing or
   invisible fields stop the MCP query. `test/unit/auth-command.test.ts` checks
   that the env-shadow warning does not print URL credentials. The 401 hint in
@@ -50,3 +51,11 @@ Update this table as each signal changes (e.g. live-parity count as commands are
   sends nothing, including schema reads and MCP handshakes.
 
 - `test/unit/resources.test.ts` verifies independent top-level exact statistics, valid zero counts, unknown collection times, and no fallback to legacy metadata statistics. Type assertions ensure resource summaries do not declare exact or estimated counts or count collection times.
+
+- `knowledge-networks-contract.test.ts` and `bkn-command-flags.test.ts` verify
+  `ignore_local_index` / `--ignore-local-index` forwarding. Python query tests
+  verify the source bypass option and the actual `Page.query_source` response.
+
+- Python traced-query tests verify opaque cursor continuation and multi-page
+  iteration stay on MCP, preserve the interaction and row receipts, and send
+  no REST requests.

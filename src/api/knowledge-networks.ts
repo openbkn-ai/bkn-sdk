@@ -214,8 +214,8 @@ export interface InstanceReadOptions {
   includeLogicParams?: boolean;
   /** Drop these system fields from each returned instance. */
   excludeSystemProperties?: SystemProperty[];
-  /** Skip the index and read the store directly. */
-  ignoringStoreCache?: boolean;
+  /** Bypass the table resource local index and query its source. */
+  ignoreLocalIndex?: boolean;
 }
 
 function instanceReadQuery(opts: InstanceReadOptions & { includeTypeInfo?: boolean }) {
@@ -226,7 +226,7 @@ function instanceReadQuery(opts: InstanceReadOptions & { includeTypeInfo?: boole
     exclude_system_properties: opts.excludeSystemProperties?.length
       ? opts.excludeSystemProperties
       : undefined,
-    ignoring_store_cache: opts.ignoringStoreCache ? "true" : undefined,
+    ignore_local_index: opts.ignoreLocalIndex ? "true" : undefined,
   };
 }
 
