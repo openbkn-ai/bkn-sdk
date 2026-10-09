@@ -641,9 +641,9 @@ QUERY ARGUMENTS
   query-object-instance rejects unknown argument keys before calling the platform. Combine
   conditions with condition.sub_conditions, not condition.conditions; vector search belongs in
   condition.operation=knn, not a top-level knn argument. Do not combine condition and filters:
-  the platform ignores filters when condition is present. Page with cursor (the MCP tool's
-  key) or offset, never both; search_after (the REST name) is passed through unchanged for a
-  deploy that advertises it. Any kn_id in --args must match <kn-id>. For properties and condition.field,
+  the platform ignores filters when condition is present. Page with an opaque cursor or
+  offset, never both; the legacy search_after argument is rejected. Any kn_id in --args
+  must match <kn-id>. For properties and condition.field,
   run object-types <kn-id> <ot-id> first to see the valid field names. Specifying properties
   also reads the object-type schema once and rejects unknown names before the query. --schema shows the
   argument shape advertised by this deploy. Every --args option also accepts --args-file <path>,
