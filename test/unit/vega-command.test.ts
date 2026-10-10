@@ -304,7 +304,7 @@ describe("vega resource writes", () => {
       "--name",
       "view",
       "--category",
-      "logicview",
+      "logical_view",
       "--logic-type",
       "derived",
     ];
@@ -324,7 +324,7 @@ describe("vega resource writes", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("creates a derived logic view with an object definition and explicit schema", async () => {
+  it("creates a derived logical view with an object definition and explicit schema", async () => {
     const fetchMock = mockFetch({ id: "view-1" });
     suppressOutput();
 
@@ -342,7 +342,7 @@ describe("vega resource writes", () => {
         "--name",
         "orders_view",
         "--category",
-        "logicview",
+        "logical_view",
         "--logic-type",
         "derived",
         "--schema-definition",

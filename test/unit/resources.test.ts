@@ -265,11 +265,11 @@ describe("listResources", () => {
 });
 
 describe("updateResource", () => {
-  it("preserves logic_type on a logic view PUT", async () => {
+  it("preserves logic_type on a logical view PUT", async () => {
     const f = mockFetch({
       entries: [
         resourceFixture({
-          category: "logicview",
+          category: "logical_view",
           logic_type: "derived",
           logic_definition: { source_resource_id: "source-1" },
           schema_definition: [{ name: "alias", original_name: "ID", type: "string" }],
@@ -415,12 +415,12 @@ describe("queryResource", () => {
 });
 
 describe("typed Resource and document APIs", () => {
-  it("rejects incomplete or server-owned logic view input before sending a request", async () => {
+  it("rejects incomplete or server-owned logical view input before sending a request", async () => {
     const fetchMock = mockFetch({ id: "view-1" });
     const valid: CreateResourceRequest = {
       catalogId: "c-1",
       name: "view",
-      category: "logicview",
+      category: "logical_view",
       logicType: "derived",
       logicDefinition: { source_resource_id: "source-1" },
       schemaDefinition: [{ name: "id", original_name: "ID", type: "integer" }],
@@ -429,7 +429,7 @@ describe("typed Resource and document APIs", () => {
       createResource(ctx, {
         catalogId: "c-1",
         name: "view",
-        category: "logicview",
+        category: "logical_view",
         logicDefinition: { source_resource_id: "source-1" },
       } as unknown as CreateResourceRequest),
     ).rejects.toThrow("logicType must be derived");
@@ -476,7 +476,7 @@ describe("typed Resource and document APIs", () => {
     });
   });
 
-  it("rejects logic view fields on a dataset before sending a request", async () => {
+  it("rejects logical view fields on a dataset before sending a request", async () => {
     const fetchMock = mockFetch({ id: "r-1" });
     const dataset = { catalogId: "c-1", name: "documents", category: "dataset" };
     await expect(
@@ -484,13 +484,13 @@ describe("typed Resource and document APIs", () => {
         ...dataset,
         logicDefinition: { source_resource_id: "source-1" },
       } as unknown as CreateResourceRequest),
-    ).rejects.toThrow("logicDefinition is only valid for logicview");
+    ).rejects.toThrow("logicDefinition is only valid for logical_view");
     await expect(
       createResource(ctx, {
         ...dataset,
         logicType: "derived",
       } as unknown as CreateResourceRequest),
-    ).rejects.toThrow("logicType is only valid for logicview");
+    ).rejects.toThrow("logicType is only valid for logical_view");
     expect((fetchMock as unknown as { mock: { calls: CallArgs[] } }).mock.calls).toHaveLength(0);
   });
 

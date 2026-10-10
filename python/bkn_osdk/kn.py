@@ -657,7 +657,7 @@ def list_resources(
     Args:
         catalog_id: 限定某个 catalog。
         type_: 资源类别，映射 vega 的 category：`table` / `file` / `fileset` / `api` / `metric` /
-            `topic` / `index` / `logicview` / `dataset`。
+            `topic` / `index` / `logical_view` / `dataset`。
         offset: 分页偏移；不传由 vega 取默认值 0。
         limit: 分页大小；不传由 vega 取默认值 20。
 

@@ -95,7 +95,7 @@ export const ResourceCategory = z.enum([
   "metric",
   "topic",
   "index",
-  "logicview",
+  "logical_view",
   "dataset",
 ]);
 export type ResourceCategory = z.infer<typeof ResourceCategory>;
@@ -259,7 +259,7 @@ export type ResourceRef = z.infer<typeof ResourceRef>;
 export interface ListResourcesOptions {
   catalogId?: string;
   name?: string;
-  /** Resource category, e.g. table | logicview. */
+  /** Resource category, e.g. table | logical_view. */
   category?: ResourceCategory;
   status?: ResourceStatus;
   /** Whether the resource is enabled. */
@@ -345,7 +345,7 @@ export type CreateResourceRequest =
       logicType?: never;
     })
   | (CreateResourceBase & {
-      category: "logicview";
+      category: "logical_view";
       logicType: "derived";
       logicDefinition: { source_resource_id: string; filter_condition?: unknown };
       schemaDefinition: (ResourceProperty & { original_name: string; type: string })[];
@@ -358,9 +358,9 @@ export async function createResource(
   ctx: RequestContext,
   req: CreateResourceRequest,
 ): Promise<ResourceRef> {
-  if (req.category === "logicview") {
+  if (req.category === "logical_view") {
     if (req.logicType !== "derived") {
-      throw new InputError("logicType must be derived for logicview resources");
+      throw new InputError("logicType must be derived for logical_view resources");
     }
     if (
       req.schema !== undefined ||
@@ -368,7 +368,7 @@ export async function createResource(
       req.sourceMetadata !== undefined
     ) {
       throw new InputError(
-        "schema, sourceIdentifier, and sourceMetadata are server-owned for logicview resources",
+        "schema, sourceIdentifier, and sourceMetadata are server-owned for logical_view resources",
       );
     }
     if (
@@ -379,11 +379,11 @@ export async function createResource(
       !req.logicDefinition.source_resource_id.trim()
     ) {
       throw new InputError(
-        "logicDefinition.source_resource_id is required for logicview resources",
+        "logicDefinition.source_resource_id is required for logical_view resources",
       );
     }
     if (!Array.isArray(req.schemaDefinition) || req.schemaDefinition.length === 0) {
-      throw new InputError("non-empty schemaDefinition is required for logicview resources");
+      throw new InputError("non-empty schemaDefinition is required for logical_view resources");
     }
     for (const field of req.schemaDefinition) {
       if (
@@ -393,16 +393,16 @@ export async function createResource(
         )
       ) {
         throw new InputError(
-          "logicview schemaDefinition fields require name, original_name, and type",
+          "logical_view schemaDefinition fields require name, original_name, and type",
         );
       }
     }
   } else {
     if (req.logicDefinition !== undefined) {
-      throw new InputError("logicDefinition is only valid for logicview resources");
+      throw new InputError("logicDefinition is only valid for logical_view resources");
     }
     if (req.logicType !== undefined) {
-      throw new InputError("logicType is only valid for logicview resources");
+      throw new InputError("logicType is only valid for logical_view resources");
     }
   }
   const result = await createResourceRaw(ctx, {
@@ -480,7 +480,7 @@ function resourceUpdateBody(
     ),
     index_config: patch.indexConfig === undefined ? current.index_config : patch.indexConfig,
     logic_definition: patch.logicDefinition ?? current.logic_definition,
-    ...(current.category === "logicview" ? { logic_type: current.logic_type } : {}),
+    ...(current.category === "logical_view" ? { logic_type: current.logic_type } : {}),
   };
   const expectedUpdateTime = patch.expectedUpdateTime ?? current.update_time;
   if (expectedUpdateTime !== undefined) {
