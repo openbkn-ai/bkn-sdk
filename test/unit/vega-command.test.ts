@@ -354,6 +354,7 @@ describe("vega resource writes", () => {
     );
 
     const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
+    expect(body.category).toBe("logical_view");
     expect(body.logic_definition).toEqual({ source_resource_id: "source-1" });
     expect(body.logic_type).toBe("derived");
     expect(body.schema_definition).toEqual([
