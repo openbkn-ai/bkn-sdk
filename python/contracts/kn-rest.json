@@ -743,7 +743,7 @@
           "name": "type",
           "type": "string",
           "required": false,
-          "description": "资源类别，映射 vega 的 category：`table` / `file` / `fileset` / `api` / `metric` / `topic` / `index` / `logicview` / `dataset`。"
+          "description": "资源类别，映射 vega 的 category：`table` / `file` / `fileset` / `api` / `metric` / `topic` / `index` / `logical_view` / `dataset`。"
         },
         {
           "name": "offset",
