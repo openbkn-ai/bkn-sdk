@@ -17,6 +17,7 @@ Update this table as each signal changes (e.g. live-parity count as commands are
 
 ## CLI reliability regression coverage
 
+- `test/unit/metric-validation.test.ts` checks HTTP-200 negative validation results, CLI JSON output and nonzero exit status, malformed responses, and HTTP failures. `test/unit/knowledge-networks.test.ts` checks SDK reads with omitted `data_properties`; the existing query and push-integrity regressions cover empty-schema behavior. `test/unit/vega.test.ts` checks the published index-capabilities API hint while retaining legacy empty-list normalization.
 - `test/unit/trace-command.test.ts` runs the complete CLI tree and checks the
   outgoing query for conversation/interaction filters before and after the
   command. Ambient Trace context does not become an implicit search filter.

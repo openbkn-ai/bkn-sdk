@@ -8,6 +8,7 @@
  * Responses are passed through as parsed JSON
  * (shapes vary by backend version — validate at higher layers as needed).
  */
+import { z } from "zod";
 import type { RequestContext } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
@@ -757,17 +758,31 @@ export function deleteMetric(
     },
   );
 }
-export function validateMetric(
+/** A completed dependency validation; HTTP 200 can still mean `valid: false`. */
+export const MetricValidationResult = z
+  .object({
+    valid: z.boolean(),
+    detail: z.string().optional(),
+  })
+  .passthrough();
+export type MetricValidationResult = z.infer<typeof MetricValidationResult>;
+
+export async function validateMetric(
   ctx: RequestContext,
   knId: string,
   body: unknown,
   opts: ImportWriteOptions = {},
-): Promise<unknown> {
-  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/validation`, {
-    method: "POST",
-    query: writeQuery(opts),
-    body,
-  });
+): Promise<MetricValidationResult> {
+  const result = await request<unknown>(
+    ctx,
+    `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/validation`,
+    {
+      method: "POST",
+      query: writeQuery(opts),
+      body,
+    },
+  );
+  return MetricValidationResult.parse(result);
 }
 
 export interface SearchInstanceOptions {
