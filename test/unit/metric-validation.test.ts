@@ -23,7 +23,7 @@ function server(body: unknown, status = 200) {
     if (new URL(String(url)).pathname === "/api/bkn-backend/v1/health") {
       return Response.json({ ServerVersion: pkg.version });
     }
-    return Response.json(body, { status });
+    return body === undefined ? new Response(null, { status }) : Response.json(body, { status });
   });
   vi.stubGlobal("fetch", fetch);
   return fetch;
@@ -55,6 +55,23 @@ function cli() {
 }
 
 describe("Metric validation results", () => {
+  it.each([200, 204])("normalizes an empty HTTP %s success in the SDK and CLI", async (status) => {
+    const fetch = server(undefined, status);
+    const client = createClient({ baseUrl: BASE, token: "t" });
+    await expect(client.kn.metricValidate("kn-1", { entries: [] })).resolves.toEqual({
+      valid: true,
+    });
+    const stdout: string[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation((part) => {
+      stdout.push(String(part));
+      return true;
+    });
+    await cli();
+    expect(JSON.parse(stdout.join(""))).toEqual({ valid: true });
+    expect(process.exitCode).toBeUndefined();
+    expect(fetch.mock.calls.some(([url]) => new URL(String(url)).pathname === PATH)).toBe(true);
+  });
+
   it.each([
     { valid: true },
     { valid: false, detail: "Object type customer does not exist", extra: "preserved" },
@@ -66,7 +83,7 @@ describe("Metric validation results", () => {
     expect(process.exitCode).toBeUndefined();
   });
 
-  it.each([{ ok: true }, { valid: "false" }, { valid: true, detail: 3 }])(
+  it.each([null, {}, { ok: true }, { valid: "false" }, { valid: true, detail: 3 }])(
     "rejects malformed validation responses: %j",
     async (body) => {
       server(body);

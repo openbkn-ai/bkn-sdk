@@ -107,7 +107,8 @@ const raw = await bkn.call("/api/...", { method: "GET" });
 
 `bkn.kn.metricValidate()` returns an exported `MetricValidationResult`
 (`{ valid: boolean, detail?: string }`); a completed negative validation is a result,
-while HTTP errors and malformed responses reject the promise. Object-type reads
+while HTTP errors and malformed responses reject the promise. Legacy empty success
+responses are normalized to `{ valid: true }`. Object-type reads
 may omit `data_properties` when none exist; SDK reads preserve omission, and local
 validation and push-integrity checks accept it.
 
