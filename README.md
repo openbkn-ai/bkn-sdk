@@ -40,6 +40,7 @@ openbkn bkn object-type list <kn-id>
 # Data platform
 openbkn resource list --type table
 openbkn vega catalog list
+openbkn vega index-capabilities --json   # available fulltext analyzers and check time
 openbkn model llm list
 
 # Operator (nested)
@@ -86,6 +87,12 @@ complete record of a completed call, find its `receipt_id` with
 
 Tokens are stored per platform/user under `~/.bkn/` (override: `BKN_CONFIG_DIR`).
 
+Before configuring fulltext indexes, use `vega index-capabilities` to read the
+deployment's supported analyzer IDs. This published Vega API changes no
+configuration and starts no build. `bkn metric validate <kn-id> --body-file metrics.json`
+prints `{ valid, detail? }` and exits with code 1 when `valid` is false, including
+when the server returns HTTP 200.
+
 ## SDK
 
 ```ts
@@ -97,6 +104,13 @@ const networks = await bkn.kn.list({ limit: 10 });
 const task = await bkn.vega.build({ resource_id: "r-1", mode: "batch" }, { wait: true });
 const raw = await bkn.call("/api/...", { method: "GET" });
 ```
+
+`bkn.kn.metricValidate()` returns an exported `MetricValidationResult`
+(`{ valid: boolean, detail?: string }`); a completed negative validation is a result,
+while HTTP errors and malformed responses reject the promise. Legacy empty success
+responses are normalized to `{ valid: true }`. Object-type reads
+may omit `data_properties` when none exist; SDK reads preserve omission, and local
+validation and push-integrity checks accept it.
 
 Importing the package has no side effects; `createClient` resolves config explicitly.
 
@@ -123,10 +137,12 @@ const bkn = await createAuthenticatedClient({
 const networks = await bkn.kn.list({ limit: 10 });
 ```
 
-Before the first request to a platform, the SDK checks that the platform's version matches its own.
-When it does not, the call fails before anything is sent, with an error naming both versions. Set
+Before the first business request to a platform, the SDK reads its health endpoint and checks
+that the base SemVer version matches its own, ignoring prerelease and build suffixes. For example,
+SDK `0.2.0` matches platform `0.2.0-rc.1` and `0.2.0-rc.2`. A mismatch stops the business request
+with an error naming both versions. Set
 `BKN_SKIP_VERSION_CHECK=1` to send the request anyway — for a deployment that reports a placeholder
-or a development build, which no release can match. It is the environment variable that serves a
+or a different base version. It is the environment variable that serves a
 library caller; the CLI has `--skip-version-check` as well.
 
 Dynamic-data responses (including Vega and ontology queries) may contain native

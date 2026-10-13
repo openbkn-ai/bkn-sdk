@@ -193,7 +193,7 @@ describe("vega uses the vega-backend base path", () => {
     });
   });
 
-  it("explains a 404 from index-capabilities as an undocumented extension the deploy lacks", async () => {
+  it("explains a 404 when the deployment does not expose the published index-capabilities API", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(
@@ -207,7 +207,8 @@ describe("vega uses the vega-backend base path", () => {
     const error = await getIndexCapabilities(ctx).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(HttpError);
     expect((error as HttpError).status).toBe(404);
-    expect((error as HttpError).hint).toMatch(/undocumented/);
+    expect((error as HttpError).hint).toContain("published Vega API");
+    expect((error as HttpError).hint).not.toContain("undocumented");
   });
 
   it("listCatalogs sends filters and sort params", async () => {

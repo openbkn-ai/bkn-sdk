@@ -197,6 +197,7 @@ describe("schema creates carry the POST override", () => {
     await deleteMetric(ctx, "kn-1", "m-1", { branch: "dev" });
     expect(lastCall(f).init.method).toBe("DELETE");
     expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
+    f.mockResolvedValueOnce(Response.json({ valid: true }));
     await validateMetric(ctx, "kn-1", { entries: [] }, { branch: "dev" });
     expect(lastCall(f).url.pathname).toBe(`${base}/validation`);
     expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
@@ -583,6 +584,7 @@ describe("write modes and branch on bkn-backend writes", () => {
     await createMetric(ctx, "kn-1", [], { importMode: "normal", strictMode: true });
     expect(lastCall(f).url.searchParams.get("import_mode")).toBe("normal");
     expect(lastCall(f).url.searchParams.get("strict_mode")).toBe("true");
+    f.mockResolvedValueOnce(Response.json({ valid: true }));
     await validateMetric(ctx, "kn-1", {}, { importMode: "overwrite", strictMode: false });
     expect(lastCall(f).url.searchParams.get("import_mode")).toBe("overwrite");
     expect(lastCall(f).url.searchParams.get("strict_mode")).toBe("false");
