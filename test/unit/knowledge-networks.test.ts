@@ -114,6 +114,17 @@ describe("create + delete", () => {
 });
 
 describe("schema lists (bkn-backend)", () => {
+  it("returns object types with omitted data_properties through the SDK", async () => {
+    const { kn } = await import("../../src/resources/knowledge-networks.js");
+    const entry = { id: "ot-1", name: "Customer", data_source: null };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ entries: [entry] })),
+    );
+    await expect(kn(ctx).objectTypes("kn-1")).resolves.toEqual({ entries: [entry] });
+    await expect(kn(ctx).objectTypeGet("kn-1", "ot-1")).resolves.toEqual({ entries: [entry] });
+  });
+
   it("object-types: branch + limit defaults", async () => {
     const f = mockFetch();
     await listObjectTypes(ctx, "kn-1");
@@ -414,6 +425,7 @@ describe("validateMetric", () => {
   it("POSTs to metrics/validation (OpenAPI path)", async () => {
     const { validateMetric } = await import("../../src/api/knowledge-networks.js");
     const fetchMock = mockFetch();
+    vi.mocked(fetchMock).mockResolvedValueOnce(Response.json({ valid: true }));
     await validateMetric(ctx, "kn-1", { entries: [] });
     const call = firstCall(fetchMock);
     expect(new URL(call[0]).pathname).toBe(

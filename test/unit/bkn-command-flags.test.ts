@@ -21,7 +21,7 @@ const kn = vi.hoisted(() => {
     metricGet: ok(),
     metricUpdate: ok(),
     metricDelete: ok(),
-    metricValidate: ok(),
+    metricValidate: vi.fn(async (..._args: unknown[]) => ({ valid: true })),
     conceptGroups: ok(),
     actionSchedules: ok(),
     actionTypeQuery: ok(),

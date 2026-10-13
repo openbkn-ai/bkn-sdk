@@ -34,6 +34,7 @@ openbkn bkn object-type list <kn-id>
 # 数据平台
 openbkn resource list --type table
 openbkn vega catalog list
+openbkn vega index-capabilities --json   # 可用全文索引分析器与检查时间
 openbkn model llm list
 
 # 运维（嵌套）
@@ -72,6 +73,10 @@ Receipt 确认权威业务上下文。
 
 Token 按平台/用户存于 `~/.bkn/`（可用 `BKN_CONFIG_DIR` 覆盖）。
 
+配置全文索引前，可用 `vega index-capabilities` 查询部署支持的分析器 ID。这是公开的
+Vega 只读接口，不修改配置或触发构建。`bkn metric validate <kn-id> --body-file metrics.json`
+输出 `{ valid, detail? }`；即使 HTTP 返回 200，只要 `valid` 为 `false`，CLI 退出码就是 1。
+
 ## SDK
 
 ```ts
@@ -83,6 +88,11 @@ const networks = await bkn.kn.list({ limit: 10 });
 const task = await bkn.vega.build({ resource_id: "r-1", mode: "batch" }, { wait: true });
 const raw = await bkn.call("/api/...", { method: "GET" });
 ```
+
+`bkn.kn.metricValidate()` 返回已导出的 `MetricValidationResult`
+（`{ valid: boolean, detail?: string }`）。校验未通过仍是正常返回的结果；HTTP 错误或
+不符合契约的响应会抛错。对象类没有数据属性时，读取结果可省略 `data_properties`；
+SDK 保留缺省，本地校验与 push 完整性检查也支持该情况。
 
 import 本包无副作用；`createClient` 显式解析配置。
 
@@ -107,9 +117,10 @@ const bkn = await createAuthenticatedClient({
 const networks = await bkn.kn.list({ limit: 10 });
 ```
 
-首次向某个平台发请求前，SDK 会校验平台版本与自身是否一致。不一致时调用在发出任何请求前
-就失败，错误信息里同时给出两边的版本。设 `BKN_SKIP_VERSION_CHECK=1` 可照常发送 ——
-用于平台报占位版本号或开发构建、任何发布版都匹配不上的情况。库调用方用这个环境变量，
+首次向某个平台发送业务请求前，SDK 会读取 health 接口，比较双方的基础 SemVer 版本，
+忽略 RC 与 build 后缀。例如 SDK `0.2.0` 可匹配平台 `0.2.0-rc.1` 和 `0.2.0-rc.2`。
+基础版本不一致时停止业务请求，错误信息里同时给出两边的版本。
+设 `BKN_SKIP_VERSION_CHECK=1` 可照常发送，用于平台报占位版本号或需要跨基础版本调用的情况。库调用方用这个环境变量，
 CLI 另有 `--skip-version-check`。
 
 Vega 和本体查询等动态数据响应中，超出 JavaScript 安全整数范围的值可能是原生 `bigint`。

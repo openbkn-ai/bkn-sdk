@@ -120,6 +120,7 @@ export {
   type ToolReceipt,
 } from "./api/context-loader.js";
 export { kn } from "./resources/knowledge-networks.js";
+export type { MetricValidationResult } from "./api/knowledge-networks.js";
 export { models } from "./resources/models.js";
 export { resources } from "./resources/resources.js";
 export { skills } from "./resources/skills.js";
