@@ -58,6 +58,7 @@ openbkn [--base-url <url>] [--token <tok>] [--user <id|name>] \
 - 默认输出为**人类可读表格**；`--json`（或 `--compact`）输出可被脚本解析的精确 JSON。
 - `-k/--insecure` 关闭 TLS 校验（自签名平台）。`auth login -k` 会按平台记住，之后该平台的命令无需再带；免校验只作用于该平台的请求，不碰进程全局，无需 `NODE_TLS_REJECT_UNAUTHORIZED`。
 - **以实时 `--help` 为准。** `openbkn --help` 看分组命令地图，`openbkn <group> <sub> --help` 看确切参数。**不要猜参数**。
+- 默认检查 SDK 与平台的基础版本是否一致，忽略 RC 与 build 后缀：`0.2.0` 可匹配 `0.2.0-rc.1` 或 `0.2.0-rc.2`。跨基础版本或平台报占位版本时，CLI 可显式加 `--skip-version-check`；SDK 可设 `BKN_SKIP_VERSION_CHECK=1`。
 
 ## 认证（凭据按平台/用户分层存于 `~/.bkn/`，可用 `BKN_CONFIG_DIR` 覆盖）
 
@@ -99,6 +100,9 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 | `call`（别名 `curl`） | 通用 API 透传 | `call <url> [-X POST] [-d '<json>']` |
 
 **按需深入**：需要某命令的完整参数时运行 `openbkn <group> <sub> --help`，或读对应的速查参考。
+
+- 配置全文索引前，用 `vega index-capabilities` 查询部署支持的分析器；返回列表与检查时间，详情见 [vega.md](references/vega.md)。
+- `bkn metric validate` 的成败看返回的 `valid`；`false` 时 CLI 输出结果并以退出码 1 结束。对象类的 `data_properties` 可省略，读取时按无数据属性处理。详情见 [bkn.md](references/bkn.md)。
 
 **本 CLI 暂未覆盖的平台能力**（别猜命令，直接用 `openbkn call` 打原始接口）：
 

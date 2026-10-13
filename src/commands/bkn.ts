@@ -813,7 +813,7 @@ An older deploy answers without paging — resend the query with "offset" instea
   writeModeFlags(
     metric
       .command("validate <kn-id>")
-      .description("Validate a metric definition (--body / --body-file)")
+      .description("Validate metric dependencies → {valid, detail?}; exits non-zero when invalid")
       .option(
         "--body <json>",
         "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
@@ -822,10 +822,9 @@ An older deploy answers without paging — resend the query with "offset" instea
       .option("--branch <b>", "branch (default: main)"),
     true,
   ).action(async (knId: string, opts, cmd: Command) => {
-    printJson(
-      await clientFrom(cmd).kn.metricValidate(knId, readBody(opts), writeModes(opts)),
-      outputOptions(cmd),
-    );
+    const result = await clientFrom(cmd).kn.metricValidate(knId, readBody(opts), writeModes(opts));
+    printJson(result, outputOptions(cmd));
+    if (!result.valid) process.exitCode = 1;
   });
 
   const cg = bkn.command("concept-group").description("Concept groups — list/get");
@@ -1310,6 +1309,14 @@ should be able to account for.
     WRITE: ["create", "update", "delete"],
   });
 
+  guide(
+    metric,
+    `VALIDATING DEFINITIONS
+  validate <kn-id> checks dependencies without saving definitions. Read valid in the
+  {valid, detail?} result: valid=false prints the result and sets exit code 1 even when
+  the server returned HTTP 200. Pass definitions with --body or --body-file.`,
+  );
+
   groupChildren(capability, {
     READ: ["list"],
     WRITE: ["attach", "detach"],
@@ -1326,6 +1333,8 @@ SEARCH VS THE MCP SIDE
   properties indexed for match/knn, so an unindexed object type yields nothing, and no hits
   comes back as empty nodes with a message rather than an error. For schema alone use
   \`openbkn context search-schema\`; for a structured filter use \`object-type query\`.
+  Object-type reads may omit data_properties when there are none; treat omission as an
+  empty property list.
 
 EDITING SCHEMA AS FILES
   pull <kn-id> ./dir  ->  edit  ->  validate ./dir  ->  push ./dir

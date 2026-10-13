@@ -139,9 +139,8 @@ export const CatalogConnectorTypeStatsResponse = z
 export type CatalogConnectorTypeStatsResponse = z.infer<typeof CatalogConnectorTypeStatsResponse>;
 
 /**
- * `GET /index-capabilities` response. Not part of the published vega-backend
- * contract: a deploy extension some deployments register. Callers must be ready
- * for a 404 on deployments that do not.
+ * Published `GET /index-capabilities` response. Legacy deployments may omit or
+ * return null for an empty analyzer list, or not expose the endpoint at all.
  */
 export const IndexCapabilities = z
   .object({
@@ -909,10 +908,9 @@ export async function getConnectorType(ctx: RequestContext, type: string): Promi
 }
 
 /**
- * Read the local index's fulltext analyzers. `GET /index-capabilities` is an
- * undocumented deploy extension, absent from the vega-backend contract, so a
- * deployment without it answers 404 — reported as such rather than as a
- * missing record.
+ * Read the local index's fulltext analyzers through the published Vega API.
+ * A deployment without the endpoint answers 404 — reported as such rather
+ * than as a missing record.
  */
 export async function getIndexCapabilities(ctx: RequestContext): Promise<IndexCapabilities> {
   let result: unknown;
@@ -924,7 +922,7 @@ export async function getIndexCapabilities(ctx: RequestContext): Promise<IndexCa
         err.status,
         err.statusText,
         err.body,
-        "This deployment does not expose GET /index-capabilities. It is an undocumented vega-backend extension, not part of the published contract; use the analyzers your deployment documents.",
+        "This deployment does not expose the published Vega API GET /index-capabilities. Check the deployed Vega version and route configuration; use the analyzers your deployment documents.",
       );
     }
     throw err;
