@@ -782,7 +782,8 @@ export async function validateMetric(
       body,
     },
   );
-  return MetricValidationResult.parse(result);
+  // Legacy backends return an empty successful response instead of a JSON result.
+  return result === undefined ? { valid: true } : MetricValidationResult.parse(result);
 }
 
 export interface SearchInstanceOptions {

@@ -1314,7 +1314,8 @@ should be able to account for.
     `VALIDATING DEFINITIONS
   validate <kn-id> checks dependencies without saving definitions. Read valid in the
   {valid, detail?} result: valid=false prints the result and sets exit code 1 even when
-  the server returned HTTP 200. Pass definitions with --body or --body-file.`,
+  the server returned HTTP 200. Legacy empty success becomes {valid: true}.
+  Pass definitions with --body or --body-file.`,
   );
 
   groupChildren(capability, {

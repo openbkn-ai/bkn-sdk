@@ -91,7 +91,8 @@ const raw = await bkn.call("/api/...", { method: "GET" });
 
 `bkn.kn.metricValidate()` 返回已导出的 `MetricValidationResult`
 （`{ valid: boolean, detail?: string }`）。校验未通过仍是正常返回的结果；HTTP 错误或
-不符合契约的响应会抛错。对象类没有数据属性时，读取结果可省略 `data_properties`；
+不符合契约的响应会抛错。旧版服务端的成功空响应统一返回 `{ valid: true }`。
+对象类没有数据属性时，读取结果可省略 `data_properties`；
 SDK 保留缺省，本地校验与 push 完整性检查也支持该情况。
 
 import 本包无副作用；`createClient` 显式解析配置。
