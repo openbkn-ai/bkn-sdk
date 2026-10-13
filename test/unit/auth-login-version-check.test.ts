@@ -38,6 +38,8 @@ async function login(args: string[]): Promise<void> {
 }
 
 beforeEach(() => {
+  vi.mocked(credentialDeviceLogin).mockReset();
+  vi.mocked(deviceLogin).mockReset();
   configDir = mkdtempSync(join(tmpdir(), "bkn-auth-login-version-"));
   process.env.BKN_CONFIG_DIR = configDir;
   vi.spyOn(process.stdout, "write").mockImplementation(() => true);

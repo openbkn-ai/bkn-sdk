@@ -15,6 +15,22 @@ Phase 2 toolchain landed. Each criterion cites a concrete repo signal; write **T
 
 Update this table as each signal changes (e.g. live-parity count as commands are filled in).
 
+## Dependency audit (2026-10-13 working-tree verification)
+
+- Removed unused `csv-parse`; raised the supported dependency floors to
+  `js-yaml ^4.3.2` and `undici ^8.10.2`. The lockfile resolves `js-yaml 4.3.2`,
+  `undici 8.11.2`, `nanoid 3.3.20`, `postcss 8.5.30`, and `source-map-js 1.2.2`.
+- After Owner confirmation, upgraded Vitest to 4.1.11 and added an esbuild
+  `^0.28.1` override (resolved 0.28.2). Full `npm audit --json` and production-only
+  audit report zero vulnerabilities. tsup's declared compatibility range still
+  excludes esbuild 0.28; see the tech debt tracker for override maintenance.
+- `npm run lint`, `npm run check:version`, `npm test` (1260 passed, one optional
+  live test skipped), and `npm run build` passed. A clean install, full lint/test,
+  and build also passed on Node 22.19.0 after the major migration. The packed
+  working-tree CLI ran and the SDK imported on that floor; its installed dependency tree
+  also audited with zero vulnerabilities. These results do not change the
+  already published `0.2.0-rc.1` artifact.
+
 ## CLI reliability regression coverage
 
 - `test/unit/metric-validation.test.ts` checks HTTP-200 negative validation results, CLI JSON output and nonzero exit status, malformed responses (including JSON null), HTTP failures, and legacy empty HTTP 200/204 success normalization in SDK and CLI. `test/e2e/metric-validation.mjs` verified the existing `m_order_cnt` Metric on 14.103.77.23: SDK valid=true, CLI exit 0, missing dependency HTTP 400/exit 1, and unchanged Metric IDs/count. `test/unit/knowledge-networks.test.ts` checks SDK reads with omitted `data_properties`; the existing query and push-integrity regressions cover empty-schema behavior. `test/unit/vega.test.ts` checks the published index-capabilities API hint while retaining legacy empty-list normalization.
