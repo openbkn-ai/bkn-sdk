@@ -18,6 +18,8 @@ import { ensureCompatible } from "./version-check.js";
 
 export interface RequestInitEx {
   method?: string;
+  /** Caller cancellation, combined with the request timeout. */
+  signal?: AbortSignal;
   /** JSON body — serialized and Content-Type set automatically. */
   body?: unknown;
   /** Query params appended to the path. */
@@ -45,6 +47,7 @@ export async function request<T = unknown>(
   path: string,
   init: RequestInitEx = {},
 ): Promise<T> {
+  init.signal?.throwIfAborted();
   const url = new URL(path.startsWith("http") ? path : `${ctx.baseUrl}${path}`);
   for (const [k, v] of Object.entries(init.query ?? {})) {
     if (Array.isArray(v)) {
@@ -59,6 +62,9 @@ export async function request<T = unknown>(
   const hasBody = init.body !== undefined;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), init.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const signal = init.signal
+    ? AbortSignal.any([init.signal, controller.signal])
+    : controller.signal;
 
   const method = init.method ?? (hasBody ? "POST" : "GET");
   // Headers are rebuilt per send: a refresh between the first send and the
@@ -75,7 +81,7 @@ export async function request<T = unknown>(
         }),
         body: hasBody ? stringifyBigIntJSON(init.body) : undefined,
         redirect: init.redirect,
-        signal: controller.signal,
+        signal,
       },
       init.headersTimeoutMs,
     );

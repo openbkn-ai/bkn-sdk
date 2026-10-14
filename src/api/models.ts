@@ -11,6 +11,16 @@ import { parseBigIntJSON, stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { authFetch } from "./auth-fetch.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
+import {
+  type ChatMessage,
+  type ChatOptions,
+  type ChatStreamOptions,
+  chatDeadline,
+  prepareChat,
+  readChatStream,
+} from "./model-chat.js";
+import { parseModelResponse } from "./model-response.js";
+export type { ChatMessage, ChatOptions, ChatStreamOptions } from "./model-chat.js";
 import { tlsFetch } from "./tls.js";
 import { ensureCompatible } from "./version-check.js";
 
@@ -42,13 +52,13 @@ function listQuery(opts: ListModelsOptions, nameParam: "name" | "model_name") {
 export function listLlmModels(ctx: RequestContext, opts: ListModelsOptions = {}): Promise<unknown> {
   return request(ctx, `${MANAGER}/llm/list`, {
     query: listQuery(opts, "name"),
-    responseParser: parseBigIntJSON,
+    responseParser: parseModelResponse,
   });
 }
 export function getLlmModel(ctx: RequestContext, modelId: string): Promise<unknown> {
   return request(ctx, `${MANAGER}/llm/get`, {
     query: { model_id: modelId },
-    responseParser: parseBigIntJSON,
+    responseParser: parseModelResponse,
   });
 }
 export function listSmallModels(
@@ -57,13 +67,13 @@ export function listSmallModels(
 ): Promise<unknown> {
   return request(ctx, `${MANAGER}/small-model/list`, {
     query: listQuery(opts, "model_name"),
-    responseParser: parseBigIntJSON,
+    responseParser: parseModelResponse,
   });
 }
 export function getSmallModel(ctx: RequestContext, modelId: string): Promise<unknown> {
   return request(ctx, `${MANAGER}/small-model/get`, {
     query: { model_id: modelId },
-    responseParser: parseBigIntJSON,
+    responseParser: parseModelResponse,
   });
 }
 
@@ -163,87 +173,77 @@ async function smallModelIdByName(ctx: RequestContext, name: string): Promise<st
   );
 }
 
-export interface ChatMessage {
-  role: string;
-  content: string;
+/** Resolve a registry id once; callers already using a model name need no metadata read. */
+export async function resolveLlmModelName(ctx: RequestContext, model: string): Promise<string> {
+  if (!/^\d+$/.test(model)) return model;
+  const detail = (await getLlmModel(ctx, model)) as
+    | { model_name?: string; data?: { model_name?: string } }
+    | undefined;
+  const name = detail?.model_name ?? detail?.data?.model_name;
+  if (typeof name !== "string" || !name.trim())
+    throw new InputError(`No LLM found with id ${model}.`);
+  return name;
 }
 
-/** OpenAI-compatible chat completion (non-streaming). */
-export function chatCompletions(
+/** OpenAI-compatible chat completion; existing arguments remain supported. */
+export async function chatCompletions(
   ctx: RequestContext,
   model: string,
   messages: ChatMessage[],
+  options: ChatOptions = {},
 ): Promise<unknown> {
+  const input = prepareChat(model, messages, options);
+  const name = await resolveLlmModelName(ctx, model);
   return request(ctx, `${API}/chat/completions`, {
     method: "POST",
-    body: { model, messages, stream: false },
+    body: { ...input.wire, model: name, messages: input.messages, stream: false },
+    timeoutMs: input.timeoutMs,
+    headersTimeoutMs: input.timeoutMs,
+    signal: input.signal,
   });
 }
 
-/** Pull `choices[0].delta.content` out of one OpenAI streaming chunk. */
-function deltaContent(chunk: Record<string, unknown>): string {
-  const choices = chunk.choices as Array<{ delta?: { content?: unknown } }> | undefined;
-  const c = choices?.[0]?.delta?.content;
-  return typeof c === "string" ? c : "";
-}
-
-/**
- * Streaming chat completion (OpenAI-style SSE: `data: {...}` / `data: [DONE]`).
- * Invokes `onDelta` with each text fragment as it arrives and resolves with the
- * full concatenated text.
- */
+/** Stream text while exposing optional structured chunks; errors reject the promise. */
 export async function chatCompletionsStream(
   ctx: RequestContext,
   model: string,
   messages: ChatMessage[],
   onDelta: (text: string) => void,
+  options: ChatStreamOptions = {},
 ): Promise<string> {
+  const input = prepareChat(model, messages, options);
+  const name = await resolveLlmModelName(ctx, model);
   await ensureCompatible(ctx, new URL(`${ctx.baseUrl}${API}/chat/completions`));
-  const res = await authFetch(ctx, () =>
-    tlsFetch(ctx, `${ctx.baseUrl}${API}/chat/completions`, {
-      method: "POST",
-      headers: {
-        ...buildHeaders(ctx),
-        "content-type": "application/json",
-        accept: "text/event-stream",
-      },
-      body: stringifyBigIntJSON({ model, messages, stream: true }),
-    }),
-  );
-  if (!res.ok) throw new HttpError(res.status, res.statusText, await res.text());
-
-  const reader = res.body?.getReader();
-  if (!reader) throw new Error("No response body for stream");
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let out = "";
-
-  const handle = (line: string): void => {
-    const trimmed = line.trimEnd();
-    if (!trimmed.startsWith("data:")) return;
-    const payload = trimmed.slice(5).trim();
-    if (payload === "[DONE]" || payload === "") return;
-    try {
-      const text = deltaContent(parseBigIntJSON(payload) as Record<string, unknown>);
-      if (text) {
-        out += text;
-        onDelta(text);
-      }
-    } catch {
-      /* skip malformed keep-alive / partial lines */
-    }
-  };
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const ln of lines) handle(ln);
+  const deadline = chatDeadline(input.timeoutMs, input.signal);
+  try {
+    deadline.signal.throwIfAborted();
+    const res = await authFetch(ctx, () =>
+      tlsFetch(
+        ctx,
+        `${ctx.baseUrl}${API}/chat/completions`,
+        {
+          method: "POST",
+          headers: {
+            ...buildHeaders(ctx),
+            "content-type": "application/json",
+            accept: "text/event-stream",
+          },
+          body: stringifyBigIntJSON({
+            ...input.wire,
+            model: name,
+            messages: input.messages,
+            stream: true,
+          }),
+          signal: deadline.signal,
+        },
+        input.timeoutMs,
+      ),
+    );
+    if (!res.ok) throw new HttpError(res.status, res.statusText, await res.text());
+    return await readChatStream(res, onDelta, deadline.signal, input.onChunk);
+  } finally {
+    deadline.dispose();
   }
-  if (buffer.trim()) handle(buffer);
-  return out;
 }
 
 /**
@@ -327,6 +327,7 @@ export function getDefaultSmallModel(
 ): Promise<unknown> {
   return request(ctx, `${MANAGER}/small-model/get_default`, {
     query: { model_type: modelType },
+    responseParser: parseModelResponse,
   });
 }
 
