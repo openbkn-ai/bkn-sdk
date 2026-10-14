@@ -10,6 +10,8 @@ export interface ChatMessage {
   content?: string | Record<string, unknown>[] | null;
   tool_calls?: Record<string, unknown>[];
   tool_call_id?: string;
+  /** Provider-returned metadata (name, refusal, reasoning_content, etc.) is preserved. */
+  [key: string]: unknown;
 }
 
 export interface ChatTool {
@@ -113,7 +115,7 @@ const messagesSchema = z
         tool_calls: z.array(record).optional(),
         tool_call_id: z.string().optional(),
       })
-      .strict(),
+      .passthrough(),
   )
   .min(1);
 
@@ -203,6 +205,11 @@ export async function readChatStream(
     data = [];
     const eventName = event;
     event = "";
+    // Empty data events are keep-alives, but an explicit error event must still fail.
+    if (!payload.trim()) {
+      if (eventName === "error") throw new ModelStreamError("Model stream failed");
+      return;
+    }
     if (payload.trim() === "[DONE]") {
       done = true;
       return;

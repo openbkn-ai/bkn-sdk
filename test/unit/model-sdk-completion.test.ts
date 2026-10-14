@@ -316,3 +316,56 @@ describe("stream lifecycle", () => {
     ).rejects.toMatchObject({ name: "ModelStreamError" });
   });
 });
+
+describe("review compatibility regressions", () => {
+  it.each(["data:\n\n", "data: \r\n\r\n", "data: \t\n\n", "data:\ndata: \n\n"])(
+    "ignores empty/whitespace SSE keep-alive events: %j",
+    async (keepAlive) => {
+      const body = `${keepAlive}data: {"choices":[{"delta":{"content":"ok"}}]}\n\n${keepAlive}data: [DONE]\n\n`;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => stream(body)),
+      );
+      const onChunk = vi.fn();
+      await expect(
+        client().models.llm.chatStream("qwen", [{ role: "user", content: "hi" }], () => {}, {
+          onChunk,
+        }),
+      ).resolves.toBe("ok");
+      expect(onChunk).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([false, true])(
+    "preserves returned message extension fields (stream=%s)",
+    async (streaming) => {
+      const fetch = vi.fn(async (_url: string | URL, _init?: RequestInit) =>
+        streaming ? stream("data: [DONE]\n\n") : Response.json({ choices: [] }),
+      );
+      vi.stubGlobal("fetch", fetch);
+      const messages = [
+        {
+          role: "assistant",
+          content: "answer",
+          name: "helper",
+          refusal: null,
+          reasoning_content: "reasoning metadata",
+        },
+      ];
+      const c = client();
+      if (streaming) await c.models.llm.chatStream("qwen", messages, () => {});
+      else await c.models.llm.chat("qwen", messages);
+      expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body)).messages).toEqual(messages);
+    },
+  );
+});
+
+it("retains explicit empty SSE error events as failures", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => stream("event: error\ndata:\n\n")),
+  );
+  await expect(
+    client().models.llm.chatStream("qwen", [{ role: "user", content: "hi" }], () => {}),
+  ).rejects.toMatchObject({ name: "ModelStreamError" });
+});

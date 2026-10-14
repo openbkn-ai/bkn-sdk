@@ -119,8 +119,10 @@ const text = await bkn.models.llm.chatStream("模型名称或ID", messages,
 参数使用 camelCase，还支持 `topP`、`topK`、`maxCompletionTokens`、
 `presencePenalty`、`frequencyPenalty`、`responseFormat`、`tools`、`toolChoice`、
 `stop`、`cache` 和 `system`。消息支持结构化或 null 内容，以及 OpenAI 的
-`tool_calls` / `tool_call_id` 字段。SDK 不会自动执行模型返回的工具调用。
-`signal` 用于取消请求，推理超时默认 30 秒。流式错误、畸形事件或在 `[DONE]`
+`tool_calls` / `tool_call_id` 字段，并保留 `name`、`refusal`、`reasoning_content`
+等返回消息的扩展字段。角色支持后端的 user/assistant/system/tool。
+SDK 不会自动执行模型返回的工具调用。
+`signal` 用于取消请求，推理超时默认 30 秒。空 data 保活事件会被忽略；流式错误、畸形事件或在 `[DONE]`
 前中断都会让 Promise 失败；此前已输出的文本仅为部分结果。
 `ModelStreamError.code` 保留服务返回的错误码，`onChunk` 提供完整结构化事件，
 原有返回值仍为拼接后的文本。

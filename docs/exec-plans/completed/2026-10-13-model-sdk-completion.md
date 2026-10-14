@@ -48,3 +48,19 @@ The requester approved the reviewed working-tree diff and explicitly authorized
 commit, push, and PR submission for main and release/0.2.0 on 2026-10-14.
 Human review/merge remains required. No deployment or package publication is
 performed by this change.
+
+## PR review follow-up (2026-10-14)
+
+Release PR #179 identified a compatibility regression in empty SSE data events.
+The same parser is present in main PR #178, so both receive the correction.
+
+- Four empty/whitespace keep-alive regressions and two message-extension regressions
+  failed before the fix. Empty data events are now ignored; explicit error events
+  still fail. Provider-returned message fields are preserved rather than rejected.
+- Role validation remains user/assistant/system/tool, matching the Foundry backend;
+  unsupported roles were never accepted by that backend.
+- `npm run lint`, `npm test` (1299 passed, one optional live judge skipped), and
+  `npm run build` passed. Empty named error events retain negative coverage.
+- Existing five-check 23 verification remains applicable to normal model invocation.
+  Empty keep-alive injection and message metadata preservation were tested offline,
+  not claimed as fault injection into the live deployment.

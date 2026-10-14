@@ -136,9 +136,11 @@ const text = await bkn.models.llm.chatStream("model-name-or-id", messages,
 Options use camelCase: `topP`, `topK`, `maxCompletionTokens`, `presencePenalty`,
 `frequencyPenalty`, `responseFormat`, `tools`, `toolChoice`, `stop`, `cache`, and
 `system` are also supported. Messages retain OpenAI `tool_calls` / `tool_call_id`
-fields and accept structured or null content. Tools are described to the model,
+fields and accept structured or null content. Returned message extension fields
+(e.g. `name`, `refusal`, `reasoning_content`) are preserved; roles are the backend
+values `user`, `assistant`, `system`, and `tool`. Tools are described to the model,
 never executed automatically. `signal` supports cancellation; inference defaults
-to a 30-second timeout. Stream errors, malformed frames, or EOF before `[DONE]`
+to a 30-second timeout. Empty data keep-alives are ignored. Stream errors, malformed frames, or EOF before `[DONE]`
 reject the promise; already emitted text is partial. `ModelStreamError.code`
 preserves a provider error code when present. `onChunk` preserves structured
 chunks while the return value remains concatenated text.
