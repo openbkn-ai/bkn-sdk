@@ -19,3 +19,6 @@ ChatMessage, ChatStreamOptions, ChatStreamChunk, ChatTool and ModelStreamError.
 chatStream's optional onChunk callback exposes tool-call deltas and usage; tools
 are never auto-executed. Use signal/timeoutMs to bound calls. Already emitted text
 is partial if the stream rejects, including EOF before DONE.
+
+Empty data keep-alives do not fail a stream. Returned message extension fields
+are preserved; role values match the backend (user/assistant/system/tool).
