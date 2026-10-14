@@ -114,6 +114,46 @@ validation and push-integrity checks accept it.
 
 Importing the package has no side effects; `createClient` resolves config explicitly.
 
+### Model invocation
+
+LLM `chat` and `chatStream` accept a model name or numeric registry ID. Existing
+calls remain valid; an optional last argument adds generation and transport controls.
+
+```typescript
+import { createClient, type ChatOptions } from "@openbkn/bkn-sdk";
+
+const bkn = createClient();
+const options: ChatOptions = { temperature: 0, maxTokens: 128, timeoutMs: 60_000 };
+const messages = [{ role: "user", content: "Say hello briefly." }];
+const reply = await bkn.models.llm.chat("model-name-or-id", messages, options);
+const text = await bkn.models.llm.chatStream("model-name-or-id", messages,
+  (delta) => process.stdout.write(delta), {
+    ...options,
+    onChunk: (chunk) => { /* tool-call deltas and usage are available here */ },
+  });
+```
+
+Options use camelCase: `topP`, `topK`, `maxCompletionTokens`, `presencePenalty`,
+`frequencyPenalty`, `responseFormat`, `tools`, `toolChoice`, `stop`, `cache`, and
+`system` are also supported. Messages retain OpenAI `tool_calls` / `tool_call_id`
+fields and accept structured or null content. Returned message extension fields
+(e.g. `name`, `refusal`, `reasoning_content`) are preserved; roles are the backend
+values `user`, `assistant`, `system`, and `tool`. Tools are described to the model,
+never executed automatically. `signal` supports cancellation; inference defaults
+to a 30-second timeout. Empty data keep-alives are ignored. Stream errors, malformed frames, or EOF before `[DONE]`
+reject the promise; already emitted text is partial. `ModelStreamError.code`
+preserves a provider error code when present. `onChunk` preserves structured
+chunks while the return value remains concatenated text.
+
+CLI: `openbkn model llm chat <name-or-id> -m "hello" --options
+'{"temperature":0,"maxTokens":128,"timeoutMs":60000}'` (add `--stream` for text
+streaming), or use `--options-file <path>`.
+
+Model management list/get and small-model default reads mask `adapter_code` and
+credential-shaped fields as `<redacted>` before returning to SDK or CLI callers.
+These metadata results are not reusable edit payloads; provide configuration
+credentials explicitly when changing a model. Raw `call` remains a passthrough.
+
 ### Account authentication for services
 
 For a Node.js service that should establish its own account session instead of

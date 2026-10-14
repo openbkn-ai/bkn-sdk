@@ -3,30 +3,13 @@
 
 /** `openbkn model …` — model factory (llm / small-model). */
 import { Command } from "commander";
-import type { BknClient } from "../client.js";
+import type { ChatOptions, ChatStreamOptions } from "../api/models.js";
 import { group, groupChildren } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
-import { InputError } from "../utils/errors.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, csv, outputOptions, readBody } from "./_shared.js";
 
 const int = (v: string) => Number.parseInt(v, 10);
-
-/**
- * `chat` resolves the model by NAME (the mf-model-api `model` field). Accept a
- * numeric id too — look up its name first — so it matches `get`/`set-default`,
- * which take ids. A non-numeric arg is assumed to already be a name.
- */
-async function resolveLlmModelName(client: BknClient, model: string): Promise<string> {
-  if (!/^\d+$/.test(model)) return model;
-  // Accept both a bare record and a `{data: {...}}` envelope, as resolveSmallModel does.
-  const detail = (await client.models.llm.get(model)) as
-    | { model_name?: string; data?: { model_name?: string } }
-    | undefined;
-  const name = detail?.model_name ?? detail?.data?.model_name;
-  if (!name) throw new InputError(`No LLM found with id ${model}.`);
-  return name;
-}
 
 /** Management subcommands (add/edit/delete/test) wired to the model resource. */
 function addManagementCommands(parent: Command, kind: "llm" | "small"): void {
@@ -116,16 +99,32 @@ export function modelCommand(): Command {
     .description("OpenAI-compatible chat completion (<model> = model name or numeric id)")
     .requiredOption("-m, --message <text>", "user message")
     .option("--stream", "stream the reply token-by-token to stdout")
+    .option(
+      "--options <json>",
+      "chat options JSON (camelCase) — docs: https://openbkn-ai.github.io/bkn-foundry/ (mf-model-api)",
+    )
+    .option("--options-file <path>", "read chat options JSON from a file")
     .action(async (model: string, opts, cmd: Command) => {
       const client = clientFrom(cmd);
-      const name = await resolveLlmModelName(client, model);
+      const options =
+        opts.options !== undefined || opts.optionsFile !== undefined
+          ? readBody({ body: opts.options, bodyFile: opts.optionsFile })
+          : undefined;
       const messages = [{ role: "user", content: opts.message }];
       if (opts.stream) {
-        await client.models.llm.chatStream(name, messages, (t) => process.stdout.write(t));
+        await client.models.llm.chatStream(
+          model,
+          messages,
+          (t) => process.stdout.write(t),
+          options as ChatStreamOptions | undefined,
+        );
         process.stdout.write("\n");
         return;
       }
-      printJson(await client.models.llm.chat(name, messages), outputOptions(cmd));
+      printJson(
+        await client.models.llm.chat(model, messages, options as ChatOptions | undefined),
+        outputOptions(cmd),
+      );
     });
   llm
     .command("set-default <modelId>")
@@ -211,6 +210,13 @@ export function modelCommand(): Command {
   model.addHelpText(
     "after",
     `
+Management reads:
+  Adapter source and credential fields are masked as <redacted>; provide credentials explicitly when editing.
+
+Chat options:
+  --options / --options-file use camelCase keys: temperature, maxTokens, responseFormat,
+  tools, toolChoice, timeoutMs (default 30000). A failed or incomplete stream exits non-zero.
+
 Identifiers:
   • get / set-default / delete take the numeric model id (e.g. 2071747547839467520).
   • chat takes a model NAME, but also accepts a numeric id (resolved to its name).
