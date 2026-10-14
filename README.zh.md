@@ -97,6 +97,41 @@ SDK 保留缺省，本地校验与 push 完整性检查也支持该情况。
 
 import 本包无副作用；`createClient` 显式解析配置。
 
+### 模型调用
+
+`chat` 和 `chatStream` 均支持模型名称或数字注册 ID。原有调用方式继续有效，
+最后一个可选参数可配置生成参数和请求控制。
+
+```typescript
+import { createClient, type ChatOptions } from "@openbkn/bkn-sdk";
+
+const bkn = createClient();
+const options: ChatOptions = { temperature: 0, maxTokens: 128, timeoutMs: 60_000 };
+const messages = [{ role: "user", content: "简短打个招呼。" }];
+const reply = await bkn.models.llm.chat("模型名称或ID", messages, options);
+const text = await bkn.models.llm.chatStream("模型名称或ID", messages,
+  (delta) => process.stdout.write(delta), {
+    ...options,
+    onChunk: (chunk) => { /* 在这里接收工具调用增量和用量等结构化事件 */ },
+  });
+```
+
+参数使用 camelCase，还支持 `topP`、`topK`、`maxCompletionTokens`、
+`presencePenalty`、`frequencyPenalty`、`responseFormat`、`tools`、`toolChoice`、
+`stop`、`cache` 和 `system`。消息支持结构化或 null 内容，以及 OpenAI 的
+`tool_calls` / `tool_call_id` 字段。SDK 不会自动执行模型返回的工具调用。
+`signal` 用于取消请求，推理超时默认 30 秒。流式错误、畸形事件或在 `[DONE]`
+前中断都会让 Promise 失败；此前已输出的文本仅为部分结果。
+`ModelStreamError.code` 保留服务返回的错误码，`onChunk` 提供完整结构化事件，
+原有返回值仍为拼接后的文本。
+
+CLI 使用 `--options '{"temperature":0,"maxTokens":128,"timeoutMs":60000}'`
+或 `--options-file <path>` 传入相同参数，`--stream` 输出文本流。
+
+模型 list/get 及小模型默认值读取会把 `adapter_code` 和凭据字段替换为
+`<redacted>`，保护 SDK 和 CLI 输出。这些元数据不是可直接复用的编辑请求体，
+修改配置时应显式提供凭据；通用 `call` 仍为原始接口透传。
+
 ### 服务端账号登录
 
 Node.js 服务如果需要自行建立账号会话，而不是复用此前 CLI 登录的会话，可使用异步的
