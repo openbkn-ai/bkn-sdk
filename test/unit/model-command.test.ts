@@ -64,3 +64,106 @@ describe("model llm chat <numeric id>", () => {
     expect(JSON.parse(String((chat?.[1] as RequestInit | undefined)?.body)).model).toBe("qwen-max");
   });
 });
+
+describe("model output protection and chat options", () => {
+  it.each([
+    ["model", "small", "list"],
+    ["model", "small", "get", "123"],
+    ["admin", "small-model", "list"],
+    ["admin", "small-model", "get", "123"],
+  ])("redacts model metadata before CLI output: %j", async (...command) => {
+    const stdout: string[] = [];
+    vi.mocked(process.stdout.write).mockImplementation((part) => {
+      stdout.push(String(part));
+      return true;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          data: [
+            {
+              model_id: "123",
+              adapter_code: "FAKE_CLI_SECRET",
+              model_config: { api_key: "FAKE_KEY" },
+            },
+          ],
+        }),
+      ),
+    );
+    await buildProgram().parseAsync(["--base-url", base, "--token", "t", "--json", ...command], {
+      from: "user",
+    });
+    const result = JSON.parse(stdout.join(""));
+    expect(result.data[0].model_id).toBe("123");
+    expect(result.data[0].adapter_code).toBe("<redacted>");
+    expect(stdout.join("")).not.toContain("FAKE_");
+  });
+
+  it("passes camelCase chat options through the shared SDK", async () => {
+    const fetch = vi.fn(async (_url: string | URL, _init?: RequestInit) =>
+      Response.json({ choices: [] }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    await buildProgram().parseAsync(
+      [
+        "--base-url",
+        base,
+        "--token",
+        "t",
+        "model",
+        "llm",
+        "chat",
+        "qwen",
+        "-m",
+        "hi",
+        "--options",
+        '{"temperature":0,"maxTokens":20}',
+      ],
+      { from: "user" },
+    );
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toMatchObject({
+      temperature: 0,
+      max_tokens: 20,
+    });
+  });
+});
+
+describe("CLI streaming failures", () => {
+  it("rejects upstream SSE errors after printing only the partial text", async () => {
+    const stdout: string[] = [];
+    vi.mocked(process.stdout.write).mockImplementation((part) => {
+      stdout.push(String(part));
+      return true;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            'data: {"choices":[{"delta":{"content":"partial"}}]}\n\ndata: {"error":{"message":"mock failure","code":"mock_code"}}\n\n',
+            { headers: { "content-type": "text/event-stream" } },
+          ),
+      ),
+    );
+    await expect(
+      buildProgram().parseAsync(
+        [
+          "--base-url",
+          base,
+          "--token",
+          "t",
+          "model",
+          "llm",
+          "chat",
+          "qwen",
+          "-m",
+          "hi",
+          "--stream",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toMatchObject({ name: "ModelStreamError", code: "mock_code" });
+    expect(stdout.join("")).toBe("partial");
+  });
+});

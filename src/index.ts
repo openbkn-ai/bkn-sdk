@@ -122,6 +122,14 @@ export {
 export { kn } from "./resources/knowledge-networks.js";
 export type { MetricValidationResult } from "./api/knowledge-networks.js";
 export { models } from "./resources/models.js";
+export {
+  ModelStreamError,
+  type ChatMessage,
+  type ChatOptions,
+  type ChatStreamOptions,
+  type ChatStreamChunk,
+  type ChatTool,
+} from "./api/model-chat.js";
 export { resources } from "./resources/resources.js";
 export { skills } from "./resources/skills.js";
 export { functions } from "./resources/functions.js";
