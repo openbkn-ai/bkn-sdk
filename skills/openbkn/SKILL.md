@@ -83,7 +83,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 | `auth` | 认证 / 会话 / 多用户 | `login`（`--token` / `-u -p` / 浏览器 / `--device`，均走 device-code）、`status`/`whoami`/`token`/`list`/`use`/`switch`/`users`/`export`、`change-password` |
 | `config` | 平台 CLI 配置 | `config show` / `config set <key> <value>` |
 | `appkey` | 用户自助签发的 AppKey（`bak_` 长期凭据，仅 Context Loader 可用） | `list`、`create --name <s> [--expire-days <n> \| --expires-at <rfc3339> \| --never-expire]`（明文 `key` **只返回一次**）、`regenerate <id>`（轮换：同 id 出新 key，旧 key 立即失效）、`revoke <id>`、`admin list [--owner-id]`/`admin revoke <id>` |
-| `bkn` | 知识网络 + Schema + 查询 + 本地包 | `list`/`get`/`search`/`stats`/`export`、`object-type/relation-type/action-type list/get/create/update/delete`、`action-type query/execute`、`metric …`、`concept-group …`、`capability list/attach/detach`、`action-log/action-schedule …`、`subgraph`、`relation-type-paths`、`resources`、`push <dir>`/`pull <kn> [dir]`、`validate <dir>`、`create-from-catalog <catalog> --name … --pk-map t:col` |
+| `bkn` | 知识网络 + Schema + 查询 + 本地包 | `list`/`get`/`search`/`stats`/`export`、`object-type/relation-type/action-type list/get/create/update/delete`、`action-type query/execute`、`object-metric …`、`concept-group …`、`capability list/attach/detach`、`action-log/action-schedule …`、`subgraph`、`relation-type-paths`、`resources`、`push <dir>`/`pull <kn> [dir]`、`validate <dir>`、`create-from-catalog <catalog> --name … --pk-map t:col` |
 | `resource` | Vega-backend 资源 | `list`/`get`/`find --name`/`query`/`delete` |
 | `vega` | Catalog + 资源 + 索引构建 + SQL | `catalog list/get/stats`、`catalog resources`、`resource create/update/delete/build`、`build-task list/get/start/stop/delete`、`connector-type list/get`、`index-capabilities`、`sql --query "<sql>"`（直连 MySQL/PG/OpenSearch，SQL 用 `{{resource-id}}` 占位） |
 | `context` | Context Loader（MCP 检索） | `info`/`tools <kn>`、`kn-detail`/`object-types`/`relation-types`、`search-schema <kn> "<q>"`、`query-object-instance`/`query-instance-subgraph`/`explore-subgraph`/`query-metric`/`get-logic-properties`/`get-action-info --args '<json>'`、`run-cypher --query`、`run-sql --sql`、`search-capabilities`、`tool-call <kn> <tool> --args`、`conversation [--forget]`。第三方 Agent 业务问答用 MCP `bkn_start_interaction`/`bkn_finish_interaction`；CLI 未带受管上下文时自己开一次托管会话并记住 |
@@ -102,7 +102,7 @@ openbkn auth status | whoami | token | list | use <url> | switch <url> <user> | 
 **按需深入**：需要某命令的完整参数时运行 `openbkn <group> <sub> --help`，或读对应的速查参考。
 
 - 配置全文索引前，用 `vega index-capabilities` 查询部署支持的分析器；返回列表与检查时间，详情见 [vega.md](references/vega.md)。
-- `bkn metric validate` 的成败看返回的 `valid`；`false` 时 CLI 输出结果并以退出码 1 结束。对象类的 `data_properties` 可省略，读取时按无数据属性处理。详情见 [bkn.md](references/bkn.md)。
+- `bkn object-metric validate` 的成败看返回的 `valid`；`false` 时 CLI 输出问题列表并以退出码 1 结束。对象类的 `data_properties` 可省略，读取时按无数据属性处理。详情见 [bkn.md](references/bkn.md)。
 
 **本 CLI 暂未覆盖的平台能力**（别猜命令，直接用 `openbkn call` 打原始接口）：
 

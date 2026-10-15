@@ -23,7 +23,7 @@ from bkn_osdk.codegen.emit import (
     generate,
     property_name,
 )
-from bkn_osdk.schema import KnSchema, ObjectTypeDef, PropertyDef, RelationTypeDef
+from bkn_osdk.schema import KnSchema, MetricDef, ObjectTypeDef, PropertyDef, RelationTypeDef
 
 GOLDEN_DIR = Path(__file__).parent / "fixtures" / "golden" / "demo"
 OPTIONS = GenOptions(package="bkn", generated_by="bkn-osdk 0.1.0")
@@ -102,6 +102,25 @@ def test_a_schema_change_moves_the_fingerprint_in_the_emitted_meta() -> None:
     )
 
     assert generate(extended, OPTIONS)["_meta.py"] != demo()["_meta.py"]
+
+
+def test_generated_metric_pins_published_version_and_property_refs() -> None:
+    schema = KnSchema(
+        kn_id="kn",
+        metrics=(
+            MetricDef(
+                bkn_id="m_gmv",
+                object_type="order",
+                version=7,
+                dimensions=(("order", "channel", ""),),
+            ),
+        ),
+    )
+
+    generated = generate(schema, OPTIONS)["metrics.py"]
+    assert "class Gmv(Metric):" in generated
+    assert "__version__ = 7" in generated
+    assert "__dimensions__ = (('order', 'channel', ''),)" in generated
 
 
 @pytest.mark.parametrize(

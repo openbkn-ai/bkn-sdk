@@ -294,20 +294,23 @@ def _relation(cls: Any, bkn_id: str) -> Any:
 # ---- metrics ---------------------------------------------------------------------
 
 
-def test_a_metric_answers_for_an_instant(package: Any) -> None:
+def test_a_metric_answers_for_a_v1_window(package: Any) -> None:
     if not package.METRICS:
         pytest.skip("this network declares no metrics")
 
-    assert package.METRICS[0].query(time={"instant": True}) is not None
+    import time
+
+    now = int(time.time() * 1000)
+    assert package.METRICS[0].query(time={"start": now - 86_400_000, "end": now}) is not None
 
 
-def test_a_range_without_a_step_is_refused_locally(package: Any) -> None:
+def test_a_legacy_step_is_refused_locally(package: Any) -> None:
     """The backend's own rule, enforced before the round trip."""
     if not package.METRICS:
         pytest.skip("this network declares no metrics")
 
     with pytest.raises(InputError):
-        package.METRICS[0].query(time={"start": 1, "end": 2})
+        package.METRICS[0].query(time={"start": 1, "end": 2, "step": "day"})
 
 
 # ---- search ----------------------------------------------------------------------
@@ -457,7 +460,7 @@ def test_a_package_that_no_longer_matches_the_network_is_caught(
     from bkn_osdk import meta as meta_module
 
     meta_module.validate_package(
-        "live_bkn", 1, ">=0.1,<0.2", kn_id=kn_id, branch="main", fingerprint="0" * 64
+        "live_bkn", 2, ">=0.1,<0.2", kn_id=kn_id, branch="main", fingerprint="0" * 64
     )
 
     with pytest.raises(SchemaDriftError):

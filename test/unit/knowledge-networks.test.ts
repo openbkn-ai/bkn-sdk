@@ -7,7 +7,6 @@ import {
   runCypherQuery,
 } from "../../src/api/bkn-backend.js";
 import {
-  dryRunMetric,
   executeActionType,
   getActionExecution,
   getActionLog,
@@ -17,7 +16,6 @@ import {
   listObjectTypes,
   listRelationTypes,
   queryActionType,
-  queryMetricData,
   queryObjectTypeInstances,
   querySubgraph,
   searchInstance,
@@ -225,10 +223,6 @@ describe("reads tunnelled over POST", () => {
     await expect(getActionLog(ctx, "kn-1", "log-1")).resolves.toEqual({
       value: 9223372036854775807n,
     });
-    await expect(queryMetricData(ctx, "kn-1", "m-1", {})).resolves.toEqual({
-      value: 9223372036854775807n,
-    });
-    await expect(dryRunMetric(ctx, "kn-1", {})).resolves.toEqual({ value: 9223372036854775807n });
   });
 
   it("relation-type-paths sends the GET override", async () => {
@@ -418,19 +412,5 @@ describe("searchInstance", () => {
     await searchInstance(ctx, "kn-1", "churn");
     const call = callTo(fetchMock, "/api/agent-retrieval/v1/kn/search_instance");
     expect(JSON.parse(call[1].body as string)).not.toHaveProperty("bkn_context");
-  });
-});
-
-describe("validateMetric", () => {
-  it("POSTs to metrics/validation (OpenAPI path)", async () => {
-    const { validateMetric } = await import("../../src/api/knowledge-networks.js");
-    const fetchMock = mockFetch();
-    vi.mocked(fetchMock).mockResolvedValueOnce(Response.json({ valid: true }));
-    await validateMetric(ctx, "kn-1", { entries: [] });
-    const call = firstCall(fetchMock);
-    expect(new URL(call[0]).pathname).toBe(
-      "/api/bkn-backend/v1/knowledge-networks/kn-1/metrics/validation",
-    );
-    expect(call[1].method).toBe("POST");
   });
 });

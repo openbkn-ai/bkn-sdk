@@ -46,44 +46,52 @@ import {
   type GetKnOptions,
   type ListActionTypesOptions,
   type ListKnOptions,
-  type ListMetricsOptions,
   type ListObjectTypesOptions,
   type ListRelationTypesOptions,
-  type MetricReadOptions,
   type ObjectQueryOptions,
   type SearchInstanceOptions,
   type SubgraphQueryOptions,
   type UpdateSchemaItemOptions,
   cancelActionLog,
   createKnowledgeNetwork,
-  createMetric,
   createSchemaItem,
   deleteKnowledgeNetwork,
-  deleteMetric,
   deleteSchemaItem,
-  dryRunMetric,
   executeActionType,
   getActionExecution,
   getActionLog,
   getKnowledgeNetwork,
-  getMetric,
   getSchemaItem,
   listActionLogs,
   listActionTypes,
   listKnowledgeNetworks,
-  listMetrics,
   listObjectTypes,
   listRelationTypes,
   queryActionType,
-  queryMetricData,
   queryObjectTypeInstances,
   querySubgraph,
   searchInstance,
   updateKnowledgeNetwork,
-  updateMetric,
   updateSchemaItem,
-  validateMetric,
 } from "../api/knowledge-networks.js";
+import {
+  type ListObjectMetricsOptions,
+  type ObjectMetricOptions,
+  type ObjectMetricVersionOptions,
+  createNextObjectMetricDraftVersion,
+  createObjectMetricDraft,
+  deleteObjectMetricDraft,
+  deprecateObjectMetric,
+  getObjectMetric,
+  listObjectMetricVersions,
+  listObjectMetrics,
+  publishObjectMetric,
+  queryObjectMetric,
+  trialObjectMetric,
+  updateObjectMetricDraft,
+  validateObjectMetric,
+  validateSavedObjectMetric,
+} from "../api/object-metrics.js";
 import type { RequestContext } from "../types.js";
 import { validateBknDirectory } from "../utils/bkn-validate.js";
 import { isDryRun } from "../utils/dry-run.js";
@@ -111,21 +119,46 @@ export function kn(ctx: RequestContext) {
       cancelActionLog(ctx, knId, logId, opts),
     actionExecution: (knId: string, executionId: string) =>
       getActionExecution(ctx, knId, executionId),
-    metricQuery: (knId: string, metricId: string, body: unknown, opts?: MetricReadOptions) =>
-      queryMetricData(ctx, knId, metricId, body, opts),
-    metricDryRun: (knId: string, body: unknown, opts?: MetricReadOptions) =>
-      dryRunMetric(ctx, knId, body, opts),
-    metricList: (knId: string, opts?: ListMetricsOptions) => listMetrics(ctx, knId, opts),
-    metricGet: (knId: string, metricId: string | string[], opts?: BranchOptions) =>
-      getMetric(ctx, knId, metricId, opts),
-    metricCreate: (knId: string, body: unknown, opts?: ImportWriteOptions) =>
-      createMetric(ctx, knId, body, opts),
-    metricUpdate: (knId: string, metricId: string, body: unknown, opts?: StrictWriteOptions) =>
-      updateMetric(ctx, knId, metricId, body, opts),
-    metricDelete: (knId: string, metricId: string | string[], opts?: BranchOptions) =>
-      deleteMetric(ctx, knId, metricId, opts),
-    metricValidate: (knId: string, body: unknown, opts?: ImportWriteOptions) =>
-      validateMetric(ctx, knId, body, opts),
+    objectMetricList: (knId: string, opts?: ListObjectMetricsOptions) =>
+      listObjectMetrics(ctx, knId, opts),
+    objectMetricGet: (
+      knId: string,
+      metricId: string,
+      opts?: ObjectMetricOptions & { version?: number },
+    ) => getObjectMetric(ctx, knId, metricId, opts),
+    objectMetricCreate: (knId: string, definition: unknown, opts?: ObjectMetricOptions) =>
+      createObjectMetricDraft(ctx, knId, definition, opts),
+    objectMetricUpdate: (
+      knId: string,
+      metricId: string,
+      definition: unknown,
+      opts: ObjectMetricVersionOptions,
+    ) => updateObjectMetricDraft(ctx, knId, metricId, definition, opts),
+    objectMetricDeleteDraft: (knId: string, metricId: string, opts: ObjectMetricVersionOptions) =>
+      deleteObjectMetricDraft(ctx, knId, metricId, opts),
+    objectMetricValidate: (knId: string, definition: unknown, opts?: ObjectMetricOptions) =>
+      validateObjectMetric(ctx, knId, definition, opts),
+    objectMetricTrial: (
+      knId: string,
+      trial: { definition: unknown; query: unknown },
+      opts?: ObjectMetricOptions,
+    ) => trialObjectMetric(ctx, knId, trial, opts),
+    objectMetricQuery: (
+      knId: string,
+      metricId: string,
+      query: unknown,
+      opts: ObjectMetricVersionOptions,
+    ) => queryObjectMetric(ctx, knId, metricId, query, opts),
+    objectMetricVersions: (knId: string, metricId: string, opts?: ObjectMetricOptions) =>
+      listObjectMetricVersions(ctx, knId, metricId, opts),
+    objectMetricNextDraft: (knId: string, metricId: string, opts?: ObjectMetricOptions) =>
+      createNextObjectMetricDraftVersion(ctx, knId, metricId, opts),
+    objectMetricValidateSaved: (knId: string, metricId: string, opts: ObjectMetricVersionOptions) =>
+      validateSavedObjectMetric(ctx, knId, metricId, opts),
+    objectMetricPublish: (knId: string, metricId: string, opts: ObjectMetricVersionOptions) =>
+      publishObjectMetric(ctx, knId, metricId, opts),
+    objectMetricDeprecate: (knId: string, metricId: string, opts: ObjectMetricVersionOptions) =>
+      deprecateObjectMetric(ctx, knId, metricId, opts),
     objectTypes: (knId: string, opts?: ListObjectTypesOptions) => listObjectTypes(ctx, knId, opts),
     objectTypeQuery: (knId: string, otId: string, body: unknown, opts?: ObjectQueryOptions) =>
       queryObjectTypeInstances(ctx, knId, otId, body, opts),

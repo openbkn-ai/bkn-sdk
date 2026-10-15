@@ -422,13 +422,13 @@ def test_check_reports_a_stale_emitted_format(
     out = package_at(tmp_path)
     meta = out / "_meta.py"
     meta.write_text(
-        meta.read_text(encoding="utf-8").replace("FORMAT_VERSION = 1", "FORMAT_VERSION = 0"),
+        meta.read_text(encoding="utf-8").replace("FORMAT_VERSION = 2", "FORMAT_VERSION = 1"),
         encoding="utf-8",
     )
 
     check(out)
 
-    assert "format: package is 0" in capsys.readouterr().out
+    assert "format: package is 1" in capsys.readouterr().out
 
 
 def test_check_fails_a_package_this_runtime_would_refuse_to_import(
@@ -439,7 +439,7 @@ def test_check_fails_a_package_this_runtime_would_refuse_to_import(
     package = package_at(tmp_path)
     meta = package / "_meta.py"
     meta.write_text(
-        meta.read_text(encoding="utf-8").replace("FORMAT_VERSION = 1", "FORMAT_VERSION = 99"),
+        meta.read_text(encoding="utf-8").replace("FORMAT_VERSION = 2", "FORMAT_VERSION = 99"),
         encoding="utf-8",
     )
 

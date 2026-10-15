@@ -144,23 +144,20 @@ next_page = Order.objects().page(limit=100, cursor=page.next_cursor)  # 末页�
 
 对象集上没有 `sum()` 或 `group_by()`，因为平台没有对应的端点：实例查询接受条件、排序、limit、cursor（或 offset）和属性选择，`need_total` 给行数。把所有行拉回本地再聚合，是把谎言包装成 API。
 
-平台的聚合面是**指标**，而且比前者更强 —— 维度、对聚合值的过滤、排序、时间窗：
+平台的聚合面是已发布、带版本的**对象指标 V1**。生成类固定引用已发布版本，只开放定义允许的运行时选择：
 
 ```python
 from bkn.metrics import Gmv
 
 Gmv.query(
-    time={"start": 1751328000000, "end": 1753920000000, "step": "day"},  # unix 毫秒
+    time={"start": 1751328000000, "end": 1753920000000},  # Unix 毫秒
     analysis_dimensions=["channel_id"],
-    condition=Order.order_status == "paid",
-    having={"field": "gmv", "operation": ">", "value": 100},
-    order_by=[("gmv", "desc")],
 )
 ```
 
-指标是从它挂载的对象类进入生成包的，所以 `Gmv.__dimensions__` 记着该工具唯一接受的那些切分维度，传错的在发请求之前就被拒。时间规则也在本地检查：`instant=True` 取一个时间点，取序列必须给 `step`，`start` / `end` 必须成对。注意单位：`start` / `end` 是 **unix 毫秒**（端点自己的示例是 `1735689600000`）；小于 `1e12` 的值——也就是秒级时间戳的样子——会被直接拒绝，而不是悄悄查询 1970 年 1 月。
+`Gmv.__version__` 与 `Gmv.__dimensions__` 来自已发布定义；未声明或有歧义的维度会在请求前被拒绝。`start` / `end` 须为 Unix 毫秒整数；不再接受旧版 `instant` 和 `step`。
 
-传输是 `POST …/metrics/{metric_id}/data`，和其他所有读走同一层 REST。条件是**合并而不是覆盖**：平台把指标定义自带的条件、这里传的条件、时间范围三者 AND 起来。`metrics=` 参数把同比环比 / 占比那一块逐字透传。
+传输走 `POST …/object-metrics/{metric_id}/data?version=N`，返回完整的 V1 `model`、`entries`、`status` 和 `warnings`。固定业务限定与统计粒度由指标定义决定，查询不能覆盖。
 
 ## 遍历
 

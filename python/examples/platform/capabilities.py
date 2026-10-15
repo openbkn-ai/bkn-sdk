@@ -33,6 +33,8 @@ from bootstrap import chosen_object_type, kn_id
 import bkn_osdk
 from bkn_osdk import HttpError, kn
 
+BASE = "/api/bkn-backend/v1/knowledge-networks"
+
 
 def attempt(label: str, call):
     """Run one route, and report a platform-side failure rather than dying on it.
@@ -111,13 +113,32 @@ def main() -> None:
     if rows:
         print(f"query_object_instance: {len(rows.get('datas') or [])} rows")
 
-    # 5. Metrics, if this network declares any: their ids come from the object
-    #    types they are mounted on.
-    metrics = [m.get("concept_id") or m.get("id") for m in (found.get("metric_types") or [])]
-    if metrics and metrics[0]:
-        measured = flat(attempt("query_metric", lambda: kn.query_metric(network, metrics[0])))
-        if measured:
-            print(f"query_metric({metrics[0]}): {list(measured)[:3]}")
+    # 5. Published Object Metric V1 ids and immutable versions.
+    metrics = (
+        flat(
+            attempt(
+                "list_object_metrics",
+                lambda: bkn_osdk.call(
+                    f"{BASE}/{network}/object-metrics",
+                    query={"status": "published", "limit": 3},
+                ),
+            )
+        ).get("entries")
+        or []
+    )
+    if metrics:
+        definition = metrics[0].get("definition") or {}
+        metric_id, version = definition.get("id"), definition.get("version")
+        if (
+            isinstance(metric_id, str)
+            and isinstance(version, int)
+            and not isinstance(version, bool)
+        ):
+            measured = flat(
+                attempt("query_metric", lambda: kn.query_metric(network, metric_id, version))
+            )
+            if measured:
+                print(f"query_metric({metric_id}, v{version}): {list(measured)[:3]}")
 
     # 6. Skills: list, then read one's manifest, then a file out of it.
     skills = flat(attempt("list_skills", lambda: kn.list_skills(network))).get("entries") or []

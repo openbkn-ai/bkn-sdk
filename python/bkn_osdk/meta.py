@@ -41,9 +41,9 @@ _packages: dict[tuple[str, str], str] = {}
 #: The pairs already checked in this process, so the check costs one round trip.
 _checked: set[tuple[str, str]] = set()
 
-#: Emitted-code shapes this runtime can read: the current one and its
-#: predecessor. Format 1 is the first, so the list holds one entry today.
-SUPPORTED_FORMAT_VERSIONS = (1,)
+#: V1 generated metric classes use the retired API and cannot safely run here.
+#: Regenerate packages to pin published Object Metric V1 versions.
+SUPPORTED_FORMAT_VERSIONS = (2,)
 
 _CLAUSE = re.compile(r"^(==|!=|>=|<=|>|<)\s*([0-9]+(?:\.[0-9]+)*)$")
 

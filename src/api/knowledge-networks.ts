@@ -8,7 +8,6 @@
  * Responses are passed through as parsed JSON
  * (shapes vary by backend version — validate at higher layers as needed).
  */
-import { z } from "zod";
 import type { RequestContext } from "../types.js";
 import { InputError } from "../utils/errors.js";
 import { parseBigIntJSON } from "../utils/json-bigint.js";
@@ -436,47 +435,6 @@ export function getActionExecution(
   );
 }
 
-/** Query-string flags of the metric data reads. */
-export interface MetricReadOptions {
-  branch?: string;
-  /** Align trend series to the full bucket axis, filling gaps with null. */
-  fillNull?: boolean;
-}
-
-function metricReadQuery(opts: MetricReadOptions) {
-  return { branch: opts.branch || undefined, fill_null: opts.fillNull ? "true" : undefined };
-}
-
-/** Query a metric's data (ontology-query). Body is a JSON query passthrough. */
-export function queryMetricData(
-  ctx: RequestContext,
-  knId: string,
-  metricId: string,
-  body: unknown,
-  opts: MetricReadOptions = {},
-): Promise<unknown> {
-  return request(
-    ctx,
-    `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/metrics/${encodeURIComponent(metricId)}/data`,
-    { method: "POST", query: metricReadQuery(opts), body, responseParser: parseBigIntJSON },
-  );
-}
-
-/** Dry-run a metric definition (ontology-query). */
-export function dryRunMetric(
-  ctx: RequestContext,
-  knId: string,
-  body: unknown,
-  opts: MetricReadOptions = {},
-): Promise<unknown> {
-  return request(ctx, `${ONTOLOGY_QUERY_BASE}/${encodeURIComponent(knId)}/metrics/dry-run`, {
-    method: "POST",
-    query: metricReadQuery(opts),
-    body,
-    responseParser: parseBigIntJSON,
-  });
-}
-
 /** Filters every bkn-backend schema list takes. */
 export interface ListSchemaOptions {
   branch?: string;
@@ -511,13 +469,6 @@ export interface ListActionTypesOptions extends ListSchemaOptions {
   actionType?: string;
   /** Bound object type. */
   objectTypeId?: string;
-}
-
-export interface ListMetricsOptions extends ListSchemaOptions {
-  /** `object_type` | `subgraph`. */
-  scopeType?: string;
-  /** Concept id(s) the metric scope references, comma-joined. */
-  scopeRef?: string;
 }
 
 function schemaListQuery(opts: ListSchemaOptions) {
@@ -680,110 +631,6 @@ export function deleteSchemaItem(
       force_delete: opts.forceDelete && kind === "object-types" ? "true" : undefined,
     },
   });
-}
-
-// Metric definitions live under bkn-backend (data/dry-run are query-side).
-export function listMetrics(
-  ctx: RequestContext,
-  knId: string,
-  opts: ListMetricsOptions = {},
-): Promise<unknown> {
-  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics`, {
-    query: {
-      ...schemaListQuery(opts),
-      scope_type: opts.scopeType || undefined,
-      scope_ref: opts.scopeRef || undefined,
-    },
-  });
-}
-/** Get one or more metrics (comma-joined ids or a list). */
-export function getMetric(
-  ctx: RequestContext,
-  knId: string,
-  metricId: string | string[],
-  opts: BranchOptions = {},
-): Promise<unknown> {
-  return request(
-    ctx,
-    `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/${idSegment(metricId)}`,
-    {
-      query: { branch: opts.branch || undefined },
-    },
-  );
-}
-/** Create metrics: `{entries:[…]}` (a bare array is wrapped). */
-export function createMetric(
-  ctx: RequestContext,
-  knId: string,
-  body: unknown,
-  opts: ImportWriteOptions = {},
-): Promise<unknown> {
-  return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics`, {
-    method: "POST",
-    headers: CREATE_OVER_POST,
-    query: writeQuery(opts),
-    body: entriesBody(body),
-  });
-}
-export function updateMetric(
-  ctx: RequestContext,
-  knId: string,
-  metricId: string,
-  body: unknown,
-  opts: StrictWriteOptions = {},
-): Promise<unknown> {
-  return request(
-    ctx,
-    `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/${encodeURIComponent(metricId)}`,
-    {
-      method: "PUT",
-      query: writeQuery({ branch: opts.branch, strictMode: opts.strictMode }),
-      body,
-    },
-  );
-}
-/** Delete one or more metrics (comma-joined ids or a list). */
-export function deleteMetric(
-  ctx: RequestContext,
-  knId: string,
-  metricId: string | string[],
-  opts: BranchOptions = {},
-): Promise<unknown> {
-  return request(
-    ctx,
-    `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/${idSegment(metricId)}`,
-    {
-      method: "DELETE",
-      query: { branch: opts.branch || undefined },
-    },
-  );
-}
-/** A completed dependency validation; HTTP 200 can still mean `valid: false`. */
-export const MetricValidationResult = z
-  .object({
-    valid: z.boolean(),
-    detail: z.string().optional(),
-  })
-  .passthrough();
-export type MetricValidationResult = z.infer<typeof MetricValidationResult>;
-
-export async function validateMetric(
-  ctx: RequestContext,
-  knId: string,
-  body: unknown,
-  opts: ImportWriteOptions = {},
-): Promise<MetricValidationResult> {
-  const result = await request<unknown>(
-    ctx,
-    `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/metrics/validation`,
-    {
-      method: "POST",
-      query: writeQuery(opts),
-      body,
-    },
-  );
-  // Legacy backends return an empty successful response instead of a JSON result.
-  return result === undefined ? { valid: true } : MetricValidationResult.parse(result);
 }
 
 export interface SearchInstanceOptions {

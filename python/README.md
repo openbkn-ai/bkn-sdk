@@ -203,34 +203,25 @@ endpoint for one: an instance query takes a condition, a sort, a limit, a cursor
 offset) and a property selection, and `need_total` returns a row count. Pulling every row back
 to aggregate client-side would be a lie dressed as an API.
 
-The platform's aggregation surface is **metrics**, and it is richer than that
-would have been — dimensions, a filter on the aggregate, ordering, and a time
-window:
+The platform's aggregation surface is published, versioned **Object Metrics V1**.
+The generated class pins a published version and permits only runtime choices
+declared by that definition:
 
 ```python
 from bkn.metrics import Gmv
 
 Gmv.query(
-    time={"start": 1751328000000, "end": 1753920000000, "step": "day"},  # unix ms
+    time={"start": 1751328000000, "end": 1753920000000},  # unix ms
     analysis_dimensions=["channel_id"],
-    condition=Order.order_status == "paid",
-    having={"field": "gmv", "operation": ">", "value": 100},
-    order_by=[("gmv", "desc")],
 )
 ```
 
-Metrics reach the generated package from the object types they are mounted on,
-so `Gmv.__dimensions__` records the only splits the tool accepts and a wrong one
-is refused before the round trip. The time rules are checked locally too:
-`instant=True` takes a point, a series needs a `step`, and `start`/`end` come as
-a pair. Note the unit: `start`/`end` are **unix milliseconds** (the endpoint's own
-example is `1735689600000`); a value below `1e12` — which is what a timestamp in
-seconds looks like — is refused rather than silently querying January 1970.
-
-The transport is `POST …/metrics/{metric_id}/data` — the same REST layer as every
-other read. Conditions **merge rather than override**: the platform ANDs the
-metric definition's own condition, the one passed here, and the time range. The
-`metrics=` argument passes the period-over-period / share block through verbatim.
+`Gmv.__version__` and `Gmv.__dimensions__` come from the published definition.
+An undeclared or ambiguous dimension is refused locally. `start`/`end` must be
+integer Unix milliseconds; old `instant` and `step` fields are not accepted.
+The transport is `POST …/object-metrics/{metric_id}/data?version=N` and the
+result preserves the V1 `model`, `entries`, `status`, and `warnings` envelope.
+Fixed business qualifiers and statistical grain cannot be overridden at query time.
 
 ## Traverse
 

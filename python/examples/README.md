@@ -110,7 +110,7 @@ after session    https://14.103.77.23     token=token-from-configure  …
 | [`explore.py`](ontology/explore.py) | A question, when you do not know the network's names yet: `search` for the types it touches, `search_instances` for the rows, then the generated class for the exact query. |
 | [`query.py`](ontology/query.py) | One object type: filters and `~`, ordering, a property subset, paging with a total, `iterate`, `get` by key, and a relation hop. |
 | [`traverse.py`](ontology/traverse.py) | One hop as a filter built from the schema's join columns, then several hops server-side through the subgraph endpoint — and why a filter cannot be attached to an intermediate hop. |
-| [`metrics.py`](ontology/metrics.py) | Aggregation, which is a metric rather than a `group_by`: a point in time, a series and its `step` rule, splitting by a declared dimension, and an undeclared one refused before the round trip. |
+| [`metrics.py`](ontology/metrics.py) | Published Object Metric V1 queries: a millisecond time range, a declared analysis dimension, and local rejection of an undeclared dimension. |
 | [`traced.py`](ontology/traced.py) | One managed turn: every read inside the scope joins it, each comes back with a receipt, and `count()` still answers truthfully. |
 
 ## The platform layer

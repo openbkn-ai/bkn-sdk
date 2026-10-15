@@ -17,11 +17,6 @@ const kn = vi.hoisted(() => {
     relationTypeDelete: ok(),
     objectTypeUpdate: ok(),
     objectTypes: ok(),
-    metricList: ok(),
-    metricGet: ok(),
-    metricUpdate: ok(),
-    metricDelete: ok(),
-    metricValidate: vi.fn(async (..._args: unknown[]) => ({ valid: true })),
     conceptGroups: ok(),
     actionSchedules: ok(),
     actionTypeQuery: ok(),
@@ -32,7 +27,6 @@ const kn = vi.hoisted(() => {
     update: ok(),
     delete: ok(),
     objectTypeCreate: ok(),
-    metricCreate: ok(),
     conceptGroupCreate: ok(),
     conceptGroupUpdate: ok(),
     conceptGroupDelete: ok(),
@@ -200,18 +194,12 @@ describe("openbkn bkn flags", () => {
     );
   });
 
-  it("schema and metric lists take name-pattern, tag and branch", async () => {
+  it("schema lists take name-pattern, tag and branch", async () => {
     await run("object-type", "list", "kn-1", "--name-pattern", "ord", "--tag", "t");
     expect(kn.objectTypes).toHaveBeenCalledWith("kn-1", {
       branch: "main",
       namePattern: "ord",
       tag: "t",
-    });
-    await run("metric", "list", "kn-1", "--branch", "dev");
-    expect(kn.metricList).toHaveBeenCalledWith("kn-1", {
-      branch: "dev",
-      namePattern: undefined,
-      tag: undefined,
     });
   });
 
@@ -287,17 +275,6 @@ describe("openbkn bkn flags", () => {
     expect(kn.bknResources).toHaveBeenCalledWith(expect.objectContaining({ sort: "update_time" }));
   });
 
-  it("metric get, update, delete and validate forward --branch", async () => {
-    await run("metric", "get", "kn-1", "m-1", "--branch", "dev");
-    expect(kn.metricGet).toHaveBeenCalledWith("kn-1", "m-1", { branch: "dev" });
-    await run("metric", "update", "kn-1", "m-1", "--body", "{}", "--branch", "dev");
-    expect(kn.metricUpdate).toHaveBeenCalledWith("kn-1", "m-1", {}, { branch: "dev" });
-    await run("metric", "delete", "kn-1", "m-1", "--branch", "dev");
-    expect(kn.metricDelete).toHaveBeenCalledWith("kn-1", "m-1", { branch: "dev" });
-    await run("metric", "validate", "kn-1", "--body", "{}", "--branch", "dev");
-    expect(kn.metricValidate).toHaveBeenCalledWith("kn-1", {}, { branch: "dev" });
-  });
-
   it("get passes --detail-level and --branch", async () => {
     await run("get", "kn-1", "--detail-level", "summary", "--branch", "dev");
     expect(kn.get).toHaveBeenCalledWith(
@@ -361,7 +338,7 @@ describe("openbkn bkn flags", () => {
     expect(kn.delete).toHaveBeenCalledWith("kn-1", { branch: "dev" });
   });
 
-  it("schema and metric creates take --import-mode and --no-strict-mode", async () => {
+  it("schema creates take --import-mode and --no-strict-mode", async () => {
     await run(
       "object-type",
       "create",
@@ -377,29 +354,6 @@ describe("openbkn bkn flags", () => {
       strictMode: false,
       importMode: "overwrite",
     });
-    await run("metric", "create", "kn-1", "--body", "[]", "--import-mode", "ignore");
-    expect(kn.metricCreate).toHaveBeenCalledWith(
-      "kn-1",
-      [],
-      expect.objectContaining({ importMode: "ignore", strictMode: undefined }),
-    );
-    await run("metric", "update", "kn-1", "m-1", "--body", "{}", "--no-strict-mode");
-    expect(kn.metricUpdate).toHaveBeenLastCalledWith(
-      "kn-1",
-      "m-1",
-      {},
-      expect.objectContaining({ strictMode: false }),
-    );
-    await run("metric", "validate", "kn-1", "--body", "{}", "--import-mode", "overwrite");
-    expect(kn.metricValidate).toHaveBeenLastCalledWith(
-      "kn-1",
-      {},
-      expect.objectContaining({ importMode: "overwrite" }),
-    );
-    // Update has no import_mode in the contract.
-    await expect(
-      run("metric", "update", "kn-1", "m-1", "--body", "{}", "--import-mode", "ignore"),
-    ).rejects.toThrow();
   });
 
   it("concept-group writes forward --branch and their write modes", async () => {

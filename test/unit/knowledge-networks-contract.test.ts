@@ -30,31 +30,23 @@ import {
   cancelActionLog,
   createKnowledgeNetwork,
   createKnowledgeNetworkRaw,
-  createMetric,
   createObjectTypes,
   createSchemaItem,
   deleteKnowledgeNetwork,
-  deleteMetric,
   deleteSchemaItem,
-  dryRunMetric,
   executeActionType,
   getActionLog,
   getKnowledgeNetwork,
-  getMetric,
   getSchemaItem,
   listActionLogs,
   listActionTypes,
-  listMetrics,
   listObjectTypes,
   listRelationTypes,
   queryActionType,
-  queryMetricData,
   queryObjectTypeInstances,
   querySubgraph,
   updateKnowledgeNetwork,
-  updateMetric,
   updateSchemaItem,
-  validateMetric,
 } from "../../src/api/knowledge-networks.js";
 import type { RequestContext } from "../../src/types.js";
 import { InputError } from "../../src/utils/errors.js";
@@ -174,35 +166,6 @@ describe("schema creates carry the POST override", () => {
     const f = mockFetch();
     await createSchemaItem(ctx, "kn-1", "relation-types", [{ id: "r" }]);
     expect(JSON.parse(lastCall(f).init.body as string)).toEqual({ entries: [{ id: "r" }] });
-  });
-
-  it("metric create sends POST override", async () => {
-    const f = mockFetch();
-    await createMetric(ctx, "kn-1", [{ name: "m" }]);
-    const { url, init } = lastCall(f);
-    expect(url.pathname).toBe("/api/bkn-backend/v1/knowledge-networks/kn-1/metrics");
-    expect(header(init, "X-HTTP-Method-Override")).toBe("POST");
-    expect(JSON.parse(init.body as string)).toEqual({ entries: [{ name: "m" }] });
-  });
-
-  it("metric get, update, delete and validate pass branch, and omit it by default", async () => {
-    const f = mockFetch();
-    const base = "/api/bkn-backend/v1/knowledge-networks/kn-1/metrics";
-    await getMetric(ctx, "kn-1", "m-1", { branch: "dev" });
-    expect(lastCall(f).url.pathname).toBe(`${base}/m-1`);
-    expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
-    await updateMetric(ctx, "kn-1", "m-1", { name: "m" }, { branch: "dev" });
-    expect(lastCall(f).init.method).toBe("PUT");
-    expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
-    await deleteMetric(ctx, "kn-1", "m-1", { branch: "dev" });
-    expect(lastCall(f).init.method).toBe("DELETE");
-    expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
-    f.mockResolvedValueOnce(Response.json({ valid: true }));
-    await validateMetric(ctx, "kn-1", { entries: [] }, { branch: "dev" });
-    expect(lastCall(f).url.pathname).toBe(`${base}/validation`);
-    expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
-    await getMetric(ctx, "kn-1", "m-1");
-    expect(lastCall(f).url.searchParams.has("branch")).toBe(false);
   });
 });
 
@@ -410,14 +373,10 @@ describe("ontology-query read flags", () => {
     expect(q.has("ignoring_store_cache")).toBe(false);
   });
 
-  it("execute and metric reads pass branch and fill_null", async () => {
+  it("execute action passes branch", async () => {
     const f = mockFetch();
     await executeActionType(ctx, "kn-1", "at-1", {}, { branch: "dev" });
     expect(lastCall(f).url.searchParams.get("branch")).toBe("dev");
-    await queryMetricData(ctx, "kn-1", "m-1", {}, { branch: "dev", fillNull: true });
-    expect(lastCall(f).url.searchParams.get("fill_null")).toBe("true");
-    await dryRunMetric(ctx, "kn-1", {}, { fillNull: true });
-    expect(lastCall(f).url.searchParams.get("fill_null")).toBe("true");
   });
 });
 
@@ -460,13 +419,6 @@ describe("knowledge network and schema items", () => {
     q = lastCall(f).url.searchParams;
     expect(q.get("action_type")).toBe("add");
     expect(q.get("object_type_id")).toBe("ot-1");
-
-    await listMetrics(ctx, "kn-1", { branch: "dev", scopeType: "object_type", scopeRef: "ot-1" });
-    q = lastCall(f).url.searchParams;
-    expect(q.get("branch")).toBe("dev");
-    expect(q.get("scope_type")).toBe("object_type");
-    expect(q.get("scope_ref")).toBe("ot-1");
-    expect(q.get("limit")).toBe("-1");
   });
 
   it("get/update/delete pass branch, strict_mode and force_delete", async () => {
@@ -581,28 +533,15 @@ describe("write modes and branch on bkn-backend writes", () => {
       branch: "dev",
       import_mode: "overwrite",
     });
-    await createMetric(ctx, "kn-1", [], { importMode: "normal", strictMode: true });
-    expect(lastCall(f).url.searchParams.get("import_mode")).toBe("normal");
-    expect(lastCall(f).url.searchParams.get("strict_mode")).toBe("true");
-    f.mockResolvedValueOnce(Response.json({ valid: true }));
-    await validateMetric(ctx, "kn-1", {}, { importMode: "overwrite", strictMode: false });
-    expect(lastCall(f).url.searchParams.get("import_mode")).toBe("overwrite");
-    expect(lastCall(f).url.searchParams.get("strict_mode")).toBe("false");
-    await updateMetric(ctx, "kn-1", "m-1", {}, { strictMode: false });
-    expect(Object.fromEntries(lastCall(f).url.searchParams)).toEqual({ strict_mode: "false" });
   });
 
-  it("comma-joined schema and metric ids keep literal commas, each id encoded", async () => {
+  it("comma-joined schema ids keep literal commas, each id encoded", async () => {
     const f = mockFetch();
     const base = "/api/bkn-backend/v1/knowledge-networks/kn-1";
     await getSchemaItem(ctx, "kn-1", "object-types", "ot-1, ot/2");
     expect(lastCall(f).url.pathname).toBe(`${base}/object-types/ot-1,ot%2F2`);
     await deleteSchemaItem(ctx, "kn-1", "relation-types", ["rt-1", "rt-2"]);
     expect(lastCall(f).url.pathname).toBe(`${base}/relation-types/rt-1,rt-2`);
-    await getMetric(ctx, "kn-1", "m-1,m-2");
-    expect(lastCall(f).url.pathname).toBe(`${base}/metrics/m-1,m-2`);
-    await deleteMetric(ctx, "kn-1", ["m 1", "m-2"]);
-    expect(lastCall(f).url.pathname).toBe(`${base}/metrics/m%201,m-2`);
   });
 
   it("relation-type-paths passes branch and keeps the GET override", async () => {

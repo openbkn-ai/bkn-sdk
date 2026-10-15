@@ -701,131 +701,7 @@ An older deploy answers without paging — resend the query with "offset" instea
       printJson(await clientFrom(cmd).kn.actionExecution(knId, execId), outputOptions(cmd));
     });
 
-  const metric = bkn.command("metric").description("Metrics — query / dry-run");
-  metric
-    .command("query <kn-id> <metric-id>")
-    .description("Query a metric's data (--body / --body-file JSON)")
-    .option(
-      "--body <json>",
-      "query JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (ontology-query)",
-    )
-    .option("--body-file <path>", "read query JSON from a file")
-    .option("--branch <b>", "branch (default: main)")
-    .option("--fill-null", "align trend series to every bucket, filling gaps with null")
-    .action(async (knId: string, metricId: string, opts, cmd: Command) => {
-      printJson(
-        await clientFrom(cmd).kn.metricQuery(knId, metricId, readBody(opts), {
-          branch: opts.branch,
-          fillNull: opts.fillNull,
-        }),
-        outputOptions(cmd),
-      );
-    });
-  metric
-    .command("dry-run <kn-id>")
-    .description("Dry-run a metric definition (--body / --body-file JSON)")
-    .option(
-      "--body <json>",
-      "metric definition JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (ontology-query)",
-    )
-    .option("--body-file <path>", "read metric definition JSON from a file")
-    .option("--branch <b>", "branch (default: main)")
-    .option("--fill-null", "align trend series to every bucket, filling gaps with null")
-    .action(async (knId: string, opts, cmd: Command) => {
-      printJson(
-        await clientFrom(cmd).kn.metricDryRun(knId, readBody(opts), {
-          branch: opts.branch,
-          fillNull: opts.fillNull,
-        }),
-        outputOptions(cmd),
-      );
-    });
-  metric
-    .command("list <kn-id>")
-    .description("List metrics")
-    .option("--branch <b>", "branch", "main")
-    .option("--name-pattern <s>", "fuzzy name filter")
-    .option("--tag <s>", "exact tag filter")
-    .action(async (knId: string, opts, cmd: Command) => {
-      printJson(
-        await clientFrom(cmd).kn.metricList(knId, {
-          branch: opts.branch,
-          namePattern: opts.namePattern,
-          tag: opts.tag,
-        }),
-        outputOptions(cmd),
-      );
-    });
-  metric
-    .command("get <kn-id> <metric-id>")
-    .description("Get a metric → {entries}, since the route takes a list of ids")
-    .option("--branch <b>", "branch (default: main)")
-    .action(async (knId: string, id: string, opts, cmd: Command) => {
-      printJson(
-        await clientFrom(cmd).kn.metricGet(knId, id, { branch: opts.branch }),
-        outputOptions(cmd),
-      );
-    });
-  writeModeFlags(
-    metric
-      .command("create <kn-id>")
-      .description("Create metrics (--body / --body-file) → body is {entries:[…]}")
-      .option(
-        "--body <json>",
-        "body JSON {entries:[…]} (a bare array is wrapped) — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
-      )
-      .option("--body-file <path>", "read body JSON from a file")
-      .option("--branch <b>", "branch (default: main)"),
-    true,
-  ).action(async (knId: string, opts, cmd: Command) => {
-    printJson(
-      await clientFrom(cmd).kn.metricCreate(knId, readBody(opts), writeModes(opts)),
-      outputOptions(cmd),
-    );
-  });
-  writeModeFlags(
-    metric
-      .command("update <kn-id> <metric-id>")
-      .description("Update a metric (--body / --body-file)")
-      .option(
-        "--body <json>",
-        "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
-      )
-      .option("--body-file <path>", "read body JSON from a file")
-      .option("--branch <b>", "branch (default: main)"),
-    false,
-  ).action(async (knId: string, id: string, opts, cmd: Command) => {
-    printJson(
-      await clientFrom(cmd).kn.metricUpdate(knId, id, readBody(opts), writeModes(opts)),
-      outputOptions(cmd),
-    );
-  });
-  metric
-    .command("delete <kn-id> <metric-id>")
-    .description("Delete a metric")
-    .option("--branch <b>", "branch (default: main)")
-    .action(async (knId: string, id: string, opts, cmd: Command) => {
-      printJson(
-        await clientFrom(cmd).kn.metricDelete(knId, id, { branch: opts.branch }),
-        outputOptions(cmd),
-      );
-    });
-  writeModeFlags(
-    metric
-      .command("validate <kn-id>")
-      .description("Validate metric dependencies → {valid, detail?}; exits non-zero when invalid")
-      .option(
-        "--body <json>",
-        "body JSON — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
-      )
-      .option("--body-file <path>", "read body JSON from a file")
-      .option("--branch <b>", "branch (default: main)"),
-    true,
-  ).action(async (knId: string, opts, cmd: Command) => {
-    const result = await clientFrom(cmd).kn.metricValidate(knId, readBody(opts), writeModes(opts));
-    printJson(result, outputOptions(cmd));
-    if (!result.valid) process.exitCode = 1;
-  });
+  const objectMetric = registerObjectMetricCommands(bkn);
 
   const cg = bkn.command("concept-group").description("Concept groups — list/get");
   cg.command("list <kn-id>")
@@ -1280,7 +1156,7 @@ should be able to account for.
       "object-type",
       "relation-type",
       "action-type",
-      "metric",
+      "object-metric",
       "concept-group",
       "capability",
       "action-log",
@@ -1303,19 +1179,29 @@ should be able to account for.
     WRITE: ["create", "update", "delete", "push", "create-from-catalog"],
   });
 
-  groupChildren(metric, {
-    READ: ["list", "get"],
-    RUN: ["query", "dry-run", "validate"],
-    WRITE: ["create", "update", "delete"],
+  groupChildren(objectMetric, {
+    READ: ["list", "get", "versions"],
+    RUN: ["validate", "trial", "query"],
+    WRITE: [
+      "create",
+      "update",
+      "delete-draft",
+      "next-draft",
+      "validate-saved",
+      "publish",
+      "deprecate",
+    ],
   });
-
   guide(
-    metric,
-    `VALIDATING DEFINITIONS
-  validate <kn-id> checks dependencies without saving definitions. Read valid in the
-  {valid, detail?} result: valid=false prints the result and sets exit code 1 even when
-  the server returned HTTP 200. Legacy empty success becomes {valid: true}.
-  Pass definitions with --body or --body-file.`,
+    objectMetric,
+    `OBJECT METRIC LIFECYCLE
+  Create or update a draft, validate-saved it, then publish that exact --version.
+  Query requires a published --version; trial takes {definition, query} without saving.
+  A completed validate with valid=false prints issues and exits with status 1.
+
+FINDING METRIC IDS
+  list --status published returns one page, not every metric. Check total_count
+  and request later pages with --offset and --limit (maximum 500).`,
   );
 
   groupChildren(capability, {
@@ -1359,4 +1245,161 @@ CREATING FROM DATA
   whole-network build.`,
   );
   return group(bkn, "DATA & KNOWLEDGE");
+}
+
+function registerObjectMetricCommands(bkn: Command): Command {
+  const metric = bkn
+    .command("object-metric")
+    .description("Versioned object metrics — author, publish, query");
+  const branch = (command: Command) =>
+    command.option("--branch <b>", "knowledge network branch (default: main)");
+  const body = (command: Command) =>
+    command
+      .option("--body <json>", "JSON body")
+      .option("--body-file <path>", "read JSON body from a file");
+  const version = (command: Command) =>
+    command.requiredOption(
+      "--version <n>",
+      "immutable or draft metric version",
+      positiveInt("--version"),
+    );
+
+  branch(
+    metric
+      .command("list <kn-id>")
+      .description("List one page of latest object-metric versions")
+      .option("--owner-object-type-id <id>", "filter by owning object type")
+      .option(
+        "--metric-type <type>",
+        "atomic | derived | composite",
+        oneOf("--metric-type", ["atomic", "derived", "composite"] as const),
+      )
+      .option(
+        "--status <status>",
+        "draft | validated | published | deprecated",
+        oneOf("--status", ["draft", "validated", "published", "deprecated"] as const),
+      )
+      .option("--keyword <text>", "search code or name")
+      .option("--offset <n>", "page offset", nonNegativeInt("--offset"))
+      .option("--limit <n>", "page size (maximum 500)", positiveInt("--limit", 500)),
+  ).action(async (knId: string, opts, cmd: Command) => {
+    printJson(await clientFrom(cmd).kn.objectMetricList(knId, opts), outputOptions(cmd));
+  });
+  branch(
+    metric
+      .command("get <kn-id> <metric-id>")
+      .description("Get one metric, optionally at a version")
+      .option("--version <n>", "specific version", positiveInt("--version")),
+  ).action(async (knId: string, metricId: string, opts, cmd: Command) => {
+    printJson(await clientFrom(cmd).kn.objectMetricGet(knId, metricId, opts), outputOptions(cmd));
+  });
+  branch(
+    body(metric.command("create <kn-id>").description("Create one object-metric draft")),
+  ).action(async (knId: string, opts, cmd: Command) => {
+    printJson(
+      await clientFrom(cmd).kn.objectMetricCreate(knId, readBody(opts), opts),
+      outputOptions(cmd),
+    );
+  });
+  branch(
+    body(
+      version(
+        metric
+          .command("update <kn-id> <metric-id>")
+          .description("Replace one draft definition; published versions are immutable"),
+      ),
+    ),
+  ).action(async (knId: string, metricId: string, opts, cmd: Command) => {
+    printJson(
+      await clientFrom(cmd).kn.objectMetricUpdate(knId, metricId, readBody(opts), opts),
+      outputOptions(cmd),
+    );
+  });
+  branch(
+    version(
+      metric
+        .command("delete-draft <kn-id> <metric-id>")
+        .description("Delete one draft version; published versions cannot be deleted"),
+    ),
+  ).action(async (knId: string, metricId: string, opts, cmd: Command) => {
+    printJson(
+      await clientFrom(cmd).kn.objectMetricDeleteDraft(knId, metricId, opts),
+      outputOptions(cmd),
+    );
+  });
+  branch(
+    body(
+      metric
+        .command("validate <kn-id>")
+        .description("Validate an unsaved definition without persisting it"),
+    ),
+  ).action(async (knId: string, opts, cmd: Command) => {
+    const result = await clientFrom(cmd).kn.objectMetricValidate(knId, readBody(opts), opts);
+    printJson(result, outputOptions(cmd));
+    if (!result.valid) process.exitCode = 1;
+  });
+  branch(
+    body(
+      metric
+        .command("trial <kn-id>")
+        .description("Evaluate an unpublished {definition, query} without saving"),
+    ),
+  ).action(async (knId: string, opts, cmd: Command) => {
+    printJson(
+      await clientFrom(cmd).kn.objectMetricTrial(
+        knId,
+        readBody(opts) as { definition: unknown; query: unknown },
+        opts,
+      ),
+      outputOptions(cmd),
+    );
+  });
+  branch(
+    body(
+      version(
+        metric
+          .command("query <kn-id> <metric-id>")
+          .description("Query one immutable published object-metric version"),
+      ),
+    ),
+  ).action(async (knId: string, metricId: string, opts, cmd: Command) => {
+    printJson(
+      await clientFrom(cmd).kn.objectMetricQuery(knId, metricId, readBody(opts), opts),
+      outputOptions(cmd),
+    );
+  });
+  branch(
+    metric.command("versions <kn-id> <metric-id>").description("List all metric versions"),
+  ).action(async (knId: string, metricId: string, opts, cmd: Command) => {
+    printJson(
+      await clientFrom(cmd).kn.objectMetricVersions(knId, metricId, opts),
+      outputOptions(cmd),
+    );
+  });
+  branch(
+    metric
+      .command("next-draft <kn-id> <metric-id>")
+      .description("Create a new draft from the latest published version"),
+  ).action(async (knId: string, metricId: string, opts, cmd: Command) => {
+    printJson(
+      await clientFrom(cmd).kn.objectMetricNextDraft(knId, metricId, opts),
+      outputOptions(cmd),
+    );
+  });
+  for (const [name, method] of [
+    ["validate-saved", "objectMetricValidateSaved"],
+    ["publish", "objectMetricPublish"],
+    ["deprecate", "objectMetricDeprecate"],
+  ] as const) {
+    branch(
+      version(
+        metric
+          .command(`${name} <kn-id> <metric-id>`)
+          .description(`${name} one object-metric version`),
+      ),
+    ).action(async (knId: string, metricId: string, opts, cmd: Command) => {
+      printJson(await clientFrom(cmd).kn[method](knId, metricId, opts), outputOptions(cmd));
+    });
+  }
+  return metric;
 }
