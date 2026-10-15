@@ -85,14 +85,25 @@ def test_every_function_takes_the_network_first() -> None:
         assert first == "kn_id", name
 
 
-def test_required_arguments_are_positional_and_the_rest_are_not() -> None:
+def test_required_arguments_and_legacy_object_type_ids_are_positional() -> None:
     import inspect
 
     signature = inspect.signature(kn.get_object_types)
     kinds = {name: p.kind for name, p in signature.parameters.items()}
 
+    # Index listing may omit ids, but older callers still pass them positionally.
     assert kinds["ids"] is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert signature.parameters["ids"].default is None
+    assert kinds["offset"] is inspect.Parameter.KEYWORD_ONLY
+    assert kinds["limit"] is inspect.Parameter.KEYWORD_ONLY
     assert kinds["context"] is inspect.Parameter.KEYWORD_ONLY
+    metric_kinds = {
+        name: parameter.kind
+        for name, parameter in inspect.signature(kn.query_metric).parameters.items()
+    }
+    assert metric_kinds["metric_id"] is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert metric_kinds["version"] is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert metric_kinds["query"] is inspect.Parameter.KEYWORD_ONLY
 
 
 def test_an_argument_the_spec_does_not_publish_is_not_invented() -> None:
@@ -200,6 +211,36 @@ def test_unset_optional_arguments_are_not_sent(deploy: Deploy) -> None:
     kn.list_skills(KN, context=CONTEXT)
 
     assert set(deploy.bodies[0]) == {"bkn_context"}
+
+
+def test_object_type_ids_remain_positional_while_index_listing_can_omit_them(
+    deploy: Deploy,
+) -> None:
+    kn.get_object_types(KN, ["order"], context=CONTEXT)
+    kn.get_object_types(KN, ids=["shipment"], context=CONTEXT)
+    kn.get_object_types(KN, offset=20, limit=10, context=CONTEXT)
+
+    assert deploy.paths == ["/api/agent-retrieval/v1/kn/get_object_types"] * 3
+    assert deploy.bodies[0]["ids"] == ["order"]
+    assert "offset" not in deploy.bodies[0]
+    assert "limit" not in deploy.bodies[0]
+    assert deploy.bodies[1]["ids"] == ["shipment"]
+    assert "ids" not in deploy.bodies[2]
+    assert deploy.bodies[2]["offset"] == 20
+    assert deploy.bodies[2]["limit"] == 10
+
+
+def test_action_execution_results_pagination_is_optional(deploy: Deploy) -> None:
+    kn.get_action_execution(KN, "execution-1", context=CONTEXT)
+    kn.get_action_execution(
+        KN, "execution-1", results_limit=100, results_offset=200, context=CONTEXT
+    )
+
+    assert deploy.paths == ["/api/agent-retrieval/v1/kn/get_action_execution"] * 2
+    assert "results_limit" not in deploy.bodies[0]
+    assert "results_offset" not in deploy.bodies[0]
+    assert deploy.bodies[1]["results_limit"] == 100
+    assert deploy.bodies[1]["results_offset"] == 200
 
 
 def test_a_route_that_sends_the_network_still_sends_it(deploy: Deploy) -> None:

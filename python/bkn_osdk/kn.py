@@ -120,6 +120,10 @@ def execute_action(
     `get_action_execution` 轮询。 `dynamic_params` 填 `get_action_info` 返回的 schema 里
     `value_from=input` 的那些参数。`_instance_identities`
     留空表示按行动类自身的条件扫描目标实例 （由下游决定命中范围），不是「不执行」。
+    必须提供有效的 `bkn_context`；缺失或传空时，执行前返回 400 `conversation_required`，附
+    `required_action: create_conversation`。 平台明确关闭证据采集时，`bkn_start_interaction`
+    不签发 ID，本接口可不带 `bkn_context` 执行，且不生成受管 Trace 记录。 Trace Core
+    基础设施故障时，本接口经只读探测确认后可不带上下文执行， 并标记本次调用未记录 Trace。
 
     Args:
         kn_id: 知识网络 ID。
@@ -161,7 +165,11 @@ def execute_skill(
     `get_skill_content` 读清楚再调；这条接口不校验命令与 Skill 的对应关系。 授权由
     execution-factory 按账户强制：必须拥有该 Skill 的 `execute` 权限； `public_access`
     只代表公开读取，不能替代执行权限。无权限返回 403。 `stdout` / `stderr` 各自超过 8000
-    字符会截断（`truncated=true`）。
+    字符会截断（`truncated=true`）。 必须提供有效的 `bkn_context`；缺失或传空时，执行前返回
+    400 `conversation_required`，附 `required_action: create_conversation`。
+    平台明确关闭证据采集时，`bkn_start_interaction` 不签发 ID，本接口可不带 `bkn_context`
+    执行，且不生成受管 Trace 记录。 Trace Core
+    基础设施故障时，本接口经只读探测确认后可不带上下文执行， 并标记本次调用未记录 Trace。
     **本端点由技能执行总闸控制**：`EXECUTE_SKILL_ENABLED=true` 时才注册这条 路由，同名 MCP
     工具也才出现在 `tools/list` 与 `GET /mcp/info`。默认关闭， 此时这条路径返回
     404——「这个部署没有技能执行能力」在路由表上成立。 （旧名 `MCP_EXECUTE_SKILL_ENABLED`
@@ -206,7 +214,10 @@ def execute_tool(
     等传输信息由平台携带，写进 `arguments` 既不生效也会被记进调用参数。 **函数自身报错同样是
     200**：调用成功不等于业务成功，需读响应体判断。 工具未挂载、已停用、所属工具箱/MCP Server
     未发布、代理未同步，或调用者没有知识网络 `execute` 权限时会拒绝，`message`
-    说明原因，请求不会执行目标工具。
+    说明原因，请求不会执行目标工具。 缺少或传空 `bkn_context` 返回 400
+    `conversation_required`，并附 `required_action: create_conversation`；执行前应先建立受管
+    Interaction。 平台明确关闭证据采集时，此上下文要求不适用。 Trace Core
+    基础设施故障且只读探测确认不可用时，此要求也不适用， 本次执行会标记为未记录 Trace。
 
     Args:
         kn_id: 知识网络 ID，须与 `search_capabilities` 所用一致。工具必须已挂载到该网络才可调用。
@@ -314,11 +325,17 @@ def get_action_execution(
     execution_id: str,
     *,
     response_format: str | None = None,
+    results_limit: int | None = None,
+    results_offset: int | None = None,
     context: Context | None = None,
 ) -> Any:
     """查询单次行动执行.
 
-    按 `execute_action` 返回的 `execution_id` 查这次执行的状态与逐对象结果。 `status` 为
+    按 `execute_action` 返回的 `execution_id` 查这次执行的状态与逐对象结果。
+    不传分页参数时沿用原有查询路径（最多返回 1000 条结果）。传入 `results_limit` 或
+    `results_offset` 时按结果分页；每页默认 100 条， `results_limit > 1000` 会钳制为
+    1000，且偏移量与实际页大小之和 不得超过 10000。比较 `results_offset + len(results)` 与
+    `results_total` 可判断是否还有下一页；超过 10000 条时当前接口 无法继续翻页。 `status` 为
     `pending` / `running` 时结果尚未齐全；`completed` 表示执行流程
     结束，**不代表全部成功**——逐对象成败看 `success_count` / `failed_count` 与
     `results[].status`。
@@ -326,10 +343,13 @@ def get_action_execution(
     Args:
         kn_id: 知识网络 ID。
         execution_id: `execute_action` 返回的执行 ID。
+        results_limit: 逐条结果每页条数；传 0 时默认 100，超过 1000 时钳制为 1000。
+        results_offset: 逐条结果偏移量，默认 0；传入后启用分页查询。
 
     Returns the platform's own payload: action_type_id, action_type_name, duration_ms,
-    dynamic_params, end_time, execution_mode, failed_count, id, kn_id, results, start_time,
-    status, success_count, target_count, total_count, trigger_type.
+    dynamic_params, end_time, execution_mode, failed_count, id, kn_id, results, results_limit,
+    results_offset, results_total, start_time, status, success_count, target_count,
+    total_count, trigger_type.
     """
     return _send(
         "/api/agent-retrieval/v1/kn/get_action_execution",
@@ -340,6 +360,8 @@ def get_action_execution(
         {
             "kn_id": kn_id,
             "execution_id": execution_id,
+            "results_limit": results_limit,
+            "results_offset": results_offset,
         },
         context,
     )
@@ -413,14 +435,27 @@ def get_kn_detail(
     `related_metric_count`（该对象类下已建模指标数），`>0` 才值得 为取指标下钻。 顶层带
     `mounted_capabilities`：该网络已挂载的 Skill 与工具按类型计数。两个 `detail_level`
     都会返回——它是网络的形状，不是可以剥掉的细节。同样只给计数： 要具体能力用
-    `search_capabilities`。
+    `search_capabilities`。 **超过 200 个对象类、或超过 600 个关系类的网络只返回导航壳**，两个
+    `detail_level` 都是：此时 `object_types` / `relation_types` / `action_types` **均回
+    `null`**，改由 `object_type_count` / `relation_type_count` / `action_type_count`
+    给出数量， `notice` 说明原因与下一步。概念组与 `mounted_capabilities` 照常返回。
+    **该网络没划概念组时**（存在这种网：一千个对象类、零个概念组），`concept_groups`
+    为空，`notice` 改为让调用方直接调 `search_schema` 按语义召回——把人指向一个空字段
+    等于没给出路。 这不是分页。一张一千对象类的网，summary
+    也有一兆多，翻页只是把同样的体积分几次
+    搬运；而按名称序翻页等于对知识模型做线性扫描。该规模下的路径是：从 `concept_groups` 选出
+    1-3 个相关分组，用 [schema-search.yaml](schema-search.yaml) 的 `search_schema` 配合
+    `search_scope.concept_groups` 收敛，再用 `get_object_types` 按 ID 取细节。
+    收窄发生在逐对象类的属性授权读取之前：那一步每个对象类一次下游调用，为一份
+    不会返回的列表付这个代价没有意义。
 
     Args:
         kn_id: 知识网络 ID。与 `x-kn-id` 头二选一，本字段优先。
         detail_level: 详情级别，见端点说明。
 
-    Returns the platform's own payload: action_types, comment, concept_groups, id,
-    mounted_capabilities, name, object_types, relation_types.
+    Returns the platform's own payload: action_type_count, action_types, comment,
+    concept_groups, id, mounted_capabilities, name, notice, object_type_count, object_types,
+    relation_type_count, relation_types.
     """
     return _send(
         "/api/agent-retrieval/v1/kn/get_kn_detail",
@@ -438,9 +473,11 @@ def get_kn_detail(
 
 def get_object_types(
     kn_id: str,
-    ids: list[Any],
+    ids: list[Any] | None = None,
     *,
     response_format: str | None = None,
+    offset: int | None = None,
+    limit: int | None = None,
     context: Context | None = None,
 ) -> Any:
     """按 ID 批量取对象类完整定义.
@@ -452,14 +489,28 @@ def get_object_types(
     [logic-property.yaml](logic-property.yaml) 的 `logic-property-resolver`（实例 +
     已绑逻辑属性）或 `query_metric`（其余）。 `ids` 里既可以传对象类 ID，也可以传对象类名（ID
     优先，名称仅作兜底）； 匹配不到的 ID 原样回填在 `missing` 里，不报错。属性的
-    `display_name` （纯 UI 标签）在本接口也会被去掉。
+    `display_name` （纯 UI 标签）在本接口也会被去掉。 **不传 `ids`
+    就是列举对象类索引**：按名称升序返回一页，每条只有 `id` / `name` / `comment` / `tags` /
+    `data_source`，**没有 `data_properties`、 `logic_properties` 与
+    `related_metrics`**。`limit` 默认 50、上限 200，响应带 `total_count`（当前账号可见总数）与
+    `next_offset`（走完最后一页即不再出现， 别自己用 `offset + len` 推）。 这是给拿不到 ID
+    的调用方准备的——`get_kn_detail` 对超过上限的网络只回导航壳， 那条路给不出 ID。挑好之后把
+    ID 传回本接口取完整定义。传了 `ids` 则 `offset` / `limit` 无效。
+    索引而非定义，是因为完整定义在大网络上一条约 60KB：一页 20 条就超过一兆，
+    正是导航壳要避免的那种返回值；而且每条还要付一次属性级授权读取。索引条目
+    只有几百字节，且一次下游读取就能取回整页。
 
     Args:
         kn_id: 知识网络 ID。与 `x-kn-id` 头二选一，本字段优先。
-        ids: 要下钻的概念 ID 列表（取自 `get_kn_detail`）。也接受概念名称作为兜底匹配。 为空时返回
-            400。
+        ids: 要下钻的对象类 ID 列表（取自 `get_kn_detail` 或本接口的列举模式）。也接受
+            名称作为兜底匹配。**留空即切换到列举模式**，不再返回 400。
+        offset: 列举的起始位置。仅在不传 `ids` 时有效；续页请用响应里的 `next_offset`。
+        limit: 列举的单页条数，默认 50、上限 200。仅在不传 `ids` 时有效。索引条目只有
+            几百字节，所以比按 ID 取定义时能装得多。超过上限不报错，按上限返回， 并在响应的
+            `notice` 里说明——一页比你要的短却什么都不说，会被读成 「这张网就这么大」。
 
-    Returns the platform's own payload: kn_id, missing, object_types.
+    Returns the platform's own payload: kn_id, missing, next_offset, notice, object_types,
+    total_count.
     """
     return _send(
         "/api/agent-retrieval/v1/kn/get_object_types",
@@ -470,6 +521,8 @@ def get_object_types(
         {
             "kn_id": kn_id,
             "ids": ids,
+            "offset": offset,
+            "limit": limit,
         },
         context,
     )
@@ -1017,18 +1070,41 @@ def run_cypher(
     **节点**：变量首次出现时必须带标签（对象类 id 或名称），可带内联属性 `{prop: value}`。 -
     **关系**：`-[:R]->`、`<-[:R]-`、无向 `-[:R]-`，每条必须指名一个关系类； 一条查询的模式最多
     8 条关系、9 个节点（不与其他节点相连的节点也各算一张表）。 关系变量（`-[r:R]->`）不支持。
-    - **WHERE**：`=` `<>` `<` `>` `<=` `>=`、`IN [...]`、`IS NULL` / `IS NOT NULL`， 用 `AND`
-    / `OR` / `NOT` 组合，可加括号。值可写 `$name` 参数。 - **RETURN**：属性、`AS`
-    别名、`DISTINCT`，以及 `count` / `sum` / `avg` / `min` / `max`（含 `count(*)` 与
-    `DISTINCT` 形式）。有聚合时按 RETURN 中其余 列自动分组——这是 Cypher 的隐式 GROUP
-    BY，无需也不能自己写 GROUP BY。 - **ORDER BY / SKIP / LIMIT**：ORDER BY
-    可用属性、返回列名或聚合。结果被聚合 或 DISTINCT 折叠后，只能按返回的值排序。
-    **不支持**（会被拒绝，报错指名是哪个语法与位置）：`OPTIONAL MATCH`、`WITH`、
-    `UNION`、变长路径 `[:R*1..3]`、`XOR`、`STARTS WITH` / `CONTAINS` / `ENDS WITH`、
-    返回整个节点、函数调用与算术表达式、写操作（`CREATE` / `MERGE` / `DELETE` / `SET` /
-    `REMOVE`）。 **行数**：不写 `LIMIT` 默认返回 1000 行；`LIMIT` 不得超过 10000。
-    **关系唯一性**：按 openCypher 语义，同一条路径里共用同一关系类的多跳互不相同，
-    编译器会自动补上主键不等的条件，调用方不必自己写。
+    - **OPTIONAL MATCH**：写一条关系，把一个新节点挂到前面子句已经找到的节点上。
+    匹配不到时该行保留，新节点的列为 NULL，所以 `count(可选侧的属性)` 得 0 而不是整行
+    消失（`count(*)` 仍然算 1 行）——按邻居数排序又不丢零度邻居，用的就是这一点。 它自带的
+    `WHERE` 与内联属性决定这条关系匹配到什么，不决定哪些行留下。 限制：首个子句必须是
+    `MATCH`；一条 `OPTIONAL MATCH` 只能写一条关系、只能引入一个
+    新节点（两端都已匹配或两端都是新节点都会被拒）；它引入的节点不能被后面的 `MATCH` 或查询的
+    `WHERE` 再要求，否则留下来的行会被重新删掉，这类查询一律拒绝而不是照做。 - **WHERE**：`=`
+    `<>` `<` `>` `<=` `>=`、`IN [...]`、`IS NULL` / `IS NOT NULL`， `STARTS WITH` / `ENDS
+    WITH` / `CONTAINS`，用 `AND` / `OR` / `NOT` 组合，可加括号。 值可写 `$name` 参数；`IN
+    $list` 可把整个列表作为一个参数传入。字符串谓词左侧须为
+    `变量.属性`，右侧须为字符串字面量或取值为字符串的参数；按 openCypher 语义做字面
+    子串匹配（`%`、`_` 等不是通配符），属性为 null 时不匹配；大小写是否敏感取决于
+    数据源列的排序规则（collation）。只能用于字符串属性，用在数值、日期等属性上返回 400。 -
+    **RETURN**：属性、`AS` 别名、`DISTINCT`，以及 `count` / `sum` / `avg` / `min` / `max`（含
+    `count(*)` 与 `DISTINCT` 形式）。有聚合时按 RETURN 中其余 列自动分组——这是 Cypher 的隐式
+    GROUP BY，无需也不能自己写 GROUP BY。 - **算术**：`+` `-` `*` `/` `%`
+    与取负，可加括号，可写在 RETURN（含聚合的参数）、 `WHERE` 比较的两侧和 `ORDER BY` 里，如
+    `count(*) * 2`、`sum(o.price * o.qty)`、 `count(o.x) * 1.0 / count(*)`、`WHERE o.amount *
+    o.rate > $floor`、 `ORDER BY count(g.id) * 0.5 + p.rank * 0.3
+    DESC`。操作数是数值属性、聚合、数字或 取值为数字的参数；字符串、布尔、null
+    与非数值属性返回 400。与 openCypher 语义不一致的
+    写法一律拒绝而不是照做：两个整数相除（Cypher 丢余数，各 SQL 库不一致），要小数结果把
+    一边乘 `1.0`；`%` 只用于整数；除以字面量 0；`^` 乘方。聚合只能出现在 RETURN 与 ORDER BY
+    里，不能写在 `WHERE` 中。一个列或排序键既有聚合又在聚合外直接读属性（如 `o.x -
+    avg(o.x)`）时，该属性须同时作为单独的列返回，结果按它分组；DISTINCT 结果要按
+    算出来的值排序，请在 RETURN 里给它起别名再按别名排序。没有声明类型的属性交给数据源决定。
+    `IN` 列表、内联属性、`SKIP` / `LIMIT` 里仍不能写算术。 - **ORDER BY / SKIP /
+    LIMIT**：ORDER BY 可用属性、返回列名或聚合。结果被聚合 或 DISTINCT
+    折叠后，只能按返回的值排序。 **不支持**（会被拒绝，报错指名是哪个语法与位置）：`WITH`、
+    `UNION`、变长路径 `[:R*1..3]`、`XOR`、返回整个节点、函数调用、`^` 乘方、写操作（`CREATE` /
+    `MERGE` / `DELETE` / `SET` / `REMOVE`）。 **行数**：不写 `LIMIT` 默认返回 1000 行；`LIMIT`
+    不得超过 10000。 **关系唯一性**：按 openCypher
+    语义，同一条路径里共用同一关系类的多跳互不相同，
+    编译器会自动补上主键不等的条件，调用方不必自己写。该规则按子句划分，因此 `OPTIONAL MATCH`
+    的那一跳不参与——它补出的条件会落在 `WHERE` 里，正好删掉外连接 保住的行。
 
     Args:
         kn_id: 知识网络 ID，来自 `list_knowledge_networks`。
@@ -1036,7 +1112,9 @@ def run_cypher(
         query: 只读 Cypher 语句，语法子集见端点说明。
         parameters: 语句里 `$name` 的取值。只能是字符串、数字或布尔值——参数是值，不会变成
             表名或列名，因此不能用来拼标签、关系类型或属性名。`null` 会被拒绝： 判空写 `IS
-            NULL`。
+            NULL`。用在 `IN $name` 右侧的参数须为非空数组，元素为同一类标量
+            （整数与小数都算数字），不能含 `null`，最多 500 个，如 `{"keys": [6, 7, 8]}`。
+            一条查询里多个长列表合计过大时会返回 400，需拆成多次查询。
 
     Returns the platform's own payload: columns, entries.
     """
