@@ -145,9 +145,7 @@ def _checked_time(time: TimeWindow) -> TimeWindow:
     ):
         raise InputError("Object Metric V1 time values must be integer Unix milliseconds.")
     if start < MIN_EPOCH_MS or end < MIN_EPOCH_MS:
-        raise InputError(
-            "Object Metric V1 time values must be Unix milliseconds, not seconds."
-        )
+        raise InputError("Object Metric V1 time values must be Unix milliseconds, not seconds.")
     if start > end:
         raise InputError("Object Metric V1 time.start must be <= time.end.")
     return {"start": start, "end": end}
