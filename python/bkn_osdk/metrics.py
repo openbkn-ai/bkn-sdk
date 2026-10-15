@@ -21,6 +21,7 @@ from .query import QUERY_BASE, branch_param
 __all__ = ["Metric", "TimeWindow"]
 
 TimeWindow = dict[str, Any]
+MIN_EPOCH_MS = 1_000_000_000_000
 
 
 class Metric:
@@ -143,6 +144,10 @@ def _checked_time(time: TimeWindow) -> TimeWindow:
         or not isinstance(end, int)
     ):
         raise InputError("Object Metric V1 time values must be integer Unix milliseconds.")
+    if start < MIN_EPOCH_MS or end < MIN_EPOCH_MS:
+        raise InputError(
+            "Object Metric V1 time values must be Unix milliseconds, not seconds."
+        )
     if start > end:
         raise InputError("Object Metric V1 time.start must be <= time.end.")
     return {"start": start, "end": end}

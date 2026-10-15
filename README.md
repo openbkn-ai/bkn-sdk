@@ -89,9 +89,11 @@ Tokens are stored per platform/user under `~/.bkn/` (override: `BKN_CONFIG_DIR`)
 
 Before configuring fulltext indexes, use `vega index-capabilities` to read the
 deployment's supported analyzer IDs. This published Vega API changes no
-configuration and starts no build. `bkn metric validate <kn-id> --body-file metrics.json`
-prints `{ valid, detail? }` and exits with code 1 when `valid` is false, including
-when the server returns HTTP 200.
+configuration and starts no build. `openbkn bkn object-metric validate <kn-id> --body-file metric.json`
+validates an unsaved Object Metric V1 definition. It prints
+`{ valid, issues, output_shape }` and exits with code 1 when `valid` is false,
+including when the server returns HTTP 200. `object-metric list` returns one page;
+use `--offset`, `--limit`, and the response's `total_count` to find later metric IDs.
 
 ## SDK
 
@@ -105,12 +107,11 @@ const task = await bkn.vega.build({ resource_id: "r-1", mode: "batch" }, { wait:
 const raw = await bkn.call("/api/...", { method: "GET" });
 ```
 
-`bkn.kn.metricValidate()` returns an exported `MetricValidationResult`
-(`{ valid: boolean, detail?: string }`); a completed negative validation is a result,
-while HTTP errors and malformed responses reject the promise. Legacy empty success
-responses are normalized to `{ valid: true }`. Object-type reads
-may omit `data_properties` when none exist; SDK reads preserve omission, and local
-validation and push-integrity checks accept it.
+`bkn.kn.objectMetricValidate(knId, definition)` returns the exported
+`ObjectMetricValidationResult` (`{ valid, issues, output_shape }`). A completed
+negative validation is a result, while HTTP errors and malformed responses reject
+the promise. Object-type reads may omit `data_properties` when none exist;
+SDK reads preserve omission, and local validation and push-integrity checks accept it.
 
 Importing the package has no side effects; `createClient` resolves config explicitly.
 

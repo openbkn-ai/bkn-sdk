@@ -74,8 +74,11 @@ Receipt 确认权威业务上下文。
 Token 按平台/用户存于 `~/.bkn/`（可用 `BKN_CONFIG_DIR` 覆盖）。
 
 配置全文索引前，可用 `vega index-capabilities` 查询部署支持的分析器 ID。这是公开的
-Vega 只读接口，不修改配置或触发构建。`bkn metric validate <kn-id> --body-file metrics.json`
-输出 `{ valid, detail? }`；即使 HTTP 返回 200，只要 `valid` 为 `false`，CLI 退出码就是 1。
+Vega 只读接口，不修改配置或触发构建。`openbkn bkn object-metric validate <kn-id> --body-file metric.json`
+校验未保存的对象指标 V1 定义，输出
+`{ valid, issues, output_shape }`；即使 HTTP 返回 200，只要 `valid` 为 `false`，CLI 退出码就是 1。
+`object-metric list` 每次只返回一页；用 `--offset`、`--limit` 和响应中的 `total_count`
+查找后续页的指标 ID。
 
 ## SDK
 
@@ -89,9 +92,9 @@ const task = await bkn.vega.build({ resource_id: "r-1", mode: "batch" }, { wait:
 const raw = await bkn.call("/api/...", { method: "GET" });
 ```
 
-`bkn.kn.metricValidate()` 返回已导出的 `MetricValidationResult`
-（`{ valid: boolean, detail?: string }`）。校验未通过仍是正常返回的结果；HTTP 错误或
-不符合契约的响应会抛错。旧版服务端的成功空响应统一返回 `{ valid: true }`。
+`bkn.kn.objectMetricValidate(knId, definition)` 返回已导出的
+`ObjectMetricValidationResult`（`{ valid, issues, output_shape }`）。校验未通过仍是
+正常返回的结果；HTTP 错误或不符合契约的响应会抛错。
 对象类没有数据属性时，读取结果可省略 `data_properties`；
 SDK 保留缺省，本地校验与 push 完整性检查也支持该情况。
 

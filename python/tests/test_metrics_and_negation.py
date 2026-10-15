@@ -120,6 +120,19 @@ def test_invalid_or_legacy_time_is_rejected(deploy: Deploy, window: dict[str, An
     assert deploy.bodies == []
 
 
+@pytest.mark.parametrize(
+    "window",
+    [
+        {"start": 1751328000, "end": 1753920000},
+        {"start": 1751328000000, "end": 1753920000},
+    ],
+)
+def test_seconds_in_v1_window_are_rejected(deploy: Deploy, window: dict[str, int]) -> None:
+    with pytest.raises(InputError, match="milliseconds, not seconds"):
+        Gmv.query(time=window)
+    assert deploy.bodies == []
+
+
 def test_legacy_query_arguments_are_not_accepted(deploy: Deploy) -> None:
     with pytest.raises(TypeError, match="unexpected keyword"):
         Gmv.query(condition={"operation": "eq"})  # type: ignore[call-arg]

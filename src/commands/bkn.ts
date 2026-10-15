@@ -1197,7 +1197,11 @@ should be able to account for.
     `OBJECT METRIC LIFECYCLE
   Create or update a draft, validate-saved it, then publish that exact --version.
   Query requires a published --version; trial takes {definition, query} without saving.
-  A completed validate with valid=false prints issues and exits with status 1.`,
+  A completed validate with valid=false prints issues and exits with status 1.
+
+FINDING METRIC IDS
+  list --status published returns one page, not every metric. Check total_count
+  and request later pages with --offset and --limit (maximum 500).`,
   );
 
   groupChildren(capability, {
@@ -1263,7 +1267,7 @@ function registerObjectMetricCommands(bkn: Command): Command {
   branch(
     metric
       .command("list <kn-id>")
-      .description("List latest object-metric versions")
+      .description("List one page of latest object-metric versions")
       .option("--owner-object-type-id <id>", "filter by owning object type")
       .option(
         "--metric-type <type>",

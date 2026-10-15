@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import pkg from "../../package.json" with { type: "json" };
 import { createClient } from "../../src/client.js";
 import { bknCommand } from "../../src/commands/bkn.js";
+import { guideOf } from "../../src/help/grouped-help.js";
 
 const BASE = "https://object-metrics.example.com";
 const ROOT = "/api/bkn-backend/v1/knowledge-networks/kn-1/object-metrics";
@@ -109,7 +110,12 @@ describe("Object Metrics V1", () => {
       (command) => command.name() === "object-metric",
     );
     const query = objectMetric?.commands.find((command) => command.name() === "query");
+    const list = objectMetric?.commands.find((command) => command.name() === "list");
     expect(query).toBeDefined();
     expect(query?.options.find((option) => option.long === "--version")?.mandatory).toBe(true);
+    expect(list?.description()).toContain("one page");
+    const metricGuide = objectMetric ? guideOf(objectMetric) : undefined;
+    expect(metricGuide).toContain("total_count");
+    expect(metricGuide).toContain("--offset");
   });
 });
