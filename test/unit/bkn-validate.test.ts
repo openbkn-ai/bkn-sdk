@@ -62,6 +62,33 @@ describe("bkn validate", () => {
     expect(r.warnings).toEqual([]);
   });
 
+  it("validates Object Metric V1 archive identities and owners", () => {
+    const record = (id: string, version: number, owner = "a") =>
+      JSON.stringify({ definition: { id, version, owner_object_type_id: owner } });
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": ot("a", "Alpha"),
+      "object_metrics/m1@1.json": record("m1", 1),
+    });
+    expect(validateBknDirectory(dir).valid).toBe(true);
+
+    const bad = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": ot("a", "Alpha"),
+      "object_metrics/wrong.json": record("m1", 1),
+      "object_metrics/m2@1.json": record("m2", 1, "missing"),
+      "object_metrics/broken@1.json": "{invalid",
+    });
+    const result = validateBknDirectory(bad);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(" ")).toContain("filename must be m1@1.json");
+    expect(result.errors.join(" ")).toContain("owner object type is absent");
+    expect(result.errors.join(" ")).toContain("invalid Object Metric V1 JSON");
+
+    const legacy = bkn({ "network.bkn": network, "metrics/old.bkn": "legacy" });
+    expect(validateBknDirectory(legacy).errors.join(" ")).toContain("Legacy metrics/");
+  });
+
   it("flags missing network.bkn", () => {
     const r = validateBknDirectory(bkn({ "object_types/a.bkn": ot("a", "A") }));
     expect(r.valid).toBe(false);
@@ -255,7 +282,7 @@ describe("bkn validate", () => {
     }
   });
 
-  it("checks metric tables, while leaving unknown notes and risk-type prose alone", () => {
+  it("rejects legacy metric files, while leaving unknown notes and risk-type prose alone", () => {
     const dir = bkn({
       "network.bkn": network,
       "metrics/count.bkn": `---
@@ -296,7 +323,7 @@ name: Risk
 
     const result = validateBknDirectory(dir);
     expect(result.errors).toEqual([
-      "metrics/count.bkn:13: table row has 4 columns; expected 3. Check for a pipe or newline inside a cell.",
+      "Legacy metrics/ is unsupported; migrate to object_metrics/ before push.",
     ]);
   });
 
@@ -346,7 +373,7 @@ network | kn1
     const result = validateBknDirectory(dir);
     expect(result.errors).toEqual([
       "object_types/a.bkn:11: table header must start with '|'; the BKN parser skips it.",
-      "metrics/m.bkn:13: table row must start with '|'; the BKN parser skips it.",
+      "Legacy metrics/ is unsupported; migrate to object_metrics/ before push.",
     ]);
   });
 

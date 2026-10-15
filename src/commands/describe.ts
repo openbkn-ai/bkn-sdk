@@ -42,7 +42,7 @@ const ID_SOURCES: Record<string, string> = {
   "resource-id": "openbkn vega catalog resources <catalog-id>",
   "ot-id": 'openbkn context search-schema <kn-id> "<q>"',
   "at-id": "openbkn bkn action-type list <kn-id>",
-  "metric-id": "openbkn bkn metric list <kn-id>",
+  "metric-id": "openbkn bkn object-metric list <kn-id> --status published",
   "skill-id": "openbkn skill list",
   "mcp-id": "openbkn mcp list",
   "box-id": "openbkn toolbox list",
@@ -269,13 +269,13 @@ const FIELD_MEANINGS: Record<string, string> = {
 export interface DescribeOptions {
   /** Annotate each command with what a probe of this deploy found. */
   probe?: ProbeResult;
-  /** Only this subtree, given as a command path (`bkn metric`). */
+  /** Only this subtree, given as a command path (`bkn object-metric`). */
   path?: string[];
   /** How many levels to walk. 1 lists a node's own commands without their children. */
   depth?: number;
 }
 
-/** Walk to the node a path names, so `describe bkn metric` ships only that subtree. */
+/** Walk to the node a path names, so `describe bkn object-metric` ships only that subtree. */
 function resolve(program: Command, path: string[]): Command {
   let node = program;
   for (const name of path) {
@@ -376,7 +376,7 @@ function renderText(tree: unknown): string {
 export function describeCommand(program: Command): Command {
   const cmd = new Command("describe")
     .description("Print the command tree — paths, sections, flags (--json for the data)")
-    .argument("[command...]", "only this subtree, e.g. `describe bkn metric`")
+    .argument("[command...]", "only this subtree, e.g. `describe bkn object-metric`")
     .option("--depth <n>", "how many levels to walk (1 = this level only)", (v) =>
       Number.parseInt(v, 10),
     )

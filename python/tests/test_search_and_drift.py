@@ -22,7 +22,14 @@ import httpx
 import pytest
 from schema_fixtures import DEMO_SCHEMA
 
-from bkn_osdk import Context, SchemaDriftError, configure, search, search_instances
+from bkn_osdk import (
+    Context,
+    FormatVersionError,
+    SchemaDriftError,
+    configure,
+    search,
+    search_instances,
+)
 from bkn_osdk import http as http_module
 from bkn_osdk import lifecycle as lifecycle_module
 from bkn_osdk import mcp as mcp_module
@@ -212,8 +219,13 @@ def clean_registry() -> Iterator[None]:
 
 def register(fingerprint_value: str) -> None:
     meta_module.validate_package(
-        "bkn", 1, ">=0.1,<0.2", kn_id=KN, branch="main", fingerprint=fingerprint_value
+        "bkn", 2, ">=0.1,<0.2", kn_id=KN, branch="main", fingerprint=fingerprint_value
     )
+
+
+def test_legacy_generated_metric_package_requires_regeneration() -> None:
+    with pytest.raises(FormatVersionError, match="Regenerate"):
+        meta_module.validate_package("legacy_bkn", 1, ">=0.1,<0.2")
 
 
 def serve_schema(monkeypatch: pytest.MonkeyPatch, schema: Any) -> list[str]:
@@ -319,10 +331,10 @@ def test_two_branches_of_one_network_are_both_checked(
     network in one process; checking only whichever registered first would
     compare against the wrong one."""
     meta_module.validate_package(
-        "bkn", 1, ">=0.1,<0.2", kn_id=KN, branch="main", fingerprint=fingerprint(DEMO_SCHEMA)
+        "bkn", 2, ">=0.1,<0.2", kn_id=KN, branch="main", fingerprint=fingerprint(DEMO_SCHEMA)
     )
     meta_module.validate_package(
-        "bkn_release", 1, ">=0.1,<0.2", kn_id=KN, branch="release", fingerprint="a3f9c2e1" * 8
+        "bkn_release", 2, ">=0.1,<0.2", kn_id=KN, branch="release", fingerprint="a3f9c2e1" * 8
     )
     calls = serve_schema(monkeypatch, DEMO_SCHEMA)
     checked = replace(CONTEXT, check_schema=True)

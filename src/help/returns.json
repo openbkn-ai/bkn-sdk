@@ -61,7 +61,7 @@
       "updater"
     ],
     "bkn action-log list": ["entries"],
-    "bkn metric list": ["entries", "total_count"],
+    "bkn object-metric list": ["entries", "total_count"],
     "bkn concept-group list": ["entries", "total_count"],
     "bkn concept-group get": [
       "branch",

@@ -120,7 +120,12 @@ export {
   type ToolReceipt,
 } from "./api/context-loader.js";
 export { kn } from "./resources/knowledge-networks.js";
-export type { MetricValidationResult } from "./api/knowledge-networks.js";
+export type {
+  ListObjectMetricsOptions,
+  ObjectMetricOptions,
+  ObjectMetricValidationResult,
+  ObjectMetricVersionOptions,
+} from "./api/object-metrics.js";
 export { models } from "./resources/models.js";
 export {
   ModelStreamError,

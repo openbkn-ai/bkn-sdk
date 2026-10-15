@@ -116,20 +116,19 @@ def main() -> None:
             f" -> {entry.get('target_object_type_id')}  join {joins}"
         )
 
-    # 5. Metric definitions. The ontology layer generates a class per metric;
-    #    this is the definition behind it, including the dimensions it allows.
-    # Note the count against the generated package's: this endpoint lists every
-    # metric the network defines, while the ontology layer generates a class only
-    # for those mounted on an object type as a `metric` logic property. A metric
-    # here with no class there is defined but not mounted.
-    # No `kn.*` for these three: context-loader does not expose the metric,
-    # action-type or concept-group definitions at all. This is the half of the
-    # platform layer that only `call` reaches.
-    metrics = bkn_osdk.call(f"{BASE}/{network}/metrics", query={"limit": 3})
-    print(f"\n{metrics.get('total_count')} metrics, as defined:")
+    # 5. Published, versioned Object Metric V1 definitions.
+    metrics = bkn_osdk.call(
+        f"{BASE}/{network}/object-metrics",
+        query={"status": "published", "limit": 3},
+    )
+    print(f"\n{metrics.get('total_count')} published object metrics:")
     for entry in entries(metrics):
-        dimensions = entry.get("analysis_dimensions")
-        print(f"    {entry.get('id'):22} {entry.get('name')}  dimensions {dimensions}")
+        definition = entry.get("definition") or {}
+        dimensions = (definition.get("query_capabilities") or {}).get("analysis_dimensions")
+        print(
+            f"    {definition.get('id')} v{definition.get('version')} "
+            f"{definition.get('name')}  dimensions {dimensions}"
+        )
 
     # 6. Action types are the write surface — the ontology layer is read-only, so
     #    they appear here and nowhere in a generated package.

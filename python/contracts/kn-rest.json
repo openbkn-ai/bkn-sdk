@@ -948,7 +948,7 @@
       "method": "POST",
       "operation": "query_metric",
       "summary": "按指标口径取数",
-      "description": "按已建模指标自身的口径计算取数，是 OT-first 指标路径的第 3 步： `search_schema` / `get_kn_detail` 锁定对象类 → `get_object_types` 从 `related_metrics` 里选定 `metric_id` → 本接口计算。 与 `logic-property-resolver` 的分工：实例级、且已绑到逻辑属性的指标走那条 （它会先用大模型推参数）；**类级指标、或未绑逻辑属性的指标走本接口**，参数 由调用方显式给出，不经大模型。 `time` 在指标没有时间维度（`related_metrics[].time_dimension` 为空）时可整体 省略。给了就要自洽：**省略 `instant` 等同于 `instant=false`（序列查询）， 必须带 `step`**；`instant=true` 取单点（此时 `step` 被下游忽略）； `start` 与 `end` 要么都给要么都不给。`step` 大小写不敏感。 这些规则在本服务就地校验并返回 400，规则逐条对齐 ontology-query 的 `validateMetricQueryRequest`——本地比下游严会把合法调用误拒，比下游松只是 把同一个错误延后。 请求体与 ontology-query 的 `MetricQueryRequestBody` 同构；响应只保留结果序列， 不回带指标定义（`related_metrics` 里已经有了）。",
+      "description": "按已建模指标自身的口径计算取数，是 OT-first 指标路径的第 3 步： `search_schema` / `get_kn_detail` 锁定对象类 → `get_object_types` 从 `related_metrics` 里选定 `metric_id` 和 `version` → 本接口计算。 与 `logic-property-resolver` 的分工：实例级、且已绑到逻辑属性的指标走那条 （它会先用大模型推参数）；**类级指标、或未绑逻辑属性的指标走本接口**，参数 由调用方显式给出，不经大模型。 `version` 必填，必须使用已发布、不可变的版本；`query` 只包含定义允许的 运行时选择（实例身份、过滤条件、分析维度、毫秒时间范围）。固定口径和统计 粒度由指标定义决定，不能通过本请求覆盖。 响应保留对象指标 V1 的 `model`、`entries`、`status` 和 `warnings`。",
       "query": [
         {
           "name": "response_format",
@@ -975,58 +975,28 @@
           "description": "指标 ID，取自 `get_object_types` 返回的 `related_metrics[].id`， 或对象类逻辑属性 `data_source` 里引用的指标 ID。"
         },
         {
-          "name": "time",
-          "type": "object",
-          "required": false,
-          "description": "时间窗。指标没有时间维度时可整体省略；给了就要自洽（见接口说明）。"
-        },
-        {
-          "name": "condition",
-          "type": "object",
-          "required": false,
-          "description": "过滤条件，结构与 `query_object_instance` 的 `condition` 一致 （`field` / `operation` / `value` / `value_from`，可 `and` / `or` 嵌套）。"
-        },
-        {
-          "name": "analysis_dimensions",
-          "type": "array",
-          "required": false,
-          "description": "分析维度（按维度拆分结果）。取值须来自 `related_metrics[].analysis_dimensions`。"
-        },
-        {
-          "name": "order_by",
-          "type": "array",
-          "item_fields": [
-            "direction",
-            "property"
-          ],
-          "required": false,
-          "description": "结果排序。"
-        },
-        {
-          "name": "having",
-          "type": "object",
-          "required": false,
-          "description": "对聚合结果过滤。"
-        },
-        {
-          "name": "limit",
+          "name": "version",
           "type": "integer",
-          "required": false,
-          "description": "返回条数上限。"
+          "required": true,
+          "description": "已发布且不可变的对象指标版本，取自 `related_metrics[].version`。"
         },
         {
-          "name": "fill_null",
-          "type": "boolean",
+          "name": "query",
+          "type": "object",
           "required": false,
-          "description": "区间查询时，无数据的步长点是否补空。仅对序列查询有效，且必须同时给 `time.start` 与 `time.end`。"
+          "description": ""
         }
       ],
       "declares_context": false,
       "returns": [
-        "datas",
+        "entries",
         "kn_id",
         "metric_id",
-        "overall_ms"
+        "model",
+        "overall_ms",
+        "status",
+        "version",
+        "warnings"
       ],
       "source": "logic-property.yaml"
     },

@@ -5,13 +5,12 @@ import { createClient } from "../../src/client.js";
 import { bknCommand } from "../../src/commands/bkn.js";
 
 const BASE = "https://metric-validation.example.com";
-const PATH = "/api/bkn-backend/v1/knowledge-networks/kn-1/metrics/validation";
+const PATH = "/api/bkn-backend/v1/knowledge-networks/kn-1/object-metrics/validate";
 const originalExitCode = process.exitCode;
 
 beforeEach(() => {
   process.exitCode = undefined;
 });
-
 afterEach(() => {
   process.exitCode = originalExitCode;
   vi.restoreAllMocks();
@@ -23,7 +22,7 @@ function server(body: unknown, status = 200) {
     if (new URL(String(url)).pathname === "/api/bkn-backend/v1/health") {
       return Response.json({ ServerVersion: pkg.version });
     }
-    return body === undefined ? new Response(null, { status }) : Response.json(body, { status });
+    return Response.json(body, { status });
   });
   vi.stubGlobal("fetch", fetch);
   return fetch;
@@ -44,61 +43,30 @@ function cli() {
         "t",
         "--json",
         "bkn",
-        "metric",
+        "object-metric",
         "validate",
         "kn-1",
         "--body",
-        '{"entries":[]}',
+        '{"code":"stock","name":"Stock"}',
       ],
       { from: "user" },
     );
 }
 
-describe("Metric validation results", () => {
-  it.each([200, 204])("normalizes an empty HTTP %s success in the SDK and CLI", async (status) => {
-    const fetch = server(undefined, status);
-    const client = createClient({ baseUrl: BASE, token: "t" });
-    await expect(client.kn.metricValidate("kn-1", { entries: [] })).resolves.toEqual({
-      valid: true,
-    });
-    const stdout: string[] = [];
-    vi.spyOn(process.stdout, "write").mockImplementation((part) => {
-      stdout.push(String(part));
-      return true;
-    });
-    await cli();
-    expect(JSON.parse(stdout.join(""))).toEqual({ valid: true });
-    expect(process.exitCode).toBeUndefined();
-    expect(fetch.mock.calls.some(([url]) => new URL(String(url)).pathname === PATH)).toBe(true);
-  });
-
-  it.each([
-    { valid: true },
-    { valid: false, detail: "Object type customer does not exist", extra: "preserved" },
-  ])("returns a completed SDK validation without throwing: %j", async (result) => {
-    const fetch = server(result);
-    const client = createClient({ baseUrl: BASE, token: "t" });
-    await expect(client.kn.metricValidate("kn-1", { entries: [] })).resolves.toEqual(result);
-    expect(fetch.mock.calls.some(([url]) => new URL(String(url)).pathname === PATH)).toBe(true);
-    expect(process.exitCode).toBeUndefined();
-  });
-
-  it.each([null, {}, { ok: true }, { valid: "false" }, { valid: true, detail: 3 }])(
-    "rejects malformed validation responses: %j",
-    async (body) => {
-      server(body);
-      const client = createClient({ baseUrl: BASE, token: "t" });
-      await expect(client.kn.metricValidate("kn-1", { entries: [] })).rejects.toMatchObject({
-        name: "ZodError",
-      });
-    },
-  );
-
+describe("Object Metric V1 validation results", () => {
   it.each([true, false])(
-    "prints the CLI result and sets failure status for valid=%s",
+    "returns a completed result and sets CLI status for valid=%s",
     async (valid) => {
-      const result = valid ? { valid } : { valid, detail: "Missing metric dependency" };
-      server(result);
+      const result = {
+        valid,
+        issues: valid
+          ? []
+          : [{ code: "missing", field: "owner_object_type_id", message: "Required" }],
+        output_shape: "summary",
+      };
+      const fetch = server(result);
+      const client = createClient({ baseUrl: BASE, token: "t" });
+      await expect(client.kn.objectMetricValidate("kn-1", {})).resolves.toEqual(result);
       const stdout: string[] = [];
       vi.spyOn(process.stdout, "write").mockImplementation((part) => {
         stdout.push(String(part));
@@ -107,12 +75,26 @@ describe("Metric validation results", () => {
       await cli();
       expect(JSON.parse(stdout.join(""))).toEqual(result);
       expect(process.exitCode).toBe(valid ? undefined : 1);
+      expect(fetch.mock.calls.some(([url]) => new URL(String(url)).pathname === PATH)).toBe(true);
     },
   );
 
-  it("preserves an HTTP validation error instead of treating it as a completed result", async () => {
+  it.each([
+    null,
+    {},
+    { valid: "false", issues: [], output_shape: "summary" },
+    { valid: true, issues: null, output_shape: "summary" },
+  ])("rejects malformed responses: %j", async (body) => {
+    server(body);
+    await expect(
+      createClient({ baseUrl: BASE, token: "t" }).kn.objectMetricValidate("kn-1", {}),
+    ).rejects.toMatchObject({ name: "ZodError" });
+  });
+
+  it("preserves an HTTP error", async () => {
     server({ description: "Invalid request" }, 400);
-    const client = createClient({ baseUrl: BASE, token: "t" });
-    await expect(client.kn.metricValidate("kn-1", {})).rejects.toMatchObject({ status: 400 });
+    await expect(
+      createClient({ baseUrl: BASE, token: "t" }).kn.objectMetricValidate("kn-1", {}),
+    ).rejects.toMatchObject({ status: 400 });
   });
 });

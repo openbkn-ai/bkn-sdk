@@ -10,10 +10,9 @@ endpoint for one — an instance query takes a condition, a sort, a limit, a cur
 and a property selection, and nothing else. Pulling every row back to add it up would
 be a lie dressed as an API.
 
-What the platform has instead is richer: a metric is a definition the network
-owns, and querying it takes dimensions to split by, a filter on the aggregate,
-an ordering and a time window. The generated class carries the dimensions the
-metric allows, so a wrong one is refused here rather than at the platform.
+The published Object Metric V1 definition owns fixed qualifiers and grain.
+The generated class pins its version and allowed dimensions; a wrong split is
+refused here rather than at the platform.
 """
 
 from __future__ import annotations
@@ -33,39 +32,39 @@ def main() -> None:
     bkn = package()
     metrics = list(bkn.METRICS)
     if not metrics:
-        raise SystemExit(
-            f"{kn_id()} has no metric mounted on an object type.\n"
-            "A network can define metrics without mounting any — "
-            "examples/platform/networks.py prints both counts."
-        )
+        raise SystemExit(f"{kn_id()} has no published Object Metric V1 definition.")
 
     print(f"{len(metrics)} metrics: {[m.__bkn_id__ for m in metrics]}")
     metric = metrics[0]
     print(f"\n{metric.__name__} ({metric.__bkn_id__})")
-    print(f"  mounted on {metric.__object_type__}, dimensions {metric.__dimensions__}")
+    print(
+        f"  owner {metric.__object_type__}, version {metric.__version__}, "
+        f"dimensions {metric.__dimensions__}"
+    )
 
-    # 1. A point in time. `instant=True` is a different shape from a series, and
-    #    the rule is checked before the round trip.
+    # 1. Query a time range in Unix milliseconds.
     now = int(time.time() * 1000)  # metric windows are unix milliseconds
     try:
-        instant = metric.query(time={"time": now, "instant": True})
-        print(f"  value now: {instant}")
+        result = metric.query(time={"start": now - 86_400_000, "end": now})
+        print(f"  result: {result}")
     except HttpError as error:
         print(f"  unavailable: {str(error)[:120]}")
 
-    # 2. A series needs a step; a range needs both ends. Getting either wrong is
-    #    an `InputError` here, not a 400 from the platform.
+    # 2. Legacy time choices are refused locally.
     try:
-        metric.query(time={"start": now - 30 * 86_400_000, "end": now})
+        metric.query(time={"instant": True})
     except InputError as error:
-        print(f"  a series without a step: {error}")
+        print(f"  legacy instant rejected: {error}")
 
     # 3. Split by a dimension the metric declares — and only those.
     if metric.__dimensions__:
-        dimension = metric.__dimensions__[0]
+        object_type, property_name, relation_alias = metric.__dimensions__[0]
+        dimension = {"object_type_id": object_type, "property_name": property_name}
+        if relation_alias:
+            dimension["relation_path_alias"] = relation_alias
         try:
             split = metric.query(
-                time={"start": now - 30 * 86_400_000, "end": now, "step": "day"},
+                time={"start": now - 30 * 86_400_000, "end": now},
                 analysis_dimensions=[dimension],
             )
             print(f"  split by {dimension}: {str(split)[:160]}")
@@ -73,7 +72,7 @@ def main() -> None:
             print(f"  split by {dimension} failed: {str(error)[:120]}")
 
     try:
-        metric.query(time={"time": now, "instant": True}, analysis_dimensions=["not_a_dimension"])
+        metric.query(analysis_dimensions=["not_a_dimension"])
     except InputError as error:
         print(f"  an undeclared dimension: {error}")
 

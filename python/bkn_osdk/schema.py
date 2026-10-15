@@ -28,6 +28,7 @@ from typing import Any
 from urllib.parse import quote
 
 from .config import Context
+from .errors import InputError
 from .http import QueryValue, request
 
 __all__ = [
@@ -64,19 +65,13 @@ class PropertyDef:
 
 @dataclass(frozen=True)
 class MetricDef:
-    """A metric mounted on an object type.
-
-    Metrics reach the schema as `logic_properties` of type `metric`: the mount
-    names the metric's real id in `data_source.id` and lists the dimensions the
-    query may split by. A standalone `listMetrics` route exists too, but no
-    network reachable from here has an entry in it, so its shape stays
-    unmodelled rather than guessed.
-    """
+    """One published, immutable Object Metric V1 definition."""
 
     bkn_id: str
     object_type: str
-    #: The only values `analysis_dimensions` accepts for this metric.
-    dimensions: tuple[str, ...] = ()
+    version: int
+    #: (object type, property, relation-path alias) tuples from the V1 registry.
+    dimensions: tuple[tuple[str, str, str], ...] = ()
     display_name: str | None = None
     description: str | None = None
 
@@ -155,8 +150,10 @@ def fingerprint(schema: KnSchema) -> str:
             digest.update(f"prop:{prop.bkn_id}:{prop.type}\n".encode())
 
     for metric in sorted(schema.metrics, key=lambda m: (m.bkn_id, m.object_type)):
-        digest.update(f"metric:{metric.bkn_id}:{metric.object_type}\n".encode())
-        digest.update(f"dims:{','.join(sorted(metric.dimensions))}\n".encode())
+        digest.update(f"metric:{metric.bkn_id}:{metric.version}:{metric.object_type}\n".encode())
+        digest.update(
+            f"dims:{json.dumps(sorted(metric.dimensions), ensure_ascii=False)}\n".encode()
+        )
 
     for relation in sorted(schema.relation_types, key=lambda r: r.bkn_id):
         digest.update(f"rt:{relation.bkn_id}:{relation.source}:{relation.target}\n".encode())
@@ -177,20 +174,52 @@ ONTOLOGY_BASE = "/api/bkn-backend/v1/knowledge-networks"
 def fetch_schema(ctx: Context, kn_id: str, branch: str = "main") -> KnSchema:
     """Read a network's schema from bkn-backend REST.
 
-    Two list calls plus the network itself, all with `limit=-1` (the backend's
-    "everything"). Everything is fetched before anything is parsed, so a failure
-    half-way cannot produce a schema that silently omits an object type.
+    Object/relation lists use `limit=-1`; the V1 metric catalogue is paginated.
+    Every page is fetched before parsing, so a partial read never silently
+    produces an incomplete generated package.
     """
     base = f"{ONTOLOGY_BASE}/{quote(kn_id, safe='')}"
     listing: dict[str, QueryValue] = {"branch": branch, "limit": -1}
     network = request(ctx, base, query={"branch": branch})
     object_types = request(ctx, f"{base}/object-types", query=listing)
     relation_types = request(ctx, f"{base}/relation-types", query=listing)
-    return parse_schema(network, object_types, relation_types)
+    metric_records: list[Mapping[str, Any]] = []
+    offset = 0
+    while True:
+        page = request(
+            ctx,
+            f"{base}/object-metrics",
+            query={"branch": branch, "status": "published", "offset": offset, "limit": 500},
+        )
+        if not isinstance(page, Mapping) or not isinstance(page.get("entries"), list):
+            raise InputError(
+                "Object Metric V1 catalogue returned an invalid page; schema is incomplete."
+            )
+        entries = _entries(page)
+        if len(entries) != len(page["entries"]):
+            raise InputError(
+                "Object Metric V1 catalogue contains malformed entries; schema is incomplete."
+            )
+        metric_records.extend(entries)
+        offset += len(entries)
+        total = page.get("total_count")
+        if not isinstance(total, int) or isinstance(total, bool) or total < offset:
+            raise InputError(
+                "Object Metric V1 catalogue has an invalid total_count; schema is incomplete."
+            )
+        if len(entries) < 500 or (isinstance(total, int) and offset >= total):
+            if offset < total:
+                raise InputError(
+                    "Object Metric V1 catalogue ended before total_count; schema is incomplete."
+                )
+            break
+    return parse_schema(network, object_types, relation_types, {"entries": metric_records})
 
 
-def parse_schema(network: Any, object_types: Any, relation_types: Any) -> KnSchema:
-    """Turn the three REST payloads into the generator's input. No IO."""
+def parse_schema(
+    network: Any, object_types: Any, relation_types: Any, object_metrics: Any = None
+) -> KnSchema:
+    """Turn V1 REST payloads into the generator's input. No IO."""
     network = network if isinstance(network, Mapping) else {}
     return KnSchema(
         kn_id=_text(network.get("id")) or "",
@@ -198,7 +227,11 @@ def parse_schema(network: Any, object_types: Any, relation_types: Any) -> KnSche
         display_name=_text(network.get("name")),
         object_types=tuple(_object_type(entry) for entry in _entries(object_types)),
         relation_types=tuple(_relation_type(entry) for entry in _entries(relation_types)),
-        metrics=tuple(metric for entry in _entries(object_types) for metric in _metrics_of(entry)),
+        metrics=tuple(
+            metric
+            for entry in _entries(object_metrics)
+            if (metric := _object_metric(entry)) is not None
+        ),
     )
 
 
@@ -231,37 +264,41 @@ def _object_type(entry: Mapping[str, Any]) -> ObjectTypeDef:
     )
 
 
-def _metrics_of(entry: Mapping[str, Any]) -> list[MetricDef]:
-    """The metrics mounted on one object type.
-
-    Only `logic_properties` whose `type` is `metric` count. The tool-backed ones
-    beside them compute a value per instance and belong to a different call path.
-    """
-    object_type = _text(entry.get("id")) or ""
-    metrics: list[MetricDef] = []
-    for prop in entry.get("logic_properties", []):
-        if not isinstance(prop, Mapping) or prop.get("type") != "metric":
-            continue
-        source = prop.get("data_source")
-        if not isinstance(source, Mapping):
-            continue
-        metric_id = _text(source.get("id"))
-        if not metric_id:
-            continue
-        metrics.append(
-            MetricDef(
-                bkn_id=metric_id,
-                object_type=object_type,
-                dimensions=tuple(
-                    _text(dimension.get("name")) or ""
-                    for dimension in prop.get("analysis_dimensions", [])
-                    if isinstance(dimension, Mapping) and _text(dimension.get("name"))
-                ),
-                display_name=_text(source.get("name")),
-                description=_text(prop.get("comment")),
-            )
-        )
-    return metrics
+def _object_metric(entry: Mapping[str, Any]) -> MetricDef | None:
+    definition = entry.get("definition")
+    if not isinstance(definition, Mapping) or not isinstance(definition.get("version"), int):
+        return None
+    lifecycle = definition.get("lifecycle")
+    if not isinstance(lifecycle, Mapping) or lifecycle.get("status") != "published":
+        return None
+    metric_id = _text(definition.get("id"))
+    owner = _text(definition.get("owner_object_type_id"))
+    version = definition["version"]
+    if not metric_id or not owner or isinstance(version, bool) or version < 1:
+        return None
+    capabilities = definition.get("query_capabilities")
+    raw_dimensions = (
+        capabilities.get("analysis_dimensions", []) if isinstance(capabilities, Mapping) else []
+    )
+    dimensions: list[tuple[str, str, str]] = []
+    if isinstance(raw_dimensions, list):
+        for item in raw_dimensions:
+            if not isinstance(item, Mapping):
+                continue
+            object_type = _text(item.get("object_type_id"))
+            property_name = _text(item.get("property_name"))
+            if object_type and property_name:
+                dimensions.append(
+                    (object_type, property_name, _text(item.get("relation_path_alias")) or "")
+                )
+    return MetricDef(
+        bkn_id=metric_id,
+        object_type=owner,
+        version=version,
+        dimensions=tuple(dimensions),
+        display_name=_text(definition.get("name")),
+        description=_text(definition.get("description")),
+    )
 
 
 def _property(prop: Mapping[str, Any]) -> PropertyDef:

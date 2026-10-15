@@ -4,12 +4,13 @@
 /**
  * Structural validation of a local BKN directory. This is a slim, dependency-free
  * check (the full network model is not vendored): it parses the
- * frontmatter of every `.bkn` file and verifies the network is internally
+ * frontmatter of every `.bkn` file and the identity of each Object Metric V1
+ * archive record, and verifies the network is internally
  * consistent enough to push — required files, well-formed frontmatter, object-type
  * name limits, unique ids, and relation endpoints that reference real object types.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import yaml from "js-yaml";
 import type { DataPropertyMaskRule } from "../types.js";
 
@@ -626,10 +627,70 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
   }
 
   const cgFiles = bknFiles(join(dir, "concept_groups"));
-  for (const kind of ["action_types", "concept_groups", "metrics", "risk_types"] as const) {
+  for (const kind of ["action_types", "concept_groups", "risk_types"] as const) {
     for (const file of kind === "concept_groups" ? cgFiles : bknFiles(join(dir, kind))) {
       const text = readFileSync(file, "utf8");
       errors.push(...validateMarkdownTables(text, file.slice(dir.length + 1), kind));
+    }
+  }
+
+  if (existsSync(join(dir, "metrics"))) {
+    errors.push("Legacy metrics/ is unsupported; migrate to object_metrics/ before push.");
+  }
+
+  // V1 metrics are complete JSON records, not the retired metrics/*.bkn files.
+  const metricDir = join(dir, "object_metrics");
+  const metricVersions = new Set<string>();
+  if (existsSync(metricDir) && statSync(metricDir).isDirectory()) {
+    for (const entry of readdirSync(metricDir)) {
+      const file = join(metricDir, entry);
+      const rel = file.slice(dir.length + 1);
+      if (!statSync(file).isFile() || !entry.endsWith(".json")) {
+        errors.push(`${rel}: Object Metric V1 archives must be flat JSON files.`);
+        continue;
+      }
+      let record: unknown;
+      try {
+        record = JSON.parse(readFileSync(file, "utf8"));
+      } catch {
+        errors.push(`${rel}: invalid Object Metric V1 JSON.`);
+        continue;
+      }
+      const definition =
+        record && typeof record === "object" && "definition" in record
+          ? record.definition
+          : undefined;
+      if (!definition || typeof definition !== "object") {
+        errors.push(`${rel}: missing Object Metric V1 definition.`);
+        continue;
+      }
+      const metric = definition as Record<string, unknown>;
+      const id = metric.id;
+      const version = metric.version;
+      if (
+        typeof id !== "string" ||
+        !/^[A-Za-z0-9_.-]+$/.test(id) ||
+        id === "." ||
+        id === ".." ||
+        typeof version !== "number" ||
+        !Number.isSafeInteger(version) ||
+        version < 1
+      ) {
+        errors.push(`${rel}: invalid Object Metric V1 id or version.`);
+        continue;
+      }
+      const key = `${id}@${version}`;
+      if (basename(file) !== `${key}.json`) errors.push(`${rel}: filename must be ${key}.json.`);
+      if (metricVersions.has(key)) {
+        errors.push(`${rel}: duplicate Object Metric V1 version ${key}.`);
+      }
+      metricVersions.add(key);
+      if (
+        typeof metric.owner_object_type_id !== "string" ||
+        !otIds.has(metric.owner_object_type_id)
+      ) {
+        errors.push(`${rel}: owner object type is absent from this archive.`);
+      }
     }
   }
 

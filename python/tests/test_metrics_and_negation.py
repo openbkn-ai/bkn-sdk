@@ -1,17 +1,7 @@
 # Copyright (c) 2026 OpenBKN. All rights reserved.
 # Licensed under the Apache License, Version 2.0. See the LICENSE file in the project root.
 
-"""Aggregation via metrics, and `~` over the operators that can express it.
-
-An instance query cannot aggregate — it takes a condition, a limit, an offset
-and a property selection and nothing else — so `sum`, `avg` and `group_by` over
-an object set have no endpoint. Metrics are the platform's aggregation surface,
-and richer than that would have been: dimensions, a `having` filter, ordering, a
-time window, and a period-over-period block.
-
-The transport is `POST …/metrics/{metric_id}/data` — the same REST layer as
-every other read, with the ids in the path rather than the body.
-"""
+"""Object Metric V1 queries and condition negation."""
 
 from __future__ import annotations
 
@@ -23,27 +13,28 @@ import pytest
 
 from bkn_osdk import InputError, Metric
 from bkn_osdk import http as http_module
-from bkn_osdk.query import Comparison, Composite, Sort, to_condition
+from bkn_osdk.query import Comparison, Composite, to_condition
 
 KN = "ecommerce_ops_bkn_public"
 PLATFORM = "https://platform.example"
+WINDOW = {"start": 1751328000000, "end": 1753920000000}
+CHANNEL = {"object_type_id": "order", "property_name": "channel_id"}
 
 
 class Gmv(Metric):
     __kn_id__ = KN
     __bkn_id__ = "m_gmv"
+    __version__ = 3
     __object_type__ = "order"
-    __dimensions__ = ("order_status", "channel_id", "payment_method")
+    __dimensions__ = (("order", "channel_id", ""), ("order", "channel_id", "relation"))
 
 
-class Unconstrained(Metric):
+class Unversioned(Metric):
     __kn_id__ = KN
-    __bkn_id__ = "m_free"
+    __bkn_id__ = "m_old"
 
 
 class Deploy:
-    """A platform answering the metric data endpoint, recording what it was asked."""
-
     def __init__(self) -> None:
         self.paths: list[str] = []
         self.queries: list[dict[str, str]] = []
@@ -53,7 +44,9 @@ class Deploy:
         self.paths.append(request.url.path)
         self.queries.append(dict(request.url.params.multi_items()))
         self.bodies.append(json.loads(request.read()))
-        return httpx.Response(200, json={"datas": [{"gmv": "14485.37", "channel_id": 1}]})
+        return httpx.Response(
+            200, json={"model": {}, "entries": [{"value": 42}], "status": "success"}
+        )
 
 
 @pytest.fixture
@@ -66,165 +59,74 @@ def deploy(monkeypatch: pytest.MonkeyPatch) -> Deploy:
     return stub
 
 
-SERIES = {"start": 1751328000000, "end": 1753920000000, "step": "day"}
+def test_v1_route_version_body_and_response(deploy: Deploy) -> None:
+    result = Gmv.query(time=WINDOW, analysis_dimensions=[CHANNEL], filter={"operation": "eq"})
+
+    assert deploy.paths == [
+        f"/api/ontology-query/v1/knowledge-networks/{KN}/object-metrics/m_gmv/data"
+    ]
+    assert deploy.queries == [{"version": "3"}]
+    assert deploy.bodies == [
+        {
+            "time": WINDOW,
+            "analysis_dimensions": [CHANNEL],
+            "filter": {"operation": "eq"},
+        }
+    ]
+    assert result == {"model": {}, "entries": [{"value": 42}], "status": "success"}
 
 
-# ---- the request -------------------------------------------------------------
-
-
-def test_the_network_and_metric_are_in_the_path_not_the_body(deploy: Deploy) -> None:
-    Gmv.query(time=SERIES)
-
-    assert deploy.paths == [f"/api/ontology-query/v1/knowledge-networks/{KN}/metrics/m_gmv/data"]
-    assert deploy.bodies[0]["time"] == SERIES
-    # `MetricQueryRequestBody` defines no `response_format`.
-    assert "response_format" not in deploy.bodies[0]
-
-
-def test_dimensions_condition_having_and_ordering_all_travel(deploy: Deploy) -> None:
-    Gmv.query(
-        time=SERIES,
-        analysis_dimensions=["channel_id"],
-        condition=Comparison("==", "order_status", "paid"),
-        having={"field": "gmv", "operation": ">", "value": 100},
-        order_by=[Sort("gmv", "desc")],
-        limit=5,
-    )
-
-    body = deploy.bodies[0]
-    assert body["analysis_dimensions"] == ["channel_id"]
-    assert body["condition"] == to_condition(Comparison("==", "order_status", "paid"))
-    assert body["having"] == {"field": "gmv", "operation": ">", "value": 100}
-    assert body["limit"] == 5
-    # A metric spells this key `property`, not the `field` an instance sort uses.
-    assert body["order_by"] == [{"property": "gmv", "direction": "desc"}]
-
-
-def test_plain_pairs_order_the_same_way(deploy: Deploy) -> None:
-    Gmv.query(time=SERIES, order_by=[("gmv", "asc")])
-
-    assert deploy.bodies[0]["order_by"] == [{"property": "gmv", "direction": "asc"}]
-
-
-def test_absent_arguments_are_omitted_rather_than_sent_empty(deploy: Deploy) -> None:
-    Gmv.query(time=SERIES)
-
-    assert set(deploy.bodies[0]) == {"time"}
-
-
-def test_a_metric_query_opens_no_session_of_its_own(deploy: Deploy) -> None:
-    """It is an ordinary read; a deploy that demands a context still gets one on retry."""
-    Gmv.query(time=SERIES)
-
-    assert len(deploy.bodies) == 1
-    assert "bkn_context" not in deploy.bodies[0]
-
-
-def test_the_period_over_period_block_passes_through(deploy: Deploy) -> None:
-    """`metrics` is a REST-only field the MCP tool never exposed."""
-    Gmv.query(time=SERIES, metrics=[{"type": "yoy"}])
-
-    assert deploy.bodies[0]["metrics"] == [{"type": "yoy"}]
-
-
-def test_the_rows_come_back_unchanged(deploy: Deploy) -> None:
-    """A metric row is not an object instance; nothing is decoded into a class."""
-    assert Gmv.query(time=SERIES) == [{"gmv": "14485.37", "channel_id": 1}]
-
-
-# ---- what is checked before the round trip ------------------------------------
-
-
-def test_a_dimension_the_metric_does_not_declare_is_refused(deploy: Deploy) -> None:
-    """The tool says values must come from `related_metrics[].analysis_dimensions`."""
-    with pytest.raises(InputError, match="can only be split by"):
-        Gmv.query(time=SERIES, analysis_dimensions=["region"])
-
-
-def test_a_metric_that_declares_no_dimensions_accepts_any(deploy: Deploy) -> None:
-    """Nothing was declared, so there is nothing to check against."""
-    Unconstrained.query(time=SERIES, analysis_dimensions=["anything"])
-
-    assert deploy.bodies[0]["analysis_dimensions"] == ["anything"]
-
-
-def test_a_series_without_a_step_is_refused(deploy: Deploy) -> None:
-    with pytest.raises(InputError, match="needs a `step`"):
-        Gmv.query(time={"start": 1, "end": 2})
-
-
-def test_an_instant_query_needs_no_step(deploy: Deploy) -> None:
-    Gmv.query(time={"instant": True})
-
-    assert deploy.bodies[0]["time"] == {"instant": True}
-
-
-def test_an_instant_query_with_a_step_is_refused(deploy: Deploy) -> None:
-    with pytest.raises(InputError, match="cannot also take a `step`"):
-        Gmv.query(time={"instant": True, "step": "day"})
-
-
-def test_a_half_open_window_is_refused(deploy: Deploy) -> None:
-    with pytest.raises(InputError, match="both `start` and `end`"):
-        Gmv.query(time={"start": 1, "step": "day"})
-
-
-def test_a_step_outside_the_documented_values_is_sent_for_the_platform_to_judge(
-    deploy: Deploy,
-) -> None:
-    """`time.step` is a free string in the published schema, so the SDK does not
-    refuse a value the platform may accept."""
-    Gmv.query(time={**SERIES, "step": "hour"})
-
-    assert deploy.bodies[0]["time"]["step"] == "hour"
-
-
-@pytest.mark.parametrize("step", ["", "  ", 7])
-def test_an_empty_or_non_string_step_is_refused(deploy: Deploy, step: Any) -> None:
-    with pytest.raises(InputError, match="`step` must be a non-empty string"):
-        Gmv.query(time={**SERIES, "step": step})
-
-
-@pytest.mark.parametrize("limit", [0, -1, True, 1.5])
-def test_a_limit_below_one_is_refused(deploy: Deploy, limit: Any) -> None:
-    """The schema's `limit` has `minimum: 1`."""
-    with pytest.raises(InputError, match="limit must be a positive integer"):
-        Gmv.query(time=SERIES, limit=limit)
-
-    assert deploy.bodies == []
-
-
-def test_fill_null_and_a_non_main_branch_ride_the_query_string(
+def test_optional_v1_instance_identities_and_branch(
     deploy: Deploy, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Gmv, "__branch__", "release")
+    Gmv.query(instance_identities=[{"order_id": "o1"}])
 
-    Gmv.query(time=SERIES, fill_null=True)
-
-    assert deploy.queries[0] == {"branch": "release", "fill_null": "true"}
-    assert "fill_null" not in deploy.bodies[0]
+    assert deploy.queries == [{"branch": "release", "version": "3"}]
+    assert deploy.bodies == [{"instance_identities": [{"order_id": "o1"}]}]
 
 
-def test_a_main_branch_metric_sends_no_query_string(deploy: Deploy) -> None:
-    """`main` is the endpoint's default, so a main package sends what it always sent."""
-    Gmv.query(time=SERIES)
+def test_unversioned_class_fails_closed(deploy: Deploy) -> None:
+    with pytest.raises(InputError, match="no published Object Metric V1 version"):
+        Unversioned.query()
+    assert deploy.bodies == []
 
-    assert deploy.queries[0] == {}
+
+def test_dimension_name_must_be_unambiguous(deploy: Deploy) -> None:
+    with pytest.raises(InputError, match="uniquely"):
+        Gmv.query(analysis_dimensions=["channel_id"])
+    assert deploy.bodies == []
+
+
+def test_undeclared_dimension_ref_is_rejected(deploy: Deploy) -> None:
+    with pytest.raises(InputError, match="does not declare"):
+        Gmv.query(analysis_dimensions=[{"object_type_id": "order", "property_name": "region"}])
+    assert deploy.bodies == []
 
 
 @pytest.mark.parametrize(
     "window",
-    [{"start": 1751328000, "end": 1753920000000}, {"start": 1751328000000, "end": 1753920000}],
+    [
+        {"start": 1},
+        {"instant": True},
+        {**WINDOW, "step": "day"},
+        {"start": True, "end": 2},
+        {"start": 3, "end": 2},
+    ],
 )
-def test_a_window_in_seconds_is_refused(deploy: Deploy, window: dict[str, int]) -> None:
-    """The endpoint takes milliseconds; seconds would silently query January 1970."""
-    with pytest.raises(InputError, match="milliseconds"):
-        Gmv.query(time={**window, "step": "day"})
-
+def test_invalid_or_legacy_time_is_rejected(deploy: Deploy, window: dict[str, Any]) -> None:
+    with pytest.raises(InputError, match="time"):
+        Gmv.query(time=window)
     assert deploy.bodies == []
 
 
-def test_metric_and_network_ids_are_encoded_in_the_path(
+def test_legacy_query_arguments_are_not_accepted(deploy: Deploy) -> None:
+    with pytest.raises(TypeError, match="unexpected keyword"):
+        Gmv.query(condition={"operation": "eq"})  # type: ignore[call-arg]
+    assert deploy.bodies == []
+
+
+def test_metric_and_network_ids_are_encoded(
     deploy: Deploy, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     raw: list[str] = []
@@ -240,19 +142,12 @@ def test_metric_and_network_ids_are_encoded_in_the_path(
     class Odd(Metric):
         __kn_id__ = "kn/a"
         __bkn_id__ = "m?1"
+        __version__ = 1
 
-    Odd.query(time=SERIES)
-
-    assert raw[0] == "/api/ontology-query/v1/knowledge-networks/kn%2Fa/metrics/m%3F1/data"
-
-
-def test_a_metric_with_no_time_dimension_can_omit_the_window(deploy: Deploy) -> None:
-    Gmv.query()
-
-    assert "time" not in deploy.bodies[0]
-
-
-# ---- negation -----------------------------------------------------------------
+    Odd.query()
+    assert raw == [
+        "/api/ontology-query/v1/knowledge-networks/kn%2Fa/object-metrics/m%3F1/data?version=1"
+    ]
 
 
 @pytest.mark.parametrize(
@@ -277,9 +172,7 @@ def test_every_operator_that_has_an_opposite_inverts(operation: str, opposite: s
 
 
 def test_de_morgan_pushes_the_negation_down_to_the_leaves() -> None:
-    """The platform's enum has no `not`, so the negation cannot stay at the top."""
     negated = ~((Comparison(">", "age", 30)) & (Comparison("in", "dept", ["ops"])))
-
     assert isinstance(negated, Composite)
     assert negated.operation == "or"
     assert to_condition(negated)["sub_conditions"] == [
@@ -290,12 +183,10 @@ def test_de_morgan_pushes_the_negation_down_to_the_leaves() -> None:
 
 def test_a_double_negation_is_the_original() -> None:
     original = (Comparison(">", "age", 30)) | (Comparison("like", "name", "z"))
-
     assert to_condition(~~original) == to_condition(original)
 
 
 @pytest.mark.parametrize("operation", ["match", "knn"])
 def test_an_operator_with_no_opposite_refuses_rather_than_inventing_one(operation: str) -> None:
-    """There is no `not_match`; a guessed negation returns wrong rows, not an error."""
     with pytest.raises(InputError, match="has no negation"):
         ~Comparison(operation, "field", "x")

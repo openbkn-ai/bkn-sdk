@@ -84,7 +84,7 @@ subcommand, and sub-subcommand carries its own:
 - top: `openbkn --help`
 - group: `openbkn bkn --help`, `openbkn vega --help` …
 - leaf: `openbkn bkn object-type --help`, `openbkn trace diagnose --help`
-- deep leaf: `openbkn bkn object-type query --help`, `openbkn bkn metric dry-run --help`
+- deep leaf: `openbkn bkn object-type query --help`, `openbkn bkn object-metric trial --help`
 
 The same grouped formatter applies at every level: a command's own help groups
 its subcommands by role (e.g.

@@ -190,7 +190,7 @@ def test_fetch_schema_encodes_the_network_id(monkeypatch: pytest.MonkeyPatch) ->
 
     def handle(request: httpx.Request) -> httpx.Response:
         raw.append(request.url.raw_path.decode("ascii").split("?")[0])
-        return httpx.Response(200, json={"entries": []})
+        return httpx.Response(200, json={"entries": [], "total_count": 0})
 
     client = httpx.Client(transport=httpx.MockTransport(handle))
     monkeypatch.setattr(http_module, "_client", lambda _ctx: client)
@@ -200,3 +200,75 @@ def test_fetch_schema_encodes_the_network_id(monkeypatch: pytest.MonkeyPatch) ->
 
     assert raw[0] == "/api/bkn-backend/v1/knowledge-networks/kn%2Fa%20b"
     assert raw[1].endswith("/kn%2Fa%20b/object-types")
+    assert raw[3].endswith("/kn%2Fa%20b/object-metrics")
+
+
+def test_published_v1_metric_is_versioned_and_fingerprinted() -> None:
+    definition = {
+        "id": "gmv",
+        "version": 2,
+        "owner_object_type_id": "order",
+        "name": "GMV",
+        "lifecycle": {"status": "published"},
+        "query_capabilities": {
+            "analysis_dimensions": [
+                {"object_type_id": "order", "property_name": "channel"},
+            ]
+        },
+    }
+
+    def parsed(version: int, status: str = "published") -> KnSchema:
+        record = {"definition": {**definition, "version": version, "lifecycle": {"status": status}}}
+        return parse_schema({"id": "kn"}, [], [], {"entries": [record]})
+
+    (metric,) = parsed(2).metrics
+    assert metric.bkn_id == "gmv"
+    assert metric.version == 2
+    assert metric.dimensions == (("order", "channel", ""),)
+    assert fingerprint(parsed(2)) != fingerprint(parsed(3))
+    assert parsed(2, "draft").metrics == ()
+
+
+def test_metric_catalogue_pagination_and_incomplete_page(monkeypatch: pytest.MonkeyPatch) -> None:
+    from bkn_osdk import InputError
+
+    offsets: list[int] = []
+    malformed = False
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        nonlocal malformed
+        if request.url.path.endswith("/object-metrics"):
+            offset = int(request.url.params["offset"])
+            offsets.append(offset)
+            if malformed:
+                return httpx.Response(200, json={"entries": [], "total_count": 501})
+            size = 500 if offset == 0 else 1
+            return httpx.Response(
+                200,
+                json={
+                    "entries": [
+                        {
+                            "definition": {
+                                "id": f"m{offset + i}",
+                                "version": 1,
+                                "owner_object_type_id": "order",
+                                "lifecycle": {"status": "published"},
+                            }
+                        }
+                        for i in range(size)
+                    ],
+                    "total_count": 501,
+                },
+            )
+        return httpx.Response(200, json={"id": "kn", "entries": []})
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+    monkeypatch.setattr(http_module, "_client", lambda _ctx: client)
+    monkeypatch.setattr(http_module, "_ensure_platform_floor", lambda _ctx: None)
+    ctx = Context(base_url="https://platform.example", token="t-1")
+
+    assert len(fetch_schema(ctx, "kn").metrics) == 501
+    assert offsets == [0, 500]
+    malformed = True
+    with pytest.raises(InputError, match="ended before total_count"):
+        fetch_schema(ctx, "kn")

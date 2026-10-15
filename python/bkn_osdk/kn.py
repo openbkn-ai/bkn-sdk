@@ -836,48 +836,32 @@ def query_instance_subgraph(
 def query_metric(
     kn_id: str,
     metric_id: str,
+    version: int,
     *,
     response_format: str | None = None,
-    time: dict[str, Any] | None = None,
-    condition: dict[str, Any] | None = None,
-    analysis_dimensions: list[Any] | None = None,
-    order_by: list[Any] | None = None,
-    having: dict[str, Any] | None = None,
-    limit: int | None = None,
-    fill_null: bool | None = None,
+    query: dict[str, Any] | None = None,
     context: Context | None = None,
 ) -> Any:
     """按指标口径取数.
 
     按已建模指标自身的口径计算取数，是 OT-first 指标路径的第 3 步： `search_schema` /
-    `get_kn_detail` 锁定对象类 → `get_object_types` 从 `related_metrics` 里选定 `metric_id` →
-    本接口计算。 与 `logic-property-resolver` 的分工：实例级、且已绑到逻辑属性的指标走那条
+    `get_kn_detail` 锁定对象类 → `get_object_types` 从 `related_metrics` 里选定 `metric_id` 和
+    `version` → 本接口计算。 与 `logic-property-resolver`
+    的分工：实例级、且已绑到逻辑属性的指标走那条
     （它会先用大模型推参数）；**类级指标、或未绑逻辑属性的指标走本接口**，参数
-    由调用方显式给出，不经大模型。 `time`
-    在指标没有时间维度（`related_metrics[].time_dimension` 为空）时可整体
-    省略。给了就要自洽：**省略 `instant` 等同于 `instant=false`（序列查询）， 必须带
-    `step`**；`instant=true` 取单点（此时 `step` 被下游忽略）； `start` 与 `end`
-    要么都给要么都不给。`step` 大小写不敏感。 这些规则在本服务就地校验并返回 400，规则逐条对齐
-    ontology-query 的 `validateMetricQueryRequest`——本地比下游严会把合法调用误拒，比下游松只是
-    把同一个错误延后。 请求体与 ontology-query 的 `MetricQueryRequestBody`
-    同构；响应只保留结果序列， 不回带指标定义（`related_metrics` 里已经有了）。
+    由调用方显式给出，不经大模型。 `version` 必填，必须使用已发布、不可变的版本；`query`
+    只包含定义允许的 运行时选择（实例身份、过滤条件、分析维度、毫秒时间范围）。固定口径和统计
+    粒度由指标定义决定，不能通过本请求覆盖。 响应保留对象指标 V1 的
+    `model`、`entries`、`status` 和 `warnings`。
 
     Args:
         kn_id: 知识网络 ID。也可用 `x-kn-id` 头传。
         metric_id: 指标 ID，取自 `get_object_types` 返回的 `related_metrics[].id`，
             或对象类逻辑属性 `data_source` 里引用的指标 ID。
-        time: 时间窗。指标没有时间维度时可整体省略；给了就要自洽（见接口说明）。
-        condition: 过滤条件，结构与 `query_object_instance` 的 `condition` 一致 （`field` /
-            `operation` / `value` / `value_from`，可 `and` / `or` 嵌套）。
-        analysis_dimensions: 分析维度（按维度拆分结果）。取值须来自
-            `related_metrics[].analysis_dimensions`。
-        order_by: 结果排序。 元素字段: direction, property。
-        having: 对聚合结果过滤。
-        limit: 返回条数上限。
-        fill_null: 区间查询时，无数据的步长点是否补空。仅对序列查询有效，且必须同时给 `time.start`
-            与 `time.end`。
+        version: 已发布且不可变的对象指标版本，取自 `related_metrics[].version`。
 
-    Returns the platform's own payload: datas, kn_id, metric_id, overall_ms.
+    Returns the platform's own payload: entries, kn_id, metric_id, model, overall_ms, status,
+    version, warnings.
     """
     return _send(
         "/api/agent-retrieval/v1/kn/query_metric",
@@ -888,13 +872,8 @@ def query_metric(
         {
             "kn_id": kn_id,
             "metric_id": metric_id,
-            "time": time,
-            "condition": condition,
-            "analysis_dimensions": analysis_dimensions,
-            "order_by": order_by,
-            "having": having,
-            "limit": limit,
-            "fill_null": fill_null,
+            "version": version,
+            "query": query,
         },
         context,
     )
