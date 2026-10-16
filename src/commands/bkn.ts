@@ -1195,8 +1195,8 @@ should be able to account for.
   guide(
     objectMetric,
     `OBJECT METRIC LIFECYCLE
-  Create or update a draft, validate-saved it, then publish that exact --version.
-  Query requires a published --version; trial takes {definition, query} without saving.
+  Create or update a draft, validate-saved it, then publish that exact --metric-version.
+  Query requires a published --metric-version; trial takes {definition, query} without saving.
   A completed validate with valid=false prints issues and exits with status 1.
 
 FINDING METRIC IDS
@@ -1259,9 +1259,9 @@ function registerObjectMetricCommands(bkn: Command): Command {
       .option("--body-file <path>", "read JSON body from a file");
   const version = (command: Command) =>
     command.requiredOption(
-      "--version <n>",
+      "--metric-version <n>",
       "immutable or draft metric version",
-      positiveInt("--version"),
+      positiveInt("--metric-version"),
     );
 
   branch(
@@ -1289,9 +1289,15 @@ function registerObjectMetricCommands(bkn: Command): Command {
     metric
       .command("get <kn-id> <metric-id>")
       .description("Get one metric, optionally at a version")
-      .option("--version <n>", "specific version", positiveInt("--version")),
+      .option("--metric-version <n>", "specific version", positiveInt("--metric-version")),
   ).action(async (knId: string, metricId: string, opts, cmd: Command) => {
-    printJson(await clientFrom(cmd).kn.objectMetricGet(knId, metricId, opts), outputOptions(cmd));
+    printJson(
+      await clientFrom(cmd).kn.objectMetricGet(knId, metricId, {
+        ...opts,
+        version: opts.metricVersion,
+      }),
+      outputOptions(cmd),
+    );
   });
   branch(
     body(metric.command("create <kn-id>").description("Create one object-metric draft")),
@@ -1311,7 +1317,10 @@ function registerObjectMetricCommands(bkn: Command): Command {
     ),
   ).action(async (knId: string, metricId: string, opts, cmd: Command) => {
     printJson(
-      await clientFrom(cmd).kn.objectMetricUpdate(knId, metricId, readBody(opts), opts),
+      await clientFrom(cmd).kn.objectMetricUpdate(knId, metricId, readBody(opts), {
+        ...opts,
+        version: opts.metricVersion,
+      }),
       outputOptions(cmd),
     );
   });
@@ -1323,7 +1332,10 @@ function registerObjectMetricCommands(bkn: Command): Command {
     ),
   ).action(async (knId: string, metricId: string, opts, cmd: Command) => {
     printJson(
-      await clientFrom(cmd).kn.objectMetricDeleteDraft(knId, metricId, opts),
+      await clientFrom(cmd).kn.objectMetricDeleteDraft(knId, metricId, {
+        ...opts,
+        version: opts.metricVersion,
+      }),
       outputOptions(cmd),
     );
   });
@@ -1364,7 +1376,10 @@ function registerObjectMetricCommands(bkn: Command): Command {
     ),
   ).action(async (knId: string, metricId: string, opts, cmd: Command) => {
     printJson(
-      await clientFrom(cmd).kn.objectMetricQuery(knId, metricId, readBody(opts), opts),
+      await clientFrom(cmd).kn.objectMetricQuery(knId, metricId, readBody(opts), {
+        ...opts,
+        version: opts.metricVersion,
+      }),
       outputOptions(cmd),
     );
   });
@@ -1398,7 +1413,10 @@ function registerObjectMetricCommands(bkn: Command): Command {
           .description(`${name} one object-metric version`),
       ),
     ).action(async (knId: string, metricId: string, opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).kn[method](knId, metricId, opts), outputOptions(cmd));
+      printJson(
+        await clientFrom(cmd).kn[method](knId, metricId, { ...opts, version: opts.metricVersion }),
+        outputOptions(cmd),
+      );
     });
   }
   return metric;
