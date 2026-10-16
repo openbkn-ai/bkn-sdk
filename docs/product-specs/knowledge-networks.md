@@ -13,7 +13,7 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
 ## User-visible behavior
 
 - `openbkn bkn object-metric validate <kn-id>` validates an unsaved Object Metric V1 definition. The SDK's `kn.objectMetricValidate` returns `{ valid, issues, output_shape }`; a completed `valid: false` result does not throw, and the CLI exits with code 1. Malformed or empty responses are rejected. The canonical endpoint is `/object-metrics/validate`.
-- Object Metrics V1 use one-draft-per-version authoring. Create or update a draft, validate the saved version, then publish that exact version. Published versions are immutable. `object-metric query` requires a positive `--version` and forwards only runtime query choices; `trial` evaluates an unpublished `{definition, query}` without persisting it.
+- Object Metrics V1 use one-draft-per-version authoring. Create or update a draft, validate the saved version, then publish that exact version. Published versions are immutable. `object-metric query` requires a positive `--metric-version` and forwards only runtime query choices; `trial` evaluates an unpublished `{definition, query}` without persisting it.
 - `object-metric list` is paginated; callers looking up a metric ID must inspect `total_count` and advance `--offset` with `--limit` (maximum 500). Omitting `--limit` uses the backend default rather than fetching every metric.
 - Object-type reads may omit `data_properties` when no data properties exist. SDK reads preserve omission; local package validation, query field validation, and push-integrity checks treat omission as no data properties. An explicitly malformed property list remains invalid.
 - `openbkn bkn list` — networks (default limit 30; `--limit` takes 1–1000 or -1 for all, checked before sending).
@@ -134,3 +134,5 @@ page continuation always follows the cursor.
 These names require the Foundry #844 cleanup and the SDK update to roll out together.
 `ignoringStoreCache` / `--ignoring-store-cache` / `ignoring_store_cache` and
 `search_from_index` are removed without aliases. Restart pre-upgrade cursors.
+
+The CLI uses `--metric-version` to distinguish an immutable metric version from the root `--version` / `-V` SDK version flag. Global options remain valid before or after a command. SDK method options and HTTP query parameters remain named `version`.

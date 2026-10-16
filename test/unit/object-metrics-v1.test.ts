@@ -112,7 +112,9 @@ describe("Object Metrics V1", () => {
     const query = objectMetric?.commands.find((command) => command.name() === "query");
     const list = objectMetric?.commands.find((command) => command.name() === "list");
     expect(query).toBeDefined();
-    expect(query?.options.find((option) => option.long === "--version")?.mandatory).toBe(true);
+    expect(query?.options.find((option) => option.long === "--metric-version")?.mandatory).toBe(
+      true,
+    );
     expect(list?.description()).toContain("one page");
     const metricGuide = objectMetric ? guideOf(objectMetric) : undefined;
     expect(metricGuide).toContain("total_count");
