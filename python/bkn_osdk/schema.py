@@ -174,6 +174,7 @@ ONTOLOGY_BASE = "/api/bkn-backend/v1/knowledge-networks"
 def fetch_schema(ctx: Context, kn_id: str, branch: str = "main") -> KnSchema:
     """Read a network's schema from bkn-backend REST.
 
+    Object summaries are hydrated from public details before parsing.
     Object/relation lists use `limit=-1`; the V1 metric catalogue is paginated.
     Every page is fetched before parsing, so a partial read never silently
     produces an incomplete generated package.
@@ -182,6 +183,7 @@ def fetch_schema(ctx: Context, kn_id: str, branch: str = "main") -> KnSchema:
     listing: dict[str, QueryValue] = {"branch": branch, "limit": -1}
     network = request(ctx, base, query={"branch": branch})
     object_types = request(ctx, f"{base}/object-types", query=listing)
+    object_types = _object_type_details(ctx, base, branch, object_types)
     relation_types = request(ctx, f"{base}/relation-types", query=listing)
     metric_records: list[Mapping[str, Any]] = []
     offset = 0
@@ -214,6 +216,38 @@ def fetch_schema(ctx: Context, kn_id: str, branch: str = "main") -> KnSchema:
                 )
             break
     return parse_schema(network, object_types, relation_types, {"entries": metric_records})
+
+
+def _object_type_details(
+    ctx: Context, base: str, branch: str, listing: Any
+) -> list[Mapping[str, Any]]:
+    """Hydrate summary-only catalogue entries before generating typed properties.
+
+    Public object-type lists omit data_properties and may null primary_keys.
+    Fetch details with the same caller context and branch; never mistake that
+    summary for a propertyless type or bypass property visibility checks.
+    """
+    result: list[Mapping[str, Any]] = []
+    for entry in _entries(listing):
+        if entry.get("data_properties") is not None:
+            result.append(entry)
+            continue
+        type_id = _text(entry.get("id"))
+        if not type_id:
+            raise InputError("Object-type summary has no id; schema is incomplete.")
+        payload = request(
+            ctx, f"{base}/object-types/{quote(type_id, safe='')}", query={"branch": branch}
+        )
+        candidates = (
+            [payload]
+            if isinstance(payload, Mapping) and payload.get("id") == type_id
+            else _entries(payload)
+        )
+        detail = next((item for item in candidates if item.get("id") == type_id), None)
+        if detail is None or "data_properties" not in detail:
+            raise InputError("Object-type details are missing or incomplete; schema is incomplete.")
+        result.append(detail)
+    return result
 
 
 def parse_schema(

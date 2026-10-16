@@ -119,7 +119,7 @@ class RelationPath:
 
         excluded = checked_system_properties(exclude_system_properties or ())
 
-        ctx = context or resolve_context()
+        ctx = context or instance.__context__ or resolve_context()
         kn_id = type(instance).__kn_id__
         target = self.steps[-1]._target_class()
         path = f"{QUERY_BASE}/{quote(kn_id, safe='')}/subgraph"

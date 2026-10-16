@@ -326,7 +326,9 @@ def test_full_schema_uses_one_internal_base_without_endpoint_overrides(
     client = httpx.Client(transport=httpx.MockTransport(handle))
     monkeypatch.setattr(http_module, "_client", lambda _ctx: client)
     result = fetch_schema(
-        Context(base_url="http://agent-retrieval:30780", token="caller-token"),
+        Context(
+            base_url="http://ingress-nginx-controller.ingress-nginx.svc:80", token="caller-token"
+        ),
         "ecommerce_ops_bkn_public",
         "dev",
     )
@@ -335,7 +337,10 @@ def test_full_schema_uses_one_internal_base_without_endpoint_overrides(
     )
     assert len(seen) == 4
     assert all(
-        str(req.url).startswith("http://agent-retrieval:30780/api/bkn-backend/v1/") for req in seen
+        str(req.url).startswith(
+            "http://ingress-nginx-controller.ingress-nginx.svc/api/bkn-backend/v1/"
+        )
+        for req in seen
     )
     assert all(req.url.params["branch"] == "dev" for req in seen)
     assert all(req.headers["authorization"] == "Bearer caller-token" for req in seen)
