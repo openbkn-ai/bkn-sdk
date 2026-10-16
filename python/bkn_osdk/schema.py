@@ -221,10 +221,12 @@ def _object_type(entry: Mapping[str, Any]) -> ObjectTypeDef:
         bkn_id=_text(entry.get("id")) or "",
         properties=tuple(
             _property(prop)
-            for prop in entry.get("data_properties", [])
+            for prop in (entry.get("data_properties") or [])
             if isinstance(prop, Mapping) and prop.get("name")
         ),
-        primary_key=tuple(_text(key) or "" for key in entry.get("primary_keys", []) if _text(key)),
+        primary_key=tuple(
+            _text(key) or "" for key in (entry.get("primary_keys") or []) if _text(key)
+        ),
         display_key=_text(entry.get("display_key")),
         display_name=_text(entry.get("name")),
         description=_text(entry.get("comment")),
