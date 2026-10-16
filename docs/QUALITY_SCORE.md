@@ -79,7 +79,12 @@ Update this table as each signal changes (e.g. live-parity count as commands are
   iteration stay on MCP, preserve the interaction and row receipts, and send
   no REST requests.
 
-- Python schema parsing regressions cover null data-property/primary-key lists
-  and all three release-schema reads through one internal base URL. The companion
-  Context Loader patch supplies missing authenticated sandbox GET aliases; it
-  preserves raw backend schema and caller authorization without a separate URL.
+- Python schema parsing regressions cover nullable schema lists and authenticated,
+  branch-scoped object-detail hydration when list endpoints return summaries.
+  Generator tests cover platform metric UUIDs starting with digits without changing
+  wire IDs. Platform REST routing uses the configured unified gateway; sandbox
+  deployment discovers it independently from the MCP endpoint.
+- Multi-hop regression coverage verifies inherited row context, explicit context
+  precedence and caller Authorization on the wire. Live capability acceptance
+  distinguishes candidate source loaded for one verification call from the SDK
+  actually pinned in the running sandbox image.
