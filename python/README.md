@@ -98,6 +98,14 @@ CI: it compares the live schema against the fingerprint and exits non-zero on
 drift, classifying it as *additive* (new object type or property — existing code
 keeps working) or *breaking* (removed, retyped, or rekeyed).
 
+Object-type catalogues may contain summaries. Generation fetches missing object
+properties from each public detail endpoint using the same caller and branch;
+a missing or mismatched detail stops generation instead of silently dropping
+properties. Metric UUIDs starting with digits receive a `Metric` class-name
+prefix; the original ID remains unchanged on requests. Multi-hop traversal keeps
+the starting row's bound connection and caller context unless the call supplies
+an explicit context.
+
 ## Credentials
 
 Both commands take `--base-url`, `--token` or `--token-file`, `--user` and
