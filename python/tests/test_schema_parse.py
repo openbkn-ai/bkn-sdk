@@ -200,3 +200,55 @@ def test_fetch_schema_encodes_the_network_id(monkeypatch: pytest.MonkeyPatch) ->
 
     assert raw[0] == "/api/bkn-backend/v1/knowledge-networks/kn%2Fa%20b"
     assert raw[1].endswith("/kn%2Fa%20b/object-types")
+
+
+def test_null_schema_lists_are_empty_instead_of_crashing() -> None:
+    result = parse_schema(
+        {"id": "kn"},
+        [
+            {
+                "id": "unbound",
+                "primary_keys": None,
+                "data_properties": None,
+            },
+        ],
+        [],
+    )
+    assert result.object_types[0].primary_key == ()
+    assert result.object_types[0].properties == ()
+    assert result.metrics == ()
+
+
+def test_full_schema_uses_one_internal_base_without_endpoint_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[httpx.Request] = []
+
+    def handle(req: httpx.Request) -> httpx.Response:
+        seen.append(req)
+        name = (
+            "object_types"
+            if req.url.path.endswith("object-types")
+            else "relation_types"
+            if req.url.path.endswith("relation-types")
+            else "network"
+        )
+        return httpx.Response(200, json=payload(name))
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+    monkeypatch.setattr(http_module, "_client", lambda _ctx: client)
+    result = fetch_schema(
+        Context(base_url="http://agent-retrieval:30780", token="caller-token"),
+        "ecommerce_ops_bkn_public",
+        "dev",
+    )
+    assert result == parse_schema(
+        payload("network"), payload("object_types"), payload("relation_types")
+    )
+    assert len(seen) == 3
+    assert all(
+        str(req.url).startswith("http://agent-retrieval:30780/api/bkn-backend/v1/") for req in seen
+    )
+    assert all(req.url.params["branch"] == "dev" for req in seen)
+    assert all(req.headers["authorization"] == "Bearer caller-token" for req in seen)
+    assert all(req.url.params["limit"] == "-1" for req in seen[1:3])
