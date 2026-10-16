@@ -325,6 +325,10 @@ def _named_metrics(schema: KnSchema) -> tuple[tuple[str, MetricDef], ...]:
 def metric_class_name(bkn_id: str) -> str:
     """`m_gmv` -> `Gmv`. The `m_` prefix is a convention, not part of the name."""
     stripped = bkn_id[2:] if bkn_id.startswith("m_") and len(bkn_id) > 2 else bkn_id
+    # Platform-generated metric IDs are UUIDs and commonly start with a digit.
+    # Prefix only that case; preserve existing class names and the original wire ID.
+    if stripped[:1].isdigit():
+        stripped = "Metric_" + stripped
     return class_name(stripped)
 
 

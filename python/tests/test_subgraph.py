@@ -464,3 +464,29 @@ def test_a_payload_shaped_unexpectedly_is_skipped_rather_than_raised_on(deploy: 
     }
 
     assert AwardWinners.team.then(Teams.confederation).of(seed()) == []
+
+
+@pytest.mark.parametrize("explicit", [False, True])
+def test_multi_hop_preserves_seed_context_unless_explicitly_overridden(
+    deploy: Deploy, monkeypatch: pytest.MonkeyPatch, explicit: bool
+) -> None:
+    from bkn_osdk import Context
+
+    bound = Context(base_url="https://bound.example", token="bound-caller")
+    override = Context(base_url="https://override.example", token="override-caller")
+    row = seed()
+    row.__context__ = bound
+    seen: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return deploy.handle(request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+    monkeypatch.setattr(http_module, "_client", lambda _ctx: client)
+    context = override if explicit else None
+    expected = override if explicit else bound
+    far = AwardWinners.team.then(Teams.confederation).of(row, context=context)
+    assert seen[0].url.host == ("override.example" if explicit else "bound.example")
+    assert seen[0].headers["Authorization"] == f"Bearer {expected.token}"
+    assert far[0].__context__ is expected
