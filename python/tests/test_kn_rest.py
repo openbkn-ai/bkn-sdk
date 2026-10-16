@@ -235,12 +235,15 @@ def test_action_execution_results_pagination_is_optional(deploy: Deploy) -> None
     kn.get_action_execution(
         KN, "execution-1", results_limit=100, results_offset=200, context=CONTEXT
     )
+    kn.get_action_execution(KN, "execution-1", results_offset=0, context=CONTEXT)
 
-    assert deploy.paths == ["/api/agent-retrieval/v1/kn/get_action_execution"] * 2
+    assert deploy.paths == ["/api/agent-retrieval/v1/kn/get_action_execution"] * 3
     assert "results_limit" not in deploy.bodies[0]
     assert "results_offset" not in deploy.bodies[0]
     assert deploy.bodies[1]["results_limit"] == 100
     assert deploy.bodies[1]["results_offset"] == 200
+    assert "results_limit" not in deploy.bodies[2]
+    assert deploy.bodies[2]["results_offset"] == 0
 
 
 def test_a_route_that_sends_the_network_still_sends_it(deploy: Deploy) -> None:
