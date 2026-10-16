@@ -120,21 +120,27 @@ def _function(op: dict[str, Any]) -> str:
 
     required = [f for f in fields if f["required"] and f["name"] != "kn_id"]
     optional = [f for f in fields if not f["required"] and f["name"] != "kn_id"]
+    # The object-type route made ids optional for index listing, but existing callers may still
+    # pass it positionally. Keep that one argument positional-or-keyword across regeneration.
+    positional_optional = (
+        [f for f in optional if f["name"] == "ids"] if op["operation"] == "get_object_types" else []
+    )
+    keyword_optional = [f for f in optional if f not in positional_optional]
 
     signature = ["kn_id: str"]
     signature += [f"{_safe(f['name'])}: {ANNOTATION[f['type']]}" for f in required]
-    if optional:
-        signature.append("*")
-        signature += [
-            f"{_safe(f['name'])}: {ANNOTATION[f['type']]} | None = None" for f in optional
-        ]
+    signature += [
+        f"{_safe(f['name'])}: {ANNOTATION[f['type']]} | None = None" for f in positional_optional
+    ]
     # The keyword-only marker is always its own line. Folding it onto `context` reads fine until
     # a route has no optional fields at all — `execute_tool` is the first — and then the emitter
     # produces `*, context: ...` on one line, which `ruff format` splits. The generated file is
     # asserted to be exactly what the generator produces, so an emitter that disagrees with the
     # formatter cannot be fixed by formatting the file.
-    if not optional:
-        signature.append("*")
+    signature.append("*")
+    signature += [
+        f"{_safe(f['name'])}: {ANNOTATION[f['type']]} | None = None" for f in keyword_optional
+    ]
     signature.append("context: Context | None = None")
 
     def mapping(fields: list[dict[str, Any]]) -> str:
