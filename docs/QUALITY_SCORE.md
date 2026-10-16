@@ -79,3 +79,8 @@ Update this table as each signal changes (e.g. live-parity count as commands are
 - Python traced-query tests verify opaque cursor continuation and multi-page
   iteration stay on MCP, preserve the interaction and row receipts, and send
   no REST requests.
+
+- Python schema parsing regressions cover null data-property/primary-key lists and nullable V1 dimensions
+  and full-schema reads through one internal base URL. The companion Context Loader
+  patch supplies the missing authenticated sandbox GET aliases including the V1 metric catalogue; it preserves raw
+  backend schema and caller authorization without a separate schema URL setting.

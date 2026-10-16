@@ -272,3 +272,75 @@ def test_metric_catalogue_pagination_and_incomplete_page(monkeypatch: pytest.Mon
     malformed = True
     with pytest.raises(InputError, match="ended before total_count"):
         fetch_schema(ctx, "kn")
+
+
+def test_null_schema_lists_are_empty_instead_of_crashing() -> None:
+    result = parse_schema(
+        {"id": "kn"},
+        [
+            {
+                "id": "unbound",
+                "primary_keys": None,
+                "data_properties": None,
+                "logic_properties": None,
+            },
+        ],
+        [],
+        {
+            "entries": [
+                {
+                    "definition": {
+                        "id": "m-1",
+                        "version": 1,
+                        "owner_object_type_id": "unbound",
+                        "lifecycle": {"status": "published"},
+                        "query_capabilities": {"analysis_dimensions": None},
+                    }
+                }
+            ]
+        },
+    )
+    assert result.object_types[0].primary_key == ()
+    assert result.object_types[0].properties == ()
+    assert result.metrics[0].dimensions == ()
+
+
+def test_full_schema_uses_one_internal_base_without_endpoint_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[httpx.Request] = []
+
+    def handle(req: httpx.Request) -> httpx.Response:
+        seen.append(req)
+        if req.url.path.endswith("object-metrics"):
+            return httpx.Response(200, json={"entries": [], "total_count": 0})
+        name = (
+            "object_types"
+            if req.url.path.endswith("object-types")
+            else "relation_types"
+            if req.url.path.endswith("relation-types")
+            else "network"
+        )
+        return httpx.Response(200, json=payload(name))
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+    monkeypatch.setattr(http_module, "_client", lambda _ctx: client)
+    result = fetch_schema(
+        Context(base_url="http://agent-retrieval:30780", token="caller-token"),
+        "ecommerce_ops_bkn_public",
+        "dev",
+    )
+    assert result == parse_schema(
+        payload("network"), payload("object_types"), payload("relation_types")
+    )
+    assert len(seen) == 4
+    assert all(
+        str(req.url).startswith("http://agent-retrieval:30780/api/bkn-backend/v1/") for req in seen
+    )
+    assert all(req.url.params["branch"] == "dev" for req in seen)
+    assert all(req.headers["authorization"] == "Bearer caller-token" for req in seen)
+    assert all(req.url.params["limit"] == "-1" for req in seen[1:3])
+
+    assert seen[-1].url.params["status"] == "published"
+    assert seen[-1].url.params["offset"] == "0"
+    assert seen[-1].url.params["limit"] == "500"
