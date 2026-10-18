@@ -110,7 +110,7 @@ export function updateObjectMetricDraft(
     Array.isArray(definition) ||
     (definition as Record<string, unknown>).version !== version
   ) {
-    throw new InputError("Object metric definition.version must match --version.");
+    throw new InputError("Object metric definition.version must match --metric-version.");
   }
   return request(ctx, item(knId, metricId), {
     method: "PUT",
