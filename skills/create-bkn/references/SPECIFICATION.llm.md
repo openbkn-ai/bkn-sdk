@@ -82,7 +82,7 @@ tags: [tag1, tag2]               # 可选
 - `### Logic Properties`（可选）：无内容时保留空小节；有内容时每个属性一个 `#### {property_name}` 小节，小节内是四张带粗体标题的表：
   - `**Meta**`：列 `Display Name | Type | Description`。Type 取 `metric` / `tool`。
   - `**Source**`：列 `Source Type | Source ID | Source Name`。`Source Type` 为 `tool` 时必须改用 6 列写法，补 `BoxID | ToolID | ResultPath`——后端校验要求 tool 源同时有 box 和 tool id，缺了会返回 400 `LogicPropertyToolSourceRequired`（三列写法只适用于 `metric` 等其他源）。列名也接受 `Box ID` / `Toolbox ID` / `Tool ID` / `Result Path` 的写法。
-  - `**Parameters**`：列 `Name | Type | Source | Operation | ValueFrom | Value | Description`。`Source` 取 `property`（对象属性，名字写在 `ValueFrom`）/ `input`（用户输入）/ `const`（常量，值写在 `Value`）。
+  - `**Parameters**`：列 `Name | Type | Source | Operation | ValueFrom | Value | Description`，各列含义与行动类的 `### Parameter Binding` 相同（见下文）：值的来源写在 `ValueFrom`，不是 `Source`。
   - `**Analysis Dimensions**`（可选）：列 `Name | Display Name | Type | Description`。
 - `### Data Source`（可选）：表格，列 Type | ID | Name；无资源绑定时可省略整节
   - Type 固定为 `resource`；ID 填 Vega 资源 ID（来自 `resource list` 或 `vega resource list`），数据默认通过 Vega 实时查询。索引配置与构建在 Vega 中管理，不在 BKN 中声明。
@@ -157,11 +157,16 @@ requires_approval: boolean       # 可选
 - `### Pre-conditions`（可选）：表格 Object | Check | Condition | Message
   - Check 格式：`relation:{relation_id}` 或 `property:{property_name}`
 - `### Scope of Impact`（可选）：表格 Object | Impact Description
-- `### Tool Configuration`（必须）：
-  - tool 类型：表格 Type | Toolbox ID | Tool ID
-  - mcp 类型：表格 Type | MCP ID | Tool Name
-- `### Parameter Binding`（必须）：表格 Parameter | Type | Source | Binding | Description
-  - Source 值：`property` / `input` / `const`
+- `### Action Source`（必须）：
+  - tool 类型：表格 Type | BoxID | ToolID
+  - mcp 类型：表格 Type | McpID | ToolName
+  - 不要写成 `### Tool Configuration`：旧标题虽然也能解析，但整节会被重复并入描述。
+- `### Parameter Binding`（必须）：表格 Name | Type | Source | Operation | ValueFrom | Value | Description
+  - `ValueFrom`：值的来源，取 `property`（对象属性）/ `input`（运行时输入）/ `const`（常量）
+  - `Value`：`ValueFrom` 为 `property` 时写属性名，为 `const` 时写常量值，为 `input` 时留空
+  - `Source`：参数在工具请求中的位置，如 `Query` / `Body` / `Header` / `Path`
+  - `Operation`：指标参数的比较操作符，行动参数留空
+  - 不要使用旧列布局 `Parameter | Type | Source | Binding | Description`：它把值的来源写在 `Source`，导入后参数在执行时会被丢弃。
 - `### Schedule`（可选）：表格 Type | Expression（`FIX_RATE` 或 `CRON`）
 - `### Execution Description`（可选）：编号列表描述执行流程
 
@@ -208,7 +213,7 @@ tags: [tag1, tag2]               # 可选
    - 所有类型：type、id、name
    - ObjectType：Data Properties、Keys（Primary Keys + Display Key）
    - RelationType：Endpoint、Mapping Rules（或 Backing Resource + Source/Target Mapping）
-   - ActionType：Bound Object、Tool Configuration、Parameter Binding
+   - ActionType：Bound Object、Action Source、Parameter Binding
    - ConceptGroup：Object Types
 7. **标题层级**：`#` 网络标题、`##` 类型定义、`###` 定义内 section、`####` 子项（逻辑属性名）
 8. **业务规则放置**：

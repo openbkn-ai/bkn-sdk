@@ -47,17 +47,17 @@ condition:
 |--------|---------------------|
 | node | Mark node unschedulable |
 
-### Tool Configuration
+### Action Source
 
-| Type | MCP ID | Tool Name |
-|------|--------|-----------|
+| Type | McpID | ToolName |
+|------|-------|----------|
 | mcp | kubernetes-mcp | cordon_node |
 
 ### Parameter Binding
 
-| Parameter | Type | Source | Binding | Description |
-|-----------|------|--------|---------|-------------|
-| node | string | property | node_name | Node name |
+| Name | Type | Source | Operation | ValueFrom | Value | Description |
+|------|------|--------|-----------|-----------|-------|-------------|
+| node | string | Body | | property | node_name | Node name |
 
 ### Execution Description
 

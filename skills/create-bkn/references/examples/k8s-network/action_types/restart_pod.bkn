@@ -44,19 +44,19 @@ condition:
 |--------|---------------------|
 | pod | Delete and recreate Pod |
 
-### Tool Configuration
+### Action Source
 
-| Type | Toolbox ID | Tool ID |
-|------|------------|---------|
+| Type | BoxID | ToolID |
+|------|-------|--------|
 | tool | k8s_toolbox | kubectl_delete_pod |
 
 ### Parameter Binding
 
-| Parameter | Source | Binding | Description |
-|-----------|--------|---------|-------------|
-| pod | property | pod_name | Pod name |
-| namespace | property | pod_namespace | Namespace |
-| grace_period | const | 30 | Grace period seconds |
+| Name | Type | Source | Operation | ValueFrom | Value | Description |
+|------|------|--------|-----------|-----------|-------|-------------|
+| pod | string | Body | | property | pod_name | Pod name |
+| namespace | string | Body | | property | pod_namespace | Namespace |
+| grace_period | integer | Body | | const | 30 | Grace period seconds |
 
 ### Schedule
 
