@@ -103,7 +103,7 @@ Rules must sit in spec-defined places so import persists them. Full wording: [re
 - [ ] Files live under folders matching `type` (`object_types/`, `relation_types/`, …); filename = `{id}.bkn`
 - [ ] Network Overview lists **all** definition IDs — no missing/extra
 - [ ] Relations/actions reference existing object-type IDs; concept groups list only existing objects
-- [ ] Parameter binding `Source` ∈ `property` | `input` | `const`; YAML blocks (e.g. trigger) parse
+- [ ] Parameter tables (action `Parameter Binding`, logic property `Parameters`) put `property` | `input` | `const` in `ValueFrom`, the property name or constant in `Value`, and the request position (`Query` / `Body` / …) in `Source`; YAML blocks (e.g. trigger) parse
 - [ ] Heading hierarchy has no skipped levels
 - [ ] Business rules only in allowed places (see [Business rules placement](#business-rules-placement))
 
