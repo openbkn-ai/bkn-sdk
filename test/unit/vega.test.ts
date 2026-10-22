@@ -614,11 +614,11 @@ describe("deleteCatalog", () => {
       blockers: ["discover_tasks_running"],
       resources: 3,
       protected_resources: 0,
-      build_tasks: { will_cancel: 1, blocking: 0 },
+      build_tasks: { will_delete: 1, blocking: 0 },
       catalog_health_check_schedules: 1,
       discover_schedules: 1,
-      discover_tasks: { will_cancel: 2, blocking: 1 },
-      semantic_understanding_tasks: { will_cancel: 0, blocking: 0 },
+      discover_tasks: { will_delete: 2, blocking: 1 },
+      semantic_understanding_tasks: { will_delete: 0, blocking: 0 },
     };
     const f = mockFetch(impact);
 
@@ -634,6 +634,42 @@ describe("deleteCatalog", () => {
     expect(url.pathname).toBe("/api/vega-backend/v1/catalogs/c-1");
     expect(url.searchParams.get("dry_run")).toBe("true");
     expect(call[1].method).toBe("DELETE");
+  });
+
+  it("accepts an empty catalog with zero deletion totals", async () => {
+    const impact = {
+      catalog_id: "empty",
+      can_delete: true,
+      blockers: [],
+      resources: 0,
+      protected_resources: 0,
+      discover_schedules: 0,
+      catalog_health_check_schedules: 0,
+      build_tasks: { will_delete: 0, blocking: 0 },
+      discover_tasks: { will_delete: 0, blocking: 0 },
+      semantic_understanding_tasks: { will_delete: 0, blocking: 0 },
+    };
+    const f = mockFetch(impact);
+    await expect(deleteCatalog(ctx, "empty", { dryRun: true })).resolves.toEqual(impact);
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects cancellation-only counts instead of treating them as deletion totals", async () => {
+    mockFetch({
+      catalog_id: "c-1",
+      can_delete: true,
+      blockers: [],
+      resources: 0,
+      protected_resources: 0,
+      discover_schedules: 0,
+      catalog_health_check_schedules: 0,
+      build_tasks: { will_cancel: 1, blocking: 0 },
+      discover_tasks: { will_cancel: 2, blocking: 0 },
+      semantic_understanding_tasks: { will_cancel: 3, blocking: 0 },
+    });
+    await expect(deleteCatalog(ctx, "c-1", { dryRun: true })).rejects.toThrow(
+      /build_tasks.will_delete/,
+    );
   });
 
   it("performs a real deletion without sending dry_run", async () => {
@@ -669,11 +705,11 @@ describe("deleteCatalog", () => {
       blockers: ["future_blocker"],
       resources: 1,
       protected_resources: 0,
-      build_tasks: { will_cancel: 0, blocking: 0 },
+      build_tasks: { will_delete: 0, blocking: 0 },
       catalog_health_check_schedules: 0,
       discover_schedules: 0,
-      discover_tasks: { will_cancel: 0, blocking: 0 },
-      semantic_understanding_tasks: { will_cancel: 0, blocking: 0 },
+      discover_tasks: { will_delete: 0, blocking: 0 },
+      semantic_understanding_tasks: { will_delete: 0, blocking: 0 },
     };
     mockFetch(impact);
 

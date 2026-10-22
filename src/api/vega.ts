@@ -268,7 +268,7 @@ export type CatalogDeletionBlocker = z.infer<typeof CatalogDeletionBlocker>;
 const UnknownCatalogDeletionBlocker = z.string() as z.ZodType<string & {}>;
 
 export const CatalogDeletionTaskImpact = z.object({
-  will_cancel: z.number().int(),
+  will_delete: z.number().int(),
   blocking: z.number().int(),
 });
 export type CatalogDeletionTaskImpact = z.infer<typeof CatalogDeletionTaskImpact>;

@@ -89,3 +89,6 @@ Update this table as each signal changes (e.g. live-parity count as commands are
   precedence and caller Authorization on the wire. Live capability acceptance
   distinguishes candidate source loaded for one verification call from the SDK
   actually pinned in the running sandbox image.
+
+- `test/unit/vega.test.ts` checks Catalog deletion `will_delete` task-record totals,
+  empty catalogs, and rejection of cancellation-only responses.
