@@ -92,3 +92,5 @@ Update this table as each signal changes (e.g. live-parity count as commands are
 
 - `test/unit/vega.test.ts` checks Catalog deletion `will_delete` task-record totals,
   empty catalogs, and rejection of cancellation-only responses.
+
+- `test/unit/vega-semantic.test.ts` and `vega-command.test.ts` cover explicit semantic output language forwarding and CLI validation. Live model output-language acceptance remains a separate environment check.

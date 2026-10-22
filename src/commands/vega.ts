@@ -831,6 +831,10 @@ export function vegaCommand(): Command {
     .option("--resource-id <id>", "resource id")
     .option("--apply-mode <mode>", "dry_run | fill_empty | force")
     .option("--confidence-threshold <n>", "minimum confidence (0..1)", confidenceThreshold)
+    .option(
+      "--language <language>",
+      "generated metadata language: zh-CN | en-US; omitted uses server language",
+    )
     .option("--include-sample-rows", "include resource sample rows")
     .option("--sample-max-rows <n>", "sample row limit", int)
     .action(async (opts, cmd: Command) => {
@@ -855,7 +859,11 @@ export function vegaCommand(): Command {
       if (opts.sampleMaxRows !== undefined && (opts.sampleMaxRows < 1 || opts.sampleMaxRows > 20)) {
         throw new InputError("--sample-max-rows must be between 1 and 20");
       }
+      if (opts.language !== undefined && opts.language !== "zh-CN" && opts.language !== "en-US") {
+        throw new InputError("--language must be zh-CN or en-US");
+      }
       const common = {
+        language: opts.language as "zh-CN" | "en-US" | undefined,
         applyMode,
         confidenceThreshold: opts.confidenceThreshold,
       };

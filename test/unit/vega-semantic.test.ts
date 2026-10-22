@@ -43,6 +43,12 @@ const task = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("SemanticUnderstandingTask APIs", () => {
+  it.each(["en-US", "zh-CN"] as const)("forwards explicit output language %s", async (language) => {
+    const f = mockFetch(task);
+    await createSemanticUnderstandingTask(ctx, { scope: "resource", resourceId: "r-1", language });
+    expect(JSON.parse(firstCall(f)[1].body as string)).toMatchObject({ language });
+  });
+
   it("creates a resource task with sample options", async () => {
     const f = mockFetch(task);
     await expect(
