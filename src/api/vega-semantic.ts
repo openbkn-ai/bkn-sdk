@@ -65,6 +65,8 @@ export type ListSemanticUnderstandingTasksResponse = z.infer<
 >;
 
 interface CreateSemanticUnderstandingTaskBase {
+  /** Output language for generated metadata; omitted uses the server's request/default language. */
+  language?: "zh-CN" | "en-US";
   applyMode?: SemanticUnderstandingApplyMode;
   confidenceThreshold?: number;
 }
@@ -123,6 +125,7 @@ export async function createSemanticUnderstandingTask(
     method: "POST",
     body: {
       scope: req.scope,
+      ...(req.language !== undefined ? { language: req.language } : {}),
       ...target,
       ...(req.applyMode !== undefined ? { apply_mode: req.applyMode } : {}),
       ...(req.confidenceThreshold !== undefined

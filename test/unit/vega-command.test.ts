@@ -1566,3 +1566,63 @@ describe("vega resource exact count", () => {
     });
   });
 });
+
+describe("vega semantic-task output language", () => {
+  it.each(["en-US", "zh-CN"])("sends --language %s", async (language) => {
+    const fetchMock = mockFetch({
+      id: "task-1",
+      scope: "resource",
+      catalog_id: "c-1",
+      resource_id: "r-1",
+      agent_id: "resource-semantic-understanding",
+      input: "{}",
+      input_hash: "hash",
+      status: "pending",
+      apply_mode: "dry_run",
+      confidence_threshold: 0.75,
+      confidence: 0,
+      applied: false,
+      creator: { id: "u-1", type: "user" },
+      create_time: 1,
+    });
+    suppressOutput();
+    await cli().parseAsync(
+      [
+        ...cliBase,
+        "semantic-task",
+        "create",
+        "--scope",
+        "resource",
+        "--resource-id",
+        "r-1",
+        "--language",
+        language,
+      ],
+      { from: "user" },
+    );
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(init.body as string)).toMatchObject({ language, resource_id: "r-1" });
+  });
+
+  it("rejects unsupported output languages without a request", async () => {
+    const fetchMock = mockFetch();
+    suppressOutput();
+    await expect(
+      cli().parseAsync(
+        [
+          ...cliBase,
+          "semantic-task",
+          "create",
+          "--scope",
+          "resource",
+          "--resource-id",
+          "r-1",
+          "--language",
+          "fr-FR",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow("--language must be zh-CN or en-US");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
