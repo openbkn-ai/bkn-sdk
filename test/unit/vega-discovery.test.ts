@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  DiscoverResult,
   createDiscoverSchedule,
   deleteDiscoverTasks,
   discoverCatalog,
@@ -214,5 +215,36 @@ describe("exact count strategy", () => {
     await expect(listDiscoverTasks(ctx)).resolves.toMatchObject({
       entries: [{ strategy: "count_only", result: { updated_count: 0, skipped_count: 2 } }],
     });
+  });
+});
+
+describe("exact count failure contract", () => {
+  const legacy = {
+    catalog_id: "c1",
+    new_count: 0,
+    stale_count: 0,
+    unchanged_count: 0,
+    message: "done",
+  };
+  const failure = {
+    resource_id: "r1",
+    resource_name: "Orders",
+    code: "source_memory_limit",
+    message: "The source database reached its memory limit.",
+  };
+  it("accepts historical results and preserves typed failure details", () => {
+    expect(DiscoverResult.parse(legacy)).not.toHaveProperty("failures");
+    expect(DiscoverResult.parse({ ...legacy, failures: [failure] }).failures).toEqual([failure]);
+  });
+  it("rejects malformed resource failures and tolerates future categories", () => {
+    expect(
+      DiscoverResult.safeParse({ ...legacy, failures: [{ ...failure, resource_id: 42 }] }).success,
+    ).toBe(false);
+    expect(
+      DiscoverResult.safeParse({
+        ...legacy,
+        failures: [{ ...failure, code: "future" }],
+      }).success,
+    ).toBe(true);
   });
 });

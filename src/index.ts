@@ -250,6 +250,7 @@ export type {
 export type {
   CreateDiscoverScheduleRequest,
   DeleteDiscoverTasksOptions,
+  DiscoverResourceFailure,
   DiscoverResult,
   DiscoverSchedule,
   DiscoverStrategy,

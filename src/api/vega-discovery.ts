@@ -186,6 +186,16 @@ export function disableDiscoverSchedule(ctx: RequestContext, id: string): Promis
   });
 }
 
+export const DiscoverResourceFailure = z
+  .object({
+    resource_id: z.string(),
+    resource_name: z.string(),
+    code: z.string(),
+    message: z.string(),
+  })
+  .passthrough();
+export type DiscoverResourceFailure = z.infer<typeof DiscoverResourceFailure>;
+
 export const DiscoverResult = z
   .object({
     catalog_id: z.string(),
@@ -196,6 +206,7 @@ export const DiscoverResult = z
     restored_count: z.number().optional(),
     failed_count: z.number().optional(),
     skipped_count: z.number().optional(),
+    failures: z.array(DiscoverResourceFailure).optional(),
     message: z.string(),
   })
   .passthrough();
@@ -226,7 +237,7 @@ export const DiscoverTask = z
   .passthrough();
 export type DiscoverTask = z.infer<typeof DiscoverTask>;
 
-const DiscoverTaskResultSummary = DiscoverResult.omit({ message: true }).extend({
+const DiscoverTaskResultSummary = DiscoverResult.omit({ message: true, failures: true }).extend({
   updated_count: z.number(),
   restored_count: z.number(),
   failed_count: z.number(),
