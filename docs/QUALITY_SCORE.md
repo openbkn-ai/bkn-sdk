@@ -94,3 +94,7 @@ Update this table as each signal changes (e.g. live-parity count as commands are
   empty catalogs, and rejection of cancellation-only responses.
 
 - `test/unit/vega-semantic.test.ts` and `vega-command.test.ts` cover explicit semantic output language forwarding and CLI validation. Live model output-language acceptance remains a separate environment check.
+
+- `test/unit/vega-discovery.test.ts` verifies typed resource-level exact count
+  failures, historical results without failure details, rejection of malformed
+  resource IDs, and forward-compatible failure codes.
