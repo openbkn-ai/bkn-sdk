@@ -362,6 +362,18 @@ describe("updateResource", () => {
 });
 
 describe("queryResource", () => {
+  it("preserves LARGEINT range bounds and response strings", async () => {
+    const value = "170141183460469231731687303715884105727";
+    const f = mockFetch({ entries: [{ wide: value }], total_count: 1 });
+    const filter = { field: "wide", operation: "range", value: ["-09", value] };
+    await expect(
+      queryResource(ctx, "r-1", { ignoreLocalIndex: true, filterCondition: filter }),
+    ).resolves.toMatchObject({ entries: [{ wide: value }] });
+    expect(JSON.parse(firstCall(f)[1].body as string)).toMatchObject({
+      ignore_local_index: true,
+      filter_condition: filter,
+    });
+  });
   it("preserves an unsafe BIGINT response value as native bigint", async () => {
     vi.stubGlobal(
       "fetch",
