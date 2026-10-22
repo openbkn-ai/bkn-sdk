@@ -16,9 +16,13 @@ Browse the Vega catalog — data sources, views, atomic views, connector types �
 - `openbkn vega resource query <id>` / `openbkn resource query <id>` — identical flags: `--filter`, `--sort field[:asc|desc],…`, `--output-fields`, `--limit`, `--offset`, `--paging-mode`, `--keep-alive-sec` (60–3600), `--need-total`, `--binary-mode metadata|content`, `--ignore-local-index`; `--cursor` alone for a continuation.
 - Enum, boolean and range flags (`catalog list --type/--enabled/--health-check-status/--sort/--direction`, `resource list --category/--status/--sort/--direction`, `build-task list --mode`, `--keep-alive-sec`, `--input-dialect`, discover-schedule `--start-time/--end-time ≥ 0`) are validated before any request.
 - `openbkn vega catalog health-check-schedule <id>` / `set-health-check-schedule <id>` — read or fully update a physical Catalog's independent schedule.
-- `openbkn vega catalog delete <id> --dry-run` — preview the resources, pending
-  tasks, running blockers, and schedules affected by deletion. Omit `--dry-run`
-  to perform the real deletion.
+- `openbkn vega catalog delete <id> --dry-run` — preview the resources, associated task records,
+  running blockers, and schedules affected by deletion. Task impacts use `will_delete`
+  for all associated records (including pending and terminal history), and `blocking`
+  for tasks preventing deletion. Omit `--dry-run` to perform the real deletion, which
+  rechecks blockers and cascades task-record deletion; it does not retain cancelled history.
+  This requires the matching SDK/Studio contract; clients expecting `will_cancel`
+  must be upgraded with this correction. Backend deletion behavior is unchanged.
 - `openbkn vega resource list|get|create|update|delete` — manage Resources; `discover <id>` refreshes one physical resource's metadata, and `enable|disable <id>` changes only its enabled state.
 - `openbkn vega resource delete <ids...> --only-if-stale` and `openbkn resource delete <id> --only-if-stale` delete only resources that are stale and source-missing. The Vega command also accepts `--ignore-missing`, but the two flags cannot both be set.
 - `openbkn vega discover-schedule …` — create/list/get/update/delete discovery schedules and enable or disable them explicitly. Full updates require the current `catalog_id`, `enabled`, `strategy`, both time-window bounds, and `--expected-update-time` for optimistic locking.

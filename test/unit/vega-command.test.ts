@@ -77,11 +77,11 @@ describe("vega catalog delete", () => {
       blockers: [],
       resources: 1,
       protected_resources: 0,
-      build_tasks: { will_cancel: 0, blocking: 0 },
+      build_tasks: { will_delete: 0, blocking: 0 },
       catalog_health_check_schedules: 1,
       discover_schedules: 1,
-      discover_tasks: { will_cancel: 0, blocking: 0 },
-      semantic_understanding_tasks: { will_cancel: 0, blocking: 0 },
+      discover_tasks: { will_delete: 0, blocking: 0 },
+      semantic_understanding_tasks: { will_delete: 0, blocking: 0 },
     });
     suppressOutput();
 
