@@ -150,14 +150,14 @@ export interface ObjectMetricDataEntry {
   value?: unknown;
   status: "ok" | "no_data" | "unavailable";
   bucket_key?: string;
-  available_actions?: Array<"filter" | "drill" | "participants" | "context">;
+  available_actions?: string[];
 }
 
 export interface ObjectMetricData {
   model: Record<string, unknown>;
   entries: ObjectMetricDataEntry[];
   status: "ok" | "no_data" | "unavailable" | "partial";
-  empty_reason?: "filtered_out";
+  empty_reason?: string;
   next_cursor?: string;
   total_count: number;
   warnings?: string[];
@@ -213,7 +213,7 @@ const ObjectMetricDataEntryResult = z
     value: z.unknown().optional(),
     status: z.enum(["ok", "no_data", "unavailable"]),
     bucket_key: z.string().optional(),
-    available_actions: z.array(z.enum(["filter", "drill", "participants", "context"])).optional(),
+    available_actions: z.array(z.string()).optional(),
   })
   .passthrough();
 
@@ -222,7 +222,7 @@ export const ObjectMetricDataResult = z
     model: z.record(z.unknown()),
     entries: z.array(ObjectMetricDataEntryResult),
     status: z.enum(["ok", "no_data", "unavailable", "partial"]),
-    empty_reason: z.literal("filtered_out").optional(),
+    empty_reason: z.string().optional(),
     next_cursor: z.string().optional(),
     total_count: z.number().int(),
     warnings: z.array(z.string()).optional(),

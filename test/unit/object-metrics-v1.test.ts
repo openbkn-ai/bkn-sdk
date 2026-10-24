@@ -176,20 +176,22 @@ describe("Object Metrics V1", () => {
     ).rejects.toMatchObject({ name: "ZodError" });
   });
 
-  it("rejects an unknown result action", async () => {
-    server({
+  it("preserves forward-compatible result metadata", async () => {
+    const result = {
       model: {},
       entries: [{ status: "ok", available_actions: ["invented"] }],
       status: "ok",
+      empty_reason: "future_reason",
       total_count: 1,
       overall_ms: 1,
       evaluated_at: 1_761_264_000_000,
-    });
+    };
+    server(result);
     const client = createClient({ baseUrl: BASE, token: "t" });
 
-    await expect(
-      client.kn.objectMetricQuery("kn-1", "m-1", {}, { version: 1 }),
-    ).rejects.toMatchObject({ name: "ZodError" });
+    await expect(client.kn.objectMetricQuery("kn-1", "m-1", {}, { version: 1 })).resolves.toEqual(
+      result,
+    );
   });
 
   it("rejects invalid versions before querying", () => {
