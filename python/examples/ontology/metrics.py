@@ -65,14 +65,14 @@ def main() -> None:
         try:
             split = metric.query(
                 time={"start": now - 30 * 86_400_000, "end": now},
-                analysis_dimensions=[dimension],
+                group_by=[dimension],
             )
             print(f"  split by {dimension}: {str(split)[:160]}")
         except HttpError as error:
             print(f"  split by {dimension} failed: {str(error)[:120]}")
 
     try:
-        metric.query(analysis_dimensions=["not_a_dimension"])
+        metric.query(group_by=["not_a_dimension"])
     except InputError as error:
         print(f"  an undeclared dimension: {error}")
 

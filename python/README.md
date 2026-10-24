@@ -220,13 +220,15 @@ from bkn.metrics import Gmv
 
 Gmv.query(
     time={"start": 1751328000000, "end": 1753920000000},  # unix ms
-    analysis_dimensions=["channel_id"],
+    group_by=["channel_id"],
 )
 ```
 
 `Gmv.__version__` and `Gmv.__dimensions__` come from the published definition.
 An undeclared or ambiguous dimension is refused locally. `start`/`end` must be
 integer Unix milliseconds; old `instant` and `step` fields are not accepted.
+`analysis_dimensions` is retained as a compatibility keyword, but both forms
+send the canonical runtime field `group_by`.
 The transport is `POST …/object-metrics/{metric_id}/data?version=N` and the
 result preserves the V1 `model`, `entries`, `status`, and `warnings` envelope.
 Fixed business qualifiers and statistical grain cannot be overridden at query time.

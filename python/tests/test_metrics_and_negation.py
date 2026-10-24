@@ -60,7 +60,13 @@ def deploy(monkeypatch: pytest.MonkeyPatch) -> Deploy:
 
 
 def test_v1_route_version_body_and_response(deploy: Deploy) -> None:
-    result = Gmv.query(time=WINDOW, analysis_dimensions=[CHANNEL], filter={"operation": "eq"})
+    filter_ast = {
+        "node_type": "predicate",
+        "left": {"source": "property", "property_ref": CHANNEL},
+        "comparison_operator": "eq",
+        "right": [{"source": "literal", "value_type": "string", "value": "online"}],
+    }
+    result = Gmv.query(time=WINDOW, group_by=[CHANNEL], filter=filter_ast)
 
     assert deploy.paths == [
         f"/api/ontology-query/v1/knowledge-networks/{KN}/object-metrics/m_gmv/data"
@@ -69,8 +75,8 @@ def test_v1_route_version_body_and_response(deploy: Deploy) -> None:
     assert deploy.bodies == [
         {
             "time": WINDOW,
-            "analysis_dimensions": [CHANNEL],
-            "filter": {"operation": "eq"},
+            "group_by": [CHANNEL],
+            "filter": filter_ast,
         }
     ]
     assert result == {"model": {}, "entries": [{"value": 42}], "status": "success"}
@@ -86,6 +92,47 @@ def test_optional_v1_instance_identities_and_branch(
     assert deploy.bodies == [{"instance_identities": [{"order_id": "o1"}]}]
 
 
+def test_analysis_dimensions_is_a_group_by_compatibility_alias(deploy: Deploy) -> None:
+    Gmv.query(analysis_dimensions=[CHANNEL])
+
+    assert deploy.bodies == [{"group_by": [CHANNEL]}]
+
+
+def test_current_query_choices_are_forwarded(deploy: Deploy) -> None:
+    Gmv.query(
+        having={"operator": "gt", "value": 0},
+        order_by=[{"field": "value", "direction": "desc"}],
+        page_size=20,
+        cursor="next-1",
+        bucket_selection={"parent_query": {"group_by": [CHANNEL]}, "bucket_key": "bucket-1"},
+    )
+
+    assert deploy.bodies == [
+        {
+            "having": {"operator": "gt", "value": 0},
+            "order_by": [{"field": "value", "direction": "desc"}],
+            "page_size": 20,
+            "cursor": "next-1",
+            "bucket_selection": {
+                "parent_query": {"group_by": [CHANNEL]},
+                "bucket_key": "bucket-1",
+            },
+        }
+    ]
+
+
+def test_group_by_aliases_are_mutually_exclusive(deploy: Deploy) -> None:
+    with pytest.raises(InputError, match="either group_by or analysis_dimensions"):
+        Gmv.query(group_by=[CHANNEL], analysis_dimensions=[CHANNEL])
+    assert deploy.bodies == []
+
+
+def test_cursor_requires_page_size(deploy: Deploy) -> None:
+    with pytest.raises(InputError, match="requires page_size"):
+        Gmv.query(cursor="next-1")
+    assert deploy.bodies == []
+
+
 def test_unversioned_class_fails_closed(deploy: Deploy) -> None:
     with pytest.raises(InputError, match="no published Object Metric V1 version"):
         Unversioned.query()
@@ -94,13 +141,13 @@ def test_unversioned_class_fails_closed(deploy: Deploy) -> None:
 
 def test_dimension_name_must_be_unambiguous(deploy: Deploy) -> None:
     with pytest.raises(InputError, match="uniquely"):
-        Gmv.query(analysis_dimensions=["channel_id"])
+        Gmv.query(group_by=["channel_id"])
     assert deploy.bodies == []
 
 
 def test_undeclared_dimension_ref_is_rejected(deploy: Deploy) -> None:
     with pytest.raises(InputError, match="does not declare"):
-        Gmv.query(analysis_dimensions=[{"object_type_id": "order", "property_name": "region"}])
+        Gmv.query(group_by=[{"object_type_id": "order", "property_name": "region"}])
     assert deploy.bodies == []
 
 

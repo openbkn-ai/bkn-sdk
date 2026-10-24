@@ -41,12 +41,22 @@ class Metric:
         cls,
         *,
         time: TimeWindow | None = None,
+        group_by: list[str | dict[str, str]] | None = None,
         analysis_dimensions: list[str | dict[str, str]] | None = None,
         filter: dict[str, Any] | None = None,
+        having: dict[str, Any] | None = None,
+        order_by: list[dict[str, Any]] | None = None,
+        page_size: int | None = None,
+        cursor: str | None = None,
+        bucket_selection: dict[str, Any] | None = None,
         instance_identities: list[dict[str, Any]] | None = None,
         context: Context | None = None,
     ) -> Any:
-        """Query the generated immutable version and return the V1 result envelope."""
+        """Query the generated immutable version and return the V1 result envelope.
+
+        ``analysis_dimensions`` remains a compatibility alias for ``group_by``;
+        both select from the published ``query_capabilities.analysis_dimensions``.
+        """
         from .http import request
         from .lifecycle import with_context_retry
 
@@ -62,12 +72,43 @@ class Metric:
         arguments: dict[str, Any] = {}
         if time is not None:
             arguments["time"] = _checked_time(time)
-        if analysis_dimensions is not None:
-            arguments["analysis_dimensions"] = cls._checked_dimensions(analysis_dimensions)
+        if group_by is not None and analysis_dimensions is not None:
+            raise InputError("Pass either group_by or analysis_dimensions, not both.")
+        requested_dimensions = group_by if group_by is not None else analysis_dimensions
+        if requested_dimensions is not None:
+            arguments["group_by"] = cls._checked_dimensions(requested_dimensions)
         if filter is not None:
             if not isinstance(filter, dict):
                 raise InputError("filter must be an Object Metric V1 condition AST object.")
             arguments["filter"] = filter
+        if having is not None:
+            if not isinstance(having, dict):
+                raise InputError("having must be an Object Metric V1 result predicate object.")
+            arguments["having"] = having
+        if order_by is not None:
+            if not isinstance(order_by, list) or any(
+                not isinstance(item, dict) for item in order_by
+            ):
+                raise InputError("order_by must be a list of Object Metric V1 ordering objects.")
+            arguments["order_by"] = order_by
+        if page_size is not None:
+            if (
+                isinstance(page_size, bool)
+                or not isinstance(page_size, int)
+                or not 1 <= page_size <= 1000
+            ):
+                raise InputError("page_size must be an integer from 1 to 1000.")
+            arguments["page_size"] = page_size
+        if cursor is not None:
+            if not isinstance(cursor, str) or not cursor:
+                raise InputError("cursor must be a non-empty string.")
+            if page_size is None:
+                raise InputError("cursor requires page_size.")
+            arguments["cursor"] = cursor
+        if bucket_selection is not None:
+            if not isinstance(bucket_selection, dict):
+                raise InputError("bucket_selection must be an Object Metric V1 selection object.")
+            arguments["bucket_selection"] = bucket_selection
         if instance_identities is not None:
             if not isinstance(instance_identities, list) or any(
                 not isinstance(item, dict) for item in instance_identities
@@ -105,7 +146,7 @@ class Metric:
                 ref = matches[0]
             elif isinstance(item, dict):
                 if any(not isinstance(value, str) for value in item.values()):
-                    raise InputError("analysis_dimensions property refs must contain strings.")
+                    raise InputError("group_by property refs must contain strings.")
                 ref = (
                     item.get("object_type_id", ""),
                     item.get("property_name", ""),
@@ -119,9 +160,7 @@ class Metric:
                         f"{cls.__name__} does not declare analysis dimension {item!r}."
                     )
             else:
-                raise InputError(
-                    "analysis_dimensions entries must be property names or V1 property refs."
-                )
+                raise InputError("group_by entries must be property names or V1 property refs.")
             value = {"object_type_id": ref[0], "property_name": ref[1]}
             if ref[2]:
                 value["relation_path_alias"] = ref[2]
