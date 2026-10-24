@@ -4,6 +4,7 @@
 /** `openbkn bkn …` — knowledge networks. */
 import { Command } from "commander";
 import type { CapabilityAttachEntry } from "../api/bkn-backend.js";
+import type { ObjectMetricQuery, ObjectMetricTrial } from "../api/object-metrics.js";
 import { group, groupChildren, guide } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT } from "../types.js";
 import { type CapabilityCheck, validateBknDirectory } from "../utils/bkn-validate.js";
@@ -1360,7 +1361,7 @@ function registerObjectMetricCommands(bkn: Command): Command {
     printJson(
       await clientFrom(cmd).kn.objectMetricTrial(
         knId,
-        readBody(opts) as { definition: unknown; query: unknown },
+        readBody(opts) as unknown as ObjectMetricTrial,
         opts,
       ),
       outputOptions(cmd),
@@ -1376,10 +1377,15 @@ function registerObjectMetricCommands(bkn: Command): Command {
     ),
   ).action(async (knId: string, metricId: string, opts, cmd: Command) => {
     printJson(
-      await clientFrom(cmd).kn.objectMetricQuery(knId, metricId, readBody(opts), {
-        ...opts,
-        version: opts.metricVersion,
-      }),
+      await clientFrom(cmd).kn.objectMetricQuery(
+        knId,
+        metricId,
+        readBody(opts) as ObjectMetricQuery,
+        {
+          ...opts,
+          version: opts.metricVersion,
+        },
+      ),
       outputOptions(cmd),
     );
   });

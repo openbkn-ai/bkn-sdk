@@ -113,6 +113,10 @@ negative validation is a result, while HTTP errors and malformed responses rejec
 the promise. Object-type reads may omit `data_properties` when none exist;
 SDK reads preserve omission, and local validation and push-integrity checks accept it.
 
+Object Metric V1 query, recursive filter, result, and drill-through contracts are
+exported as TypeScript types. Runtime dimensions use `query.group_by`; choose its
+property refs from the definition's `query_capabilities.analysis_dimensions`.
+
 Importing the package has no side effects; `createClient` resolves config explicitly.
 
 ### Model invocation

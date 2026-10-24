@@ -76,19 +76,30 @@ import {
 } from "../api/knowledge-networks.js";
 import {
   type ListObjectMetricsOptions,
+  type ObjectMetricDrillThroughRequest,
+  type ObjectMetricLogicPropertyBinding,
   type ObjectMetricOptions,
+  type ObjectMetricQuery,
+  type ObjectMetricTrial,
   type ObjectMetricVersionOptions,
+  bindObjectMetricLogicProperty,
+  checkObjectMetricDeletion,
   createNextObjectMetricDraftVersion,
   createObjectMetricDraft,
   deleteObjectMetricDraft,
   deprecateObjectMetric,
+  drillThroughObjectMetric,
+  drillThroughObjectMetricTrial,
   getObjectMetric,
+  getObjectMetricCapabilities,
   listObjectMetricVersions,
   listObjectMetrics,
+  previewObjectMetric,
   publishObjectMetric,
   queryObjectMetric,
   trialObjectMetric,
   updateObjectMetricDraft,
+  upgradeObjectMetricLogicProperty,
   validateObjectMetric,
   validateSavedObjectMetric,
 } from "../api/object-metrics.js";
@@ -121,6 +132,7 @@ export function kn(ctx: RequestContext) {
       getActionExecution(ctx, knId, executionId),
     objectMetricList: (knId: string, opts?: ListObjectMetricsOptions) =>
       listObjectMetrics(ctx, knId, opts),
+    objectMetricCapabilities: () => getObjectMetricCapabilities(ctx),
     objectMetricGet: (
       knId: string,
       metricId: string,
@@ -138,21 +150,45 @@ export function kn(ctx: RequestContext) {
       deleteObjectMetricDraft(ctx, knId, metricId, opts),
     objectMetricValidate: (knId: string, definition: unknown, opts?: ObjectMetricOptions) =>
       validateObjectMetric(ctx, knId, definition, opts),
-    objectMetricTrial: (
-      knId: string,
-      trial: { definition: unknown; query: unknown },
-      opts?: ObjectMetricOptions,
-    ) => trialObjectMetric(ctx, knId, trial, opts),
+    objectMetricPreview: (knId: string, definition: unknown, opts?: ObjectMetricOptions) =>
+      previewObjectMetric(ctx, knId, definition, opts),
+    objectMetricTrial: (knId: string, trial: ObjectMetricTrial, opts?: ObjectMetricOptions) =>
+      trialObjectMetric(ctx, knId, trial, opts),
     objectMetricQuery: (
       knId: string,
       metricId: string,
-      query: unknown,
+      query: ObjectMetricQuery,
       opts: ObjectMetricVersionOptions,
     ) => queryObjectMetric(ctx, knId, metricId, query, opts),
+    objectMetricDrillThrough: (
+      knId: string,
+      metricId: string,
+      request: ObjectMetricDrillThroughRequest,
+      opts: ObjectMetricVersionOptions,
+    ) => drillThroughObjectMetric(ctx, knId, metricId, request, opts),
+    objectMetricTrialDrillThrough: (
+      knId: string,
+      request: ObjectMetricDrillThroughRequest & { definition: unknown },
+      opts?: ObjectMetricOptions,
+    ) => drillThroughObjectMetricTrial(ctx, knId, request, opts),
     objectMetricVersions: (knId: string, metricId: string, opts?: ObjectMetricOptions) =>
       listObjectMetricVersions(ctx, knId, metricId, opts),
     objectMetricNextDraft: (knId: string, metricId: string, opts?: ObjectMetricOptions) =>
       createNextObjectMetricDraftVersion(ctx, knId, metricId, opts),
+    objectMetricDeletionCheck: (knId: string, metricId: string, opts: ObjectMetricVersionOptions) =>
+      checkObjectMetricDeletion(ctx, knId, metricId, opts),
+    objectMetricBindLogicProperty: (
+      knId: string,
+      metricId: string,
+      binding: ObjectMetricLogicPropertyBinding,
+      opts: ObjectMetricVersionOptions,
+    ) => bindObjectMetricLogicProperty(ctx, knId, metricId, binding, opts),
+    objectMetricUpgradeLogicProperty: (
+      knId: string,
+      metricId: string,
+      propertyName: string,
+      opts: ObjectMetricVersionOptions,
+    ) => upgradeObjectMetricLogicProperty(ctx, knId, metricId, propertyName, opts),
     objectMetricValidateSaved: (knId: string, metricId: string, opts: ObjectMetricVersionOptions) =>
       validateSavedObjectMetric(ctx, knId, metricId, opts),
     objectMetricPublish: (knId: string, metricId: string, opts: ObjectMetricVersionOptions) =>

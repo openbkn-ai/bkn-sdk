@@ -151,11 +151,11 @@ from bkn.metrics import Gmv
 
 Gmv.query(
     time={"start": 1751328000000, "end": 1753920000000},  # Unix 毫秒
-    analysis_dimensions=["channel_id"],
+    group_by=["channel_id"],
 )
 ```
 
-`Gmv.__version__` 与 `Gmv.__dimensions__` 来自已发布定义；未声明或有歧义的维度会在请求前被拒绝。`start` / `end` 须为 Unix 毫秒整数；不再接受旧版 `instant` 和 `step`。
+`Gmv.__version__` 与 `Gmv.__dimensions__` 来自已发布定义；未声明或有歧义的维度会在请求前被拒绝。`start` / `end` 须为 Unix 毫秒整数；不再接受旧版 `instant` 和 `step`。`analysis_dimensions` 仍作为兼容参数保留，但两种写法在线路上都发送规范字段 `group_by`。
 
 传输走 `POST …/object-metrics/{metric_id}/data?version=N`，返回完整的 V1 `model`、`entries`、`status` 和 `warnings`。固定业务限定与统计粒度由指标定义决定，查询不能覆盖。
 
