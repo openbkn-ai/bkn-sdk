@@ -98,3 +98,8 @@ Update this table as each signal changes (e.g. live-parity count as commands are
 - `test/unit/vega-discovery.test.ts` verifies typed resource-level exact count
   failures, historical results without failure details, rejection of malformed
   resource IDs, and forward-compatible failure codes.
+
+- `test/unit/errors.test.ts` and `test/unit/context-loader.test.ts` verify shared
+  error-code propagation through MCP, structured-code precedence and receipt
+  retention, legacy lifecycle prefixes in JSON messages with safe user guidance,
+  bounded array details, and tolerance of ignored legacy solution and link fields.

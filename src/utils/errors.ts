@@ -207,8 +207,9 @@ function serverError(body: string): string {
 
 /**
  * Render one platform error envelope as a sentence: the human description, the
- * stable code that identifies it, and the suggested fix when the server offers
- * one. Services nest an inner envelope inside `details` as a string, so follow
+ * stable code that identifies it, and its details. Legacy `solution`,
+ * `error_link`, and `link` fields are ignored. Services nest an inner envelope
+ * inside `details` as a string, so follow
  * that one level down to the error that actually happened.
  *
  * Three shapes carry `error` as an object rather than a string: the BKN Trace
@@ -221,15 +222,18 @@ function describeEnvelope(j: Record<string, unknown>, depth = 0): string {
     const nested = describeErrorObject(j.error);
     if (nested) return nested;
   }
-  const description = text(j.description) || text(j.error) || text(j.detail) || text(j.message);
+  const sharedCode = text(j.error_code);
+  const description = sharedCode
+    ? text(j.description)
+    : text(j.description) || text(j.error) || text(j.detail) || text(j.message);
   const code = text(j.error_code) || text(j.code);
-  const solution = text(j.solution);
   const details = text(j.error_details) || text(j.details);
   // `error_details` is service-typed: vega answers with objects such as
   // `{active_ids: [...]}` that name exactly what blocked the call. Computed
   // independently of the prose `details`: an envelope can carry both, and the
   // id list is the part that says what to act on.
-  const structured = describeDetailsObject(j.error_details) || describeDetailsObject(j.details);
+  const structured =
+    describeStructuredDetails(j.error_details) || describeStructuredDetails(j.details);
 
   const inner = depth < 2 ? innerEnvelope(details, depth) : "";
   const parts = [
@@ -237,7 +241,6 @@ function describeEnvelope(j: Record<string, unknown>, depth = 0): string {
     description && code ? `[${code}]` : "",
     inner || (details && details !== description ? truncate(details, 200) : ""),
     structured ? `(${structured})` : "",
-    solution && solution !== description ? `— ${solution}` : "",
   ].filter(Boolean);
   return parts.join(" ");
 }
@@ -273,10 +276,18 @@ function describeErrorObject(e: Record<string, unknown>): string {
     .join(" ");
 }
 
-/** A compact one-line view of an object-valued `error_details` / `details`. */
-function describeDetailsObject(value: unknown): string {
-  if (!isPlainObject(value)) return "";
+/** A bounded one-line view of object or array `error_details` / `details`. */
+function describeStructuredDetails(value: unknown): string {
   const MAX_ITEMS = 10;
+  if (Array.isArray(value)) {
+    const shown = value
+      .slice(0, MAX_ITEMS)
+      .map((item) => (typeof item === "object" ? JSON.stringify(item) : String(item)))
+      .join(", ");
+    const more = value.length > MAX_ITEMS ? ` (+${value.length - MAX_ITEMS} more)` : "";
+    return truncate(shown + more, 300);
+  }
+  if (!isPlainObject(value)) return "";
   const parts = Object.entries(value).flatMap(([key, v]) => {
     if (v === null || v === undefined || v === "") return [];
     if (Array.isArray(v) && v.every((x) => x === null || typeof x !== "object")) {
