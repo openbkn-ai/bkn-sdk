@@ -1199,3 +1199,143 @@ describe("slim receipts (foundry #1417)", () => {
     expect(calls).toEqual(["bkn_start_interaction", "search_capabilities"]);
   });
 });
+
+describe("shared MCP error envelopes", () => {
+  it.each(["message", "error", "description"])(
+    "recognizes a lifecycle prefix in a JSON %s field without exposing diagnostics",
+    async (field) => {
+      const result = {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              [field]: "interaction_terminal: query=private-argument",
+            }),
+          },
+        ],
+      };
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: string | URL) =>
+          String(input).endsWith("/mcp/info")
+            ? new Response(JSON.stringify({ tools: [] }))
+            : new Response(JSON.stringify({ jsonrpc: "2.0", result }), {
+                headers: { "mcp-session-id": `legacy-prefix-${field}` },
+              }),
+        ),
+      );
+      const error = await callTool(ctx, `kn-legacy-prefix-${field}`, "search_schema", {}).catch(
+        (reason: unknown) => reason,
+      );
+      expect(error).toBeInstanceOf(ToolError);
+      expect(error).toMatchObject({ code: "interaction_terminal" });
+      expect(formatError(error)).toContain("Start a new interaction");
+      expect(formatError(error)).not.toContain("private-argument");
+    },
+  );
+
+  it.each([
+    {
+      name: "text envelope",
+      structuredContent: undefined,
+      want: "agentRetrieval.InvalidParameter",
+    },
+    {
+      name: "structured envelope",
+      structuredContent: { error_code: "agentRetrieval.Structured" },
+      want: "agentRetrieval.Structured",
+    },
+    {
+      name: "structured lifecycle code",
+      structuredContent: { error: { code: "permission_denied" } },
+      want: "permission_denied",
+    },
+    {
+      name: "legacy structured code",
+      structuredContent: { code: "Public.BadRequest" },
+      want: "Public.BadRequest",
+    },
+    {
+      name: "blank structured code",
+      structuredContent: { error_code: " " },
+      want: "agentRetrieval.InvalidParameter",
+    },
+    {
+      name: "nonstring structured code",
+      structuredContent: { error_code: 400 },
+      want: "agentRetrieval.InvalidParameter",
+    },
+  ])(
+    "preserves the machine-readable code from $name",
+    async ({ name, structuredContent, want }) => {
+      const result = {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              error_code: "agentRetrieval.InvalidParameter",
+              description: "Bad query",
+              error_details: ["Check query"],
+            }),
+          },
+        ],
+        structuredContent,
+      };
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: string | URL) =>
+          String(input).endsWith("/mcp/info")
+            ? new Response(JSON.stringify({ tools: [] }))
+            : new Response(JSON.stringify({ jsonrpc: "2.0", result }), {
+                headers: { "mcp-session-id": `shared-${name}` },
+              }),
+        ),
+      );
+      const error = await callTool(ctx, `kn-shared-${name}`, "search_schema", {}).catch(
+        (reason: unknown) => reason,
+      );
+      expect(error).toBeInstanceOf(ToolError);
+      expect(error).toMatchObject({ code: want });
+      expect(formatError(error)).toContain("Bad query [agentRetrieval.InvalidParameter]");
+    },
+  );
+
+  it("preserves a shared text code alongside a verified failed receipt", async () => {
+    const receipt = {
+      receipt_id: "receipt-shared-code",
+      conversation_id: "conversation_supply_chain",
+      interaction_id: "interaction_june_forecast",
+      operation_id: "operation-shared-code",
+      receipt_status: "failed",
+    };
+    const result = {
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({ error_code: "agentRetrieval.Refused", description: "Refused" }),
+        },
+      ],
+      structuredContent: { bkn_receipt: receipt },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ jsonrpc: "2.0", result }), {
+            headers: { "mcp-session-id": "shared-receipt-session" },
+          }),
+      ),
+    );
+    const error = await callManagedTool(ctx, "kn-shared-code-receipt", "execute_tool", {
+      bkn_context: {
+        conversation_id: receipt.conversation_id,
+        interaction_id: receipt.interaction_id,
+      },
+    }).catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(ManagedToolError);
+    expect(error).toMatchObject({ code: "agentRetrieval.Refused", receipt });
+  });
+});

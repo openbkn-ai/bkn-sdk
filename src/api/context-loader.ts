@@ -248,11 +248,26 @@ function receiptFrom(structuredContent: unknown): ToolReceipt | undefined {
   return candidate;
 }
 
-function toolErrorCode(structuredContent: unknown): string | undefined {
-  const content = structuredContent as { code?: unknown; error?: { code?: unknown } } | undefined;
-  // Nested under `error` on older deploys; `ErrorCompact` puts it at the top.
-  const code = content?.error?.code ?? content?.code;
-  return typeof code === "string" ? code : lifecycleCodeInText(structuredContent);
+/** Read a code from the original shared or lifecycle envelope, before formatting. */
+function toolErrorCode(value: unknown): string | undefined {
+  let envelope = value;
+  if (typeof value === "string") {
+    try {
+      envelope = JSON.parse(value);
+    } catch {
+      return lifecycleCodeInText(value);
+    }
+  }
+  if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) return undefined;
+  const content = envelope as {
+    error_code?: unknown;
+    code?: unknown;
+    error?: { code?: unknown };
+  };
+  for (const code of [content.error_code, content.error?.code, content.code]) {
+    if (typeof code === "string" && code.trim()) return code.trim();
+  }
+  return undefined;
 }
 
 const LIFECYCLE_ERROR_CODES = new Set([
@@ -316,7 +331,7 @@ function unwrapToolResult(parsed: unknown, extractBusinessReceipt = true): Unwra
     const message = readableServerError(raw) || raw;
     const toolError = {
       message: `Context-loader error: ${message}`,
-      code: toolErrorCode(structuredContent) ?? lifecycleCodeInText(message),
+      code: toolErrorCode(structuredContent) ?? toolErrorCode(raw) ?? lifecycleCodeInText(message),
     };
     if (!receipt) throw new ToolError(toolError.message, toolError.code);
     return { value: null, receipt, toolError };

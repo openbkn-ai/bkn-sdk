@@ -3,8 +3,8 @@ import { HttpError, formatError, readableServerError } from "../../src/utils/err
 
 const body = (value: unknown) => JSON.stringify(value);
 
-describe("readableServerError: string envelopes (unchanged)", () => {
-  it("reads the comm-go BaseError envelope with code and solution", () => {
+describe("readableServerError: string envelopes", () => {
+  it("reads the comm-go BaseError envelope and ignores legacy guidance", () => {
     expect(
       readableServerError(
         body({
@@ -15,7 +15,7 @@ describe("readableServerError: string envelopes (unchanged)", () => {
           error_details: "",
         }),
       ),
-    ).toBe("catalog not found [Vega.Catalog.NotFound] — check the catalog id");
+    ).toBe("catalog not found [Vega.Catalog.NotFound]");
   });
 
   it("reads a plain string error and a compact code/description envelope", () => {
@@ -150,5 +150,115 @@ describe("readableServerError: object `error_details`", () => {
     expect(rendered).toBe(
       'missing [Vega.Missing] (missing_ids: id0, id1, id2, id3, id4, id5, id6, id7, id8, id9 (+2 more); dependency: {"kind":"catalog"})',
     );
+  });
+});
+
+describe("shared error migration", () => {
+  it("uses the error code when rendering leaves an empty description", () => {
+    expect(
+      readableServerError(
+        body({
+          error_code: "Vega.Query.Invalid",
+          description: "  ",
+          message: "generic HTTP failure",
+          metadata: { field: "title" },
+        }),
+      ),
+    ).toBe("Vega.Query.Invalid");
+  });
+  it("accepts new responses without legacy fields", () => {
+    expect(
+      readableServerError(
+        body({
+          error_code: "Vega.Query.Invalid",
+          description: "The query is invalid. Check its limit.",
+          error_details: "{{ literal }}",
+        }),
+      ),
+    ).toBe("The query is invalid. Check its limit. [Vega.Query.Invalid] {{ literal }}");
+  });
+  it("ignores legacy solution and error_link fields", () => {
+    expect(
+      readableServerError(
+        body({
+          error_code: "Vega.Query.Invalid",
+          description: "Bad query",
+          solution: "Check the limit",
+          error_link: "https://example.com/errors/query",
+        }),
+      ),
+    ).toBe("Bad query [Vega.Query.Invalid]");
+    expect(
+      readableServerError(
+        body({
+          error_code: "Vega.Query.Invalid",
+          description: "Bad query",
+          solution: { unused: true },
+          error_link: ["unused"],
+        }),
+      ),
+    ).toBe("Bad query [Vega.Query.Invalid]");
+  });
+});
+
+describe("structured error detail arrays", () => {
+  it("renders top-level scalar arrays without interpreting template text", () => {
+    expect(
+      readableServerError(
+        body({
+          error_code: "Vega.Invalid",
+          description: "Bad fields",
+          error_details: ["name is required", "{{ literal }}", 0, false, null],
+        }),
+      ),
+    ).toBe("Bad fields [Vega.Invalid] (name is required, {{ literal }}, 0, false, null)");
+  });
+
+  it("keeps object and nested array details readable", () => {
+    expect(
+      readableServerError(
+        body({
+          error_code: "Vega.Invalid",
+          description: "Bad fields",
+          error_details: [{ field: "name", reason: "required" }, ["limit", 10]],
+        }),
+      ),
+    ).toBe('Bad fields [Vega.Invalid] ({"field":"name","reason":"required"}, ["limit",10])');
+  });
+
+  it("bounds top-level array items and output length", () => {
+    expect(
+      readableServerError(
+        body({
+          error_code: "Vega.Invalid",
+          description: "Bad fields",
+          error_details: Array.from({ length: 12 }, (_, i) => `field${i}`),
+        }),
+      ),
+    ).toBe(
+      "Bad fields [Vega.Invalid] (field0, field1, field2, field3, field4, field5, field6, field7, field8, field9 (+2 more))",
+    );
+    const rendered = readableServerError(
+      body({
+        error_code: "Vega.Invalid",
+        description: "Bad fields",
+        error_details: ["x".repeat(1000)],
+      }),
+    );
+    expect(rendered).toContain("xxx");
+    expect(rendered.length).toBeLessThanOrEqual("Bad fields [Vega.Invalid] ()".length + 301);
+  });
+
+  it("ignores empty arrays and unknown legacy link fields", () => {
+    expect(
+      readableServerError(
+        body({
+          code: "Public.BadRequest",
+          description: "Bad input",
+          details: [],
+          link: { unused: true },
+        }),
+      ),
+    ).toBe("Bad input [Public.BadRequest]");
   });
 });
