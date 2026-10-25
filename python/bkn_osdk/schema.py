@@ -13,9 +13,8 @@ than from the MCP `get_kn_detail` tool: that one is the agent-facing
 progressive-disclosure surface, subject to dedup and the lifecycle contract, and
 is the wrong source of truth for codegen.
 
-The canonical prefix is `/api/bkn-backend/v1`. `/api/ontology-manager/v1` still
-answers on the deploys reachable so far, but foundry's API README documents it
-as a monorepo-refactor alias kept only until external callers move off it.
+The supported prefix is `/api/bkn-backend/v1`; the former
+`/api/ontology-manager/v1` compatibility alias has been retired.
 """
 
 from __future__ import annotations

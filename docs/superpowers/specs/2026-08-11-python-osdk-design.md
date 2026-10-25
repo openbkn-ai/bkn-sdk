@@ -96,13 +96,12 @@ dict-iteration-order dependence.
 
 ## Generation source
 
-Schema comes from **ontology-manager REST** — the authoritative schema layer, which needs
+Schema comes from **bkn-backend REST** — the authoritative schema layer, which needs
 no managed lifecycle session:
 
-- `GET /api/bkn-backend/v1/knowledge-networks/{id}` — network metadata. The
-  `/api/ontology-manager/v1` prefix still answers but is a monorepo-refactor
-  alias, kept only until external callers move off it.
-- `GET …/{id}/object-types?branch=main&limit=-1` — [`api/knowledge-networks.ts:251`](../../../src/api/knowledge-networks.ts#L251).
+- `GET /api/bkn-backend/v1/knowledge-networks/{id}` — network metadata. The former
+  `/api/ontology-manager/v1` monorepo-refactor alias has been retired.
+- `GET …/{id}/object-types?branch=main&limit=-1` — [`api/knowledge-networks.ts:485`](../../../src/api/knowledge-networks.ts#L485).
 - `GET …/{id}/relation-types?branch=main&limit=-1` — same file, `listRelationTypes`.
 
 Not the MCP `get_kn_detail` tool: that is the agent-facing progressive-disclosure surface,
