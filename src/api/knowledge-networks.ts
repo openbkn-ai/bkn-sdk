@@ -3,8 +3,7 @@
 
 /**
  * Knowledge-network backend client (bkn-backend + ontology-query + agent-retrieval).
- * `/api/ontology-manager/v1` is a compat alias of `/api/bkn-backend/v1`; the
- * canonical prefix is the latter.
+ * bkn-backend requests use its canonical `/api/bkn-backend/v1` prefix.
  * Responses are passed through as parsed JSON
  * (shapes vary by backend version — validate at higher layers as needed).
  */
