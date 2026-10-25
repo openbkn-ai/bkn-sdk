@@ -101,7 +101,7 @@ no managed lifecycle session:
 
 - `GET /api/bkn-backend/v1/knowledge-networks/{id}` — network metadata. The former
   `/api/ontology-manager/v1` monorepo-refactor alias has been retired.
-- `GET …/{id}/object-types?branch=main&limit=-1` — [`api/knowledge-networks.ts:251`](../../../src/api/knowledge-networks.ts#L251).
+- `GET …/{id}/object-types?branch=main&limit=-1` — [`api/knowledge-networks.ts:485`](../../../src/api/knowledge-networks.ts#L485).
 - `GET …/{id}/relation-types?branch=main&limit=-1` — same file, `listRelationTypes`.
 
 Not the MCP `get_kn_detail` tool: that is the agent-facing progressive-disclosure surface,

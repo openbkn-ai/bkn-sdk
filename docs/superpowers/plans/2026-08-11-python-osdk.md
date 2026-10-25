@@ -31,7 +31,7 @@ and phase 4 has none on the runtime — they can proceed in parallel if two peop
 
 ## 3. Schema fetch and models
 
-1. `schema.py`: fetch network metadata, object types, and relation types from ontology-manager
+1. `schema.py`: fetch network metadata, object types, and relation types from bkn-backend
    REST (`branch`, `limit=-1`), and parse into frozen dataclasses — `KnSchema`, `ObjectTypeDef`,
    `PropertyDef`, `RelationTypeDef`.
 2. Capture the real responses from the live KN `ecommerce_ops_bkn_public` into
