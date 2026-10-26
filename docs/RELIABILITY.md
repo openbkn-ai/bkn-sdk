@@ -36,6 +36,9 @@ Runtime expectations for the SDK and CLI as a client of the BKN backend.
 ## Errors & exit codes
 
 - `api/` maps HTTP/network failures to typed errors; `utils/errors` maps those to user messages + non-zero exit codes.
+- Independent Trace HTTP errors preserve their public `message` when the DTO
+  carries matching code aliases and `trace_id` without a shared `description`
+  property. Explicit blank shared descriptions still fall back to the code.
 - Auth failures (401/403) tell the user to re-login, not just "request failed".
 - Stored refresh credentials allow one refresh and one retry after a 401. The retry
   rebuilds Authorization from the refreshed token and preserves the request body

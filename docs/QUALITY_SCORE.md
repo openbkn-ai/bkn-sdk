@@ -103,3 +103,8 @@ Update this table as each signal changes (e.g. live-parity count as commands are
   error-code propagation through MCP, structured-code precedence and receipt
   retention, legacy lifecycle prefixes in JSON messages with safe user guidance,
   bounded array details, and tolerance of ignored legacy solution and link fields.
+
+- `test/unit/errors.test.ts` pairs independent Trace HTTP envelopes with shared
+  Error controls: eight bilingual reasons reach actual `formatError` output,
+  while explicit blank/null shared descriptions keep the stable code fallback.
+  Trace details and metadata handling remain independent of the reason field.

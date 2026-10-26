@@ -223,8 +223,17 @@ function describeEnvelope(j: Record<string, unknown>, depth = 0): string {
     if (nested) return nested;
   }
   const sharedCode = text(j.error_code);
+  // The independent Trace DTO has matching aliases and trace_id, but no
+  // shared description property. Explicit blank/null descriptions stay shared.
+  const traceEnvelope =
+    sharedCode &&
+    text(j.code) === sharedCode &&
+    typeof j.trace_id === "string" &&
+    !Object.hasOwn(j, "description");
   const description = sharedCode
-    ? text(j.description)
+    ? traceEnvelope
+      ? text(j.message)
+      : text(j.description)
     : text(j.description) || text(j.error) || text(j.detail) || text(j.message);
   const code = text(j.error_code) || text(j.code);
   const details = text(j.error_details) || text(j.details);
