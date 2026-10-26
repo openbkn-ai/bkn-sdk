@@ -262,3 +262,46 @@ describe("structured error detail arrays", () => {
     ).toBe("Bad input [Public.BadRequest]");
   });
 });
+
+describe("independent Trace HTTP errors", () => {
+  it.each([
+    ["INVALID_ARGUMENT", "limit 必须是 1 到 200 之间的整数"],
+    ["INVALID_ARGUMENT", "limit must be an integer between 1 and 200"],
+    ["INVALID_ARGUMENT", "from 必须是 RFC3339 时间戳"],
+    ["INVALID_ARGUMENT", "from must be an RFC3339 timestamp"],
+    ["INVALID_ARGUMENT", "page_size 必须是 1 到 200 之间的整数"],
+    ["INVALID_ARGUMENT", "page_size must be an integer between 1 and 200"],
+    ["NOT_FOUND", "Trace 不存在"],
+    ["NOT_FOUND", "trace not found"],
+  ])("formats Trace %s reason %s", (code, message) => {
+    const error = new HttpError(
+      code === "NOT_FOUND" ? 404 : 400,
+      "",
+      body({ error_code: code, code, message, trace_id: "trace-test" }),
+    );
+    expect(formatError(error)).toContain(`${message} [${code}]`);
+  });
+  it.each(["", null, " "])(
+    "keeps an explicit shared description %j authoritative",
+    (description) => {
+      expect(
+        readableServerError(
+          body({
+            error_code: "INVALID_ARGUMENT",
+            code: "INVALID_ARGUMENT",
+            message: "Trace-like message",
+            trace_id: "",
+            description,
+          }),
+        ),
+      ).toBe("INVALID_ARGUMENT");
+    },
+  );
+  it.each([
+    { error_code: "INVALID_ARGUMENT", message: "generic" },
+    { error_code: "INVALID_ARGUMENT", code: "other", message: "generic", trace_id: "" },
+    { error_code: "INVALID_ARGUMENT", code: "INVALID_ARGUMENT", message: "", trace_id: "" },
+  ])("retains code fallback for %j", (data) => {
+    expect(readableServerError(body(data))).toBe("INVALID_ARGUMENT");
+  });
+});
