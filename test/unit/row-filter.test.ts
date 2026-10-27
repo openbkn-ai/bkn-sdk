@@ -48,6 +48,21 @@ const snapshotWire = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("row-filter management API", () => {
+  it("accepts 128-character resource ID segments and rejects 129 characters", async () => {
+    const longRef = `${"k".repeat(128)}/${"o".repeat(128)}`;
+    const fetchMock = mockFetch({ ...snapshotWire, object_type_ref: longRef });
+
+    await expect(
+      getRowFilterPolicySafe(ctx, { ...target, objectTypeRef: longRef }),
+    ).resolves.toEqual(expect.objectContaining({ objectTypeRef: longRef }));
+    expect(fetchMock).toHaveBeenCalledOnce();
+
+    await expect(
+      getRowFilterPolicySafe(ctx, { ...target, objectTypeRef: `${"k".repeat(129)}/order` }),
+    ).rejects.toThrow(/canonical/);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it("gets one policy with canonical query names and maps the snapshot", async () => {
     const fetchMock = mockFetch(snapshotWire);
 

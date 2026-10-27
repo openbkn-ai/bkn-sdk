@@ -14,8 +14,8 @@ import { basename, join, resolve } from "node:path";
 import yaml from "js-yaml";
 import type { DataPropertyMaskRule } from "../types.js";
 
-// validateObjectName parity: ISF caps BKN object names at 40 utf-8 codepoints.
-export const BKN_OBJECT_NAME_MAX_LENGTH = 40;
+// validateObjectName parity: BKN resource names are capped at 128 Unicode codepoints.
+export const BKN_RESOURCE_NAME_MAX_LENGTH = 128;
 
 /**
  * A declared capability that push is certain to leave unbound, on whatever platform receives
@@ -89,6 +89,17 @@ function bknFiles(dir: string): string[] {
   return readdirSync(dir)
     .filter((f) => f.endsWith(".bkn"))
     .map((f) => join(dir, f));
+}
+
+function validateResourceName(
+  name: string | undefined,
+  rel: string,
+  resourceType: string,
+): string[] {
+  if (!name || [...name].length <= BKN_RESOURCE_NAME_MAX_LENGTH) return [];
+  return [
+    `${rel}: ${resourceType} name exceeds ${BKN_RESOURCE_NAME_MAX_LENGTH} codepoints ('${name}').`,
+  ];
 }
 
 const STRUCTURED_TABLE_SECTIONS = {
@@ -576,6 +587,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
         errors.push(`network.bkn type must be 'knowledge_network', got '${fm.type ?? ""}'.`);
       if (!fm.id) errors.push("network.bkn is missing 'id'.");
       if (!fm.name) errors.push("network.bkn is missing 'name'.");
+      errors.push(...validateResourceName(fm.name, "network.bkn", "knowledge_network"));
       capabilities = checkCapabilities(networkText, warnings);
     }
   }
@@ -594,11 +606,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
     }
     if (!fm.id) errors.push(`${rel}: object_type missing 'id'.`);
     if (!fm.name) errors.push(`${rel}: object_type missing 'name'.`);
-    if (fm.name && [...fm.name].length > BKN_OBJECT_NAME_MAX_LENGTH) {
-      errors.push(
-        `${rel}: object_type name exceeds ${BKN_OBJECT_NAME_MAX_LENGTH} codepoints ('${fm.name}').`,
-      );
-    }
+    errors.push(...validateResourceName(fm.name, rel, "object_type"));
     if (fm.id) {
       if (otIds.has(fm.id)) errors.push(`Duplicate object_type id '${fm.id}'.`);
       otIds.add(fm.id);
@@ -618,6 +626,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
       continue;
     }
     if (!fm.id) errors.push(`${rel}: relation_type missing 'id'.`);
+    errors.push(...validateResourceName(fm.name, rel, "relation_type"));
     for (const { source, target } of endpointRefs(text)) {
       if (otIds.size > 0 && !otIds.has(source))
         warnings.push(`${rel}: endpoint source '${source}' is not a known object_type.`);
@@ -630,8 +639,15 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
   for (const kind of ["action_types", "concept_groups", "risk_types"] as const) {
     for (const file of kind === "concept_groups" ? cgFiles : bknFiles(join(dir, kind))) {
       const text = readFileSync(file, "utf8");
-      errors.push(...validateMarkdownTables(text, file.slice(dir.length + 1), kind));
+      const rel = file.slice(dir.length + 1);
+      errors.push(...validateMarkdownTables(text, rel, kind));
+      errors.push(...validateResourceName(parseFrontmatter(text)?.name, rel, kind.slice(0, -1)));
     }
+  }
+  for (const file of bknFiles(join(dir, "value_types"))) {
+    const text = readFileSync(file, "utf8");
+    const rel = file.slice(dir.length + 1);
+    errors.push(...validateResourceName(parseFrontmatter(text)?.name, rel, "value_type"));
   }
 
   if (existsSync(join(dir, "metrics"))) {
