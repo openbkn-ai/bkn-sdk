@@ -96,7 +96,7 @@ def main() -> None:
         counted = flat(
             attempt(
                 "run_sql",
-                lambda: kn.run_sql(network, "SELECT COUNT(*) AS n FROM {{." + resource + "}}"),
+                lambda: kn.run_sql(network, "SELECT COUNT(*) AS n FROM {{" + resource + "}}"),
             )
         )
         if counted:
