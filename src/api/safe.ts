@@ -497,7 +497,7 @@ export interface RowFilterExplanation {
   rolePolicies?: RowFilterPolicySource[];
 }
 
-const objectTypeRefPattern = /^[a-z0-9][a-z0-9_-]{0,39}\/[a-z0-9][a-z0-9_-]{0,39}$/;
+const objectTypeRefPattern = /^[a-z0-9][a-z0-9_-]{0,127}\/[a-z0-9][a-z0-9_-]{0,127}$/;
 const propertyNamePattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,39}$/;
 const rowFilterScalarSchema = z.union([
   z.string(),

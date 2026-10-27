@@ -96,16 +96,36 @@ describe("bkn validate", () => {
     expect(r.errors.join()).toContain("Missing network.bkn");
   });
 
-  it("flags an over-long object-type name and duplicate ids", () => {
-    const long = "x".repeat(41);
+  it("accepts 128-codepoint names for every BKN resource kind", () => {
+    const longName = "名".repeat(128);
     const dir = bkn({
-      "network.bkn": "---\ntype: knowledge_network\nid: k\nname: K\n---\n",
+      "network.bkn": `---\ntype: knowledge_network\nid: kn1\nname: ${longName}\n---\n`,
+      "object_types/a.bkn": ot("a", longName),
+      "relation_types/r.bkn": `---\ntype: relation_type\nid: r\nname: ${longName}\n---\n`,
+      "action_types/a.bkn": `---\ntype: action_type\nid: a\nname: ${longName}\n---\n`,
+      "concept_groups/c.bkn": `---\ntype: concept_group\nid: c\nname: ${longName}\n---\n`,
+      "risk_types/r.bkn": `---\ntype: risk_type\nid: r\nname: ${longName}\n---\n`,
+      "value_types/v.bkn": `---\ntype: value_type\nid: v\nname: ${longName}\n---\n`,
+    });
+
+    expect(validateBknDirectory(dir).valid).toBe(true);
+  });
+
+  it("flags a 129-codepoint resource name and duplicate object-type ids", () => {
+    const long = "名".repeat(129);
+    const dir = bkn({
+      "network.bkn": `---\ntype: knowledge_network\nid: k\nname: ${long}\n---\n`,
       "object_types/a.bkn": ot("dup", long),
       "object_types/b.bkn": ot("dup", "Beta"),
+      "relation_types/r.bkn": `---\ntype: relation_type\nid: r\nname: ${long}\n---\n`,
+      "action_types/a.bkn": `---\ntype: action_type\nid: a\nname: ${long}\n---\n`,
+      "concept_groups/c.bkn": `---\ntype: concept_group\nid: c\nname: ${long}\n---\n`,
+      "risk_types/r.bkn": `---\ntype: risk_type\nid: r\nname: ${long}\n---\n`,
+      "value_types/v.bkn": `---\ntype: value_type\nid: v\nname: ${long}\n---\n`,
     });
     const r = validateBknDirectory(dir);
     expect(r.valid).toBe(false);
-    expect(r.errors.some((e) => e.includes("exceeds"))).toBe(true);
+    expect(r.errors.filter((e) => e.includes("exceeds"))).toHaveLength(7);
     expect(r.errors.some((e) => e.includes("Duplicate object_type id"))).toBe(true);
   });
 
