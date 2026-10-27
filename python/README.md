@@ -377,7 +377,7 @@ also generated, from foundry's own OpenAPI:
 from bkn_osdk import kn
 
 kn.list_resources(KN_ID)
-kn.run_sql(KN_ID, "SELECT COUNT(*) AS n FROM {{.d9hff…}}")
+kn.run_sql(KN_ID, "SELECT COUNT(*) AS n FROM {{d9hff…}}")
 kn.run_cypher(
     KN_ID,
     "MATCH (o:order)-[:rel_order_customer]->(c:customer) RETURN c.city AS city, count(*) AS n",

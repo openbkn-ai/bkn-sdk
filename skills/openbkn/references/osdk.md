@@ -23,7 +23,7 @@ import bkn_osdk
 bkn_osdk.call("/api/agent-observability/v1/traces", query={"limit": 10})
 bkn_osdk.tool_catalog(bkn_osdk.resolve_context())      # 这个部署公布了什么
 from bkn_osdk import kn
-kn.run_sql(KN_ID, "SELECT COUNT(*) AS n FROM {{.<resource_id>}}")
+kn.run_sql(KN_ID, "SELECT COUNT(*) AS n FROM {{<resource_id>}}")
 
 # 本体层：某个知识网络的本体 —— 从它的 schema 生成的类
 import bkn
@@ -97,7 +97,7 @@ kn.query_object_instance(KN_ID, "order", limit=10, response_format="json")
 
 **1. 聚合不在对象集上。** 没有 `sum()` / `group_by()`，因为平台没有这个端点。
 聚合走指标（`bkn.Gmv.query(...)`）或 `kn.run_sql(...)`；后者表名写
-`{{.<resource_id>}}` 占位符，resource_id 从 `kn.search_schema(..., include_columns=True)`
+`{{<resource_id>}}` 占位符，resource_id 从 `kn.search_schema(..., include_columns=True)`
 的 `data_source.id` 取，**不是物理表名**。
 
 **2. 能力面必须带 turn，读路径不用。** MCP 工具与 `/kn/` REST 拒绝无上下文调用；
