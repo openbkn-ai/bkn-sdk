@@ -720,6 +720,43 @@ describe("deleteCatalog", () => {
 });
 
 describe("runSql", () => {
+  it.each([undefined, ""])("preserves the SQL default for dialect %s", async (dialect) => {
+    const fetchMock = mockFetch({ entries: [] });
+    const body = {
+      query_format: "sql",
+      query: "SELECT * FROM {{r-1}}",
+      ...(dialect === undefined ? {} : { input_dialect: dialect }),
+    } as RawQueryRequest;
+    await runSql(ctx, body);
+    expect(JSON.parse(firstCall(fetchMock)[1].body as string)).toEqual(body);
+  });
+
+  it.each([
+    ["sql", "MYSQL"],
+    ["sql", "MySQL"],
+    ["sql", "mYsQl"],
+    ["sql", "MariaDB"],
+    ["sql", "TSQL"],
+    ["sql", "Oracle"],
+    ["sql", "DORIS"],
+    ["sql", "Generic"],
+    ["dsl", "OpenSearch"],
+    ["dsl", "oPeNsEaRcH"],
+  ] as const)("normalizes %s dialect %s before HTTP", async (format, dialect) => {
+    const fetchMock = mockFetch({ entries: [] });
+    const body = {
+      query_format: format,
+      query: format === "sql" ? "SELECT * FROM {{r-1}}" : { match_all: {} },
+      input_dialect: dialect,
+    } as unknown as RawQueryRequest;
+    await runSql(ctx, body);
+    expect(JSON.parse(firstCall(fetchMock)[1].body as string)).toEqual({
+      ...body,
+      input_dialect: dialect.toLowerCase(),
+    });
+    expect(body).toHaveProperty("input_dialect", dialect);
+  });
+
   it.each(["postgres", "Postgres", "POSTGRES", "trino", "duckdb", "TRINO", "DuckDB"])(
     "rejects explicit %s before HTTP",
     async (dialect) => {
@@ -738,8 +775,8 @@ describe("runSql", () => {
     },
   );
 
-  it.each(["tsql", "oracle", "doris", "generic"] as const)(
-    "preserves EE %s input",
+  it.each(["mysql", "mariadb", "tsql", "oracle", "doris", "generic"] as const)(
+    "preserves supported %s input",
     async (dialect) => {
       const fetchMock = mockFetch({ entries: [] });
       await runSql(ctx, {

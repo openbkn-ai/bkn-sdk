@@ -509,7 +509,7 @@ interface RawQueryInitialBase {
 export interface SqlRawQueryRequest extends RawQueryInitialBase {
   query: string;
   query_format: "sql";
-  /** SQL input dialect; defaults to mysql server-side. */
+  /** SQL input dialect; matched case-insensitively and sent in lowercase. Defaults to mysql server-side. */
   input_dialect?: "mysql" | "mariadb" | "tsql" | "oracle" | "doris" | "generic";
 }
 
@@ -532,6 +532,7 @@ export type SqlQueryRequest = RawQueryRequest;
  * connector to use. `POST /api/vega-backend/v1/resources/query`.
  */
 export async function runSql(ctx: RequestContext, body: RawQueryRequest): Promise<unknown> {
+  let requestBody = body;
   if (
     body &&
     typeof body === "object" &&
@@ -549,10 +550,11 @@ export async function runSql(ctx: RequestContext, body: RawQueryRequest): Promis
         "unsupported input_dialect; SQL supports mysql, mariadb, tsql, oracle, doris or generic; DSL requires opensearch",
       );
     }
+    requestBody = { ...body, input_dialect: dialect } as RawQueryRequest;
   }
   return request(ctx, `${VEGA_BASE}/resources/query`, {
     method: "POST",
-    body,
+    body: requestBody,
     responseParser: parseBigIntJSON,
   });
 }

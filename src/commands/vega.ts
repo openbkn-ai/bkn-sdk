@@ -958,8 +958,7 @@ export function vegaCommand(): Command {
     )
     .option(
       "--input-dialect <dialect>",
-      "SQL input dialect: mysql | mariadb | tsql | oracle | doris | generic",
-      oneOf("--input-dialect", ["mysql", "mariadb", "tsql", "oracle", "doris", "generic"] as const),
+      "SQL input dialect (case-insensitive): mysql | mariadb | tsql | oracle | doris | generic",
     )
     .option(
       "--paging-mode <mode>",

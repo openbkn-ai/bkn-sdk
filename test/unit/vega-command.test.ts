@@ -1346,7 +1346,7 @@ describe("vega flag validation against the contract enums", () => {
     [["resource", "list", "--direction", "up"], /--direction must be one of/],
     [["build-task", "list", "--mode", "stream"], /--mode must be one of/],
     [["sql", "--query", "SELECT 1", "--keep-alive-sec", "30"], /60 to 3600/],
-    [["sql", "--query", "SELECT 1", "--input-dialect", "hana"], /--input-dialect must be one of/],
+    [["sql", "--query", "SELECT 1", "--input-dialect", "hana"], /unsupported input_dialect/],
     [["resource", "query", "r-1", "--keep-alive-sec", "4000"], /60 to 3600/],
     [["resource", "query", "r-1", "--binary-mode", "raw"], /--binary-mode must be one of/],
     [
@@ -1396,7 +1396,7 @@ describe("vega flag validation against the contract enums", () => {
     expect(url.searchParams.get("health_check_status")).toBe("healthy");
   });
 
-  it.each(["postgres", "trino", "duckdb"])(
+  it.each(["postgres", "Postgres", "POSTGRES", "trino", "TRINO", "duckdb", "DuckDB"])(
     "rejects %s input from flags and advanced JSON before HTTP",
     async (dialect) => {
       const fetchMock = mockFetch();
@@ -1420,20 +1420,64 @@ describe("vega flag validation against the contract enums", () => {
     },
   );
 
-  it.each(["mysql", "mariadb", "tsql", "oracle", "doris", "generic"])(
-    "accepts supported %s SQL input",
-    async (dialect) => {
-      const fetchMock = mockFetch({ entries: [] });
-      suppressOutput();
-      await cli().parseAsync(
-        [...cliBase, "sql", "--query", "SELECT * FROM {{r-1}}", "--input-dialect", dialect],
-        { from: "user" },
-      );
-      expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
-        input_dialect: dialect,
+  it.each([
+    "mysql",
+    "mariadb",
+    "tsql",
+    "oracle",
+    "doris",
+    "generic",
+    "MYSQL",
+    "MySQL",
+    "mYsQl",
+    "MariaDB",
+    "TSQL",
+    "Oracle",
+    "DORIS",
+    "Generic",
+  ])("accepts supported %s SQL input", async (dialect) => {
+    const fetchMock = mockFetch({ entries: [] });
+    suppressOutput();
+    for (const args of [
+      ["--query", "SELECT * FROM {{r-1}}", "--input-dialect", dialect],
+      [
+        "--data",
+        JSON.stringify({
+          query_format: "sql",
+          query: "SELECT * FROM {{r-1}}",
+          input_dialect: dialect,
+        }),
+      ],
+    ]) {
+      await cli().parseAsync([...cliBase, "sql", ...args], { from: "user" });
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const call of fetchMock.mock.calls) {
+      expect(JSON.parse(call[1]?.body as string)).toMatchObject({
+        input_dialect: dialect.toLowerCase(),
       });
-    },
-  );
+    }
+  });
+
+  it("normalizes the DSL dialect from advanced JSON before HTTP", async () => {
+    const fetchMock = mockFetch({ entries: [] });
+    suppressOutput();
+    const query = { resource_id: "r-1", query: { match_all: {} } };
+    await cli().parseAsync(
+      [
+        ...cliBase,
+        "sql",
+        "--data",
+        JSON.stringify({ query_format: "dsl", query, input_dialect: "oPeNsEaRcH" }),
+      ],
+      { from: "user" },
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      query_format: "dsl",
+      query,
+      input_dialect: "opensearch",
+    });
+  });
 
   it("omits input_dialect so the server applies its MySQL default", async () => {
     const fetchMock = mockFetch({ entries: [] });
