@@ -97,6 +97,8 @@ Update this table as each signal changes (e.g. live-parity count as commands are
   distinguishes candidate source loaded for one verification call from the SDK
   actually pinned in the running sandbox image.
 
+- `test/unit/vega.test.ts` and `vega-command.test.ts` reject unsupported SQL input dialects before HTTP, including case variants and the advanced CLI JSON body. SQL retains the MySQL default and EE `tsql`/`oracle`/`doris`/`generic` inputs, while rejecting `postgres`/`trino`/`duckdb`; DSL uses `opensearch`.
+
 - `test/unit/vega.test.ts` checks Catalog deletion `will_delete` task-record totals,
   empty catalogs, and rejection of cancellation-only responses.
 

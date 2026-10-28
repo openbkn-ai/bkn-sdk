@@ -510,15 +510,7 @@ export interface SqlRawQueryRequest extends RawQueryInitialBase {
   query: string;
   query_format: "sql";
   /** SQL input dialect; defaults to mysql server-side. */
-  input_dialect?:
-    | "postgres"
-    | "mysql"
-    | "mariadb"
-    | "trino"
-    | "duckdb"
-    | "tsql"
-    | "oracle"
-    | "generic";
+  input_dialect?: "mysql" | "mariadb" | "tsql" | "oracle" | "doris" | "generic";
 }
 
 export interface DslRawQueryRequest extends RawQueryInitialBase {
@@ -539,7 +531,25 @@ export type SqlQueryRequest = RawQueryRequest;
  * the SQL with a `{{<resource-id>}}` placeholder so the backend knows which
  * connector to use. `POST /api/vega-backend/v1/resources/query`.
  */
-export function runSql(ctx: RequestContext, body: RawQueryRequest): Promise<unknown> {
+export async function runSql(ctx: RequestContext, body: RawQueryRequest): Promise<unknown> {
+  if (
+    body &&
+    typeof body === "object" &&
+    "input_dialect" in body &&
+    typeof body.input_dialect === "string"
+  ) {
+    const dialect = body.input_dialect.toLowerCase();
+    const supported =
+      body.query_format === "dsl"
+        ? dialect === "opensearch"
+        : dialect === "" ||
+          ["mysql", "mariadb", "tsql", "oracle", "doris", "generic"].includes(dialect);
+    if (!supported) {
+      throw new InputError(
+        "unsupported input_dialect; SQL supports mysql, mariadb, tsql, oracle, doris or generic; DSL requires opensearch",
+      );
+    }
+  }
   return request(ctx, `${VEGA_BASE}/resources/query`, {
     method: "POST",
     body,

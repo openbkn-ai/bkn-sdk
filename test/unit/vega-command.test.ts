@@ -1396,20 +1396,32 @@ describe("vega flag validation against the contract enums", () => {
     expect(url.searchParams.get("health_check_status")).toBe("healthy");
   });
 
-  it("accepts tsql as a SQL input dialect", async () => {
-    const fetchMock = mockFetch({ entries: [] });
-    suppressOutput();
-    await cli().parseAsync(
-      [...cliBase, "sql", "--query", "SELECT TOP (1) * FROM {{r-1}}", "--input-dialect", "tsql"],
-      { from: "user" },
-    );
-    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
-      input_dialect: "tsql",
-    });
-  });
+  it.each(["postgres", "trino", "duckdb"])(
+    "rejects %s input from flags and advanced JSON before HTTP",
+    async (dialect) => {
+      const fetchMock = mockFetch();
+      suppressOutput();
+      for (const args of [
+        ["--query", "SELECT * FROM {{r-1}}", "--input-dialect", dialect],
+        [
+          "--data",
+          JSON.stringify({
+            query_format: "sql",
+            query: "SELECT * FROM {{r-1}}",
+            input_dialect: dialect,
+          }),
+        ],
+      ]) {
+        await expect(
+          cli().parseAsync([...cliBase, "sql", ...args], { from: "user" }),
+        ).rejects.toThrow(/input.dialect/);
+      }
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
 
-  it.each(["oracle", "generic", "mariadb"])(
-    "accepts %s as a SQL input dialect",
+  it.each(["mysql", "mariadb", "tsql", "oracle", "doris", "generic"])(
+    "accepts supported %s SQL input",
     async (dialect) => {
       const fetchMock = mockFetch({ entries: [] });
       suppressOutput();

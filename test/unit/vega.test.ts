@@ -3,6 +3,8 @@ import {
   type CatalogDeletionImpact,
   type CatalogSummary,
   CreateBuildTaskRequest,
+  type RawQueryRequest,
+  type SqlRawQueryRequest,
   catalogConnectorTypeStats,
   catalogHealthStatus,
   createBuildTask,
@@ -718,6 +720,39 @@ describe("deleteCatalog", () => {
 });
 
 describe("runSql", () => {
+  it.each(["postgres", "Postgres", "POSTGRES", "trino", "duckdb", "TRINO", "DuckDB"])(
+    "rejects explicit %s before HTTP",
+    async (dialect) => {
+      const fetchMock = mockFetch();
+      expectTypeOf<"postgres" | "trino" | "duckdb">().not.toMatchTypeOf<
+        NonNullable<SqlRawQueryRequest["input_dialect"]>
+      >();
+      await expect(
+        runSql(ctx, {
+          query_format: "sql",
+          query: "SELECT * FROM {{r-1}}",
+          input_dialect: dialect,
+        } as unknown as RawQueryRequest),
+      ).rejects.toThrow(/input_dialect/);
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["tsql", "oracle", "doris", "generic"] as const)(
+    "preserves EE %s input",
+    async (dialect) => {
+      const fetchMock = mockFetch({ entries: [] });
+      await runSql(ctx, {
+        query_format: "sql",
+        query: "SELECT * FROM {{r-1}}",
+        input_dialect: dialect,
+      });
+      expect(JSON.parse(firstCall(fetchMock)[1].body as string)).toMatchObject({
+        input_dialect: dialect,
+      });
+    },
+  );
+
   it("preserves an unsafe BIGINT response value as native bigint", async () => {
     vi.stubGlobal(
       "fetch",

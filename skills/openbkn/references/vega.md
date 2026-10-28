@@ -65,7 +65,7 @@ openbkn vega sql --cursor "<paging.next_cursor>"
 openbkn vega sql -d '{"query":{"resource_id":"<res-id>","query":{"match":{"name":"web-pod"}}},"query_format":"dsl","input_dialect":"opensearch","paging":{"mode":"single","limit":50}}'
 
 # Advanced SQL body with total count and timeout.
-openbkn vega sql -d '{"query":"SELECT ... FROM {{<res-id>}}","query_format":"sql","input_dialect":"postgres","paging":{"mode":"single","limit":1000},"query_timeout_sec":120,"need_total":true}'
+openbkn vega sql -d '{"query":"SELECT ... FROM {{<res-id>}}","query_format":"sql","input_dialect":"mysql","paging":{"mode":"single","limit":1000},"query_timeout_sec":120,"need_total":true}'
 ```
 
 ### Parameters
@@ -74,7 +74,7 @@ openbkn vega sql -d '{"query":"SELECT ... FROM {{<res-id>}}","query_format":"sql
 | --- | :---: | --- | --- |
 | `--query` / body `query` | ✅ for first page | — | SQL string or an OpenSearch DSL object. SQL references tables as `{{<resource-id>}}`; DSL includes top-level `resource_id`. |
 | body `query_format` | ✅ for first page | — | `sql` or `dsl`; the CLI sets `sql` for `--query`. |
-| `--input-dialect` / `input_dialect` | SQL optional; DSL required | SQL: `mysql` | SQL supports `postgres`, `mysql`, `mariadb` (parsed as `mysql`), `trino`, `duckdb`, `tsql`, `oracle`, or `generic` (SQLGlot's generic dialect); DSL must be `opensearch`. Input SQL is converted to the Catalog's target dialect where needed. |
+| `--input-dialect` / `input_dialect` | SQL optional; DSL required | SQL: `mysql` | SQL supports `mysql`, `mariadb` (parsed as `mysql`), and the EE dialects `tsql` (SQL Server), `oracle`, `doris`, or `generic` (HANA). DSL must be `opensearch`. `postgres`, `trino`, and `duckdb` inputs are rejected; MariaDB/MySQL and PostgreSQL Catalogs accept only MySQL input (the default or `mysql`/`mariadb`); other input dialects return 400 for these targets. The input dialect describes syntax, not the data source. |
 | `--paging-mode`, `--limit`, `--offset`, `--keep-alive-sec` / `paging` | optional | `single`, server-default limit | `cursor` requires `limit`; keep-alive is 60–3600 seconds. Always set `--limit` rather than relying on the server default. |
 | `--cursor` / `paging.cursor` | continuation only | — | Opaque cursor from `paging.next_cursor`; no initial-query fields may accompany it. |
 | `--query-timeout-sec` / `query_timeout_sec` | optional | 60 | Seconds, 1–3600; initial request only. |
