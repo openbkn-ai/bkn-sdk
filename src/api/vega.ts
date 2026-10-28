@@ -510,7 +510,7 @@ export interface SqlRawQueryRequest extends RawQueryInitialBase {
   query: string;
   query_format: "sql";
   /** SQL input dialect; matched case-insensitively and sent in lowercase. Defaults to mysql server-side. */
-  input_dialect?: "mysql" | "mariadb" | "tsql" | "oracle" | "doris" | "generic";
+  input_dialect?: "mysql" | "mariadb" | "tsql" | "oracle" | "doris";
 }
 
 export interface DslRawQueryRequest extends RawQueryInitialBase {
@@ -543,11 +543,10 @@ export async function runSql(ctx: RequestContext, body: RawQueryRequest): Promis
     const supported =
       body.query_format === "dsl"
         ? dialect === "opensearch"
-        : dialect === "" ||
-          ["mysql", "mariadb", "tsql", "oracle", "doris", "generic"].includes(dialect);
+        : dialect === "" || ["mysql", "mariadb", "tsql", "oracle", "doris"].includes(dialect);
     if (!supported) {
       throw new InputError(
-        "unsupported input_dialect; SQL supports mysql, mariadb, tsql, oracle, doris or generic; DSL requires opensearch",
+        "unsupported input_dialect; SQL supports mysql, mariadb, tsql, oracle or doris; DSL requires opensearch",
       );
     }
     requestBody = { ...body, input_dialect: dialect } as RawQueryRequest;

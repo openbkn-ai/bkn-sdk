@@ -739,7 +739,6 @@ describe("runSql", () => {
     ["sql", "TSQL"],
     ["sql", "Oracle"],
     ["sql", "DORIS"],
-    ["sql", "Generic"],
     ["dsl", "OpenSearch"],
     ["dsl", "oPeNsEaRcH"],
   ] as const)("normalizes %s dialect %s before HTTP", async (format, dialect) => {
@@ -757,25 +756,34 @@ describe("runSql", () => {
     expect(body).toHaveProperty("input_dialect", dialect);
   });
 
-  it.each(["postgres", "Postgres", "POSTGRES", "trino", "duckdb", "TRINO", "DuckDB"])(
-    "rejects explicit %s before HTTP",
-    async (dialect) => {
-      const fetchMock = mockFetch();
-      expectTypeOf<"postgres" | "trino" | "duckdb">().not.toMatchTypeOf<
-        NonNullable<SqlRawQueryRequest["input_dialect"]>
-      >();
-      await expect(
-        runSql(ctx, {
-          query_format: "sql",
-          query: "SELECT * FROM {{r-1}}",
-          input_dialect: dialect,
-        } as unknown as RawQueryRequest),
-      ).rejects.toThrow(/input_dialect/);
-      expect(fetchMock).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    "postgres",
+    "Postgres",
+    "POSTGRES",
+    "trino",
+    "duckdb",
+    "TRINO",
+    "DuckDB",
+    "generic",
+    "GENERIC",
+    "GeNeRiC",
+  ])("rejects explicit %s before HTTP", async (dialect) => {
+    const fetchMock = mockFetch();
+    expectTypeOf<"generic">().not.toMatchTypeOf<NonNullable<SqlRawQueryRequest["input_dialect"]>>();
+    expectTypeOf<"postgres" | "trino" | "duckdb">().not.toMatchTypeOf<
+      NonNullable<SqlRawQueryRequest["input_dialect"]>
+    >();
+    await expect(
+      runSql(ctx, {
+        query_format: "sql",
+        query: "SELECT * FROM {{r-1}}",
+        input_dialect: dialect,
+      } as unknown as RawQueryRequest),
+    ).rejects.toThrow(/input_dialect/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 
-  it.each(["mysql", "mariadb", "tsql", "oracle", "doris", "generic"] as const)(
+  it.each(["mysql", "mariadb", "tsql", "oracle", "doris"] as const)(
     "preserves supported %s input",
     async (dialect) => {
       const fetchMock = mockFetch({ entries: [] });

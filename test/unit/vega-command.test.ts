@@ -1396,29 +1396,37 @@ describe("vega flag validation against the contract enums", () => {
     expect(url.searchParams.get("health_check_status")).toBe("healthy");
   });
 
-  it.each(["postgres", "Postgres", "POSTGRES", "trino", "TRINO", "duckdb", "DuckDB"])(
-    "rejects %s input from flags and advanced JSON before HTTP",
-    async (dialect) => {
-      const fetchMock = mockFetch();
-      suppressOutput();
-      for (const args of [
-        ["--query", "SELECT * FROM {{r-1}}", "--input-dialect", dialect],
-        [
-          "--data",
-          JSON.stringify({
-            query_format: "sql",
-            query: "SELECT * FROM {{r-1}}",
-            input_dialect: dialect,
-          }),
-        ],
-      ]) {
-        await expect(
-          cli().parseAsync([...cliBase, "sql", ...args], { from: "user" }),
-        ).rejects.toThrow(/input.dialect/);
-      }
-      expect(fetchMock).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    "postgres",
+    "Postgres",
+    "POSTGRES",
+    "trino",
+    "TRINO",
+    "duckdb",
+    "DuckDB",
+    "generic",
+    "GENERIC",
+    "GeNeRiC",
+  ])("rejects %s input from flags and advanced JSON before HTTP", async (dialect) => {
+    const fetchMock = mockFetch();
+    suppressOutput();
+    for (const args of [
+      ["--query", "SELECT * FROM {{r-1}}", "--input-dialect", dialect],
+      [
+        "--data",
+        JSON.stringify({
+          query_format: "sql",
+          query: "SELECT * FROM {{r-1}}",
+          input_dialect: dialect,
+        }),
+      ],
+    ]) {
+      await expect(
+        cli().parseAsync([...cliBase, "sql", ...args], { from: "user" }),
+      ).rejects.toThrow(/input.dialect/);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 
   it.each([
     "mysql",
@@ -1426,7 +1434,6 @@ describe("vega flag validation against the contract enums", () => {
     "tsql",
     "oracle",
     "doris",
-    "generic",
     "MYSQL",
     "MySQL",
     "mYsQl",
@@ -1434,7 +1441,6 @@ describe("vega flag validation against the contract enums", () => {
     "TSQL",
     "Oracle",
     "DORIS",
-    "Generic",
   ])("accepts supported %s SQL input", async (dialect) => {
     const fetchMock = mockFetch({ entries: [] });
     suppressOutput();
