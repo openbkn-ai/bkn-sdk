@@ -1,0 +1,21 @@
+---
+type: relation_type
+id: order_for_patient
+name: 检验对象
+---
+
+## RelationType: 检验对象
+
+每张检验申请对应一个患者。急诊未建档的申请没有患者编号，此时可按申请的 `patient_id_card` 与患者的 `id_card` 匹配，结果标为待确认。
+
+### Endpoint
+
+| Source | Target | Type |
+|--------|--------|------|
+| lab_order | patient | direct |
+
+### Mapping Rules
+
+| Source Property | Target Property |
+|-----------------|-----------------|
+| patient_id | patient_id |

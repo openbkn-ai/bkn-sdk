@@ -773,10 +773,43 @@ describe("bkn validate: BKN spec 3.0", () => {
     });
   });
 
-  it("still passes the 2.x example", () => {
-    const r = validateBknDirectory(join(examples, "k8s-network"));
+  it("passes the 2.x example, which has no 3.0 content", () => {
+    const r = validateBknDirectory(join(examples, "clinic-lab-2.x"));
     expect(r.errors).toEqual([]);
-    expect(r.counts.valueTypes).toBe(0);
+    expect(r.warnings).toEqual([]);
+    expect(r.counts).toEqual({
+      objectTypes: 4,
+      relationTypes: 4,
+      conceptGroups: 1,
+      valueTypes: 0,
+    });
+  });
+
+  it("warns when 3.0 content sits in a package without bkn_spec 3.0", () => {
+    const constrained = `${ot("a", "Alpha")}
+## ObjectType: Alpha
+
+### Property Constraints
+
+\`\`\`yaml
+x:
+  unit: 元
+\`\`\`
+`;
+    const files = {
+      "object_types/a.bkn": constrained,
+      "value_types/v.bkn": "---\ntype: value_type\nid: v\nname: V\n---\n",
+    };
+    const without = validateBknDirectory(bkn({ "network.bkn": network, ...files }));
+    expect(without.valid).toBe(true);
+    expect(without.warnings).toHaveLength(1);
+    expect(without.warnings[0]).toContain("(value_types/, object_types/a.bkn)");
+
+    const spec3 = network.replace("name: KN One\n", 'name: KN One\nbkn_spec: "3.0"\n');
+    expect(validateBknDirectory(bkn({ "network.bkn": spec3, ...files })).warnings).toEqual([]);
+    // Unquoted 3.0 is the number 3 to YAML and still selects 3.0.
+    const unquoted = network.replace("name: KN One\n", "name: KN One\nbkn_spec: 3.0\n");
+    expect(validateBknDirectory(bkn({ "network.bkn": unquoted, ...files })).warnings).toEqual([]);
   });
 
   it("checks the Data Properties table of an indirect relation", () => {

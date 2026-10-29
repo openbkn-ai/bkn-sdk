@@ -44,4 +44,13 @@ Known structure
   `length`, `pattern`, `unit`) (§16).
 - Full example: spec appendix C; SDK example skills/create-bkn/references/examples/clinic-lab/.
 
+BKN 2.x
+-------
+- A package without `bkn_spec` is read as 2.x on every platform; platform 0.2.0 reads only 2.x.
+  2.x readers take 3.0 content without an error: 3.0 sections become description text, value_types/
+  and 3.0 fields and columns are dropped. 2.x packages leave out all 3.0 content (create-bkn
+  SPECIFICATION.llm.md「2.x 规范写法」; example skills/create-bkn/references/examples/clinic-lab-2.x/,
+  checked against the v0.2.0 spec library).
+- The CLI talks only to a platform of its own version, so `openbkn --version` gives the target.
+
 [ paste spec excerpts below this line ]

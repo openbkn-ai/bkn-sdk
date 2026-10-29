@@ -565,6 +565,21 @@ function checkCapabilities(text: string, warnings: string[]): CapabilityCheck {
   return result;
 }
 
+/** True when network.bkn declares `bkn_spec` 3.0 (`3`, `3.0` or `3.0.x`; YAML may read `3.0` as 3). */
+function declaresSpec3(networkText: string): boolean {
+  const end = networkText.indexOf("\n---", 3);
+  if (!networkText.startsWith("---") || end === -1) return false;
+  try {
+    const fm = yaml.load(networkText.slice(3, end)) as Record<string, unknown> | null;
+    const spec = fm && typeof fm === "object" ? fm.bkn_spec : undefined;
+    return spec !== undefined && spec !== null && /^3(\.0(\.\d+)?)?$/.test(String(spec).trim());
+  } catch {
+    return false;
+  }
+}
+
+const SPEC3_SECTION = /^###\s+(Property Constraints|Relation Constraints)\s*$/m;
+
 export function validateBknDirectory(dirPath: string): ValidationResult {
   const dir = resolve(dirPath);
   const errors: string[] = [];
@@ -585,7 +600,10 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
   // network.bkn — required, must declare a knowledge_network.
   const networkPath = join(dir, "network.bkn");
   let networkId = "";
+  let spec3 = false;
   let capabilities: CapabilityCheck = { declared: 0, skipped: [] };
+  // 3.0 content that a package without `bkn_spec: "3.0"` would lose without an error.
+  const spec3Content: string[] = [];
   if (!existsSync(networkPath)) {
     errors.push("Missing network.bkn at the BKN root.");
   } else {
@@ -600,6 +618,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
       if (!fm.name) errors.push("network.bkn is missing 'name'.");
       errors.push(...validateResourceName(fm.name, "network.bkn", "knowledge_network"));
       capabilities = checkCapabilities(networkText, warnings);
+      spec3 = declaresSpec3(networkText);
     }
   }
 
@@ -611,6 +630,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
     const fm = parseFrontmatter(text);
     const rel = file.slice(dir.length + 1);
     errors.push(...validateMarkdownTables(text, rel, "object_types"));
+    if (SPEC3_SECTION.test(text)) spec3Content.push(rel);
     if (!fm || fm.type !== "object_type") {
       errors.push(`${rel}: not a valid object_type (missing/wrong frontmatter type).`);
       continue;
@@ -632,6 +652,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
     const fm = parseFrontmatter(text);
     const rel = file.slice(dir.length + 1);
     errors.push(...validateMarkdownTables(text, rel, "relation_types"));
+    if (SPEC3_SECTION.test(text)) spec3Content.push(rel);
     if (!fm || fm.type !== "relation_type") {
       errors.push(`${rel}: not a valid relation_type (missing/wrong frontmatter type).`);
       continue;
@@ -656,10 +677,17 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
     }
   }
   const vtFiles = bknFiles(join(dir, "value_types"));
+  if (vtFiles.length > 0) spec3Content.unshift("value_types/");
   for (const file of vtFiles) {
     const text = readFileSync(file, "utf8");
     const rel = file.slice(dir.length + 1);
     errors.push(...validateResourceName(parseFrontmatter(text)?.name, rel, "value_type"));
+  }
+
+  if (!spec3 && existsSync(networkPath) && spec3Content.length > 0) {
+    warnings.push(
+      `network.bkn has no bkn_spec "3.0", so the platform reads this package as 2.x: value_types/ is ignored and Property Constraints / Relation Constraints sections become description text (${spec3Content.join(", ")}). Add bkn_spec: "3.0" to write BKN 3.0 (platform 0.2.1 and later); to stay on BKN 2.x, remove them and write their content in descriptions.`,
+    );
   }
 
   if (existsSync(join(dir, "metrics"))) {

@@ -1,0 +1,22 @@
+---
+type: relation_type
+id: department_under
+name: 隶属于
+---
+
+## RelationType: 隶属于
+
+下级科室隶属于上级科室，可逐级向上追溯；一级科室没有上级。
+
+### Endpoint
+
+| Source | Target | Type |
+|--------|--------|------|
+| department | department | direct |
+
+### Mapping Rules
+
+| Source Property | Target Property |
+|-----------------|-----------------|
+| parent_dept_id | dept_id |
+

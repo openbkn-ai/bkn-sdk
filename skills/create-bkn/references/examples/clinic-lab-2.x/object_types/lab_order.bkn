@@ -1,0 +1,40 @@
+---
+type: object_type
+id: lab_order
+name: 检验申请
+tags: [检验]
+---
+
+## ObjectType: 检验申请
+
+也称化验单、检验单。按开单时间（`ordered_at`）判断时间范围。
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+| resource | res_lab_order | 检验申请表 |
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| order_no | 申请单号 | string | 主键；条码号，形如 LO 加 10 位数字 | order_no |
+| patient_id | 患者编号 | string | 院内建档后才有；急诊未建档时为空 | patient_id |
+| patient_id_card | 患者身份证号 | string | 开单时登记的 18 位证件号 | patient_id_card |
+| doctor_id | 开单医生工号 | string | | doctor_id |
+| legacy_doctor_code | 旧系统医生编码 | string | 旧 HIS 迁移数据才有 | old_doctor_code |
+| ordered_at | 开单时间 | datetime | 北京时间 | apply_time |
+| reported_at | 报告时间 | datetime | 北京时间；未出报告时为空 | report_time |
+| status | 申请状态 | keyword | 编码：N 已开单、S 已采样、P 已出报告、C 已撤销；X 是旧系统的撤销编码，筛「已撤销」时写 IN (C, X) | apply_status |
+| critical_level | 危急程度 | keyword | 正常 / 异常 / 危急 | critical_flag |
+| fee | 费用 | decimal | 单位：元 | fee_amount |
+| updated_at | 更新时间 | datetime | | updated_at |
+
+### Logic Properties
+
+### Keys
+
+Primary Keys: order_no
+Display Key: order_no
+Incremental Key: updated_at

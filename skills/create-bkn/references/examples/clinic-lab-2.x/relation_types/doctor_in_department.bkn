@@ -1,0 +1,34 @@
+---
+type: relation_type
+id: doctor_in_department
+name: 任职于
+---
+
+## RelationType: 任职于
+
+医生可以同时在多个科室任职，任职记录在任职表中，一行一段任职（含职务与起止日期）。
+
+### Endpoint
+
+| Source | Target | Type |
+|--------|--------|------|
+| doctor | department | indirect |
+
+### Backing Resource
+
+| Type | ID |
+|------|----|
+| resource | res_doctor_assignment |
+
+### Source Mapping
+
+| Source Property | Resource Property |
+|-----------------|-------------------|
+| doctor_id | doctor_id |
+
+### Target Mapping
+
+| Resource Property | Target Property |
+|-------------------|-----------------|
+| dept_code | dept_id |
+

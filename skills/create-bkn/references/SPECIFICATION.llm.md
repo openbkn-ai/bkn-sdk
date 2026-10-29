@@ -1,16 +1,17 @@
-# BKN 规范 3.0（LLM 生成用）
+# BKN 规范 3.0 / 2.x（LLM 生成用）
 
-你负责生成符合 BKN 3.0 格式的知识网络目录，供业务知识网络建模使用。
+你负责生成符合 BKN 格式的知识网络目录，供业务知识网络建模使用。默认写 3.0；要写 2.x 时按「[2.x 规范写法](#2x-规范写法)」。
 
 本文是 bkn-foundry `adp/bkn/bkn-backend/server/bkn-specification/SPECIFICATION.md`（3.0.0）的生成用摘要，
-只写 3.0 的唯一写法。两者不一致时以 foundry 的规范为准。
+只写 3.0 的唯一写法，最后一节说明 2.x 写法。两者不一致时以 foundry 的规范为准。
 
 ## 规范版本
 
 `network.bkn` 的 frontmatter 写 `bkn_spec: "3.0"`，整个包按 3.0 读取。不写时按 2.x 读取，本文的
 属性声明、值类型、别名、关系声明与生命周期**全部被忽略**。
 
-- 目标平台低于 0.2.1 时不支持 3.0，只能不写 `bkn_spec` 并去掉 3.0 专有内容。
+- 3.0 需要 0.2.1 及以上的平台；0.2.0 平台只读 2.x。用 `openbkn --version` 确认目标平台：CLI 只连与自己同版本的平台。
+- 用户要求 2.x，或目标平台只读 2.x 时，按「[2.x 规范写法](#2x-规范写法)」写。
 - 3.0 **每样东西只有一种写法**：未列出的 frontmatter 字段、未知的 `###` 小节、未知或重复的表格列、
   旧列名、同义写法都会被拒绝导入，错误信息会指出文件与位置。只按本文写。
 
@@ -598,6 +599,32 @@ capabilities:
 
 不要添加规范外的 frontmatter 字段或 `###` 小节：3.0 下会被拒绝导入。
 
+## 2.x 规范写法
+
+不写 `bkn_spec` 的包按 2.x 读取，所有平台读法相同（0.2.0 平台只认 2.x）。2.x 读到 3.0 的内容不会报错，但会被丢掉或并进描述：
+`### Property Constraints`、`### Relation Constraints`、关系的 `### Data Properties` 变成描述文字，`value_types/` 与新字段、新列被忽略，
+替代路径与弃用的关系变成普通关系。所以写 2.x 包时，按本文写，再去掉下面这些：
+
+| 去掉 | 要表达的内容改写到 |
+|------|--------------------|
+| `network.bkn` 的 `bkn_spec` | — |
+| `value_types/` 整个目录与属性的 `value_type` | 属性 `Description`：编码与含义，如「N 已开单、C 已撤销；X 是旧撤销编码，筛已撤销时写 IN (C, X)」；格式、范围 |
+| Data Properties 的 `Semantic`、`Required`、`Aliases` 列 | 属性 `Description`；时间范围按哪个属性判断写进定义描述 |
+| `### Property Constraints` | 属性 `Description`：单位、时区、坐标系、格式、唯一 |
+| frontmatter 的 `aliases` | 定义描述：「也称 ……」 |
+| 关系的 `reverse_name`、`verification`、`Cardinality` 列、`### Relation Constraints` | 关系描述：如「每张申请对应一个患者」「可逐级向上追溯」 |
+| `indirect` 关系的 `### Data Properties` | 关系描述：关联表一行代表什么、有哪些列 |
+| `importance: secondary` + `fallback_for` 的替代路径关系 | 不建这条关系；在主关系描述里写明替代匹配规则与「结果待确认」 |
+| `lifecycle` 为 `deprecated` 的定义 | 不导入；已在平台上的用平台删除 |
+| 行动类的 `aliases` | 行动描述 |
+
+其余写法与 3.0 相同，2.x 都能读：`### Action Source` 与列 `BoxID`、`ToolID`、`McpID`、`ToolName`，
+参数表 `Name | Type | Source | Operation | ValueFrom | Value | Description`，直接写的条件 YAML，`action_intent`。
+不要退回 2.x 的旧写法（`### Tool Configuration`、`Parameter | Source | Binding`、`condition:` 包装、
+`enabled` / `risk_level` 等字段、`Pre-conditions` 等小节）：2.x 对它们要么丢参数，要么静默忽略。
+
+完整示例见 `references/examples/clinic-lab-2.x/`（与 `clinic-lab` 是同一个网络）。
+
 ## 更新与删除
 
 - 导入按 `(网络, 类型, id)` 新增或覆盖；修改即编辑文件后重新 `push`。
@@ -606,7 +633,7 @@ capabilities:
 ## 输出规则（必须遵守）
 
 1. 只输出 BKN 文件内容（frontmatter + 正文），不要用 ```` ```markdown ```` 包裹整个文件。
-2. `network.bkn` 写 `bkn_spec: "3.0"`。
+2. 写 3.0 时 `network.bkn` 写 `bkn_spec: "3.0"`；写 2.x 时不写，并按「2.x 规范写法」去掉 3.0 内容。
 3. 引用的 ID（端点、映射属性、`value_type`、`fallback_for`、`replaced_by`、绑定对象、概念分组成员）必须在包内已定义。
 4. 表格列名、小节标题严格按本文；不要写 HTML 注释、引用块或其他说明文字到小节里。
 5. ID 用小写字母、数字、下划线；显示名和描述用中文（除非另有要求）。
