@@ -363,8 +363,10 @@ user.departments, user.roles          # department ids; role names
 
 Inside a Function the credential is the invoking caller's own, so `me()` names
 whoever ran it — for a Function behind an action, the person who triggered the
-action. It is a REST call through `BKN_BASE_URL`; a sandbox with no gateway
-configured gets the HTTP error instead.
+action. It is a REST call through `BKN_BASE_URL`. If that is empty in the
+sandbox, it raises `InputError` ("No base URL"), like every other OSDK call;
+if it is set but the sandbox network does not allow the gateway, it fails with
+a connection error.
 
 ### Named functions for the capability routes
 

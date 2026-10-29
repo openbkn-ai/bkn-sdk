@@ -14,8 +14,10 @@ the person who ran it — for a Function behind an action, the person who
 triggered the action. It is a live read, not decoded from a token, so a profile
 edit shows up on the next call.
 
-It goes through the REST gateway at `BKN_BASE_URL`. A sandbox with no gateway
-configured cannot reach bkn-safe, and the call fails with the HTTP error.
+It goes through the REST gateway at `BKN_BASE_URL`. In a sandbox where that is
+empty it raises `InputError` ("No base URL") before sending anything, as every
+other OSDK call does; when the address is set but the sandbox network does not
+allow the gateway, it fails with a connection error.
 """
 
 from __future__ import annotations

@@ -246,7 +246,7 @@ user.id, user.account, user.name, user.email, user.telephone
 user.departments, user.roles          # 部门 id；角色名
 ```
 
-在函数里，凭据就是调用方本人的，所以 `me()` 返回的是运行这个函数的人 —— 行动背后的函数，就是触发行动的人。它是一次经 `BKN_BASE_URL` 的 REST 调用；沙箱没配网关时会直接抛出 HTTP 错误。
+在函数里，凭据就是调用方本人的，所以 `me()` 返回的是运行这个函数的人 —— 行动背后的函数，就是触发行动的人。它是一次经 `BKN_BASE_URL` 的 REST 调用。沙箱里这个地址为空时，会和其他 OSDK 调用一样直接抛出 `InputError`（"No base URL"），不会发出请求；地址配了但沙箱网络没放行网关时，会报连接错误。
 
 ### 能力路由的命名函数
 
