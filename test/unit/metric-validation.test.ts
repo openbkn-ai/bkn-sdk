@@ -84,6 +84,7 @@ describe("Object Metric V1 validation results", () => {
     {},
     { valid: "false", issues: [], output_shape: "summary" },
     { valid: true, issues: null, output_shape: "summary" },
+    { valid: true, issues: [], output_shape: "object_value" },
   ])("rejects malformed responses: %j", async (body) => {
     server(body);
     await expect(

@@ -49,7 +49,6 @@ class Metric:
         page_size: int | None = None,
         cursor: str | None = None,
         bucket_selection: dict[str, Any] | None = None,
-        instance_identities: list[dict[str, Any]] | None = None,
         context: Context | None = None,
     ) -> Any:
         """Query the generated immutable version and return the V1 result envelope.
@@ -109,12 +108,6 @@ class Metric:
             if not isinstance(bucket_selection, dict):
                 raise InputError("bucket_selection must be an Object Metric V1 selection object.")
             arguments["bucket_selection"] = bucket_selection
-        if instance_identities is not None:
-            if not isinstance(instance_identities, list) or any(
-                not isinstance(item, dict) for item in instance_identities
-            ):
-                raise InputError("instance_identities must be a list of object identity maps.")
-            arguments["instance_identities"] = instance_identities
 
         path = (
             f"{QUERY_BASE}/{quote(cls.__kn_id__, safe='')}"

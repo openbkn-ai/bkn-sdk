@@ -484,10 +484,10 @@ def get_object_types(
 
     取 `get_kn_detail` 在 summary 级别剥掉的对象类细节：属性的 `mapped_field` （写 `run_sql`
     要的物理列名）、`condition_operations`（该属性可用的查询算子）、 逻辑属性的 `data_source`
-    与 `parameters`。 同时返回 `related_metrics`——挂在该对象类下的指标，**包括没绑到逻辑属性、
-    因而在 `logic_properties` 里根本看不见的那些**。这是 Agent 选指标的权威清单， 选定后走
-    [logic-property.yaml](logic-property.yaml) 的 `logic-property-resolver`（实例 +
-    已绑逻辑属性）或 `query_metric`（其余）。 `ids` 里既可以传对象类 ID，也可以传对象类名（ID
+    与 `parameters`。 同时返回 `related_metrics`——挂在该对象类下的已发布实例集合指标。这是
+    Agent 选指标的权威清单，选定后统一走 `query_metric`。`logic_properties` 只包含工具型
+    逻辑属性，通过 [logic-property.yaml](logic-property.yaml) 的 `logic-property-resolver`
+    按对象实例求值；二者不建立绑定关系。 `ids` 里既可以传对象类 ID，也可以传对象类名（ID
     优先，名称仅作兜底）； 匹配不到的 ID 原样回填在 `missing` 里，不报错。属性的
     `display_name` （纯 UI 标签）在本接口也会被去掉。 **不传 `ids`
     就是列举对象类索引**：按名称升序返回一页，每条只有 `id` / `name` / `comment` / `tags` /
@@ -899,22 +899,20 @@ def query_metric(
 
     按已建模指标自身的口径计算取数，是 OT-first 指标路径的第 3 步： `search_schema` /
     `get_kn_detail` 锁定对象类 → `get_object_types` 从 `related_metrics` 里选定 `metric_id` 和
-    `version` → 本接口计算。 与 `logic-property-resolver`
-    的分工：实例级、且已绑到逻辑属性的指标走那条
-    （它会先用大模型推参数）；**类级指标、或未绑逻辑属性的指标走本接口**，参数
-    由调用方显式给出，不经大模型。 `version` 必填，必须使用已发布、不可变的版本；`query`
-    只包含定义允许的 运行时选择（实例身份、过滤条件、分析维度、毫秒时间范围）。固定口径和统计
+    `version` → 本接口计算。 对象指标只支持实例集合，统一走本接口；`logic-property-resolver`
+    只负责独立的 工具型逻辑属性。指标参数由调用方显式给出，不经大模型。 `version`
+    必填，必须使用已发布、不可变的版本；`query` 只包含定义允许的
+    运行时选择（过滤条件、分析维度、毫秒时间范围）。固定口径和统计
     粒度由指标定义决定，不能通过本请求覆盖。 响应保留对象指标 V1 的
     `model`、`entries`、`status` 和 `warnings`。
 
     Args:
         kn_id: 知识网络 ID。也可用 `x-kn-id` 头传。
-        metric_id: 指标 ID，取自 `get_object_types` 返回的 `related_metrics[].id`，
-            或对象类逻辑属性 `data_source` 里引用的指标 ID。
+        metric_id: 指标 ID，取自 `get_object_types` 返回的 `related_metrics[].id`。
         version: 已发布且不可变的对象指标版本，取自 `related_metrics[].version`。
 
-    Returns the platform's own payload: entries, kn_id, metric_id, model, overall_ms, status,
-    version, warnings.
+    Returns the platform's own payload: effective_window, empty_reason, entries, evaluated_at,
+    kn_id, metric_id, model, next_cursor, overall_ms, status, total_count, version, warnings.
     """
     return _send(
         "/api/agent-retrieval/v1/kn/query_metric",
