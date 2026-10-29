@@ -122,7 +122,6 @@ export interface ObjectMetricOrderBy {
 }
 
 export interface ObjectMetricQuery {
-  instance_identities?: Record<string, unknown>[];
   filter?: ObjectMetricCondition;
   group_by?: ObjectMetricPropertyRef[];
   having?: ObjectMetricHaving;
@@ -142,8 +141,6 @@ export interface ObjectMetricTrial {
 }
 
 export interface ObjectMetricDataEntry {
-  instance_identity?: Record<string, unknown>;
-  dimensions?: Record<string, unknown>;
   dimension_cells?: Array<{ ref: ObjectMetricPropertyRef; value: unknown }>;
   time?: number;
   time_bucket?: ObjectMetricTimeRange;
@@ -182,13 +179,6 @@ export interface ObjectMetricDrillThrough {
   warnings?: string[];
 }
 
-export interface ObjectMetricLogicPropertyBinding {
-  object_type_id: string;
-  property_name: string;
-  display_name: string;
-  comment?: string;
-}
-
 const ObjectMetricPropertyRefResult = z
   .object({
     object_type_id: z.string(),
@@ -203,8 +193,6 @@ const ObjectMetricTimeRangeResult = z
 
 const ObjectMetricDataEntryResult = z
   .object({
-    instance_identity: z.record(z.unknown()).optional(),
-    dimensions: z.record(z.unknown()).optional(),
     dimension_cells: z
       .array(z.object({ ref: ObjectMetricPropertyRefResult, value: z.unknown() }).strict())
       .optional(),
@@ -249,7 +237,7 @@ export const ObjectMetricValidationResult = z
   .object({
     valid: z.boolean(),
     issues: z.array(z.object({ code: z.string(), field: z.string(), message: z.string() })),
-    output_shape: z.enum(["object_value", "summary", "grouped", "time_series"]),
+    output_shape: z.enum(["summary", "grouped", "time_series"]),
   })
   .passthrough();
 export type ObjectMetricValidationResult = z.infer<typeof ObjectMetricValidationResult>;
@@ -420,37 +408,6 @@ export function checkObjectMetricDeletion(
   return request(ctx, `${item(knId, metricId)}/deletion-check`, {
     query: { branch: opts.branch, version: requiredVersion(opts.version) },
   });
-}
-
-export function bindObjectMetricLogicProperty(
-  ctx: RequestContext,
-  knId: string,
-  metricId: string,
-  binding: ObjectMetricLogicPropertyBinding,
-  opts: ObjectMetricVersionOptions,
-): Promise<unknown> {
-  return request(ctx, `${item(knId, metricId)}/logic-properties`, {
-    method: "POST",
-    query: { branch: opts.branch, version: requiredVersion(opts.version) },
-    body: binding,
-  });
-}
-
-export function upgradeObjectMetricLogicProperty(
-  ctx: RequestContext,
-  knId: string,
-  metricId: string,
-  propertyName: string,
-  opts: ObjectMetricVersionOptions,
-): Promise<unknown> {
-  return request(
-    ctx,
-    `${item(knId, metricId)}/logic-properties/${encodeURIComponent(propertyName)}/metric-ref`,
-    {
-      method: "PUT",
-      query: { branch: opts.branch, version: requiredVersion(opts.version) },
-    },
-  );
 }
 
 export function drillThroughObjectMetric(

@@ -77,12 +77,10 @@ import {
 import {
   type ListObjectMetricsOptions,
   type ObjectMetricDrillThroughRequest,
-  type ObjectMetricLogicPropertyBinding,
   type ObjectMetricOptions,
   type ObjectMetricQuery,
   type ObjectMetricTrial,
   type ObjectMetricVersionOptions,
-  bindObjectMetricLogicProperty,
   checkObjectMetricDeletion,
   createNextObjectMetricDraftVersion,
   createObjectMetricDraft,
@@ -99,7 +97,6 @@ import {
   queryObjectMetric,
   trialObjectMetric,
   updateObjectMetricDraft,
-  upgradeObjectMetricLogicProperty,
   validateObjectMetric,
   validateSavedObjectMetric,
 } from "../api/object-metrics.js";
@@ -177,18 +174,6 @@ export function kn(ctx: RequestContext) {
       createNextObjectMetricDraftVersion(ctx, knId, metricId, opts),
     objectMetricDeletionCheck: (knId: string, metricId: string, opts: ObjectMetricVersionOptions) =>
       checkObjectMetricDeletion(ctx, knId, metricId, opts),
-    objectMetricBindLogicProperty: (
-      knId: string,
-      metricId: string,
-      binding: ObjectMetricLogicPropertyBinding,
-      opts: ObjectMetricVersionOptions,
-    ) => bindObjectMetricLogicProperty(ctx, knId, metricId, binding, opts),
-    objectMetricUpgradeLogicProperty: (
-      knId: string,
-      metricId: string,
-      propertyName: string,
-      opts: ObjectMetricVersionOptions,
-    ) => upgradeObjectMetricLogicProperty(ctx, knId, metricId, propertyName, opts),
     objectMetricValidateSaved: (knId: string, metricId: string, opts: ObjectMetricVersionOptions) =>
       validateSavedObjectMetric(ctx, knId, metricId, opts),
     objectMetricPublish: (knId: string, metricId: string, opts: ObjectMetricVersionOptions) =>

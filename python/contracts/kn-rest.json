@@ -461,7 +461,7 @@
       "method": "POST",
       "operation": "get_object_types",
       "summary": "按 ID 批量取对象类完整定义",
-      "description": "取 `get_kn_detail` 在 summary 级别剥掉的对象类细节：属性的 `mapped_field` （写 `run_sql` 要的物理列名）、`condition_operations`（该属性可用的查询算子）、 逻辑属性的 `data_source` 与 `parameters`。 同时返回 `related_metrics`——挂在该对象类下的指标，**包括没绑到逻辑属性、 因而在 `logic_properties` 里根本看不见的那些**。这是 Agent 选指标的权威清单， 选定后走 [logic-property.yaml](logic-property.yaml) 的 `logic-property-resolver`（实例 + 已绑逻辑属性）或 `query_metric`（其余）。 `ids` 里既可以传对象类 ID，也可以传对象类名（ID 优先，名称仅作兜底）； 匹配不到的 ID 原样回填在 `missing` 里，不报错。属性的 `display_name` （纯 UI 标签）在本接口也会被去掉。 **不传 `ids` 就是列举对象类索引**：按名称升序返回一页，每条只有 `id` / `name` / `comment` / `tags` / `data_source`，**没有 `data_properties`、 `logic_properties` 与 `related_metrics`**。`limit` 默认 50、上限 200，响应带 `total_count`（当前账号可见总数）与 `next_offset`（走完最后一页即不再出现， 别自己用 `offset + len` 推）。 这是给拿不到 ID 的调用方准备的——`get_kn_detail` 对超过上限的网络只回导航壳， 那条路给不出 ID。挑好之后把 ID 传回本接口取完整定义。传了 `ids` 则 `offset` / `limit` 无效。 索引而非定义，是因为完整定义在大网络上一条约 60KB：一页 20 条就超过一兆， 正是导航壳要避免的那种返回值；而且每条还要付一次属性级授权读取。索引条目 只有几百字节，且一次下游读取就能取回整页。",
+      "description": "取 `get_kn_detail` 在 summary 级别剥掉的对象类细节：属性的 `mapped_field` （写 `run_sql` 要的物理列名）、`condition_operations`（该属性可用的查询算子）、 逻辑属性的 `data_source` 与 `parameters`。 同时返回 `related_metrics`——挂在该对象类下的已发布实例集合指标。这是 Agent 选指标的权威清单，选定后统一走 `query_metric`。`logic_properties` 只包含工具型 逻辑属性，通过 [logic-property.yaml](logic-property.yaml) 的 `logic-property-resolver` 按对象实例求值；二者不建立绑定关系。 `ids` 里既可以传对象类 ID，也可以传对象类名（ID 优先，名称仅作兜底）； 匹配不到的 ID 原样回填在 `missing` 里，不报错。属性的 `display_name` （纯 UI 标签）在本接口也会被去掉。 **不传 `ids` 就是列举对象类索引**：按名称升序返回一页，每条只有 `id` / `name` / `comment` / `tags` / `data_source`，**没有 `data_properties`、 `logic_properties` 与 `related_metrics`**。`limit` 默认 50、上限 200，响应带 `total_count`（当前账号可见总数）与 `next_offset`（走完最后一页即不再出现， 别自己用 `offset + len` 推）。 这是给拿不到 ID 的调用方准备的——`get_kn_detail` 对超过上限的网络只回导航壳， 那条路给不出 ID。挑好之后把 ID 传回本接口取完整定义。传了 `ids` 则 `offset` / `limit` 无效。 索引而非定义，是因为完整定义在大网络上一条约 60KB：一页 20 条就超过一兆， 正是导航壳要避免的那种返回值；而且每条还要付一次属性级授权读取。索引条目 只有几百字节，且一次下游读取就能取回整页。",
       "query": [
         {
           "name": "response_format",
@@ -900,7 +900,7 @@
           "name": "properties",
           "type": "array",
           "required": true,
-          "description": "要求值的逻辑属性名列表（`metric` 或 `operator`）。"
+          "description": "要求值的工具型逻辑属性名列表（`tool`）。对象指标请使用 `query_metric`。"
         },
         {
           "name": "additional_context",
@@ -982,7 +982,7 @@
       "method": "POST",
       "operation": "query_metric",
       "summary": "按指标口径取数",
-      "description": "按已建模指标自身的口径计算取数，是 OT-first 指标路径的第 3 步： `search_schema` / `get_kn_detail` 锁定对象类 → `get_object_types` 从 `related_metrics` 里选定 `metric_id` 和 `version` → 本接口计算。 与 `logic-property-resolver` 的分工：实例级、且已绑到逻辑属性的指标走那条 （它会先用大模型推参数）；**类级指标、或未绑逻辑属性的指标走本接口**，参数 由调用方显式给出，不经大模型。 `version` 必填，必须使用已发布、不可变的版本；`query` 只包含定义允许的 运行时选择（实例身份、过滤条件、分析维度、毫秒时间范围）。固定口径和统计 粒度由指标定义决定，不能通过本请求覆盖。 响应保留对象指标 V1 的 `model`、`entries`、`status` 和 `warnings`。",
+      "description": "按已建模指标自身的口径计算取数，是 OT-first 指标路径的第 3 步： `search_schema` / `get_kn_detail` 锁定对象类 → `get_object_types` 从 `related_metrics` 里选定 `metric_id` 和 `version` → 本接口计算。 对象指标只支持实例集合，统一走本接口；`logic-property-resolver` 只负责独立的 工具型逻辑属性。指标参数由调用方显式给出，不经大模型。 `version` 必填，必须使用已发布、不可变的版本；`query` 只包含定义允许的 运行时选择（过滤条件、分析维度、毫秒时间范围）。固定口径和统计 粒度由指标定义决定，不能通过本请求覆盖。 响应保留对象指标 V1 的 `model`、`entries`、`status` 和 `warnings`。",
       "query": [
         {
           "name": "response_format",
@@ -1006,7 +1006,7 @@
           "name": "metric_id",
           "type": "string",
           "required": true,
-          "description": "指标 ID，取自 `get_object_types` 返回的 `related_metrics[].id`， 或对象类逻辑属性 `data_source` 里引用的指标 ID。"
+          "description": "指标 ID，取自 `get_object_types` 返回的 `related_metrics[].id`。"
         },
         {
           "name": "version",
@@ -1023,12 +1023,17 @@
       ],
       "declares_context": false,
       "returns": [
+        "effective_window",
+        "empty_reason",
         "entries",
+        "evaluated_at",
         "kn_id",
         "metric_id",
         "model",
+        "next_cursor",
         "overall_ms",
         "status",
+        "total_count",
         "version",
         "warnings"
       ],

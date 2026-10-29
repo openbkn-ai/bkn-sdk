@@ -130,7 +130,6 @@ export type {
   ObjectMetricDrillThroughRequest,
   ObjectMetricHaving,
   ObjectMetricLiteralOperand,
-  ObjectMetricLogicPropertyBinding,
   ObjectMetricOperand,
   ObjectMetricOptions,
   ObjectMetricOrderBy,
