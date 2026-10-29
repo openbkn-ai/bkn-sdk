@@ -82,9 +82,7 @@ def test_v1_route_version_body_and_response(deploy: Deploy) -> None:
     assert result == {"model": {}, "entries": [{"value": 42}], "status": "success"}
 
 
-def test_optional_v1_branch(
-    deploy: Deploy, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_optional_v1_branch(deploy: Deploy, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Gmv, "__branch__", "release")
     Gmv.query()
 
