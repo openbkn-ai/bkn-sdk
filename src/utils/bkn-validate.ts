@@ -22,14 +22,14 @@ export const BKN_RESOURCE_NAME_MAX_LENGTH = 128;
  * it. Same shape and reason codes as the `capabilities.skipped` entries push answers with.
  */
 export interface CapabilitySkipPreview {
-  capability_type: "skill" | "function" | "mcp_tool";
+  capability_type: "skill" | "function" | "mcp_tool" | "knowledge_base";
   name?: string;
   reason: "not_found";
   detail: string;
 }
 
 export interface CapabilityCheck {
-  /** Entries declared across skills, functions and mcp_tools. */
+  /** Entries declared across skills, functions, mcp_tools and knowledge_bases. */
   declared: number;
   /** Set when the section cannot be decoded: push then drops all of it, silently. */
   malformed?: string;
@@ -459,6 +459,7 @@ const CAPABILITY_LISTS = {
   skills: "skill",
   functions: "function",
   mcp_tools: "mcp_tool",
+  knowledge_bases: "knowledge_base",
 } as const;
 
 function field(entry: Record<string, unknown>, key: string): string {
@@ -501,13 +502,13 @@ function checkCapabilities(text: string, warnings: string[]): CapabilityCheck {
     return { declared: 0, malformed: detail, skipped: [] };
   };
   if (typeof section !== "object" || Array.isArray(section)) {
-    return malformed("is not a mapping of skills / functions / mcp_tools");
+    return malformed("is not a mapping of skills / functions / mcp_tools / knowledge_bases");
   }
   const lists = section as Record<string, unknown>;
   for (const [key, value] of Object.entries(lists)) {
     if (!(key in CAPABILITY_LISTS)) {
       warnings.push(
-        `network.bkn: capabilities.${key} is not a known list (skills, functions, mcp_tools); push ignores it.`,
+        `network.bkn: capabilities.${key} is not a known list (skills, functions, mcp_tools, knowledge_bases); push ignores it.`,
       );
       continue;
     }
@@ -534,9 +535,11 @@ function checkCapabilities(text: string, warnings: string[]): CapabilityCheck {
         warnings.push(
           `network.bkn: capabilities.${key} entry '${label}' has ids but no names; it binds only on the platform it was exported from.`,
         );
-      if (type === "skill") {
+      if (type === "skill" || type === "knowledge_base") {
+        // Knowledge base ids are local integers, so like skill ids they bind only where exported.
         const [id, name] = [field(entry, "id"), field(entry, "name")];
-        if (!id && !name) skip("", "a skill needs an id or a name");
+        const label = type === "skill" ? "a skill" : "a knowledge base";
+        if (!id && !name) skip("", `${label} needs an id or a name`);
         else if (!name) idsOnly(id);
       } else if (type === "function") {
         const [boxId, toolId] = [field(entry, "box_id"), field(entry, "tool_id")];

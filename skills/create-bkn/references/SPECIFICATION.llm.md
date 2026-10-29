@@ -20,7 +20,7 @@
 {network_dir}/
 ├── network.bkn              # 必需，根文件
 ├── SKILL.md                 # 可选，给 Agent 的网络导读
-├── CHECKSUM                 # 可选；导出时生成
+├── CHECKSUM                 # 可选；导出时生成，不要手写；改了文件就删掉
 ├── value_types/             # 值类型
 ├── object_types/            # 对象类
 ├── relation_types/          # 关系类

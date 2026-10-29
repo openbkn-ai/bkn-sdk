@@ -24,6 +24,7 @@ Known structure
   3.0 refuses a frontmatter `type` that differs.
 - Optional CHECKSUM file inside the BKN dir (sibling of network.bkn); format 2 hashes frontmatter and
   body per definition; keys `network`, `<type>:<id>` (incl. `value_type:<id>`), `SKILL.md`.
+  A mismatch only warns on load, except that a package with object metrics is refused.
 - Packaging: macOS tar must set COPYFILE_DISABLE=1 to avoid ._* metadata files.
 
 3.0 additions (spec section)

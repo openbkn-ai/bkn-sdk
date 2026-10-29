@@ -641,6 +641,36 @@ describe("validateBknDirectory — capabilities section", () => {
     expect(r.warnings).toEqual([]);
   });
 
+  it("knows knowledge_bases: a named one binds, one with neither id nor name is skipped", () => {
+    const dir = bkn({
+      "network.bkn": withCapabilities(
+        [
+          "capabilities:",
+          "  knowledge_bases:",
+          '    - id: "7"',
+          "      name: 合同库",
+          "    - {}",
+          "",
+        ].join("\n"),
+      ),
+    });
+    const r = validateBknDirectory(dir);
+    expect(r.valid).toBe(true);
+    expect(r.capabilities).toEqual({
+      declared: 2,
+      skipped: [
+        {
+          capability_type: "knowledge_base",
+          reason: "not_found",
+          detail: "a knowledge base needs an id or a name",
+        },
+      ],
+    });
+    expect(r.warnings).toEqual([
+      "network.bkn: push will skip knowledge_base (unnamed): a knowledge base needs an id or a name.",
+    ]);
+  });
+
   it("reports an entry with nothing to resolve by as a certain skip, without failing", () => {
     const dir = bkn({
       "network.bkn": withCapabilities(
@@ -685,7 +715,10 @@ describe("validateBknDirectory — capabilities section", () => {
   });
 
   it.each([
-    ['capabilities: "not a mapping"\n', "is not a mapping of skills / functions / mcp_tools"],
+    [
+      'capabilities: "not a mapping"\n',
+      "is not a mapping of skills / functions / mcp_tools / knowledge_bases",
+    ],
     ["capabilities:\n  skills: s1\n", ".skills is not a list"],
     ["capabilities:\n  functions:\n    - t1\n", ".functions has an entry that is not a mapping"],
   ])("flags a section push would drop whole: %j", (block, detail) => {
@@ -701,7 +734,7 @@ describe("validateBknDirectory — capabilities section", () => {
     );
     expect(r.capabilities).toEqual({ declared: 0, skipped: [] });
     expect(r.warnings).toEqual([
-      "network.bkn: capabilities.tools is not a known list (skills, functions, mcp_tools); push ignores it.",
+      "network.bkn: capabilities.tools is not a known list (skills, functions, mcp_tools, knowledge_bases); push ignores it.",
     ]);
   });
 

@@ -31,11 +31,13 @@ Write BKN 3.0: put `bkn_spec: "3.0"` in `network.bkn`. Without it the package is
 
 ## Directory layout
 
+Do not hand-write a `CHECKSUM`, and delete it when you copy the example and change its files: a stale one only makes push warn, but a package with object metrics is refused. `openbkn bkn pull` writes a fresh one.
+
 ```
 {network_dir}/
 ├── SKILL.md
 ├── network.bkn
-├── CHECKSUM                 # optional; generated on export
+├── CHECKSUM                 # optional; generated on export — do not write or copy one
 ├── value_types/             # 3.0: enums, formats, ranges reused by properties
 ├── object_types/
 ├── relation_types/
