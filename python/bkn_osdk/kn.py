@@ -9,7 +9,7 @@ OpenAPI. Every function here is one REST route under
     from bkn_osdk.kn import list_resources, run_sql
 
     list_resources(kn_id)
-    run_sql(kn_id, "SELECT COUNT(*) AS n FROM {{.d9hff…}}")
+    run_sql(kn_id, "SELECT COUNT(*) AS n FROM {{d9hff…}}")
 """
 
 from __future__ import annotations
@@ -1143,14 +1143,14 @@ def run_sql(
     """对数据资源执行只读 SQL.
 
     以 MySQL 方言执行**只读** SQL。表名不写物理表名，写占位符
-    `{{.<resource_id>}}`，由服务端解析到真实数据源。 **权限**：调用者必须对 SQL
+    `{{<resource_id>}}`，由服务端解析到真实数据源。 **权限**：调用者必须对 SQL
     引用的每个数据资源都持有 Vega 资源的 `view_detail`
     权限——与其他遵循知识网络授权的查询接口不同，通过对象类获得的授权不覆盖本接口，
     仅通过对象类获得授权的调用方应改用 `/kn/query_object_instance` 或 `/kn/run_cypher`。
     标识符需要引用时使用反引号（如 `` `order_id` ``）；双引号在 MySQL 方言下是
     字符串字面量，不能用于标识符。 **两条硬约束，违反直接 400，SQL 不会下发**： 1.
-    **必须引用占位符**。SQL 里没有 `{{.resource_id}}` 时报 `sql must reference at least one
-    data resource via the {{.resource_id}} placeholder`
+    **必须引用占位符**。SQL 里没有 `{{resource_id}}` 时报 `sql must reference at least one
+    data resource via the {{resource_id}} placeholder`
     ——这既是定位数据源的唯一途径，也挡住了绕开权限直接写物理表名。 2. **必须是单条只读
     `SELECT` 语句**。端到端兼容性以 vega 的只读策略为准； 虽然本服务的本地守卫可接受以 `WITH`
     开头的语句，但 vega 当前会拒绝 CTE， 因此调用方**不得使用 `WITH` / CTE 或 `UNION` /
@@ -1164,16 +1164,16 @@ def run_sql(
     `COUNT`、`SUM`、
     `AVG`、`MIN`、`MAX`）。子查询和窗口函数不属于当前兼容性承诺，调用方不得依赖。 SQL Server
     资源还要求 `SELECT` 输出列名唯一；使用 `JOIN` 时，`*` 必须带表别名 限定（如
-    `o.*`），不能使用裸 `*`。 守卫不是完整 SQL 解析器，是纵深防御的一层：vega 侧另有基于
-    SQLGlot AST 的 只读策略做最终裁决（拒绝非顶层
-    SELECT、WITH/CTE、集合运算等），两层都不可省。 **不分页**：固定单次返回，上限 10000
-    行。要更多数据请在 SQL 里自己收敛 （聚合、加条件、加 LIMIT）。
+    `o.*`），不能使用裸 `*`。 守卫不是完整 SQL 解析器，是纵深防御的一层：vega 侧统一使用公共
+    Go Parser 做最终只读策略校验（拒绝非顶层 SELECT、WITH/CTE、集合运算等），两层都不可省。
+    **不分页**：固定单次返回，上限 10000 行。要更多数据请在 SQL 里自己收敛 （聚合、加条件、加
+    LIMIT）。
 
     Args:
-        sql: MySQL 方言 SQL。表名必须写成 `{{.<resource_id>}}` 占位符， 也接受 `{{<resource_id>}}`
-            形式；`resource_id` 必须匹配 `[a-z0-9][a-z0-9_-]{0,39}`（小写，最长 40
-            个字符），否则占位符不会被识别。 标识符需要引用时使用反引号；双引号在 MySQL
-            方言下是字符串字面量，不能用于 标识符。只允许单条 `SELECT`（不支持 `WITH` / CTE）。
+        sql: MySQL 方言 SQL。表名必须写成 `{{<resource_id>}}` 占位符， `resource_id` 必须匹配
+            `[a-z0-9][a-z0-9_-]{0,39}`（小写，最长 40 个字符），否则占位符不会被识别。
+            标识符需要引用时使用反引号；双引号在 MySQL 方言下是字符串字面量，不能用于
+            标识符。只允许单条 `SELECT`（不支持 `WITH` / CTE）。
         query_timeout: 查询超时（秒）。不传走下游默认。
 
     Returns the platform's own payload: columns, entries, paging, total_count, warnings.

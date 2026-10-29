@@ -327,9 +327,9 @@ openbkn context explore-subgraph <kn> <ot-id> --hops 2 --direction bidirectional
 # --args: analysis_dimensions, time, condition, having, order_by, limit, fill_null.
 openbkn context query-metric <kn> <metric-id> --args '{"time":{"instant":true}}'
 
-# run-sql: read-only MySQL; tables are {{.<data_source.id>}} placeholders, ids and
+# run-sql: read-only MySQL; tables are {{<resource_id>}} placeholders, ids and
 # physical columns from `search-schema <kn> "<q>" --include-columns`. --timeout <sec>.
-openbkn context run-sql <kn> --sql 'SELECT COUNT(*) FROM {{.<data_source.id>}}'
+openbkn context run-sql <kn> --sql 'SELECT COUNT(*) FROM {{<resource_id>}}'
 ```
 
 Every command that takes `--args <json>` also accepts `--args-file <path>`

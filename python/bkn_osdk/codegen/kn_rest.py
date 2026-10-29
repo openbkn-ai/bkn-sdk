@@ -37,7 +37,7 @@ OpenAPI. Every function here is one REST route under
     from bkn_osdk.kn import list_resources, run_sql
 
     list_resources(kn_id)
-    run_sql(kn_id, "SELECT COUNT(*) AS n FROM {{.d9hff…}}")
+    run_sql(kn_id, "SELECT COUNT(*) AS n FROM {{d9hff…}}")
 """
 
 from __future__ import annotations

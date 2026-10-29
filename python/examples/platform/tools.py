@@ -128,7 +128,7 @@ def main() -> None:
                     "run_sql",
                     {
                         "kn_id": network,
-                        "sql": "SELECT COUNT(*) AS n FROM {{." + resource + "}}",
+                        "sql": "SELECT COUNT(*) AS n FROM {{" + resource + "}}",
                         "bkn_context": turn.bkn_context,
                     },
                 ).value

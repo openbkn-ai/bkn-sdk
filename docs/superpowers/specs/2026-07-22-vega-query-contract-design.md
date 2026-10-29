@@ -7,7 +7,7 @@ introduced by bkn-foundry commit `ef1e90f8`.
 
 ## Scope
 
-- Replace the obsolete raw-query fields with `query_format`, `input_dialect`,
+- Replace the obsolete raw-query fields with `query_format`,
   `paging`, `query_timeout_sec`, and `need_total`.
 - Model initial and cursor-continuation requests separately so a continuation
   cannot accidentally repeat the initial query.
@@ -19,11 +19,10 @@ introduced by bkn-foundry commit `ef1e90f8`.
 ## Design
 
 `api/vega.ts` owns a discriminated TypeScript request union. `vega.sql()`
-continues to expose it without CLI concerns. SQL input defaults to the backend
-`mysql` dialect when omitted (changed from `postgres` for Foundry 0.2.0); DSL
-callers must explicitly use `opensearch`.
-The CLI also accepts `mariadb`, `oracle`, and `generic` for SQL; these values
-require a backend that includes [the Foundry dialect update](https://github.com/openbkn-ai/bkn-foundry/pull/1880).
+continues to expose it without CLI concerns. SQL input uses the shared MySQL
+SELECT subset; target connectors generate their own SQL dialect. DSL callers
+send an OpenSearch JSON object with `query_format: "dsl"`. The referenced
+Resource and its Catalog determine the target data source.
 The CLI emits a SQL initial request from flags, accepts complete advanced JSON,
 and emits a minimal cursor continuation body when `--cursor` is supplied.
 

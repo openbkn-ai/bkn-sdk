@@ -3,6 +3,8 @@ import {
   type CatalogDeletionImpact,
   type CatalogSummary,
   CreateBuildTaskRequest,
+  type RawQueryRequest,
+  type SqlRawQueryRequest,
   catalogConnectorTypeStats,
   catalogHealthStatus,
   createBuildTask,
@@ -718,6 +720,20 @@ describe("deleteCatalog", () => {
 });
 
 describe("runSql", () => {
+  it.each(["sql", "dsl"] as const)("POSTs %s without a dialect option", async (format) => {
+    const fetchMock = mockFetch({ entries: [] });
+    const body = {
+      query_format: format,
+      query:
+        format === "sql"
+          ? "SELECT * FROM {{r-1}}"
+          : { resource_id: "r-1", query: { match_all: {} } },
+    } as RawQueryRequest;
+    await runSql(ctx, body);
+    expect(JSON.parse(firstCall(fetchMock)[1].body as string)).toEqual(body);
+    expectTypeOf<"input_dialect">().not.toMatchTypeOf<keyof SqlRawQueryRequest>();
+  });
+
   it("preserves an unsafe BIGINT response value as native bigint", async () => {
     vi.stubGlobal(
       "fetch",
@@ -733,7 +749,6 @@ describe("runSql", () => {
       runSql(ctx, {
         query: "SELECT id_card, safe_id FROM {{r-1}}",
         query_format: "sql",
-        input_dialect: "mysql",
       }),
     ).resolves.toEqual({
       columns: [],
@@ -746,7 +761,6 @@ describe("runSql", () => {
     await runSql(ctx, {
       query: "SELECT * FROM {{r-1}} LIMIT 5",
       query_format: "sql",
-      input_dialect: "mysql",
       paging: { mode: "cursor", limit: 1000, keep_alive_sec: 300 },
       query_timeout_sec: 60,
       need_total: true,
@@ -759,7 +773,6 @@ describe("runSql", () => {
     expect(body).toEqual({
       query: "SELECT * FROM {{r-1}} LIMIT 5",
       query_format: "sql",
-      input_dialect: "mysql",
       paging: { mode: "cursor", limit: 1000, keep_alive_sec: 300 },
       query_timeout_sec: 60,
       need_total: true,
@@ -770,7 +783,6 @@ describe("runSql", () => {
     const f = mockFetch({ rows: [] });
     await runSql(ctx, {
       query_format: "dsl",
-      input_dialect: "opensearch",
       query: { term: { id_card: 110101199001152345n } },
     });
 

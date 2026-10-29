@@ -396,7 +396,7 @@ function buildForecastSql(binding, year) {
     `SELECT ${columns.join(", ")},`,
     "COUNT(*) OVER () AS forecast_count,",
     `SUM(CAST(${demand} AS DOUBLE)) OVER () AS total_demand`,
-    `FROM {{.${binding.resourceId}}}`,
+    `FROM {{${binding.resourceId}}}`,
     `WHERE ${month} >= '${periodStart}' AND ${month} < '${periodEnd}'`,
     `ORDER BY ${month}, ${quoteIdentifier(binding.product.column)}`,
   ].join(" ");

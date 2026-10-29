@@ -330,7 +330,7 @@ function buildSalesOrderSql(binding) {
     `SELECT ${productCode}, MAX(${productName}) AS product_name,`,
     "COUNT(*) AS order_count,",
     `SUM(CAST(${signingQuantity} AS DOUBLE)) AS signing_quantity`,
-    `FROM {{.${binding.resourceId}}}`,
+    `FROM {{${binding.resourceId}}}`,
     `GROUP BY ${productCode}`,
     "ORDER BY signing_quantity DESC",
   ].join(" ");
@@ -361,7 +361,7 @@ function buildForecastSql(binding, start, end) {
     `SELECT ${columns.join(", ")},`,
     "COUNT(*) OVER () AS forecast_count,",
     `SUM(CAST(${demand} AS DOUBLE)) OVER () AS total_demand`,
-    `FROM {{.${binding.resourceId}}}`,
+    `FROM {{${binding.resourceId}}}`,
     `WHERE ${month} >= '${start}' AND ${month} < '${end}'`,
     `ORDER BY ${month}, ${quoteIdentifier(binding.product.column)}`,
   ].join(" ");

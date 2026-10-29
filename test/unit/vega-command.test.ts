@@ -1006,7 +1006,7 @@ describe("vega sql", () => {
         "vega",
         "sql",
         "--data",
-        '{"query_format":"dsl","input_dialect":"opensearch","query":{"term":{"id_card":110101199001152345}}}',
+        '{"query_format":"dsl","query":{"term":{"id_card":110101199001152345}}}',
       ],
       { from: "user" },
     );
@@ -1346,7 +1346,6 @@ describe("vega flag validation against the contract enums", () => {
     [["resource", "list", "--direction", "up"], /--direction must be one of/],
     [["build-task", "list", "--mode", "stream"], /--mode must be one of/],
     [["sql", "--query", "SELECT 1", "--keep-alive-sec", "30"], /60 to 3600/],
-    [["sql", "--query", "SELECT 1", "--input-dialect", "hana"], /--input-dialect must be one of/],
     [["resource", "query", "r-1", "--keep-alive-sec", "4000"], /60 to 3600/],
     [["resource", "query", "r-1", "--binary-mode", "raw"], /--binary-mode must be one of/],
     [
@@ -1396,42 +1395,40 @@ describe("vega flag validation against the contract enums", () => {
     expect(url.searchParams.get("health_check_status")).toBe("healthy");
   });
 
-  it("accepts tsql as a SQL input dialect", async () => {
-    const fetchMock = mockFetch({ entries: [] });
+  it("rejects the removed dialect flag before HTTP", async () => {
+    const fetchMock = mockFetch();
     suppressOutput();
-    await cli().parseAsync(
-      [...cliBase, "sql", "--query", "SELECT TOP (1) * FROM {{r-1}}", "--input-dialect", "tsql"],
-      { from: "user" },
-    );
-    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
-      input_dialect: "tsql",
-    });
+    const root = cli();
+    root.commands
+      .find((command) => command.name() === "vega")
+      ?.commands.find((command) => command.name() === "sql")
+      ?.exitOverride();
+    await expect(
+      root.parseAsync([...cliBase, "sql", "--query", "SELECT 1", "--input-dialect", "mysql"], {
+        from: "user",
+      }),
+    ).rejects.toThrow(/unknown option '--input-dialect'/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it.each(["oracle", "generic", "mariadb"])(
-    "accepts %s as a SQL input dialect",
-    async (dialect) => {
-      const fetchMock = mockFetch({ entries: [] });
-      suppressOutput();
-      await cli().parseAsync(
-        [...cliBase, "sql", "--query", "SELECT * FROM {{r-1}}", "--input-dialect", dialect],
-        { from: "user" },
-      );
-      expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
-        input_dialect: dialect,
-      });
-    },
-  );
+  it("sends DSL through advanced JSON without a dialect option", async () => {
+    const fetchMock = mockFetch({ entries: [] });
+    suppressOutput();
+    const body = { query_format: "dsl", query: { resource_id: "r-1", query: { match_all: {} } } };
+    await cli().parseAsync([...cliBase, "sql", "--data", JSON.stringify(body)], { from: "user" });
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual(body);
+  });
 
-  it("omits input_dialect so the server applies its MySQL default", async () => {
+  it("sends SQL flags using the shared parser contract", async () => {
     const fetchMock = mockFetch({ entries: [] });
     suppressOutput();
     await cli().parseAsync([...cliBase, "sql", "--query", "SELECT * FROM {{r-1}}"], {
       from: "user",
     });
-    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).not.toHaveProperty(
-      "input_dialect",
-    );
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      query_format: "sql",
+      query: "SELECT * FROM {{r-1}}",
+    });
   });
 });
 

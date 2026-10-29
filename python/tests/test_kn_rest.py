@@ -250,7 +250,7 @@ def test_a_route_that_sends_the_network_still_sends_it(deploy: Deploy) -> None:
     """`kn_id` is the first argument everywhere, but only the routes that declare
     it put it on the wire."""
     kn.search_capabilities(KN, context=CONTEXT)
-    kn.run_sql(KN, "SELECT 1 FROM {{.r}}", context=CONTEXT)
+    kn.run_sql(KN, "SELECT 1 FROM {{r}}", context=CONTEXT)
 
     assert deploy.bodies[0]["kn_id"] == KN
     assert "kn_id" not in deploy.bodies[1]  # run_sql finds its data through the placeholder

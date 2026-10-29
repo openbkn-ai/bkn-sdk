@@ -509,22 +509,11 @@ interface RawQueryInitialBase {
 export interface SqlRawQueryRequest extends RawQueryInitialBase {
   query: string;
   query_format: "sql";
-  /** SQL input dialect; defaults to mysql server-side. */
-  input_dialect?:
-    | "postgres"
-    | "mysql"
-    | "mariadb"
-    | "trino"
-    | "duckdb"
-    | "tsql"
-    | "oracle"
-    | "generic";
 }
 
 export interface DslRawQueryRequest extends RawQueryInitialBase {
   query: Record<string, unknown>;
   query_format: "dsl";
-  input_dialect: "opensearch";
 }
 
 /** Request contract for POST /resources/query. */
@@ -539,7 +528,7 @@ export type SqlQueryRequest = RawQueryRequest;
  * the SQL with a `{{<resource-id>}}` placeholder so the backend knows which
  * connector to use. `POST /api/vega-backend/v1/resources/query`.
  */
-export function runSql(ctx: RequestContext, body: RawQueryRequest): Promise<unknown> {
+export async function runSql(ctx: RequestContext, body: RawQueryRequest): Promise<unknown> {
   return request(ctx, `${VEGA_BASE}/resources/query`, {
     method: "POST",
     body,

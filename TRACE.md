@@ -18,7 +18,7 @@ const result = await interaction.runOperation(
     operationKey: "purchase-orders-by-material",
     toolName: "run_sql",
     input: {
-      sql: "SELECT * FROM {{.purchase_orders}} WHERE material_number = '101-000015'",
+      sql: "SELECT * FROM {{purchase_orders}} WHERE material_number = '101-000015'",
     },
   },
   async ({ context }) => invokeBusinessApi(context),

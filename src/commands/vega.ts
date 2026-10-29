@@ -957,20 +957,6 @@ export function vegaCommand(): Command {
       "SQL string; reference a resource with a {{<resource-id>}} placeholder",
     )
     .option(
-      "--input-dialect <dialect>",
-      "SQL input dialect: postgres | mysql | mariadb | trino | duckdb | tsql | oracle | generic",
-      oneOf("--input-dialect", [
-        "postgres",
-        "mysql",
-        "mariadb",
-        "trino",
-        "duckdb",
-        "tsql",
-        "oracle",
-        "generic",
-      ] as const),
-    )
-    .option(
       "--paging-mode <mode>",
       "paging mode: single | cursor",
       oneOf("--paging-mode", ["single", "cursor"] as const),
@@ -996,7 +982,6 @@ export function vegaCommand(): Command {
       } else if (opts.cursor) {
         if (
           opts.query ||
-          opts.inputDialect ||
           opts.pagingMode ||
           opts.limit !== undefined ||
           opts.offset !== undefined ||
@@ -1025,7 +1010,6 @@ export function vegaCommand(): Command {
         body = {
           query: opts.query,
           query_format: "sql",
-          ...(opts.inputDialect ? { input_dialect: opts.inputDialect } : {}),
           ...(Object.keys(paging).length ? { paging } : {}),
           ...(opts.needTotal ? { need_total: true } : {}),
           ...(opts.queryTimeoutSec !== undefined
