@@ -956,10 +956,7 @@ export function vegaCommand(): Command {
       "--query <sql>",
       "SQL string; reference a resource with a {{<resource-id>}} placeholder",
     )
-    .option(
-      "--input-dialect <dialect>",
-      "SQL input dialect (case-insensitive): mysql | mariadb | tsql",
-    )
+    .option("--input-dialect <dialect>", "SQL input dialect (case-insensitive): mysql | mariadb")
     .option(
       "--paging-mode <mode>",
       "paging mode: single | cursor",

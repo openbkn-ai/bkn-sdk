@@ -1404,6 +1404,9 @@ describe("vega flag validation against the contract enums", () => {
     "TRINO",
     "duckdb",
     "DuckDB",
+    "tsql",
+    "TSQL",
+    "TsQl",
     "generic",
     "GENERIC",
     "GeNeRiC",
@@ -1434,7 +1437,7 @@ describe("vega flag validation against the contract enums", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it.each(["mysql", "mariadb", "tsql", "MYSQL", "MySQL", "mYsQl", "MariaDB", "TSQL"])(
+  it.each(["mysql", "mariadb", "MYSQL", "MySQL", "mYsQl", "MariaDB"])(
     "accepts supported %s SQL input",
     async (dialect) => {
       const fetchMock = mockFetch({ entries: [] });

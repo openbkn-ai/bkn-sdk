@@ -736,7 +736,6 @@ describe("runSql", () => {
     ["sql", "MySQL"],
     ["sql", "mYsQl"],
     ["sql", "MariaDB"],
-    ["sql", "TSQL"],
     ["dsl", "OpenSearch"],
     ["dsl", "oPeNsEaRcH"],
   ] as const)("normalizes %s dialect %s before HTTP", async (format, dialect) => {
@@ -762,6 +761,9 @@ describe("runSql", () => {
     "duckdb",
     "TRINO",
     "DuckDB",
+    "tsql",
+    "TSQL",
+    "TsQl",
     "generic",
     "GENERIC",
     "GeNeRiC",
@@ -774,7 +776,7 @@ describe("runSql", () => {
   ])("rejects explicit %s before HTTP", async (dialect) => {
     const fetchMock = mockFetch();
     expectTypeOf<"generic">().not.toMatchTypeOf<NonNullable<SqlRawQueryRequest["input_dialect"]>>();
-    expectTypeOf<"postgres" | "trino" | "duckdb" | "doris" | "oracle">().not.toMatchTypeOf<
+    expectTypeOf<"postgres" | "trino" | "duckdb" | "doris" | "oracle" | "tsql">().not.toMatchTypeOf<
       NonNullable<SqlRawQueryRequest["input_dialect"]>
     >();
     await expect(
@@ -787,20 +789,17 @@ describe("runSql", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it.each(["mysql", "mariadb", "tsql"] as const)(
-    "preserves supported %s input",
-    async (dialect) => {
-      const fetchMock = mockFetch({ entries: [] });
-      await runSql(ctx, {
-        query_format: "sql",
-        query: "SELECT * FROM {{r-1}}",
-        input_dialect: dialect,
-      });
-      expect(JSON.parse(firstCall(fetchMock)[1].body as string)).toMatchObject({
-        input_dialect: dialect,
-      });
-    },
-  );
+  it.each(["mysql", "mariadb"] as const)("preserves supported %s input", async (dialect) => {
+    const fetchMock = mockFetch({ entries: [] });
+    await runSql(ctx, {
+      query_format: "sql",
+      query: "SELECT * FROM {{r-1}}",
+      input_dialect: dialect,
+    });
+    expect(JSON.parse(firstCall(fetchMock)[1].body as string)).toMatchObject({
+      input_dialect: dialect,
+    });
+  });
 
   it("preserves an unsafe BIGINT response value as native bigint", async () => {
     vi.stubGlobal(
