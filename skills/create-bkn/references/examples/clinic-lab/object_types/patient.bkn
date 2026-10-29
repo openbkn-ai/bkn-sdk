@@ -1,0 +1,44 @@
+---
+type: object_type
+id: patient
+name: 患者
+aliases: [病人, 就诊人]
+tags: [主数据]
+---
+
+## ObjectType: 患者
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+| resource | res_patient | 患者表 |
+
+### Data Properties
+
+| Name | Display Name | Type | Required | Aliases | Description | Mapped Field | Mask Rule |
+|------|--------------|------|----------|---------|-------------|--------------|-----------|
+| patient_id | 患者编号 | string | | 病历号, 就诊号 | 主键 | patient_id | |
+| patient_name | 姓名 | string | true | | | name | |
+| id_card | 身份证号 | string | | 证件号 | | id_card_no | {"kind":"partial","keep_start":6,"keep_end":4,"replacement":"*"} |
+| age | 年龄 | integer | | | | age | |
+| updated_at | 更新时间 | datetime | | | | updated_at | |
+
+### Property Constraints
+
+```yaml
+id_card:
+  value_type: cn_id_card
+  unique: true
+age:
+  range: { min: 0, max: 150 }
+  unit: 岁
+```
+
+### Logic Properties
+
+### Keys
+
+Primary Keys: patient_id
+Display Key: patient_name
+Incremental Key: updated_at

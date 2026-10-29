@@ -1,0 +1,26 @@
+---
+type: relation_type
+id: department_under
+name: 隶属于
+reverse_name: 下辖
+---
+
+## RelationType: 隶属于
+
+### Endpoint
+
+| Source | Target | Type | Cardinality |
+|--------|--------|------|-------------|
+| department | department | direct | many_to_one |
+
+### Mapping Rules
+
+| Source Property | Target Property |
+|-----------------|-----------------|
+| parent_dept_id | dept_id |
+
+### Relation Constraints
+
+```yaml
+characteristics: [transitive]
+```

@@ -1,0 +1,34 @@
+---
+type: object_type
+id: patient
+name: 患者
+tags: [主数据]
+---
+
+## ObjectType: 患者
+
+也称病人、就诊人。
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+| resource | res_patient | 患者表 |
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field | Mask Rule |
+|------|--------------|------|-------------|--------------|-----------|
+| patient_id | 患者编号 | string | 主键；即病历号 | patient_id | |
+| patient_name | 姓名 | string | | name | |
+| id_card | 身份证号 | string | 18 位，唯一 | id_card_no | {"kind":"partial","keep_start":6,"keep_end":4,"replacement":"*"} |
+| age | 年龄 | integer | 单位：岁 | age | |
+| updated_at | 更新时间 | datetime | | updated_at | |
+
+### Logic Properties
+
+### Keys
+
+Primary Keys: patient_id
+Display Key: patient_name
+Incremental Key: updated_at

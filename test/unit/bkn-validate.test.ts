@@ -58,7 +58,12 @@ describe("bkn validate", () => {
     const r = validateBknDirectory(dir);
     expect(r.valid).toBe(true);
     expect(r.networkId).toBe("kn1");
-    expect(r.counts).toEqual({ objectTypes: 2, relationTypes: 1, conceptGroups: 0 });
+    expect(r.counts).toEqual({
+      objectTypes: 2,
+      relationTypes: 1,
+      conceptGroups: 0,
+      valueTypes: 0,
+    });
     expect(r.warnings).toEqual([]);
   });
 
@@ -636,6 +641,36 @@ describe("validateBknDirectory — capabilities section", () => {
     expect(r.warnings).toEqual([]);
   });
 
+  it("knows knowledge_bases: a named one binds, one with neither id nor name is skipped", () => {
+    const dir = bkn({
+      "network.bkn": withCapabilities(
+        [
+          "capabilities:",
+          "  knowledge_bases:",
+          '    - id: "7"',
+          "      name: 合同库",
+          "    - {}",
+          "",
+        ].join("\n"),
+      ),
+    });
+    const r = validateBknDirectory(dir);
+    expect(r.valid).toBe(true);
+    expect(r.capabilities).toEqual({
+      declared: 2,
+      skipped: [
+        {
+          capability_type: "knowledge_base",
+          reason: "not_found",
+          detail: "a knowledge base needs an id or a name",
+        },
+      ],
+    });
+    expect(r.warnings).toEqual([
+      "network.bkn: push will skip knowledge_base (unnamed): a knowledge base needs an id or a name.",
+    ]);
+  });
+
   it("reports an entry with nothing to resolve by as a certain skip, without failing", () => {
     const dir = bkn({
       "network.bkn": withCapabilities(
@@ -680,7 +715,10 @@ describe("validateBknDirectory — capabilities section", () => {
   });
 
   it.each([
-    ['capabilities: "not a mapping"\n', "is not a mapping of skills / functions / mcp_tools"],
+    [
+      'capabilities: "not a mapping"\n',
+      "is not a mapping of skills / functions / mcp_tools / knowledge_bases",
+    ],
     ["capabilities:\n  skills: s1\n", ".skills is not a list"],
     ["capabilities:\n  functions:\n    - t1\n", ".functions has an entry that is not a mapping"],
   ])("flags a section push would drop whole: %j", (block, detail) => {
@@ -696,7 +734,7 @@ describe("validateBknDirectory — capabilities section", () => {
     );
     expect(r.capabilities).toEqual({ declared: 0, skipped: [] });
     expect(r.warnings).toEqual([
-      "network.bkn: capabilities.tools is not a known list (skills, functions, mcp_tools); push ignores it.",
+      "network.bkn: capabilities.tools is not a known list (skills, functions, mcp_tools, knowledge_bases); push ignores it.",
     ]);
   });
 
@@ -717,5 +755,102 @@ describe("validateBknDirectory — capabilities section", () => {
   it("reports nothing for a network without the section", () => {
     const r = validateBknDirectory(bkn({ "network.bkn": network }));
     expect(r.capabilities).toEqual({ declared: 0, skipped: [] });
+  });
+});
+
+describe("bkn validate: BKN spec 3.0", () => {
+  const examples = join(__dirname, "..", "..", "skills", "create-bkn", "references", "examples");
+
+  it("passes the create-bkn 3.0 example and counts its value types", () => {
+    const r = validateBknDirectory(join(examples, "clinic-lab"));
+    expect(r.errors).toEqual([]);
+    expect(r.warnings).toEqual([]);
+    expect(r.counts).toEqual({
+      objectTypes: 4,
+      relationTypes: 6,
+      conceptGroups: 1,
+      valueTypes: 3,
+    });
+  });
+
+  it("passes the 2.x example, which has no 3.0 content", () => {
+    const r = validateBknDirectory(join(examples, "clinic-lab-2.x"));
+    expect(r.errors).toEqual([]);
+    expect(r.warnings).toEqual([]);
+    expect(r.counts).toEqual({
+      objectTypes: 4,
+      relationTypes: 4,
+      conceptGroups: 1,
+      valueTypes: 0,
+    });
+  });
+
+  it("warns when 3.0 content sits in a package without bkn_spec 3.0", () => {
+    const constrained = `${ot("a", "Alpha")}
+## ObjectType: Alpha
+
+### Property Constraints
+
+\`\`\`yaml
+x:
+  unit: 元
+\`\`\`
+`;
+    const files = {
+      "object_types/a.bkn": constrained,
+      "value_types/v.bkn": "---\ntype: value_type\nid: v\nname: V\n---\n",
+    };
+    const without = validateBknDirectory(bkn({ "network.bkn": network, ...files }));
+    expect(without.valid).toBe(true);
+    expect(without.warnings).toHaveLength(1);
+    expect(without.warnings[0]).toContain("(value_types/, object_types/a.bkn)");
+
+    // A relation's Data Properties are 3.0 content too; an object type's are not.
+    const relationProps = validateBknDirectory(
+      bkn({
+        "network.bkn": network,
+        "object_types/a.bkn": `${ot("a", "Alpha")}\n## ObjectType: Alpha\n\n### Data Properties\n\n| Name | Display Name |\n|------|--------------|\n| x | X |\n`,
+        "relation_types/r.bkn":
+          "---\ntype: relation_type\nid: r\nname: R\n---\n\n## RelationType: R\n\n### Data Properties\n\n| Name | Display Name |\n|------|--------------|\n| t | T |\n",
+      }),
+    );
+    expect(relationProps.warnings).toHaveLength(1);
+    expect(relationProps.warnings[0]).toContain("(relation_types/r.bkn)");
+
+    const spec3 = network.replace("name: KN One\n", 'name: KN One\nbkn_spec: "3.0"\n');
+    expect(validateBknDirectory(bkn({ "network.bkn": spec3, ...files })).warnings).toEqual([]);
+    // Unquoted 3.0 is the number 3 to YAML and still selects 3.0.
+    const unquoted = network.replace("name: KN One\n", "name: KN One\nbkn_spec: 3.0\n");
+    expect(validateBknDirectory(bkn({ "network.bkn": unquoted, ...files })).warnings).toEqual([]);
+  });
+
+  it("checks the Data Properties table of an indirect relation", () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": ot("a", "Alpha"),
+      "relation_types/r.bkn": `---
+type: relation_type
+id: r
+name: R
+---
+
+## RelationType: R
+
+### Endpoint
+
+| Source | Target | Type |
+|--------|--------|------|
+| a | a | indirect |
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| title | 职务 | string | 主任 | 副主任 | title |
+`,
+    });
+    expect(validateBknDirectory(dir).errors).toEqual([
+      "relation_types/r.bkn:19: table row has 6 columns; expected 5. Check for a pipe or newline inside a cell.",
+    ]);
   });
 });

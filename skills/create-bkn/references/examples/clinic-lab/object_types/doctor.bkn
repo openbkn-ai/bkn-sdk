@@ -1,0 +1,29 @@
+---
+type: object_type
+id: doctor
+name: 医生
+aliases: [医师]
+---
+
+## ObjectType: 医生
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+| resource | res_doctor | 医生表 |
+
+### Data Properties
+
+| Name | Display Name | Type | Semantic | Required | Description | Mapped Field |
+|------|--------------|------|----------|----------|-------------|--------------|
+| doctor_id | 工号 | string | | | 主键 | doctor_id |
+| doctor_name | 姓名 | string | | true | | name |
+| license_expiry | 执业证有效期至 | date | valid_to | | 为空表示长期有效 | license_expire_date |
+
+### Logic Properties
+
+### Keys
+
+Primary Keys: doctor_id
+Display Key: doctor_name

@@ -1,0 +1,10 @@
+---
+type: knowledge_network
+id: clinic_lab
+name: 门诊检验
+tags: [医疗]
+---
+
+# 门诊检验
+
+门诊检验申请，以及相关的患者、医生与科室。

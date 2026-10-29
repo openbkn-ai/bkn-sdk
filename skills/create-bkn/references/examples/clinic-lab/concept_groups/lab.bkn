@@ -1,0 +1,14 @@
+---
+type: concept_group
+id: lab
+name: 检验
+---
+
+## ConceptGroup: 检验
+
+### Object Types
+
+| ID | Name | Description |
+|----|------|-------------|
+| lab_order | 检验申请 | |
+| patient | 患者 | |

@@ -1,0 +1,36 @@
+---
+type: object_type
+id: department
+name: 科室
+---
+
+## ObjectType: 科室
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+| resource | res_department | 科室表 |
+
+### Data Properties
+
+| Name | Display Name | Type | Semantic | Required | Description | Mapped Field |
+|------|--------------|------|----------|----------|-------------|--------------|
+| dept_id | 科室代码 | string | | | 主键 | dept_code |
+| dept_name | 科室名称 | string | | true | | dept_name |
+| parent_dept_id | 上级科室代码 | string | | | 一级科室为空 | parent_code |
+| site | 所在位置 | point | location | | 科室所在楼宇的坐标 | geo |
+
+### Property Constraints
+
+```yaml
+site:
+  crs: gcj02
+```
+
+### Logic Properties
+
+### Keys
+
+Primary Keys: dept_id
+Display Key: dept_name

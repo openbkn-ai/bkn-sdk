@@ -22,14 +22,14 @@ export const BKN_RESOURCE_NAME_MAX_LENGTH = 128;
  * it. Same shape and reason codes as the `capabilities.skipped` entries push answers with.
  */
 export interface CapabilitySkipPreview {
-  capability_type: "skill" | "function" | "mcp_tool";
+  capability_type: "skill" | "function" | "mcp_tool" | "knowledge_base";
   name?: string;
   reason: "not_found";
   detail: string;
 }
 
 export interface CapabilityCheck {
-  /** Entries declared across skills, functions and mcp_tools. */
+  /** Entries declared across skills, functions, mcp_tools and knowledge_bases. */
   declared: number;
   /** Set when the section cannot be decoded: push then drops all of it, silently. */
   malformed?: string;
@@ -41,7 +41,13 @@ export interface ValidationResult {
   dir: string;
   /** `network.bkn` frontmatter id, or an empty string when none can be read. */
   networkId: string;
-  counts: { objectTypes: number; relationTypes: number; conceptGroups: number };
+  counts: {
+    objectTypes: number;
+    relationTypes: number;
+    conceptGroups: number;
+    /** BKN spec 3.0 `value_types/` definitions; a 2.x package has none. */
+    valueTypes: number;
+  };
   /** network.bkn's `capabilities:` section: how many entries it declares, and which cannot bind. */
   capabilities: CapabilityCheck;
   errors: string[];
@@ -110,6 +116,8 @@ const STRUCTURED_TABLE_SECTIONS = {
     "Backing Resource",
     "Source Mapping",
     "Target Mapping",
+    // Spec 3.0: an indirect relation's properties, same table as an object type's.
+    "Data Properties",
   ]),
   action_types: new Set([
     "Bound Object",
@@ -451,6 +459,7 @@ const CAPABILITY_LISTS = {
   skills: "skill",
   functions: "function",
   mcp_tools: "mcp_tool",
+  knowledge_bases: "knowledge_base",
 } as const;
 
 function field(entry: Record<string, unknown>, key: string): string {
@@ -493,13 +502,13 @@ function checkCapabilities(text: string, warnings: string[]): CapabilityCheck {
     return { declared: 0, malformed: detail, skipped: [] };
   };
   if (typeof section !== "object" || Array.isArray(section)) {
-    return malformed("is not a mapping of skills / functions / mcp_tools");
+    return malformed("is not a mapping of skills / functions / mcp_tools / knowledge_bases");
   }
   const lists = section as Record<string, unknown>;
   for (const [key, value] of Object.entries(lists)) {
     if (!(key in CAPABILITY_LISTS)) {
       warnings.push(
-        `network.bkn: capabilities.${key} is not a known list (skills, functions, mcp_tools); push ignores it.`,
+        `network.bkn: capabilities.${key} is not a known list (skills, functions, mcp_tools, knowledge_bases); push ignores it.`,
       );
       continue;
     }
@@ -526,9 +535,11 @@ function checkCapabilities(text: string, warnings: string[]): CapabilityCheck {
         warnings.push(
           `network.bkn: capabilities.${key} entry '${label}' has ids but no names; it binds only on the platform it was exported from.`,
         );
-      if (type === "skill") {
+      if (type === "skill" || type === "knowledge_base") {
+        // Knowledge base ids are local integers, so like skill ids they bind only where exported.
         const [id, name] = [field(entry, "id"), field(entry, "name")];
-        if (!id && !name) skip("", "a skill needs an id or a name");
+        const label = type === "skill" ? "a skill" : "a knowledge base";
+        if (!id && !name) skip("", `${label} needs an id or a name`);
         else if (!name) idsOnly(id);
       } else if (type === "function") {
         const [boxId, toolId] = [field(entry, "box_id"), field(entry, "tool_id")];
@@ -554,6 +565,24 @@ function checkCapabilities(text: string, warnings: string[]): CapabilityCheck {
   return result;
 }
 
+/** True when network.bkn declares `bkn_spec` 3.0 (`3`, `3.0` or `3.0.x`; YAML may read `3.0` as 3). */
+function declaresSpec3(networkText: string): boolean {
+  const end = networkText.indexOf("\n---", 3);
+  if (!networkText.startsWith("---") || end === -1) return false;
+  try {
+    const fm = yaml.load(networkText.slice(3, end)) as Record<string, unknown> | null;
+    const spec = fm && typeof fm === "object" ? fm.bkn_spec : undefined;
+    return spec !== undefined && spec !== null && /^3(\.0(\.\d+)?)?$/.test(String(spec).trim());
+  } catch {
+    return false;
+  }
+}
+
+const SPEC3_SECTION = /^###\s+(Property Constraints|Relation Constraints)\s*$/m;
+// An object type has Data Properties in either spec; only a relation's are 3.0 content.
+const SPEC3_RELATION_SECTION =
+  /^###\s+(Property Constraints|Relation Constraints|Data Properties)\s*$/m;
+
 export function validateBknDirectory(dirPath: string): ValidationResult {
   const dir = resolve(dirPath);
   const errors: string[] = [];
@@ -564,7 +593,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
       valid: false,
       dir,
       networkId: "",
-      counts: { objectTypes: 0, relationTypes: 0, conceptGroups: 0 },
+      counts: { objectTypes: 0, relationTypes: 0, conceptGroups: 0, valueTypes: 0 },
       capabilities: { declared: 0, skipped: [] },
       errors: [`Not a directory: ${dir}`],
       warnings: [],
@@ -574,7 +603,10 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
   // network.bkn — required, must declare a knowledge_network.
   const networkPath = join(dir, "network.bkn");
   let networkId = "";
+  let spec3 = false;
   let capabilities: CapabilityCheck = { declared: 0, skipped: [] };
+  // 3.0 content that a package without `bkn_spec: "3.0"` would lose without an error.
+  const spec3Content: string[] = [];
   if (!existsSync(networkPath)) {
     errors.push("Missing network.bkn at the BKN root.");
   } else {
@@ -589,6 +621,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
       if (!fm.name) errors.push("network.bkn is missing 'name'.");
       errors.push(...validateResourceName(fm.name, "network.bkn", "knowledge_network"));
       capabilities = checkCapabilities(networkText, warnings);
+      spec3 = declaresSpec3(networkText);
     }
   }
 
@@ -600,6 +633,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
     const fm = parseFrontmatter(text);
     const rel = file.slice(dir.length + 1);
     errors.push(...validateMarkdownTables(text, rel, "object_types"));
+    if (SPEC3_SECTION.test(text)) spec3Content.push(rel);
     if (!fm || fm.type !== "object_type") {
       errors.push(`${rel}: not a valid object_type (missing/wrong frontmatter type).`);
       continue;
@@ -621,6 +655,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
     const fm = parseFrontmatter(text);
     const rel = file.slice(dir.length + 1);
     errors.push(...validateMarkdownTables(text, rel, "relation_types"));
+    if (SPEC3_RELATION_SECTION.test(text)) spec3Content.push(rel);
     if (!fm || fm.type !== "relation_type") {
       errors.push(`${rel}: not a valid relation_type (missing/wrong frontmatter type).`);
       continue;
@@ -644,10 +679,18 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
       errors.push(...validateResourceName(parseFrontmatter(text)?.name, rel, kind.slice(0, -1)));
     }
   }
-  for (const file of bknFiles(join(dir, "value_types"))) {
+  const vtFiles = bknFiles(join(dir, "value_types"));
+  if (vtFiles.length > 0) spec3Content.unshift("value_types/");
+  for (const file of vtFiles) {
     const text = readFileSync(file, "utf8");
     const rel = file.slice(dir.length + 1);
     errors.push(...validateResourceName(parseFrontmatter(text)?.name, rel, "value_type"));
+  }
+
+  if (!spec3 && existsSync(networkPath) && spec3Content.length > 0) {
+    warnings.push(
+      `network.bkn has no bkn_spec "3.0", so the platform reads this package as 2.x: value_types/ is ignored and Property Constraints / Relation Constraints sections and relation Data Properties become description text (${spec3Content.join(", ")}). Add bkn_spec: "3.0" to write BKN 3.0 (platform 0.2.1 and later); to stay on BKN 2.x, remove them and write their content in descriptions.`,
+    );
   }
 
   if (existsSync(join(dir, "metrics"))) {
@@ -718,6 +761,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
       objectTypes: otFiles.length,
       relationTypes: rtFiles.length,
       conceptGroups: cgFiles.length,
+      valueTypes: vtFiles.length,
     },
     capabilities,
     errors,

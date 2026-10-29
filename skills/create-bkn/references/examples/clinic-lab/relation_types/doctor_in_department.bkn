@@ -1,0 +1,43 @@
+---
+type: relation_type
+id: doctor_in_department
+name: 任职于
+reverse_name: 在职医生
+aliases: [所属科室]
+---
+
+## RelationType: 任职于
+
+医生可以同时在多个科室任职，任职记录在任职表中。
+
+### Endpoint
+
+| Source | Target | Type | Cardinality |
+|--------|--------|------|-------------|
+| doctor | department | indirect | many_to_many |
+
+### Backing Resource
+
+| Type | ID |
+|------|----|
+| resource | res_doctor_assignment |
+
+### Source Mapping
+
+| Source Property | Resource Property |
+|-----------------|-------------------|
+| doctor_id | doctor_id |
+
+### Target Mapping
+
+| Resource Property | Target Property |
+|-------------------|-----------------|
+| dept_code | dept_id |
+
+### Data Properties
+
+| Name | Display Name | Type | Semantic | Description | Mapped Field |
+|------|--------------|------|----------|-------------|--------------|
+| title | 职务 | string | | 如主任、副主任 | title |
+| start_date | 任职开始 | date | valid_from | | start_date |
+| end_date | 任职结束 | date | valid_to | 在职时为空 | end_date |

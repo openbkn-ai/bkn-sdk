@@ -6,14 +6,51 @@ excerpts here; keep it append-only. Do not duplicate into product-specs.
 
 Authoritative source
 --------------------
-- BKN specification (upstream). Paste the current SPECIFICATION.md excerpts below.
-- Foundation project: https://github.com/openbkn-ai/bkn-foundry
+- BKN specification 3.0.0, in bkn-foundry:
+  adp/bkn/bkn-backend/server/bkn-specification/SPECIFICATION.md
+  https://github.com/openbkn-ai/bkn-foundry/blob/main/adp/bkn/bkn-backend/server/bkn-specification/SPECIFICATION.md
+  Last synced from bkn-foundry commit 88af77812 (2026-10-29).
+- The spec and its Go implementation change together in bkn-foundry. The SDK copies follow it and
+  are not edited on their own: skills/create-bkn/references/SPECIFICATION.llm.md (generation
+  summary), skills/create-bkn/assets/templates/, src/utils/bkn-validate.ts (offline structural check).
 
-Known structure (fill / verify against the spec)
-------------------------------------------------
-- Root file: network.bkn
-- Subdirs: object_types/, relation_types/, action_types/, concept_groups/
-- Optional CHECKSUM file inside the BKN dir (sibling of network.bkn); does not affect load.
+Known structure
+---------------
+- Root file: network.bkn. `bkn_spec: "3.0"` in its frontmatter selects the 3.0 rules for the whole
+  package; without it the package is read as 2.x and 3.0 declarations are ignored. Any other value
+  is refused on import (`unsupported bkn_spec`).
+- Subdirs: value_types/ (3.0), object_types/, relation_types/, action_types/, risk_types/,
+  concept_groups/, object_metrics/ (`<id>@<version>.json`). The subdir decides the definition type;
+  3.0 refuses a frontmatter `type` that differs.
+- Optional CHECKSUM file inside the BKN dir (sibling of network.bkn); format 2 hashes frontmatter and
+  body per definition; keys `network`, `<type>:<id>` (incl. `value_type:<id>`), `SKILL.md`.
+  A mismatch only warns on load, except that a package with object metrics is refused.
 - Packaging: macOS tar must set COPYFILE_DISABLE=1 to avoid ._* metadata files.
+
+3.0 additions (spec section)
+----------------------------
+- One way to write each thing (§1.3): unknown frontmatter fields, `###` sections and columns,
+  legacy column names, `condition:` wrappers, `Tool Configuration` are refused with a position.
+- Lifecycle `lifecycle: {status, reason, replaced_by}` on object, relation and action types (§4.3).
+- Property declarations (§6.8): Data Properties columns `Semantic`, `Required`, `Aliases`;
+  `### Property Constraints` YAML keyed by property (`value_type`, `range`, `length`, `pattern`,
+  `unit`, `unique`, `crs`, `timezone`); object type `aliases`.
+- Relation declarations (§7.6): `reverse_name`, `aliases`, `importance`, `fallback_for`,
+  `verification` in frontmatter; `Cardinality` column in `### Endpoint`; `### Relation Constraints`
+  (`required`, `characteristics`); relation properties (`### Data Properties`,
+  `### Property Constraints`) on indirect relations only.
+- Action type `aliases` (§8.2).
+- Value types `value_types/*.bkn` with a `### Definition` YAML (`base_type`, `enum`, `range`,
+  `length`, `pattern`, `unit`) (§16).
+- Full example: spec appendix C; SDK example skills/create-bkn/references/examples/clinic-lab/.
+
+BKN 2.x
+-------
+- A package without `bkn_spec` is read as 2.x on every platform; platform 0.2.0 reads only 2.x.
+  2.x readers take 3.0 content without an error: 3.0 sections become description text, value_types/
+  and 3.0 fields and columns are dropped. 2.x packages leave out all 3.0 content (create-bkn
+  SPECIFICATION.llm.md「2.x 规范写法」; example skills/create-bkn/references/examples/clinic-lab-2.x/,
+  checked against the v0.2.0 spec library).
+- The CLI talks only to a platform of its own version, so `openbkn --version` gives the target.
 
 [ paste spec excerpts below this line ]

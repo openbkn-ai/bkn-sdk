@@ -1,0 +1,43 @@
+---
+type: relation_type
+id: {relation_id}
+name: {关系名称}
+reverse_name: {反向名称}
+tags: [{标签1}]
+---
+
+## RelationType: {关系名称}
+
+{详细描述：关联记录在哪个关联表里，一行代表什么}
+
+### Endpoint
+
+| Source | Target | Type | Cardinality |
+|--------|--------|------|-------------|
+| {source_object_id} | {target_object_id} | indirect | many_to_many |
+
+### Backing Resource
+
+| Type | ID |
+|------|----|
+| resource | {resource_id} |
+
+### Source Mapping
+
+| Source Property | Resource Property |
+|-----------------|-------------------|
+| {source_property} | {resource_property} |
+
+### Target Mapping
+
+| Resource Property | Target Property |
+|-------------------|-----------------|
+| {resource_property} | {target_property} |
+
+### Data Properties
+
+| Name | Display Name | Type | Semantic | Description | Mapped Field |
+|------|--------------|------|----------|-------------|--------------|
+| {edge_property} | {显示名} | string | | {说明} | {resource_column} |
+| {start_property} | {显示名} | date | valid_from | | {resource_column} |
+| {end_property} | {显示名} | date | valid_to | 为空表示仍有效 | {resource_column} |

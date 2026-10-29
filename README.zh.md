@@ -192,8 +192,8 @@ skill、toolbox、function、osdk、trace、admin、call），以及两篇操作
 （建知识网络、排障）。
 
 第二个技能 `skills/create-bkn/` 引导 AI **编写** BKN 定义目录（`network.bkn` +
-按类型分目录的 `object_types/` / `relation_types/` / `action_types/` /
-`concept_groups/` 文件，遵循 v2.0.1 规范），`references/` 下附格式规范、模板和
+按类型分目录的 `value_types/` / `object_types/` / `relation_types/` /
+`action_types/` / `concept_groups/` 文件，默认遵循 BKN 3.0 规范，也可写 2.x），`references/` 下附格式规范、模板和
 完整示例。它与 `openbkn` 技能配合：产出的目录再由 `openbkn bkn validate` / `push`
 校验和导入。
 

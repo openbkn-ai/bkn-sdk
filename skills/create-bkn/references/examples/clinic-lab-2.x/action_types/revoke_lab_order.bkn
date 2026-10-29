@@ -1,0 +1,36 @@
+---
+type: action_type
+id: revoke_lab_order
+name: 撤销检验申请
+action_intent: modify
+---
+
+## ActionType: 撤销检验申请
+
+撤销尚未采样的检验申请，状态改为已撤销（C）。已采样或已出报告的申请不能撤销。
+
+### Bound Object
+
+| Bound Object |
+|--------------|
+| lab_order |
+
+### Trigger Condition
+
+### Action Source
+
+| Type | BoxID | ToolID | McpID | ToolName |
+|------|-------|--------|-------|----------|
+| tool | box_lis | tool_revoke_order | | |
+
+### Parameter Binding
+
+| Name | Type | Source | Operation | ValueFrom | Value | Description |
+|------|------|--------|-----------|-----------|-------|-------------|
+| order_no | string | Body | | property | order_no | 申请单号 |
+| reason | string | Body | | input | | 撤销原因 |
+
+### Schedule
+
+| Type | Expression |
+|------|------------|

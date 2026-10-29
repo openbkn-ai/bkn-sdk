@@ -1,0 +1,15 @@
+---
+type: value_type
+id: cn_id_card
+name: 居民身份证号
+---
+
+## ValueType: 居民身份证号
+
+### Definition
+
+```yaml
+base_type: string
+length: { min: 18, max: 18 }
+pattern: "^\\d{17}[\\dX]$"
+```

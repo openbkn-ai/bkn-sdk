@@ -1,0 +1,57 @@
+---
+type: object_type
+id: lab_order
+name: 检验申请
+aliases: [化验单, 检验单]
+tags: [检验]
+---
+
+## ObjectType: 检验申请
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+| resource | res_lab_order | 检验申请表 |
+
+### Data Properties
+
+| Name | Display Name | Type | Semantic | Required | Aliases | Description | Mapped Field |
+|------|--------------|------|----------|----------|---------|-------------|--------------|
+| order_no | 申请单号 | string | | | 条码号 | 主键 | order_no |
+| patient_id | 患者编号 | string | | | | 院内建档后才有；急诊未建档时为空 | patient_id |
+| patient_id_card | 患者身份证号 | string | | | | 开单时登记的证件号 | patient_id_card |
+| doctor_id | 开单医生工号 | string | | true | | | doctor_id |
+| legacy_doctor_code | 旧系统医生编码 | string | | | | 旧 HIS 迁移数据才有 | old_doctor_code |
+| ordered_at | 开单时间 | datetime | event_time | true | 申请时间 | | apply_time |
+| reported_at | 报告时间 | datetime | end_time | | 出报告时间 | 未出报告时为空 | report_time |
+| status | 申请状态 | keyword | status | true | | | apply_status |
+| critical_level | 危急程度 | keyword | severity | | | 正常 / 异常 / 危急 | critical_flag |
+| fee | 费用 | decimal | | | 检验费 | | fee_amount |
+| updated_at | 更新时间 | datetime | | | | | updated_at |
+
+### Property Constraints
+
+```yaml
+order_no:
+  pattern: "^LO\\d{10}$"
+  unique: true
+patient_id_card:
+  value_type: cn_id_card
+ordered_at:
+  timezone: Asia/Shanghai
+reported_at:
+  timezone: Asia/Shanghai
+status:
+  value_type: lis_apply_status
+fee:
+  value_type: amount_cny
+```
+
+### Logic Properties
+
+### Keys
+
+Primary Keys: order_no
+Display Key: order_no
+Incremental Key: updated_at

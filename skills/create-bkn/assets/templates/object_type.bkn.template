@@ -2,68 +2,47 @@
 type: object_type
 id: {object_id}
 name: {对象名称}
+aliases: [{别名1}, {别名2}]
 tags: [{标签1}, {标签2}]
 ---
 
 ## ObjectType: {对象名称}
 
-{详细描述}
-
-### Data Properties
-
-| Name | Display Name | Type | Description | Mapped Field |
-|------|--------------|------|-------------|--------------|
-| {name} | {显示名} | string | {说明} | {mapped_field} |
-| {name} | {显示名} | integer | {说明} | {mapped_field} |
-
-### Keys
-
-Primary Keys: {primary_key}
-Display Key: {display_key}
-Incremental Key:
-
-### Logic Properties
-
-<!-- 可选：无逻辑属性时保留空标题即可。有内容时按以下格式添加子章节：
-
-#### {logic_property_name}
-
-**Meta**
-
-| Display Name | Type | Description |
-|--------------|------|-------------|
-| {显示名} | metric | {描述} |
-
-**Source**
-
-| Source Type | Source ID | Source Name |
-|-------------|-----------|-------------|
-| metric | {metric_id} | {指标名} |
-
-**Parameters**
-
-ValueFrom：值的来源（property / input / const）；Value：属性名或常量（input 时留空）；
-Source：参数在工具请求中的位置（Query / Body / Header / Path），metric 参数留空；Operation：metric 参数的比较操作符。
-
-| Name | Type | Source | Operation | ValueFrom | Value | Description |
-|------|------|--------|-----------|-----------|-------|-------------|
-| {param} | string |  | == | property | {property_name} | {说明} |
-| {param} | array |  | in | input |  | {说明} |
-| {param} | number |  | == | const | {value} | {说明} |
-
--->
-
-<!-- Source Type 为 tool 时，上面的 Source 表要多三列：BoxID、ToolID、ResultPath
-     （表头写成 Source Type / Source ID / Source Name / BoxID / ToolID / ResultPath）。
-     box_id 与 tool_id 缺一不可，否则后端返回 400 LogicPropertyToolSourceRequired；
-     Source ID 留空，ResultPath 形如 $.result.rate_pct。示例见 references/SPECIFICATION.llm.md。
--->
-
-<!-- 可选：无数据源绑定时省略整个 Data Source 节 -->
-<!-- Type 固定为 resource（Vega 资源 ID，默认实时查询） -->
+{详细描述：对象是什么、类型级业务规则}
 
 ### Data Source
 
 | Type | ID | Name |
-|------|-----|------|
+|------|----|------|
 | resource | {resource_id} | {resource_name} |
+
+### Data Properties
+
+| Name | Display Name | Type | Semantic | Required | Aliases | Description | Mapped Field |
+|------|--------------|------|----------|----------|---------|-------------|--------------|
+| {id_property} | {显示名} | string | | | | 主键 | {mapped_field} |
+| {name_property} | {显示名} | string | | true | {别名} | | {mapped_field} |
+| {time_property} | {显示名} | datetime | event_time | true | | | {mapped_field} |
+| {status_property} | {显示名} | keyword | status | | | | {mapped_field} |
+| {amount_property} | {显示名} | decimal | | | | {口径说明} | {mapped_field} |
+| {updated_property} | {显示名} | datetime | | | | | {mapped_field} |
+
+### Property Constraints
+
+```yaml
+{time_property}:
+  timezone: Asia/Shanghai
+{status_property}:
+  value_type: {value_type_id}
+{amount_property}:
+  range: { min: 0 }
+  unit: 元
+```
+
+### Logic Properties
+
+### Keys
+
+Primary Keys: {id_property}
+Display Key: {name_property}
+Incremental Key: {updated_property}

@@ -1,16 +1,19 @@
 ---
 name: create-bkn
 description: >-
-  Guides creation of BKN (Business Knowledge Network) definition files following v2.0.1 spec.
-  Covers network, object_type, relation_type, action_type, concept_group.
-  Use when creating knowledge networks, BKN files, object types, relation types, action types,
-  concept groups, or when user asks to model business knowledge in BKN format.
+  Guides creation of BKN (Business Knowledge Network) definition files in either spec version:
+  BKN 3.0 (default) or BKN 2.x.
+  Covers network, value_type, object_type, relation_type, action_type, concept_group, including
+  property declarations (semantic, required, constraints), value types and enums, aliases, relation
+  declarations (reverse name, cardinality, constraints, relation properties), lifecycle and
+  fallback paths. Use when creating knowledge networks, BKN files, object types, relation types,
+  action types, value types, concept groups, or when user asks to model business knowledge in BKN format.
   When the openbkn skill is also loaded, use it to run the openbkn CLI (auth, bkn push) after files exist.
 ---
 
 # Create BKN
 
-Generate well-formed BKN directories (Markdown + YAML frontmatter) per v2.0.1.
+Generate well-formed BKN directories (Markdown + YAML frontmatter) in either spec version: BKN 3.0 (default) or BKN 2.x.
 
 ## Works with the openbkn skill
 
@@ -18,106 +21,146 @@ Generate well-formed BKN directories (Markdown + YAML frontmatter) per v2.0.1.
 
 ## What is BKN
 
-BKN is Markdown + YAML frontmatter for schema; one file per definition under typed subfolders. Details (sections, required tables, types) live in [references/SPECIFICATION.llm.md](references/SPECIFICATION.llm.md).
+BKN is Markdown + YAML frontmatter for schema; one file per definition under typed subfolders. Details (sections, required tables, types, every declaration) live in [references/SPECIFICATION.llm.md](references/SPECIFICATION.llm.md).
+
+## Spec version: 3.0 or 2.x
+
+Pick the spec version before writing anything:
+
+| Write | When | `network.bkn` | Example |
+|-------|------|---------------|---------|
+| **BKN 3.0** (default) | Target platform 0.2.1 or later | `bkn_spec: "3.0"` | [references/examples/clinic-lab/](references/examples/clinic-lab/) |
+| **BKN 2.x** | The user asks for 2.x, or the target platform only reads 2.x (0.2.0) | no `bkn_spec` | [references/examples/clinic-lab-2.x/](references/examples/clinic-lab-2.x/) |
+
+- Find the target platform with `openbkn --version`: the CLI only talks to a platform of its own version. If the user names a version, use that; if neither the spec nor the platform is known, ask.
+- A 2.x package is the 3.0 writing minus the 3.0 additions (value types, declarations, aliases, lifecycle, fallback paths); what they would say goes into descriptions. Every platform reads it the same way, including 0.2.1 and later. The rules are in [references/SPECIFICATION.llm.md](references/SPECIFICATION.llm.md#2x-规范写法).
+- Never mix the two: 2.x readers (no `bkn_spec`, or a 0.2.0 platform) import 3.0 content without an error, but `### Property Constraints` and `### Relation Constraints` become description text, value types and aliases are dropped, and fallback paths and deprecated relations become ordinary relations.
+- 3.0 accepts **one way to write each thing**. Unknown frontmatter fields, unknown `###` sections, unknown or legacy columns and wrappers are rejected on push with the file and position. Write only what the spec lists.
+- The templates are 3.0; for 2.x drop the 3.0 parts the spec lists.
 
 ## Directory layout
+
+Do not hand-write a `CHECKSUM`, and delete it when you copy the example and change its files: a stale one only makes push warn, but a package with object metrics is refused. `openbkn bkn pull` writes a fresh one.
 
 ```
 {network_dir}/
 ├── SKILL.md
 ├── network.bkn
-├── CHECKSUM                 # optional; SDK may generate
+├── CHECKSUM                 # optional; generated on export — do not write or copy one
+├── value_types/             # 3.0 only: enums, formats, ranges reused by properties
 ├── object_types/
 ├── relation_types/
 ├── action_types/
-├── concept_groups/
-└── data/                    # optional sample data; not read by `openbkn bkn validate`/`push`
+├── risk_types/
+└── concept_groups/
 ```
 
 ## Workflow
 
-1. **Gather requirements** — objects, relations, actions, optional concept groups
-2. **Read spec** — [references/SPECIFICATION.llm.md](references/SPECIFICATION.llm.md) (format rules, sections, frontmatter types)
-3. **Pick templates** — copy/adapt from [assets/templates/](assets/templates/) (`network_type.bkn.template`, `object_type.bkn.template`, …)
-4. **Create `network.bkn`** — root file; align with Network Overview
-5. **Create `object_types/*.bkn`** — one file per object, `{id}.bkn`
-6. **Create `relation_types/*.bkn`** — one file per relation
-7. **Create `action_types/*.bkn`** — one file per action
-8. **Create `concept_groups/*.bkn`** — optional
-9. **Update `network.bkn`** — list all IDs in Network Overview
-10. **Add root `SKILL.md` in the BKN directory** — same folder as `network.bkn` (this is **not** the create-bkn skill file); agent-facing guide for that network (see [Delivered BKN: root SKILL.md](#delivered-bkn-root-skillmd))
-11. **Review (MUST)** — cross-check [Validation checklist](#validation-checklist) and [Business rules placement](#business-rules-placement); fix IDs, cross-refs, headings
-12. **Validate (MUST)** — `openbkn bkn validate <dir>` (see [Validation](#validation))
-13. **Import** (optional) — `openbkn bkn push <dir>`
+1. **Spec version** — 3.0 or 2.x (see [Spec version](#spec-version-30-or-2x))
+2. **Gather requirements** — objects and their key properties, relations (and which ones are reliable), actions, code tables / dictionaries, optional concept groups
+3. **Read spec** — [references/SPECIFICATION.llm.md](references/SPECIFICATION.llm.md) (format rules, sections, declarations)
+4. **Pick templates** — copy/adapt from [assets/templates/](assets/templates/)
+5. **Create `network.bkn`** — root file; `bkn_spec: "3.0"` for 3.0, none for 2.x; title and network description only
+6. **Create `value_types/*.bkn`** (3.0 only) — one per code table (enum), fixed format (pattern / length) or bounded number (range / unit) that properties share
+7. **Create `object_types/*.bkn`** — one file per object, `{id}.bkn`; for 3.0 declare semantic, required, aliases and constraints
+8. **Create `relation_types/*.bkn`** — one file per relation; for 3.0 declare reverse name, cardinality, constraints; mark helper relations `secondary` and link fallback paths with `fallback_for`
+9. **Create `action_types/*.bkn`** — one file per action
+10. **Create `concept_groups/*.bkn`** — optional
+11. **Add root `SKILL.md` in the BKN directory** — same folder as `network.bkn` (this is **not** the create-bkn skill file); agent-facing guide for that network (see [Delivered BKN: root SKILL.md](#delivered-bkn-root-skillmd))
+12. **Review (MUST)** — cross-check [Validation checklist](#validation-checklist) and [Business rules placement](#business-rules-placement); fix IDs, cross-refs, headings
+13. **Validate (MUST)** — `openbkn bkn validate <dir>` (see [Validation](#validation))
+14. **Import** (optional) — `openbkn bkn push <dir>`
 
 ## Import (openbkn CLI)
 
 Requires the `openbkn` CLI from `@openbkn/bkn-sdk` (`npm install -g @openbkn/bkn-sdk`; Node.js 22.19.0+). `push` uses `tar`; on macOS `COPYFILE_DISABLE=1` is set by the tool.
 
 - **Platform auth** — Don't pre-check with `openbkn auth status`; run `openbkn bkn push` directly (`validate` is offline and needs no login). Only when it fails with 401 / not authorized, run `openbkn auth login <platform-url>` and retry.
-- **BKN validation** — If workflow step 12 (`openbkn bkn validate <dir>`) **already succeeded** for this directory, **do not** repeat validate before `push` unless you changed `.bkn` files. If you have **not** validated yet, run `validate` before `push`.
+- **BKN validation** — If workflow step 13 (`openbkn bkn validate <dir>`) **already succeeded** for this directory, **do not** repeat validate before `push` unless you changed `.bkn` files. If you have **not** validated yet, run `validate` before `push`.
+- **3.0 rules** — a 0.2.1+ platform checks the 3.0 rules on push and names the file, section and field of each problem. Fix the file and push again. A 2.x package is read with the 2.x rules on every platform.
+- **Tools** — every toolbox or MCP tool an action or logic property references must exist on the target platform, or push fails listing the missing tools. To import the model without them, push with `--binding-policy detach` and bind the tools on the platform afterwards.
 
 ```bash
-openbkn bkn push <dir> [--branch main]
+openbkn bkn push <dir> [--branch main] [--binding-policy detach]
 ```
 
 Export: `openbkn bkn pull <kn-id> [<dir>]`. More subcommands: `openbkn bkn --help` (see the openbkn skill if loaded).
 
 ## Validation
 
-`openbkn bkn validate <dir>` — must pass before delivery or upload. It loads `network.bkn` and sibling `.bkn` files. Success prints counts; on failure fix `.bkn` files and re-run.
+`openbkn bkn validate <dir>` — must pass before delivery or upload. It is an offline structural check: it loads `network.bkn` and sibling `.bkn` files, checks frontmatter, ids, table shape and relation endpoints, and prints counts (object types, relation types, concept groups, value types). The 3.0 declaration rules are checked by the platform on push; follow the spec to get them right the first time.
 
-A `capabilities:` section in `network.bkn` never fails validation or push. Read `capabilities.skipped` and the warnings instead: an entry listed there binds on no platform, and a malformed section is ignored whole. After `push`, the answer's `capabilities.skipped` names what this platform could not resolve.
+A `capabilities:` section in `network.bkn` never fails validation. Read `capabilities.skipped` and the warnings instead: an entry listed there binds on no platform. After `push`, the answer's `capabilities.skipped` names what this platform could not resolve.
 
 ## Per-type reference
 
-| Kind | Spec (section) | Template | Example (k8s) |
-|------|------------------|----------|---------------|
-| Network | `knowledge_network` in spec | [assets/templates/network_type.bkn.template](assets/templates/network_type.bkn.template) | [references/examples/k8s-network/network.bkn](references/examples/k8s-network/network.bkn) |
-| Object | `object_type` | [assets/templates/object_type.bkn.template](assets/templates/object_type.bkn.template) | [references/examples/k8s-network/object_types/pod.bkn](references/examples/k8s-network/object_types/pod.bkn) |
-| Relation | `relation_type` | [assets/templates/relation_type.bkn.template](assets/templates/relation_type.bkn.template) | [references/examples/k8s-network/relation_types/pod_belongs_node.bkn](references/examples/k8s-network/relation_types/pod_belongs_node.bkn) |
-| Action | `action_type` | [assets/templates/action_type.bkn.template](assets/templates/action_type.bkn.template) | [references/examples/k8s-network/action_types/restart_pod.bkn](references/examples/k8s-network/action_types/restart_pod.bkn) |
-| Concept group | `concept_group` | [assets/templates/concept_group.bkn.template](assets/templates/concept_group.bkn.template) | [references/examples/k8s-network/concept_groups/k8s.bkn](references/examples/k8s-network/concept_groups/k8s.bkn) |
+| Kind | Template | Example (clinic-lab, 3.0) |
+|------|----------|----------------------|
+| Network | [network_type.bkn.template](assets/templates/network_type.bkn.template) | [network.bkn](references/examples/clinic-lab/network.bkn) |
+| Value type | [value_type.bkn.template](assets/templates/value_type.bkn.template) | [lis_apply_status.bkn](references/examples/clinic-lab/value_types/lis_apply_status.bkn) (enum), [cn_id_card.bkn](references/examples/clinic-lab/value_types/cn_id_card.bkn) (format), [amount_cny.bkn](references/examples/clinic-lab/value_types/amount_cny.bkn) (range) |
+| Object | [object_type.bkn.template](assets/templates/object_type.bkn.template) | [lab_order.bkn](references/examples/clinic-lab/object_types/lab_order.bkn), [patient.bkn](references/examples/clinic-lab/object_types/patient.bkn) |
+| Relation (direct) | [relation_type.bkn.template](assets/templates/relation_type.bkn.template) | [order_for_patient.bkn](references/examples/clinic-lab/relation_types/order_for_patient.bkn), [department_under.bkn](references/examples/clinic-lab/relation_types/department_under.bkn) (self, transitive) |
+| Relation (indirect, with properties) | [relation_type_indirect.bkn.template](assets/templates/relation_type_indirect.bkn.template) | [doctor_in_department.bkn](references/examples/clinic-lab/relation_types/doctor_in_department.bkn) |
+| Fallback path / lifecycle | — | [order_for_patient_by_id_card.bkn](references/examples/clinic-lab/relation_types/order_for_patient_by_id_card.bkn), [order_by_legacy_doctor.bkn](references/examples/clinic-lab/relation_types/order_by_legacy_doctor.bkn) |
+| Action | [action_type.bkn.template](assets/templates/action_type.bkn.template) | [revoke_lab_order.bkn](references/examples/clinic-lab/action_types/revoke_lab_order.bkn) |
+| Concept group | [concept_group.bkn.template](assets/templates/concept_group.bkn.template) | [lab.bkn](references/examples/clinic-lab/concept_groups/lab.bkn) |
 
-Full rules and optional sections: [references/SPECIFICATION.llm.md](references/SPECIFICATION.llm.md).
+Templates are complete 3.0 files: replace every `{placeholder}`, and delete rows, columns, keys or sections you do not need (a column no property uses, such as `Semantic` or `Aliases`, is left out whole). Full rules and optional sections: [references/SPECIFICATION.llm.md](references/SPECIFICATION.llm.md).
+
+## Declarations: when to use what
+
+- **Code table / dictionary** (status codes, department codes) → enum value type, referenced with `value_type`. Keep retired codes with `deprecated: true`: stored data still holds them.
+- **Shared format or range** (ID card number, amount ≥ 0) → format / range value type. A property that references a value type writes no `range` / `length` / `pattern` / `unit` of its own.
+- **One-off constraint** → inline in `### Property Constraints`.
+- **Time and place** → `Semantic` (`event_time`, `end_time`, `valid_from`, `valid_to`, `location`, `latitude` / `longitude`), plus `timezone` / `crs` when known.
+- **Other names users call it** → `aliases` (definitions) and the `Aliases` column (properties).
+- **Relations** → `reverse_name` when the reverse reads differently; `Cardinality` whenever known; `required` for "every X has a Y"; `verification: unconfirmed` for inferred links; `importance: secondary` + `fallback_for` for a path that fills gaps of a primary relation.
+- **Retiring a definition** → `lifecycle: { status: deprecated, reason, replaced_by }`, never a name prefix like "【废弃】".
+- **BKN 2.x** → none of the above exists; write what they would say in the descriptions (codes and meanings, units, time zone, "also called …", matching rules), leave out fallback-path and deprecated definitions. The table is in the spec.
 
 ## Naming conventions
 
 - **ID**: lowercase, digits, underscores; **file**: `{id}.bkn` under the matching folder
-- **Headings**: `#` network title, `##` type block, `###` section, `####` logic property
-- **Frontmatter**: at least `type`, `id`, `name` (see spec for each type)
+- **Headings**: `#` network title, `##` definition (`## ObjectType: {name}`, `## ValueType: {name}`, …), `###` section, `####` logic property
+- **Frontmatter**: `type`, `id`, `name`, plus only the fields the spec lists for that type
 
 ## Business rules placement
 
-Rules must sit in spec-defined places so import persists them. Full wording: [references/SPECIFICATION.llm.md](references/SPECIFICATION.llm.md#输出规则必须遵守).
+Rules must sit in spec-defined places so import persists them. Full wording: [references/SPECIFICATION.llm.md](references/SPECIFICATION.llm.md#业务规则放在哪里).
 
-- **Network-level** — prose in `network.bkn` right after `# {title}` (before structured sections like `## Network Overview`)
+- **Network-level** — prose in `network.bkn` right after `# {title}`
 - **Type-level** — prose in each type file after `## ObjectType:` / `## RelationType:` / … and **before** the first `###`; never in frontmatter
-- **Property-level** — in **Data Properties** table **Description** column
-- **No extra sections** — do not add Markdown outside the standard sections; parsers may drop unparsed content on import
+- **Property-level** — what a declaration can say (semantic, required, unit, enum, format, range) goes in the declaration; the **Description** column keeps only business meaning, calculation and caveats
+- **No extra sections** — 3.0 rejects unknown `###` sections and frontmatter fields
 
 ## Validation checklist
 
-- [ ] `network.bkn` at root; frontmatter matches spec
-- [ ] Every `.bkn` has valid YAML frontmatter (`type`, `id`, `name`)
-- [ ] Files live under folders matching `type` (`object_types/`, `relation_types/`, …); filename = `{id}.bkn`
-- [ ] Network Overview lists **all** definition IDs — no missing/extra
-- [ ] Relations/actions reference existing object-type IDs; concept groups list only existing objects
-- [ ] Parameter tables (action `Parameter Binding`, logic property `Parameters`) put `property` | `input` | `const` in `ValueFrom`, the property name or constant in `Value`, and the request position (`Query` / `Body` / …) in `Source`; YAML blocks (e.g. trigger) parse
-- [ ] Heading hierarchy has no skipped levels
+- [ ] Spec version chosen; 3.0: `network.bkn` has `bkn_spec: "3.0"`; 2.x: no `bkn_spec`, no `value_types/`, no 3.0 fields, columns or sections
+- [ ] `network.bkn` at root; body is only the title and description
+- [ ] Every `.bkn` has valid YAML frontmatter (`type`, `id`, `name`) and no fields outside the spec
+- [ ] Files live under folders matching `type` (`value_types/`, `object_types/`, …); filename = `{id}.bkn`; `## {Prefix}: {name}` matches `name`
+- [ ] Relations, actions, concept groups, `value_type`, `fallback_for` and `replaced_by` reference ids defined in the package
+- [ ] `Semantic` values fit the property `Type` and appear at most once per definition; `end_time` has an `event_time`; `latitude` / `longitude` come in pairs
+- [ ] Primary keys leave `Required` empty; no `Required: false`, `importance: primary` or `lifecycle.status: active` written out
+- [ ] A property with `value_type` has no `range` / `length` / `pattern` / `unit`
+- [ ] Parameter tables put `property` | `input` | `const` in `ValueFrom`, the property name or constant in `Value`, and the request position (`Query` / `Body` / …) in `Source`
+- [ ] Condition YAML is written directly (no `condition:` wrapper); every YAML block parses
+- [ ] Heading hierarchy has no skipped levels; no HTML comments or notes left inside sections
 - [ ] Business rules only in allowed places (see [Business rules placement](#business-rules-placement))
 
 ## Output rules
 
 1. Emit raw `.bkn` content — do not wrap the whole file in a fenced `markdown` block
-2. Reuse IDs consistently across relations/actions
+2. Reuse IDs consistently across relations/actions/value types
 3. IDs: lowercase + underscores; display text Chinese unless asked otherwise
-4. Keep heading order per spec
+4. Keep heading order and column names per spec
 
 ## Examples
 
-- [references/examples/k8s-network/](references/examples/k8s-network/) — modular sample (objects, relations, actions, concept group)
+- [references/examples/clinic-lab/](references/examples/clinic-lab/) — BKN 3.0: value types, property declarations, aliases, relation declarations and properties, lifecycle, fallback path, action, concept group
+- [references/examples/clinic-lab-2.x/](references/examples/clinic-lab-2.x/) — the same network in BKN 2.x: no 3.0 declarations, their content in descriptions
 
 ## Delivered BKN: root SKILL.md
 
-When you build a knowledge network directory `{network_dir}/`, add `{network_dir}/SKILL.md` at the root (alongside `network.bkn`). Short overview + **index tables with file paths** (object | path | relation | path | action | path) so agents route to the right `.bkn` without scanning. Optional: topology sketch, usage scenarios. Example: [references/examples/k8s-network/SKILL.md](references/examples/k8s-network/SKILL.md).
+When you build a knowledge network directory `{network_dir}/`, add `{network_dir}/SKILL.md` at the root (alongside `network.bkn`). Short overview + **index tables with file paths** (value type | object | relation | action | path) so agents route to the right `.bkn` without scanning, and how to use the declarations (enum codes, fallback paths, deprecated definitions). Example: [references/examples/clinic-lab/SKILL.md](references/examples/clinic-lab/SKILL.md).
