@@ -571,7 +571,7 @@ const rowFilterPredicateWireSchema: z.ZodType<RowFilterPredicateWire> = z.lazy((
 const rowFilterExplanationWireSchema = z
   .object({
     snapshot: rowFilterSnapshotWireSchema,
-    role_policy_only: z.boolean(),
+    role_policy_only: z.boolean().optional(),
     effective_predicate: rowFilterPredicateWireSchema.optional(),
     effective_row_filter_digest: z.string().optional(),
     direct_policy: rowFilterPolicyWireSchema.optional(),
@@ -790,15 +790,26 @@ export async function explainRowFilterPolicySafe(
   target: RowFilterTarget,
 ): Promise<RowFilterExplanation> {
   validateRowFilterTarget(target);
-  const response = rowFilterExplanationWireSchema.parse(
-    await request<unknown>(ctx, `${ADMIN}/row-filter-policies/explain`, {
-      method: "POST",
-      body: { object_type_ref: target.objectTypeRef, subject: target.subject },
-    }),
-  );
+  const response = rowFilterExplanationWireSchema
+    .refine(
+      (value) =>
+        target.subject.type === "role"
+          ? value.role_policy_only === true
+          : value.role_policy_only !== true,
+      {
+        path: ["role_policy_only"],
+        message: "Role explanations require true; user explanations allow only omission or false.",
+      },
+    )
+    .parse(
+      await request<unknown>(ctx, `${ADMIN}/row-filter-policies/explain`, {
+        method: "POST",
+        body: { object_type_ref: target.objectTypeRef, subject: target.subject },
+      }),
+    );
   return {
     snapshot: rowFilterSnapshotFromWire(response.snapshot),
-    rolePolicyOnly: response.role_policy_only,
+    rolePolicyOnly: response.role_policy_only ?? false,
     ...(response.effective_predicate
       ? { effectivePredicate: rowFilterPredicateFromWire(response.effective_predicate) }
       : {}),

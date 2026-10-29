@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import {
   applyRowFilterPolicySafe,
   explainRowFilterPolicySafe,
@@ -6,7 +7,9 @@ import {
   patchRowFilterPolicySafe,
 } from "../../src/api/safe.js";
 import type { RowFilterPolicy } from "../../src/api/safe.js";
+import { admin } from "../../src/resources/admin.js";
 import type { RequestContext } from "../../src/types.js";
+import { HttpError } from "../../src/utils/errors.js";
 import { verifiedContext } from "../setup/verified-context.js";
 
 const ctx = verifiedContext<RequestContext>({
@@ -156,7 +159,6 @@ describe("row-filter management API", () => {
   it("maps effective predicates and role policy sources from explain", async () => {
     mockFetch({
       snapshot: snapshotWire,
-      role_policy_only: false,
       effective_predicate: {
         kind: "or",
         predicates: [
@@ -177,9 +179,17 @@ describe("row-filter management API", () => {
       ],
     });
 
-    const explanation = await explainRowFilterPolicySafe(ctx, target);
+    const explanation = await admin(ctx).rowFilterExplain(target);
 
     expect(explanation.rolePolicyOnly).toBe(false);
+    expect(explanation.snapshot).toMatchObject({
+      objectTypeRef: target.objectTypeRef,
+      subject: target.subject,
+      revision: snapshotWire.revision,
+      availableFields: [{ displayName: "Sales region", name: "region", type: "string" }],
+    });
+    expect(explanation.directPolicy).toEqual(explanation.snapshot.policy);
+    expect(explanation.effectiveRowFilterDigest).toBe("sha256:digest");
     expect(explanation.effectivePredicate).toEqual({
       kind: "or",
       predicates: [
@@ -194,6 +204,87 @@ describe("row-filter management API", () => {
         conditions: [{ propertyName: "priority", operator: "gte", values: [8] }],
       },
     });
+  });
+
+  it("accepts a minimal user explanation and legacy explicit false", async () => {
+    for (const flag of [{}, { role_policy_only: false }]) {
+      mockFetch({ snapshot: snapshotWire, ...flag });
+      const result = await explainRowFilterPolicySafe(ctx, target);
+      expect(result).toEqual({
+        snapshot: expect.objectContaining({ subject: target.subject }),
+        rolePolicyOnly: false,
+      });
+    }
+  });
+
+  it("accepts a role-only explanation without user-effective fields", async () => {
+    const subject = { type: "role" as const, id: "sales-east" };
+    mockFetch({ snapshot: { ...snapshotWire, subject }, role_policy_only: true });
+    await expect(explainRowFilterPolicySafe(ctx, { ...target, subject })).resolves.toEqual({
+      snapshot: expect.objectContaining({ subject }),
+      rolePolicyOnly: true,
+    });
+  });
+
+  it.each([
+    { type: "role" as const, flag: undefined },
+    { type: "role" as const, flag: false },
+    { type: "user" as const, flag: true },
+    ...(["user", "role"] as const).flatMap((type) =>
+      [null, "false", "true", 0, 1, {}, []].map((flag) => ({ type, flag })),
+    ),
+  ])("rejects an invalid $type explanation flag $flag", async ({ type, flag }) => {
+    const subject = { type, id: "subject-1" };
+    mockFetch({ snapshot: { ...snapshotWire, subject }, role_policy_only: flag });
+    const error = await explainRowFilterPolicySafe(ctx, { ...target, subject }).catch(
+      (error: unknown) => error,
+    );
+    expect(error).toBeInstanceOf(z.ZodError);
+    expect((error as z.ZodError).issues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: ["role_policy_only"] })]),
+    );
+  });
+
+  it.each([401, 403, 409])("preserves explain HTTP %i errors", async (status) => {
+    const body = { error: { code: "test_error", message: "Request denied" } };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(body), { status }));
+    vi.stubGlobal("fetch", fetchMock);
+    const error = await admin(ctx)
+      .rowFilterExplain(target)
+      .catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(HttpError);
+    expect(error).toMatchObject({ status });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("explains the same subject and revision after a rejected stale update", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(snapshotWire)))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { code: "revision_conflict" } }), { status: 409 }),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ snapshot: snapshotWire })));
+    vi.stubGlobal("fetch", fetchMock);
+    const resource = admin(ctx);
+    const before = await resource.rowFilterGet(target);
+    await expect(
+      resource.rowFilterApply({
+        ...target,
+        expectedRevision: "stale-revision",
+        policy: {
+          relation: "and",
+          conditions: [{ propertyName: "region", operator: "in", values: ["west"] }],
+        },
+        reason: "Check stale revision rejection",
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    const current = await resource.rowFilterExplain(target);
+    expect(current.snapshot.revision).toBe(before.revision);
+    expect(current.snapshot.subject).toEqual(target.subject);
+    expect(current.snapshot.policy).toEqual(before.policy);
+    expect(current.rolePolicyOnly).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it("rejects malformed policy values before sending a request", async () => {

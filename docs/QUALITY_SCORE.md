@@ -33,6 +33,13 @@ Update this table as each signal changes (e.g. live-parity count as commands are
 
 ## CLI reliability regression coverage
 
+- `test/unit/row-filter.test.ts` covers omitted user explanation flags, legacy
+  explicit false, role-only semantics, invalid flag types, mapped policy sources,
+  HTTP errors, and explanation after a mocked revision conflict through the public
+  admin resource. `row-filter-command.test.ts` checks CLI JSON for a user response
+  without the wire flag. Live permission and query-result consistency on 132
+  remain separate acceptance checks.
+
 - `model-sdk-completion.test.ts` and `model-command.test.ts` cover SDK/CLI metadata redaction and bigint preservation, shared LLM ID resolution, typed option forwarding, tool messages/chunks, SSE errors and premature EOF, callback failures, byte-split UTF-8/CRLF, empty data keep-alives, provider message extension preservation, cancellation, timeouts, and reader cleanup. `test/e2e/model-sdk.mjs` live-verified existing qwen3.8-max name/ID chat and stream, CLI options, small-model adapter masking, and tool-call parameters on 23; no tool was executed.
 
 - `test/unit/metric-validation.test.ts` checks Object Metric V1 validation results, CLI JSON output and exit status, malformed responses, and HTTP errors. `test/e2e/metric-validation.mjs` is a read-only V1 validation probe for a configured metric; it requires a V1-capable deployment. `test/unit/object-metrics-v1.test.ts` checks V1 route and version pinning, typed recursive filters and result envelopes, current authoring routes, and published/trial participant drill-through. Python query tests verify that the compatibility keyword `analysis_dimensions` is serialized as the canonical `group_by` field and that current pagination and bucket-selection choices are forwarded. `test/unit/knowledge-networks.test.ts` checks SDK reads with omitted `data_properties`; the existing query and push-integrity regressions cover empty-schema behavior. `test/unit/vega.test.ts` checks the published index-capabilities API hint while retaining legacy empty-list normalization.

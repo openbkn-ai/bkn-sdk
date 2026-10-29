@@ -153,7 +153,7 @@ describe("admin row-filter command", () => {
   });
 
   it("explain calls only the bearer-token-protected management endpoint", async () => {
-    const fetchMock = mockFetch({ snapshot: emptySnapshot, role_policy_only: false });
+    const fetchMock = mockFetch({ snapshot: emptySnapshot });
 
     await run([
       "explain",
@@ -169,5 +169,13 @@ describe("admin row-filter command", () => {
     expect(new URL(url).pathname).toBe("/api/safe/v1/admin/row-filter-policies/explain");
     expect(init.method).toBe("POST");
     expect(url).not.toContain("/authz/row-filters");
+    const output = vi
+      .mocked(process.stdout.write)
+      .mock.calls.map(([chunk]) => String(chunk))
+      .join("");
+    expect(JSON.parse(output)).toMatchObject({
+      snapshot: { subject: emptySnapshot.subject },
+      rolePolicyOnly: false,
+    });
   });
 });
