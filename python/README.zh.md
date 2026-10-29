@@ -236,6 +236,18 @@ with ensure_interaction(ctx, kn_id) as turn:
     bkn_osdk.call_tool(ctx, kn_id, "list_skills", arguments)
 ```
 
+### 当前调用者是谁
+
+`me()` 返回当前凭据所属用户的资料，实时从 bkn-safe 读取：
+
+```python
+user = bkn_osdk.me()
+user.id, user.account, user.name, user.email, user.telephone
+user.departments, user.roles  # 部门 id；角色名
+```
+
+在函数里，凭据就是调用方本人的，所以 `me()` 返回的是运行这个函数的人 —— 行动背后的函数，就是触发行动的人。它是一次经 `BKN_BASE_URL` 的 REST 调用。沙箱里这个地址为空时，会和其他 OSDK 调用一样直接抛出 `InputError`（"No base URL"），不会发出请求；地址配了但沙箱网络没放行网关时，会报连接错误。
+
 ### 能力路由的命名函数
 
 context-loader 那一圈 —— `/api/agent-retrieval/v1/kn/` 下的 25 条路由 —— 也是生成的，源头是 foundry 自己的 OpenAPI：

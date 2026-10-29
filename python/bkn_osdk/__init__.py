@@ -47,6 +47,7 @@ from .errors import (
     ToolError,
 )
 from .http import call, request
+from .identity import Me, me
 from .mcp import ToolResult, call_tool, tool_catalog
 from .metrics import Metric
 from .query import Comparison, Composite, Filter, ObjectSet, Page, Sort, to_condition
@@ -82,6 +83,7 @@ __all__ = [
     "HttpError",
     "InputError",
     "KnSchema",
+    "Me",
     "Metric",
     "MetricDef",
     "ObjectNotFound",
@@ -105,6 +107,7 @@ __all__ = [
     "call_tool",
     "configure",
     "fingerprint",
+    "me",
     "request",
     "resolve_context",
     "search",

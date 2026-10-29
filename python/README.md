@@ -350,6 +350,24 @@ with ensure_interaction(ctx, kn_id) as turn:
     bkn_osdk.call_tool(ctx, kn_id, "list_skills", arguments)
 ```
 
+### Who is calling
+
+`me()` returns the record of the user the current credential belongs to, read
+live from bkn-safe:
+
+```python
+user = bkn_osdk.me()
+user.id, user.account, user.name, user.email, user.telephone
+user.departments, user.roles  # department ids; role names
+```
+
+Inside a Function the credential is the invoking caller's own, so `me()` names
+whoever ran it — for a Function behind an action, the person who triggered the
+action. It is a REST call through `BKN_BASE_URL`. If that is empty in the
+sandbox, it raises `InputError` ("No base URL"), like every other OSDK call;
+if it is set but the sandbox network does not allow the gateway, it fails with
+a connection error.
+
 ### Named functions for the capability routes
 
 The context-loader surface — 25 routes under `/api/agent-retrieval/v1/kn/` — is
