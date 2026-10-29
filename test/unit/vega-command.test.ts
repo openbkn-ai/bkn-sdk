@@ -1410,6 +1410,9 @@ describe("vega flag validation against the contract enums", () => {
     "doris",
     "DORIS",
     "DoRiS",
+    "oracle",
+    "ORACLE",
+    "Oracle",
   ])("rejects %s input from flags and advanced JSON before HTTP", async (dialect) => {
     const fetchMock = mockFetch();
     suppressOutput();
@@ -1431,40 +1434,32 @@ describe("vega flag validation against the contract enums", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it.each([
-    "mysql",
-    "mariadb",
-    "tsql",
-    "oracle",
-    "MYSQL",
-    "MySQL",
-    "mYsQl",
-    "MariaDB",
-    "TSQL",
-    "Oracle",
-  ])("accepts supported %s SQL input", async (dialect) => {
-    const fetchMock = mockFetch({ entries: [] });
-    suppressOutput();
-    for (const args of [
-      ["--query", "SELECT * FROM {{r-1}}", "--input-dialect", dialect],
-      [
-        "--data",
-        JSON.stringify({
-          query_format: "sql",
-          query: "SELECT * FROM {{r-1}}",
-          input_dialect: dialect,
-        }),
-      ],
-    ]) {
-      await cli().parseAsync([...cliBase, "sql", ...args], { from: "user" });
-    }
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    for (const call of fetchMock.mock.calls) {
-      expect(JSON.parse(call[1]?.body as string)).toMatchObject({
-        input_dialect: dialect.toLowerCase(),
-      });
-    }
-  });
+  it.each(["mysql", "mariadb", "tsql", "MYSQL", "MySQL", "mYsQl", "MariaDB", "TSQL"])(
+    "accepts supported %s SQL input",
+    async (dialect) => {
+      const fetchMock = mockFetch({ entries: [] });
+      suppressOutput();
+      for (const args of [
+        ["--query", "SELECT * FROM {{r-1}}", "--input-dialect", dialect],
+        [
+          "--data",
+          JSON.stringify({
+            query_format: "sql",
+            query: "SELECT * FROM {{r-1}}",
+            input_dialect: dialect,
+          }),
+        ],
+      ]) {
+        await cli().parseAsync([...cliBase, "sql", ...args], { from: "user" });
+      }
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      for (const call of fetchMock.mock.calls) {
+        expect(JSON.parse(call[1]?.body as string)).toMatchObject({
+          input_dialect: dialect.toLowerCase(),
+        });
+      }
+    },
+  );
 
   it("normalizes the DSL dialect from advanced JSON before HTTP", async () => {
     const fetchMock = mockFetch({ entries: [] });
