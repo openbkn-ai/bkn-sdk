@@ -358,7 +358,7 @@ live from bkn-safe:
 ```python
 user = bkn_osdk.me()
 user.id, user.account, user.name, user.email, user.telephone
-user.departments, user.roles          # department ids; role names
+user.departments, user.roles  # department ids; role names
 ```
 
 Inside a Function the credential is the invoking caller's own, so `me()` names
