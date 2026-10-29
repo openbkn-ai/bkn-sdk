@@ -579,6 +579,9 @@ function declaresSpec3(networkText: string): boolean {
 }
 
 const SPEC3_SECTION = /^###\s+(Property Constraints|Relation Constraints)\s*$/m;
+// An object type has Data Properties in either spec; only a relation's are 3.0 content.
+const SPEC3_RELATION_SECTION =
+  /^###\s+(Property Constraints|Relation Constraints|Data Properties)\s*$/m;
 
 export function validateBknDirectory(dirPath: string): ValidationResult {
   const dir = resolve(dirPath);
@@ -652,7 +655,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
     const fm = parseFrontmatter(text);
     const rel = file.slice(dir.length + 1);
     errors.push(...validateMarkdownTables(text, rel, "relation_types"));
-    if (SPEC3_SECTION.test(text)) spec3Content.push(rel);
+    if (SPEC3_RELATION_SECTION.test(text)) spec3Content.push(rel);
     if (!fm || fm.type !== "relation_type") {
       errors.push(`${rel}: not a valid relation_type (missing/wrong frontmatter type).`);
       continue;
@@ -686,7 +689,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
 
   if (!spec3 && existsSync(networkPath) && spec3Content.length > 0) {
     warnings.push(
-      `network.bkn has no bkn_spec "3.0", so the platform reads this package as 2.x: value_types/ is ignored and Property Constraints / Relation Constraints sections become description text (${spec3Content.join(", ")}). Add bkn_spec: "3.0" to write BKN 3.0 (platform 0.2.1 and later); to stay on BKN 2.x, remove them and write their content in descriptions.`,
+      `network.bkn has no bkn_spec "3.0", so the platform reads this package as 2.x: value_types/ is ignored and Property Constraints / Relation Constraints sections and relation Data Properties become description text (${spec3Content.join(", ")}). Add bkn_spec: "3.0" to write BKN 3.0 (platform 0.2.1 and later); to stay on BKN 2.x, remove them and write their content in descriptions.`,
     );
   }
 

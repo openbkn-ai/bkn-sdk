@@ -805,6 +805,18 @@ x:
     expect(without.warnings).toHaveLength(1);
     expect(without.warnings[0]).toContain("(value_types/, object_types/a.bkn)");
 
+    // A relation's Data Properties are 3.0 content too; an object type's are not.
+    const relationProps = validateBknDirectory(
+      bkn({
+        "network.bkn": network,
+        "object_types/a.bkn": `${ot("a", "Alpha")}\n## ObjectType: Alpha\n\n### Data Properties\n\n| Name | Display Name |\n|------|--------------|\n| x | X |\n`,
+        "relation_types/r.bkn":
+          "---\ntype: relation_type\nid: r\nname: R\n---\n\n## RelationType: R\n\n### Data Properties\n\n| Name | Display Name |\n|------|--------------|\n| t | T |\n",
+      }),
+    );
+    expect(relationProps.warnings).toHaveLength(1);
+    expect(relationProps.warnings[0]).toContain("(relation_types/r.bkn)");
+
     const spec3 = network.replace("name: KN One\n", 'name: KN One\nbkn_spec: "3.0"\n');
     expect(validateBknDirectory(bkn({ "network.bkn": spec3, ...files })).warnings).toEqual([]);
     // Unquoted 3.0 is the number 3 to YAML and still selects 3.0.
