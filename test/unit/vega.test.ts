@@ -720,85 +720,18 @@ describe("deleteCatalog", () => {
 });
 
 describe("runSql", () => {
-  it.each([undefined, ""])("preserves the SQL default for dialect %s", async (dialect) => {
-    const fetchMock = mockFetch({ entries: [] });
-    const body = {
-      query_format: "sql",
-      query: "SELECT * FROM {{r-1}}",
-      ...(dialect === undefined ? {} : { input_dialect: dialect }),
-    } as RawQueryRequest;
-    await runSql(ctx, body);
-    expect(JSON.parse(firstCall(fetchMock)[1].body as string)).toEqual(body);
-  });
-
-  it.each([
-    ["sql", "MYSQL"],
-    ["sql", "MySQL"],
-    ["sql", "mYsQl"],
-    ["sql", "MariaDB"],
-    ["dsl", "OpenSearch"],
-    ["dsl", "oPeNsEaRcH"],
-  ] as const)("normalizes %s dialect %s before HTTP", async (format, dialect) => {
+  it.each(["sql", "dsl"] as const)("POSTs %s without a dialect option", async (format) => {
     const fetchMock = mockFetch({ entries: [] });
     const body = {
       query_format: format,
-      query: format === "sql" ? "SELECT * FROM {{r-1}}" : { match_all: {} },
-      input_dialect: dialect,
-    } as unknown as RawQueryRequest;
+      query:
+        format === "sql"
+          ? "SELECT * FROM {{r-1}}"
+          : { resource_id: "r-1", query: { match_all: {} } },
+    } as RawQueryRequest;
     await runSql(ctx, body);
-    expect(JSON.parse(firstCall(fetchMock)[1].body as string)).toEqual({
-      ...body,
-      input_dialect: dialect.toLowerCase(),
-    });
-    expect(body).toHaveProperty("input_dialect", dialect);
-  });
-
-  it.each([
-    "postgres",
-    "Postgres",
-    "POSTGRES",
-    "trino",
-    "duckdb",
-    "TRINO",
-    "DuckDB",
-    "tsql",
-    "TSQL",
-    "TsQl",
-    "generic",
-    "GENERIC",
-    "GeNeRiC",
-    "doris",
-    "DORIS",
-    "DoRiS",
-    "oracle",
-    "ORACLE",
-    "Oracle",
-  ])("rejects explicit %s before HTTP", async (dialect) => {
-    const fetchMock = mockFetch();
-    expectTypeOf<"generic">().not.toMatchTypeOf<NonNullable<SqlRawQueryRequest["input_dialect"]>>();
-    expectTypeOf<"postgres" | "trino" | "duckdb" | "doris" | "oracle" | "tsql">().not.toMatchTypeOf<
-      NonNullable<SqlRawQueryRequest["input_dialect"]>
-    >();
-    await expect(
-      runSql(ctx, {
-        query_format: "sql",
-        query: "SELECT * FROM {{r-1}}",
-        input_dialect: dialect,
-      } as unknown as RawQueryRequest),
-    ).rejects.toThrow(/input_dialect/);
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it.each(["mysql", "mariadb"] as const)("preserves supported %s input", async (dialect) => {
-    const fetchMock = mockFetch({ entries: [] });
-    await runSql(ctx, {
-      query_format: "sql",
-      query: "SELECT * FROM {{r-1}}",
-      input_dialect: dialect,
-    });
-    expect(JSON.parse(firstCall(fetchMock)[1].body as string)).toMatchObject({
-      input_dialect: dialect,
-    });
+    expect(JSON.parse(firstCall(fetchMock)[1].body as string)).toEqual(body);
+    expectTypeOf<"input_dialect">().not.toMatchTypeOf<keyof SqlRawQueryRequest>();
   });
 
   it("preserves an unsafe BIGINT response value as native bigint", async () => {
@@ -816,7 +749,6 @@ describe("runSql", () => {
       runSql(ctx, {
         query: "SELECT id_card, safe_id FROM {{r-1}}",
         query_format: "sql",
-        input_dialect: "mysql",
       }),
     ).resolves.toEqual({
       columns: [],
@@ -829,7 +761,6 @@ describe("runSql", () => {
     await runSql(ctx, {
       query: "SELECT * FROM {{r-1}} LIMIT 5",
       query_format: "sql",
-      input_dialect: "mysql",
       paging: { mode: "cursor", limit: 1000, keep_alive_sec: 300 },
       query_timeout_sec: 60,
       need_total: true,
@@ -842,7 +773,6 @@ describe("runSql", () => {
     expect(body).toEqual({
       query: "SELECT * FROM {{r-1}} LIMIT 5",
       query_format: "sql",
-      input_dialect: "mysql",
       paging: { mode: "cursor", limit: 1000, keep_alive_sec: 300 },
       query_timeout_sec: 60,
       need_total: true,
@@ -853,7 +783,6 @@ describe("runSql", () => {
     const f = mockFetch({ rows: [] });
     await runSql(ctx, {
       query_format: "dsl",
-      input_dialect: "opensearch",
       query: { term: { id_card: 110101199001152345n } },
     });
 

@@ -28,8 +28,9 @@
 ## `vega sql` — run SQL / DSL against a data source
 
 `POST /api/vega-backend/v1/resources/query`. The query body declares its
-representation with `query_format` and its input syntax with `input_dialect`;
-the backend resolves the actual data source through the referenced Resource.
+representation with `query_format`: SQL uses the shared MySQL SELECT subset;
+DSL uses an OpenSearch JSON object. The backend resolves the actual data source
+and SQL output dialect through the referenced Resource and its Catalog.
 
 ### The placeholder rule (most important)
 
@@ -51,21 +52,21 @@ connector that isn't configured. **Always use the placeholder.**
 ### Usage
 
 ```bash
-# SQL; query_format=sql is added by the CLI. input_dialect defaults to mysql.
+# SQL uses the shared MySQL SELECT subset; the CLI adds query_format=sql.
 openbkn vega sql --query "SELECT * FROM {{d7nicrcjto2s73d9g67g}} LIMIT 10"
 
 # First cursor page. Use a deterministic ORDER BY with a unique tiebreaker.
-openbkn vega sql --input-dialect mysql --paging-mode cursor --limit 500 \
+openbkn vega sql --paging-mode cursor --limit 500 \
   --query "SELECT id, name FROM {{<res-id>}} ORDER BY id"
 
 # Cursor continuation — send no initial-query options.
 openbkn vega sql --cursor "<paging.next_cursor>"
 
 # OpenSearch DSL — query is a JSON object; a top-level resource_id is required.
-openbkn vega sql -d '{"query":{"resource_id":"<res-id>","query":{"match":{"name":"web-pod"}}},"query_format":"dsl","input_dialect":"opensearch","paging":{"mode":"single","limit":50}}'
+openbkn vega sql -d '{"query":{"resource_id":"<res-id>","query":{"match":{"name":"web-pod"}}},"query_format":"dsl","paging":{"mode":"single","limit":50}}'
 
 # Advanced SQL body with total count and timeout.
-openbkn vega sql -d '{"query":"SELECT ... FROM {{<res-id>}}","query_format":"sql","input_dialect":"mysql","paging":{"mode":"single","limit":1000},"query_timeout_sec":120,"need_total":true}'
+openbkn vega sql -d '{"query":"SELECT ... FROM {{<res-id>}}","query_format":"sql","paging":{"mode":"single","limit":1000},"query_timeout_sec":120,"need_total":true}'
 ```
 
 ### Parameters
@@ -74,7 +75,6 @@ openbkn vega sql -d '{"query":"SELECT ... FROM {{<res-id>}}","query_format":"sql
 | --- | :---: | --- | --- |
 | `--query` / body `query` | ✅ for first page | — | SQL string or an OpenSearch DSL object. SQL references tables as `{{<resource-id>}}`; DSL includes top-level `resource_id`. |
 | body `query_format` | ✅ for first page | — | `sql` or `dsl`; the CLI sets `sql` for `--query`. |
-| `--input-dialect` / `input_dialect` | SQL optional; DSL required | SQL: `mysql` | SQL supports `mysql` and `mariadb` (parsed as `mysql`); target connectors generate the source dialect. DSL uses `opensearch`. SDK, CLI flags, and advanced JSON match dialect values case-insensitively, normalize them to lowercase, then validate and forward the lowercase value. `tsql`, `postgres`, `generic`, `trino`, `duckdb`, `doris`, and `oracle` inputs are rejected in any casing; MariaDB/MySQL, PostgreSQL, HANA, Doris, Oracle, and SQL Server Catalogs accept only MySQL input (the default or `mysql`/`mariadb`); other input dialects return 400 for these targets. The input dialect describes syntax, not the data source. |
 | `--paging-mode`, `--limit`, `--offset`, `--keep-alive-sec` / `paging` | optional | `single`, server-default limit | `cursor` requires `limit`; keep-alive is 60–3600 seconds. Always set `--limit` rather than relying on the server default. |
 | `--cursor` / `paging.cursor` | continuation only | — | Opaque cursor from `paging.next_cursor`; no initial-query fields may accompany it. |
 | `--query-timeout-sec` / `query_timeout_sec` | optional | 60 | Seconds, 1–3600; initial request only. |

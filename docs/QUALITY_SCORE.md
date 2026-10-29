@@ -97,7 +97,7 @@ Update this table as each signal changes (e.g. live-parity count as commands are
   distinguishes candidate source loaded for one verification call from the SDK
   actually pinned in the running sandbox image.
 
-- `test/unit/vega.test.ts` and `vega-command.test.ts` verify case-insensitive input dialect handling across SDK, CLI flags, and advanced JSON: normalize to lowercase, validate, then forward the lowercase value without mutating the caller's object. SQL accepts only MySQL input (`mysql` or `mariadb`), including SQL Server Catalogs, while rejecting `tsql`/`postgres`/`generic`/`trino`/`duckdb`/`doris`/`oracle` in any casing before HTTP; DSL uses `opensearch`.
+- `test/unit/vega.test.ts` and `vega-command.test.ts` verify SQL and DSL requests using only `query_format`, initial paging and opaque cursor continuation. SQL uses the shared MySQL SELECT subset; the resource Catalog selects its output dialect. The removed dialect CLI option is rejected before HTTP.
 
 - `test/unit/vega.test.ts` checks Catalog deletion `will_delete` task-record totals,
   empty catalogs, and rejection of cancellation-only responses.

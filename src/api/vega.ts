@@ -509,14 +509,11 @@ interface RawQueryInitialBase {
 export interface SqlRawQueryRequest extends RawQueryInitialBase {
   query: string;
   query_format: "sql";
-  /** SQL input dialect; matched case-insensitively and sent in lowercase. Defaults to mysql server-side. */
-  input_dialect?: "mysql" | "mariadb";
 }
 
 export interface DslRawQueryRequest extends RawQueryInitialBase {
   query: Record<string, unknown>;
   query_format: "dsl";
-  input_dialect: "opensearch";
 }
 
 /** Request contract for POST /resources/query. */
@@ -532,28 +529,9 @@ export type SqlQueryRequest = RawQueryRequest;
  * connector to use. `POST /api/vega-backend/v1/resources/query`.
  */
 export async function runSql(ctx: RequestContext, body: RawQueryRequest): Promise<unknown> {
-  let requestBody = body;
-  if (
-    body &&
-    typeof body === "object" &&
-    "input_dialect" in body &&
-    typeof body.input_dialect === "string"
-  ) {
-    const dialect = body.input_dialect.toLowerCase();
-    const supported =
-      body.query_format === "dsl"
-        ? dialect === "opensearch"
-        : dialect === "" || ["mysql", "mariadb"].includes(dialect);
-    if (!supported) {
-      throw new InputError(
-        "unsupported input_dialect; SQL supports mysql or mariadb; DSL requires opensearch",
-      );
-    }
-    requestBody = { ...body, input_dialect: dialect } as RawQueryRequest;
-  }
   return request(ctx, `${VEGA_BASE}/resources/query`, {
     method: "POST",
-    body: requestBody,
+    body,
     responseParser: parseBigIntJSON,
   });
 }
