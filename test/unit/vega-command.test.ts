@@ -1407,6 +1407,9 @@ describe("vega flag validation against the contract enums", () => {
     "generic",
     "GENERIC",
     "GeNeRiC",
+    "doris",
+    "DORIS",
+    "DoRiS",
   ])("rejects %s input from flags and advanced JSON before HTTP", async (dialect) => {
     const fetchMock = mockFetch();
     suppressOutput();
@@ -1433,14 +1436,12 @@ describe("vega flag validation against the contract enums", () => {
     "mariadb",
     "tsql",
     "oracle",
-    "doris",
     "MYSQL",
     "MySQL",
     "mYsQl",
     "MariaDB",
     "TSQL",
     "Oracle",
-    "DORIS",
   ])("accepts supported %s SQL input", async (dialect) => {
     const fetchMock = mockFetch({ entries: [] });
     suppressOutput();

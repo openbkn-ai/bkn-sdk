@@ -738,7 +738,6 @@ describe("runSql", () => {
     ["sql", "MariaDB"],
     ["sql", "TSQL"],
     ["sql", "Oracle"],
-    ["sql", "DORIS"],
     ["dsl", "OpenSearch"],
     ["dsl", "oPeNsEaRcH"],
   ] as const)("normalizes %s dialect %s before HTTP", async (format, dialect) => {
@@ -767,10 +766,13 @@ describe("runSql", () => {
     "generic",
     "GENERIC",
     "GeNeRiC",
+    "doris",
+    "DORIS",
+    "DoRiS",
   ])("rejects explicit %s before HTTP", async (dialect) => {
     const fetchMock = mockFetch();
     expectTypeOf<"generic">().not.toMatchTypeOf<NonNullable<SqlRawQueryRequest["input_dialect"]>>();
-    expectTypeOf<"postgres" | "trino" | "duckdb">().not.toMatchTypeOf<
+    expectTypeOf<"postgres" | "trino" | "duckdb" | "doris">().not.toMatchTypeOf<
       NonNullable<SqlRawQueryRequest["input_dialect"]>
     >();
     await expect(
@@ -783,7 +785,7 @@ describe("runSql", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it.each(["mysql", "mariadb", "tsql", "oracle", "doris"] as const)(
+  it.each(["mysql", "mariadb", "tsql", "oracle"] as const)(
     "preserves supported %s input",
     async (dialect) => {
       const fetchMock = mockFetch({ entries: [] });
