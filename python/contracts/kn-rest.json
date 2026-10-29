@@ -900,7 +900,7 @@
           "name": "properties",
           "type": "array",
           "required": true,
-          "description": "要求值的逻辑属性名列表（`metric` 或 `operator`）。"
+          "description": "要求值的工具型逻辑属性名列表（`tool`）。对象指标请使用 `query_metric`。"
         },
         {
           "name": "additional_context",

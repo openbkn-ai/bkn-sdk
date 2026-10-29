@@ -806,7 +806,7 @@ def logic_property_resolver(
         instance_identities: 对象实例标识数组，**必须从上游取，不可自拼**：先调
             `query_object_instance` 或 `query_instance_subgraph`，从每个对象的
             `_instance_identity` 取值，按原顺序组成数组。
-        properties: 要求值的逻辑属性名列表（`metric` 或 `operator`）。
+        properties: 要求值的工具型逻辑属性名列表（`tool`）。对象指标请使用 `query_metric`。
         additional_context: 补充上下文，如 timezone、instant、step 或对象属性，帮助模型生成更准的
             `dynamic_params`。
         llm_model: 覆盖用于生成动态参数的大模型；留空走系统默认大模型。
