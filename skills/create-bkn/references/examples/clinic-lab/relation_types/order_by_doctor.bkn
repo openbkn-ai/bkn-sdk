@@ -1,0 +1,27 @@
+---
+type: relation_type
+id: order_by_doctor
+name: 开单医生
+reverse_name: 开出的检验申请
+verification: confirmed
+---
+
+## RelationType: 开单医生
+
+### Endpoint
+
+| Source | Target | Type | Cardinality |
+|--------|--------|------|-------------|
+| lab_order | doctor | direct | many_to_one |
+
+### Mapping Rules
+
+| Source Property | Target Property |
+|-----------------|-----------------|
+| doctor_id | doctor_id |
+
+### Relation Constraints
+
+```yaml
+required: [source]
+```

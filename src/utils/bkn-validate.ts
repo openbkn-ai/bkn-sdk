@@ -41,7 +41,13 @@ export interface ValidationResult {
   dir: string;
   /** `network.bkn` frontmatter id, or an empty string when none can be read. */
   networkId: string;
-  counts: { objectTypes: number; relationTypes: number; conceptGroups: number };
+  counts: {
+    objectTypes: number;
+    relationTypes: number;
+    conceptGroups: number;
+    /** BKN spec 3.0 `value_types/` definitions; a 2.x package has none. */
+    valueTypes: number;
+  };
   /** network.bkn's `capabilities:` section: how many entries it declares, and which cannot bind. */
   capabilities: CapabilityCheck;
   errors: string[];
@@ -110,6 +116,8 @@ const STRUCTURED_TABLE_SECTIONS = {
     "Backing Resource",
     "Source Mapping",
     "Target Mapping",
+    // Spec 3.0: an indirect relation's properties, same table as an object type's.
+    "Data Properties",
   ]),
   action_types: new Set([
     "Bound Object",
@@ -564,7 +572,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
       valid: false,
       dir,
       networkId: "",
-      counts: { objectTypes: 0, relationTypes: 0, conceptGroups: 0 },
+      counts: { objectTypes: 0, relationTypes: 0, conceptGroups: 0, valueTypes: 0 },
       capabilities: { declared: 0, skipped: [] },
       errors: [`Not a directory: ${dir}`],
       warnings: [],
@@ -644,7 +652,8 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
       errors.push(...validateResourceName(parseFrontmatter(text)?.name, rel, kind.slice(0, -1)));
     }
   }
-  for (const file of bknFiles(join(dir, "value_types"))) {
+  const vtFiles = bknFiles(join(dir, "value_types"));
+  for (const file of vtFiles) {
     const text = readFileSync(file, "utf8");
     const rel = file.slice(dir.length + 1);
     errors.push(...validateResourceName(parseFrontmatter(text)?.name, rel, "value_type"));
@@ -718,6 +727,7 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
       objectTypes: otFiles.length,
       relationTypes: rtFiles.length,
       conceptGroups: cgFiles.length,
+      valueTypes: vtFiles.length,
     },
     capabilities,
     errors,

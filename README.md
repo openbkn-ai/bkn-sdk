@@ -221,9 +221,9 @@ skill, toolbox, function, osdk, trace, admin, call) and two how-tos
 (build-a-KN, troubleshooting).
 
 A second skill, `skills/create-bkn/`, guides an AI through **authoring** a BKN
-definition tree (`network.bkn` + typed `object_types/` / `relation_types/` /
-`action_types/` / `concept_groups/` files, per the v2.0.1 spec) — with the
-format spec, templates, and a worked example under `references/`. It pairs with
+definition tree (`network.bkn` + typed `value_types/` / `object_types/` /
+`relation_types/` / `action_types/` / `concept_groups/` files, per the BKN 3.0
+spec) — with the format spec, templates, and a worked example under `references/`. It pairs with
 the `openbkn` skill, which then runs `openbkn bkn validate` / `push` on the
 tree it produced.
 

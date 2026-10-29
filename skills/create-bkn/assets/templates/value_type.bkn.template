@@ -1,0 +1,20 @@
+---
+type: value_type
+id: {value_type_id}
+name: {值类型名称}
+tags: [{标签1}]
+---
+
+## ValueType: {值类型名称}
+
+{值类型描述：取值的来源与含义}
+
+### Definition
+
+```yaml
+base_type: keyword
+enum:
+  - { value: {编码1}, display: {显示名1} }
+  - { value: {编码2}, display: {显示名2} }
+  - { value: {旧编码}, display: {显示名2}, deprecated: true }
+```

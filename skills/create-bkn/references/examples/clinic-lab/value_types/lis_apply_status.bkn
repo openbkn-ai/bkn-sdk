@@ -1,0 +1,22 @@
+---
+type: value_type
+id: lis_apply_status
+name: LIS 检验申请状态
+tags: [检验]
+---
+
+## ValueType: LIS 检验申请状态
+
+LIS 系统的检验申请状态码。X 是旧系统的撤销编码，存量数据中仍存在。
+
+### Definition
+
+```yaml
+base_type: keyword
+enum:
+  - { value: N, display: 已开单 }
+  - { value: S, display: 已采样 }
+  - { value: P, display: 已出报告 }
+  - { value: C, display: 已撤销 }
+  - { value: X, display: 已撤销, deprecated: true }
+```

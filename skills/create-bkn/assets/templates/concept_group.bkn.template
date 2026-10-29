@@ -13,4 +13,4 @@ tags: [{标签1}]
 
 | ID | Name | Description |
 |----|------|-------------|
-| {object_id} | {对象名称} | {说明} |
+| {object_id} | {对象名称} | |

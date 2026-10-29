@@ -1,0 +1,20 @@
+# BKN Directory Checksum
+# format: 2
+# generated: 2026-10-29T04:22:13+01:00
+SKILL.md  sha256:e08094769537e2b8
+action_type:revoke_lab_order  sha256:c8abff8caa9a1a80
+concept_group:lab  sha256:4b9db9e98f2898fb
+network  sha256:396d02f18cd29713
+object_type:department  sha256:7a9ac15faee7c816
+object_type:doctor  sha256:ac74cd33491e74b8
+object_type:lab_order  sha256:96051d7dcd56b51d
+object_type:patient  sha256:c8aa64a05f854b81
+relation_type:department_under  sha256:4f69081cfc79d539
+relation_type:doctor_in_department  sha256:9e1b4891670b8894
+relation_type:order_by_doctor  sha256:95a7de7c23f719db
+relation_type:order_by_legacy_doctor  sha256:ebd4e12cfa1986ee
+relation_type:order_for_patient  sha256:9235ece5d27da89d
+relation_type:order_for_patient_by_id_card  sha256:db74bc70195e805d
+value_type:amount_cny  sha256:6a2341f7ed1ac8ee
+value_type:cn_id_card  sha256:3c9ec6184d6e50f8
+value_type:lis_apply_status  sha256:f1d6f13b050ea669

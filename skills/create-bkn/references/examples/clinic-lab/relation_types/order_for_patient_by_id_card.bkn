@@ -1,0 +1,25 @@
+---
+type: relation_type
+id: order_for_patient_by_id_card
+name: 检验对象（按身份证号）
+reverse_name: 检验申请（按身份证号）
+importance: secondary
+fallback_for: order_for_patient
+verification: unconfirmed
+---
+
+## RelationType: 检验对象（按身份证号）
+
+急诊未建档的检验申请没有患者编号，按开单时登记的身份证号匹配患者。只在申请单沿「检验对象」找不到患者时使用，结果标为待确认。
+
+### Endpoint
+
+| Source | Target | Type | Cardinality |
+|--------|--------|------|-------------|
+| lab_order | patient | direct | many_to_one |
+
+### Mapping Rules
+
+| Source Property | Target Property |
+|-----------------|-----------------|
+| patient_id_card | id_card |

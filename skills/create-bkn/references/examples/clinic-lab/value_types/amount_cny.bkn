@@ -1,0 +1,15 @@
+---
+type: value_type
+id: amount_cny
+name: 人民币金额
+---
+
+## ValueType: 人民币金额
+
+### Definition
+
+```yaml
+base_type: decimal
+range: { min: 0 }
+unit: 元
+```

@@ -1,0 +1,23 @@
+---
+type: relation_type
+id: order_by_legacy_doctor
+name: 开单医生（旧编码）
+lifecycle:
+  status: deprecated
+  reason: 旧 HIS 编码已全部映射为工号，改用「开单医生」
+  replaced_by: order_by_doctor
+---
+
+## RelationType: 开单医生（旧编码）
+
+### Endpoint
+
+| Source | Target | Type |
+|--------|--------|------|
+| lab_order | doctor | direct |
+
+### Mapping Rules
+
+| Source Property | Target Property |
+|-----------------|-----------------|
+| legacy_doctor_code | doctor_id |

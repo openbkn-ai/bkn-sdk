@@ -58,7 +58,12 @@ describe("bkn validate", () => {
     const r = validateBknDirectory(dir);
     expect(r.valid).toBe(true);
     expect(r.networkId).toBe("kn1");
-    expect(r.counts).toEqual({ objectTypes: 2, relationTypes: 1, conceptGroups: 0 });
+    expect(r.counts).toEqual({
+      objectTypes: 2,
+      relationTypes: 1,
+      conceptGroups: 0,
+      valueTypes: 0,
+    });
     expect(r.warnings).toEqual([]);
   });
 
@@ -717,5 +722,57 @@ describe("validateBknDirectory — capabilities section", () => {
   it("reports nothing for a network without the section", () => {
     const r = validateBknDirectory(bkn({ "network.bkn": network }));
     expect(r.capabilities).toEqual({ declared: 0, skipped: [] });
+  });
+});
+
+describe("bkn validate: BKN spec 3.0", () => {
+  const examples = join(__dirname, "..", "..", "skills", "create-bkn", "references", "examples");
+
+  it("passes the create-bkn 3.0 example and counts its value types", () => {
+    const r = validateBknDirectory(join(examples, "clinic-lab"));
+    expect(r.errors).toEqual([]);
+    expect(r.warnings).toEqual([]);
+    expect(r.counts).toEqual({
+      objectTypes: 4,
+      relationTypes: 6,
+      conceptGroups: 1,
+      valueTypes: 3,
+    });
+  });
+
+  it("still passes the 2.x example", () => {
+    const r = validateBknDirectory(join(examples, "k8s-network"));
+    expect(r.errors).toEqual([]);
+    expect(r.counts.valueTypes).toBe(0);
+  });
+
+  it("checks the Data Properties table of an indirect relation", () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": ot("a", "Alpha"),
+      "relation_types/r.bkn": `---
+type: relation_type
+id: r
+name: R
+---
+
+## RelationType: R
+
+### Endpoint
+
+| Source | Target | Type |
+|--------|--------|------|
+| a | a | indirect |
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| title | 职务 | string | 主任 | 副主任 | title |
+`,
+    });
+    expect(validateBknDirectory(dir).errors).toEqual([
+      "relation_types/r.bkn:19: table row has 6 columns; expected 5. Check for a pipe or newline inside a cell.",
+    ]);
   });
 });

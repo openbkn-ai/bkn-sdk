@@ -1,0 +1,21 @@
+---
+type: relation_type
+id: order_for_patient
+name: 检验对象
+reverse_name: 检验申请
+verification: confirmed
+---
+
+## RelationType: 检验对象
+
+### Endpoint
+
+| Source | Target | Type | Cardinality |
+|--------|--------|------|-------------|
+| lab_order | patient | direct | many_to_one |
+
+### Mapping Rules
+
+| Source Property | Target Property |
+|-----------------|-----------------|
+| patient_id | patient_id |
