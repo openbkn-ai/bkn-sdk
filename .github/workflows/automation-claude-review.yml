@@ -761,11 +761,13 @@ jobs:
           # 表态权限收在 verdict 一处（`Bash(gh api:*)` 是全方法通配，模型能直接
           # POST /pulls/N/reviews 绕过去）。
           #
-          # 只有一个 agent，没必要在 effort 上省——它要独自承担整轮判断。轮次上限 200
-          # 是余量而非目标，跑不满不计费。
+          # 轮次上限 200 是余量而非目标，跑不满不计费。
+          # effort 用 high、verify 保持 xhigh。Anthropic 公布的 Opus 5.5 数据里，xhigh 比 high
+          # 只高约 1.4 分，成本约 2.5 倍；bkn-foundry 由 max 降到 xhigh 后单次评审从 $1.95 降到
+          # $0.77，省下的主要是轮次。verify 只在有阻塞项时运行、负责驳回误报，那里不省。
           claude_args: |
-            --model claude-opus-5
-            --effort xhigh
+            --model claude-opus-5-5
+            --effort high
             --max-turns 200
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Read,Grep,Glob,LS,Write,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr checks:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git grep:*)"
 
@@ -1053,7 +1055,7 @@ jobs:
             `reason` **一律用中文**。它会原样进 verdict 正文，与骨架和评审给的文字
             并排显示，语言不一致会读成两份东西。
           claude_args: |
-            --model claude-opus-5
+            --model claude-opus-5-5
             --effort xhigh
             --max-turns 40
             --allowedTools "Read,Grep,Glob,LS,Write,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git grep:*)"
