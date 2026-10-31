@@ -199,6 +199,20 @@ function hintFor(
       "AppKey invalid / expired / revoked / owner disabled — re-issue with `openbkn appkey create` (or `appkey regenerate <id>`). Do not auto-retry.",
     );
   }
+  if (status === 401 && ctx.refresh?.app) {
+    switch (renewal) {
+      case "failed":
+        return withEnv(
+          "The access token expired and could not be renewed: the refresh token was rejected (expired or revoked, or the user disconnected the app under connected clients). Sign the user in again.",
+        );
+      case "renewed":
+        return withEnv(
+          "The access token was renewed, and the platform still rejects it — the session was revoked or the account disabled. Sign the user in again.",
+        );
+      default:
+        break;
+    }
+  }
   if (status === 401) {
     switch (renewal) {
       case "failed":

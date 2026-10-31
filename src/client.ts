@@ -81,6 +81,7 @@ export async function createAuthenticatedClient(
       refreshToken: tokens.refreshToken,
       ...(tokens.expiresAt ? { expiresAt: tokens.expiresAt } : {}),
       persist: (next: RefreshableTokens) => onTokenRefresh?.(next),
+      app: true,
     };
   }
 

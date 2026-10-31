@@ -27,20 +27,23 @@ import base64
 import json
 import os
 import re
-from collections.abc import Iterator
+import threading
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from .errors import InputError
+from .oauth import Tokens
 
 __all__ = [
     "DEFAULT_CLIENT_ID",
     "DEFAULT_TIMEOUT",
     "Context",
     "StoredCredential",
+    "TokenHolder",
     "configure",
     "resolve_context",
     "session",
@@ -69,6 +72,23 @@ class StoredCredential:
     client_id: str = DEFAULT_CLIENT_ID
 
 
+@dataclass(eq=False)
+class TokenHolder:
+    """An app's own token set, shared by every request under one configuration.
+
+    Mutable on purpose: a refresh replaces `tokens`, and every `Context` resolved
+    from the same `configure`/`session` call must see the replacement — otherwise
+    each request would spend the refresh token the last one just rotated away.
+    The lock makes that one refresh at a time; it is re-entrant so an `on_refresh`
+    that itself calls the SDK cannot deadlock.
+    """
+
+    tokens: Tokens
+    client_id: str = DEFAULT_CLIENT_ID
+    on_refresh: Callable[[Tokens], None] | None = None
+    lock: threading.RLock = field(default_factory=threading.RLock)
+
+
 @dataclass(frozen=True)
 class Context:
     """A fully resolved request context — everything an HTTP call needs."""
@@ -79,6 +99,8 @@ class Context:
     timeout: float = DEFAULT_TIMEOUT
     #: Set when the token came from the store and can be refreshed in place.
     credential: StoredCredential | None = None
+    #: Set when the caller supplied `tokens=`; refreshed in place, via `on_refresh`.
+    app_tokens: TokenHolder | None = None
     #: Verify the generated package against the live schema on the first query.
     check_schema: bool = False
     #: A business turn the caller already owns. When both ids are present the
@@ -97,6 +119,8 @@ class _Overrides:
 
     base_url: str | None = None
     token: str | None = None
+    #: Mutually exclusive with `token` within one level; see `_holder`.
+    holder: TokenHolder | None = None
     insecure: bool | None = None
     timeout: float | None = None
     user: str | None = None
@@ -120,6 +144,9 @@ def configure(
     *,
     base_url: str | None = None,
     token: str | None = None,
+    tokens: Tokens | None = None,
+    client_id: str | None = None,
+    on_refresh: Callable[[Tokens], None] | None = None,
     insecure: bool | None = None,
     timeout: float | None = None,
     user: str | None = None,
@@ -133,11 +160,18 @@ def configure(
     Each call **replaces** the whole default rather than merging into it, so
     `configure()` with no arguments clears it — which is what a test teardown
     wants, and what makes the resulting state readable from one line.
+
+    `tokens` is an app's own OAuth token set (see `bkn_osdk.oauth`). It is
+    refreshed with `client_id` — the client the tokens were issued to, default
+    `openbkn-sdk` — shortly before it expires and on a 401, and `on_refresh`
+    receives every new set: save it, because each refresh spends the old refresh
+    token. One call, one shared token set.
     """
     global _process_default
     _process_default = _Overrides(
         base_url=base_url,
         token=token,
+        holder=_holder(token, tokens, client_id, on_refresh),
         insecure=insecure,
         timeout=timeout,
         user=user,
@@ -153,6 +187,9 @@ def session(
     *,
     base_url: str | None = None,
     token: str | None = None,
+    tokens: Tokens | None = None,
+    client_id: str | None = None,
+    on_refresh: Callable[[Tokens], None] | None = None,
     insecure: bool | None = None,
     timeout: float | None = None,
     user: str | None = None,
@@ -174,6 +211,7 @@ def session(
         overrides=_Overrides(
             base_url=base_url,
             token=token,
+            holder=_holder(token, tokens, client_id, on_refresh),
             insecure=insecure,
             timeout=timeout,
             user=user,
@@ -242,6 +280,22 @@ def _finish_interactions(ctx: Context, opened: _Opened | None, outcome: str) -> 
         interaction_scope().reset(reset_to)
 
 
+def _holder(
+    token: str | None,
+    tokens: Tokens | None,
+    client_id: str | None,
+    on_refresh: Callable[[Tokens], None] | None,
+) -> TokenHolder | None:
+    """The one mutable token set a `configure`/`session` call owns, if it was given tokens."""
+    if tokens is None:
+        if client_id is not None or on_refresh is not None:
+            raise InputError("client_id and on_refresh only apply together with tokens=….")
+        return None
+    if token is not None:
+        raise InputError("Pass either token=… or tokens=…, not both.")
+    return TokenHolder(tokens, client_id or DEFAULT_CLIENT_ID, on_refresh)
+
+
 def resolve_context() -> Context:
     """Walk the four levels and produce a usable `Context`, or explain what is missing."""
     levels: list[_Overrides] = []
@@ -269,8 +323,21 @@ def resolve_context() -> Context:
     user_id = _resolve_user_id(base_url, user) if user else _active_user_id(base_url)
     stored = _read_token(base_url, user_id) or {}
 
-    explicit = pick("token") or os.environ.get("BKN_TOKEN")
-    token = explicit or stored.get("accessToken")
+    # `token` and `tokens` are one choice: the innermost level that sets either
+    # wins outright, so a `session(token=…)` is never half-mixed with outer tokens.
+    holder: TokenHolder | None = None
+    explicit = None
+    for level in levels:
+        if level.holder is not None:
+            holder = level.holder
+            break
+        if level.token is not None:
+            explicit = level.token
+            break
+    if holder is None:
+        explicit = explicit or os.environ.get("BKN_TOKEN")
+    app_access = holder.tokens.access_token if holder is not None else None
+    token = app_access or explicit or stored.get("accessToken")
     if not isinstance(token, str) or not token:
         raise InputError(
             "No access token. Pass token=…, set BKN_TOKEN, or run `openbkn auth login`."
@@ -281,7 +348,11 @@ def resolve_context() -> Context:
     refresh_token = stored.get("refreshToken")
     credential = (
         StoredCredential(base_url=base_url, user_id=user_id, refresh_token=refresh_token)
-        if not explicit and user_id and isinstance(refresh_token, str) and refresh_token
+        if not explicit
+        and holder is None
+        and user_id
+        and isinstance(refresh_token, str)
+        and refresh_token
         else None
     )
 
@@ -310,6 +381,7 @@ def resolve_context() -> Context:
         base_url=base_url,
         token=token,
         credential=credential,
+        app_tokens=holder,
         insecure=bool(insecure),
         timeout=float(timeout) if timeout is not None else DEFAULT_TIMEOUT,
         check_schema=bool(pick("check_schema")),

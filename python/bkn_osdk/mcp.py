@@ -198,7 +198,7 @@ def _post(ctx: Context, kn_id: str, session_id: str, body: dict[str, Any]) -> An
 
 
 def _raw_post(ctx: Context, kn_id: str, session_id: str | None, body: dict[str, Any]) -> Any:
-    from .auth import refreshed_token, token_for
+    from .auth import can_refresh, refreshed_token, token_for
     from .http import _client, _ensure_platform_floor, _headers
 
     # Skill recall runs over this transport, so it takes the same version floor as REST.
@@ -224,9 +224,9 @@ def _raw_post(ctx: Context, kn_id: str, session_id: str | None, body: dict[str, 
 
     token = token_for(ctx)
     response = send(token)
-    if response.status_code == 401 and ctx.credential is not None:
-        # A stored session that expired mid-process, exactly as the REST path
-        # handles it. Without this a long-lived process keeps reading over REST
+    if response.status_code == 401 and can_refresh(ctx):
+        # A stored session or app token set that expired mid-process, exactly as
+        # the REST path handles it. Without this a long-lived process keeps reading over REST
         # while every traced read and every tool call fails for good.
         refreshed = refreshed_token(ctx, token)
         if refreshed is not None:

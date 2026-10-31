@@ -14,6 +14,7 @@ import json
 from typing import Any
 
 __all__ = [
+    "AuthError",
     "BknError",
     "FormatVersionError",
     "HttpError",
@@ -32,6 +33,23 @@ class BknError(Exception):
 
 class InputError(BknError):
     """Caller-side mistake: missing credentials, bad arguments, unusable filter."""
+
+
+class AuthError(BknError):
+    """A sign-in that did not happen: denied, expired, mismatched, or refused.
+
+    `error` is the OAuth error code (`access_denied`, `invalid_grant`, …) or one
+    of this SDK's own (`state_mismatch`, `timeout`, `registration_unavailable`);
+    `description` is the platform's `error_description` when it sent one. Neither
+    ever holds a token, so the message is safe to log.
+    """
+
+    def __init__(
+        self, message: str, *, error: str | None = None, description: str | None = None
+    ) -> None:
+        super().__init__(message)
+        self.error = error
+        self.description = description
 
 
 class PlatformVersionError(BknError):

@@ -151,6 +151,78 @@ the platform rotates the refresh token, the replacement is written back to the
 store, because spending the CLI's credential and keeping the new one would force
 a re-login.
 
+## Sign users in to your app
+
+An app that acts as its own users needs an OAuth token per user and has to keep
+it alive. `bkn_osdk.oauth` does the sign-in (PKCE, the loopback callback, the
+code exchange) and the refresh grant, and `configure` / `session` refresh the
+tokens it returns the way they refresh a stored session:
+
+```python
+import bkn_osdk
+from bkn_osdk import oauth
+
+# Once: a public client for the app (or ask an operator for one).
+client = oauth.register_client(PLATFORM, "My app")
+
+# A CLI, desktop app, script or notebook: opens the browser, waits on
+# http://127.0.0.1:8765/callback, exchanges the code.
+tokens = oauth.login(PLATFORM, client_id=client.client_id)
+save(tokens.to_dict())  # keep it; see the caveats below
+
+bkn_osdk.configure(
+    base_url=PLATFORM,
+    tokens=tokens,
+    client_id=client.client_id,  # refresh must name the client the tokens were issued to
+    on_refresh=lambda fresh: save(fresh.to_dict()),
+)
+People.take(10)  # refreshed shortly before expiry and on a 401
+```
+
+A server with many users binds each request's tokens instead; the scope is a
+`ContextVar`, so one user's tokens never reach another's request:
+
+```python
+with bkn_osdk.session(tokens=tokens_for(user), client_id=CLIENT_ID, on_refresh=save_for(user)):
+    People.take(10)
+```
+
+A web app receives the callback in its own handler. Keep the `AuthorizationRequest`
+(it holds the `state` and PKCE verifier) in the user's server-side session:
+
+```python
+req = oauth.authorization_request(PLATFORM, CLIENT_ID, redirect_uri="https://app.example/cb")
+# redirect the browser to req.url; later, in the /cb handler:
+tokens = oauth.exchange_code(PLATFORM, req, code=params["code"], state=params["state"])
+```
+
+On a machine without a browser, `oauth.device_login(PLATFORM)` prints a code to
+approve elsewhere (pass `on_prompt` to show it yourself); it signs in as the
+CLI's `openbkn-sdk` client, which is also `configure`'s default `client_id`.
+`oauth.refresh(PLATFORM, tokens, client_id=…)` is the refresh grant on its own.
+A sign-in that did not happen raises `AuthError`, with `error` and `description`.
+
+Four things to know:
+
+1. **Save the refresh token from every callback.** Each refresh spends the old
+   one and the platform issues a new one; `on_refresh` receives the whole new
+   set. An app that kept only the first must sign the user in again on its next
+   start.
+2. **Never refresh one user's tokens from two processes.** The platform treats a
+   reused refresh token as theft and revokes the whole chain, signing the user
+   out everywhere. One process is safe (concurrent requests share a single
+   refresh); several instances need a shared store with a lock, or one place
+   that does the refreshing.
+3. **A failed refresh means sign in again.** The refresh token expired, was
+   revoked, or the user disconnected the app under connected clients. The
+   request then fails with its original 401 and a hint saying so.
+4. **`login` serves loopback callbacks only.** A web app uses
+   `authorization_request` + `exchange_code` from its own handler, and an
+   operator must allow a non-loopback callback origin for the client.
+   `register_client` raises `AuthError` where the platform has no
+   self-registration (0.2.0 has none; it can also be disabled): use
+   `device_login`, or ask an operator.
+
 ## Query
 
 ```python

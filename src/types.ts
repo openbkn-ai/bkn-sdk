@@ -9,6 +9,24 @@ import type { RetryNotice } from "./api/tls.js";
 export interface ClientOptions {
   baseUrl?: string;
   token?: string;
+  /**
+   * An app's own OAuth tokens for the user it signs in (from `oauth.login`,
+   * `oauth.exchangeCode` or `oauth.deviceLogin`). Unlike `token`, they refresh:
+   * shortly before `expiresAt` and on a 401, with `clientId` and the refresh
+   * token. Passing both `token` and `tokens` is an `InputError`.
+   */
+  tokens?: RefreshableTokens;
+  /**
+   * The OAuth client the `tokens` were issued to; the refresh grant must name
+   * it. Defaults to `openbkn-sdk`, which is right for device-login tokens.
+   */
+  clientId?: string;
+  /**
+   * Called with the full new token set after every successful refresh of
+   * `tokens` — the new refresh token included, which the app must save (each
+   * refresh spends the old one). An exception from it fails the refresh.
+   */
+  onTokenRefresh?: (tokens: RefreshableTokens) => void;
   /** Specific user credentials (transient); maps to legacy `--user`. */
   user?: string;
   /** Skip TLS verification (dev / self-signed only). */
@@ -69,7 +87,8 @@ export interface AccountPasswordAuth {
  * Options for {@link createAuthenticatedClient}. Unlike {@link ClientOptions},
  * this factory establishes a new OAuth session before creating the client.
  */
-export interface AuthenticatedClientOptions extends Omit<ClientOptions, "baseUrl" | "token"> {
+export interface AuthenticatedClientOptions
+  extends Omit<ClientOptions, "baseUrl" | "token" | "tokens" | "clientId" | "onTokenRefresh"> {
   /** Platform origin to authenticate against. */
   baseUrl: string;
   /** Account credentials for the headless OAuth device flow. */
@@ -113,6 +132,12 @@ export interface RequestContext {
     /** Expiry of the current `token` (ISO 8601) — what an opaque token has instead of `exp`. */
     expiresAt?: string;
     persist: (tokens: RefreshableTokens) => void;
+    /**
+     * The refresh token belongs to an app (its own tokens, or an authenticated
+     * client), not to an `openbkn auth login` session: a failed renewal then
+     * means "sign the user in again", never "run `openbkn auth login`".
+     */
+    app?: boolean;
   };
   /** See {@link ClientOptions.rememberedConversationId}. */
   rememberedConversationId?: string;

@@ -27,9 +27,15 @@ from dataclasses import dataclass
 
 import httpx
 
-from .config import Context, StoredCredential, write_refreshed_token
+from . import oauth
+from .config import Context, StoredCredential, TokenHolder, write_refreshed_token
+from .errors import BknError
 
-__all__ = ["refreshed_token", "token_for"]
+__all__ = ["can_refresh", "refreshed_token", "token_for"]
+
+#: An app's token set is renewed this long before it expires, so a request does
+#: not set off with a token that dies in flight.
+REFRESH_WINDOW_SECONDS = 60.0
 
 TOKEN_PATH = "/oauth2/token"
 
@@ -44,12 +50,19 @@ class _Tokens:
     refresh_token: str | None
 
 
+def can_refresh(ctx: Context) -> bool:
+    """Whether a 401 for this context is worth a refresh attempt."""
+    return ctx.credential is not None or ctx.app_tokens is not None
+
+
 def token_for(ctx: Context) -> str:
     """The token to send: whatever this process last refreshed, else the stored one.
 
     Without this, every request after the first expiry would pay for its own
     refresh round trip.
     """
+    if ctx.app_tokens is not None:
+        return _app_token(ctx, ctx.app_tokens)
     credential = ctx.credential
     if credential is None:
         return ctx.token
@@ -63,6 +76,8 @@ def refreshed_token(ctx: Context, used: str) -> str | None:
     `used` is the token that just came back 401; if another thread refreshed in
     the meantime, its result is returned instead of a second exchange.
     """
+    if ctx.app_tokens is not None:
+        return _app_refreshed(ctx, ctx.app_tokens, used)
     credential = ctx.credential
     if credential is None:
         return None
@@ -90,6 +105,56 @@ def refreshed_token(ctx: Context, used: str) -> str | None:
             refresh_token=tokens.refresh_token,
         )
     return tokens.access_token
+
+
+def _app_token(ctx: Context, holder: TokenHolder) -> str:
+    """The holder's access token, renewed first if it is about to expire.
+
+    The lock is held across the renewal so threads arriving together wait for
+    one refresh and then all read its result.
+    """
+    with holder.lock:
+        if holder.tokens.expires_within(REFRESH_WINDOW_SECONDS):
+            renewed = _renew(ctx, holder)
+            if renewed is not None:
+                return renewed
+        return holder.tokens.access_token
+
+
+def _app_refreshed(ctx: Context, holder: TokenHolder, used: str) -> str | None:
+    """Refresh after a 401 on `used`, unless another thread already replaced it."""
+    with holder.lock:
+        current = holder.tokens.access_token
+        if current != used:
+            return current
+        return _renew(ctx, holder)
+
+
+def _renew(ctx: Context, holder: TokenHolder) -> str | None:
+    """Run the refresh grant for a holder (lock held); None when it fails.
+
+    A failed grant is not raised: the caller falls back to the request's own 401,
+    which `http.py` annotates with the sign-in-again hint. `on_refresh` runs after
+    the holder is updated, and its exceptions are deliberately *not* caught — an
+    app that cannot save a rotated refresh token wants to know before it loses it.
+    """
+    tokens = holder.tokens
+    if not tokens.refresh_token:
+        return None
+    try:
+        renewed = oauth.refresh(
+            ctx.base_url,
+            tokens,
+            client_id=holder.client_id,
+            insecure=ctx.insecure,
+            timeout=ctx.timeout,
+        )
+    except BknError:
+        return None
+    holder.tokens = renewed
+    if holder.on_refresh is not None:
+        holder.on_refresh(renewed)
+    return renewed.access_token
 
 
 def _exchange(credential: StoredCredential, insecure: bool, timeout: float) -> _Tokens | None:

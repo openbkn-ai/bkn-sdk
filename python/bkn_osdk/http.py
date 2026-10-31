@@ -4,9 +4,9 @@
 """The single choke point for every backend call: JSON in, JSON out, typed errors.
 
 Mirrors `src/api/http.ts` — explicit timeout, auth headers, and the same
-next-step hints on failure. Token refresh is deliberately absent: the CLI owns
-the store, so an expired stored token is reported rather than silently rewritten
-from a Python process.
+next-step hints on failure. A 401 is retried once after a refresh when the token
+can be renewed: a session from the `~/.bkn` store, or an app's own `tokens=` (see
+`auth.py`). An explicit `token=`, `BKN_TOKEN` or an AppKey is reported as is.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from urllib.parse import urljoin
 
 import httpx
 
-from .auth import refreshed_token, token_for
+from .auth import can_refresh, refreshed_token, token_for
 from .config import Context, resolve_context
 from .errors import HttpError, PlatformVersionError, hint_for
 
@@ -75,8 +75,8 @@ def request(
         )
 
     response = send(token)
-    if response.status_code == 401 and ctx.credential is not None:
-        # A stored session that expired mid-process. Swap it for a fresh access
+    if response.status_code == 401 and can_refresh(ctx):
+        # A stored session or app token set that expired mid-process. Swap it for a fresh access
         # token and retry once; on failure the original 401 stands, hint included.
         refreshed = refreshed_token(ctx, token)
         if refreshed is not None:
@@ -88,13 +88,28 @@ def request(
             response.status_code,
             response.reason_phrase,
             text,
-            hint_for(ctx.token, response.status_code, text),
+            _hint(ctx, response.status_code, text),
         )
     if not text:
         return None
     if "toon" in response.headers.get("content-type", "").lower():
         return text
     return response.json()
+
+
+def _hint(ctx: Context, status: int, text: str) -> str | None:
+    """The next step for a failed request.
+
+    A 401 under app-supplied tokens means the refresh did not rescue them (or
+    there was none), and `openbkn auth login` would sign in someone else; the
+    app has to send its user through sign-in again.
+    """
+    if status == 401 and ctx.app_tokens is not None:
+        return (
+            "The access token was rejected and could not be refreshed (expired, "
+            "revoked, or the user disconnected the app). Sign the user in again."
+        )
+    return hint_for(ctx.token, status, text)
 
 
 def call(
