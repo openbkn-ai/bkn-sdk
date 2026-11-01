@@ -157,7 +157,7 @@ Gmv.query(
 
 `Gmv.__version__` 与 `Gmv.__dimensions__` 来自已发布定义；未声明或有歧义的维度会在请求前被拒绝。`start` / `end` 须为 Unix 毫秒整数；不再接受旧版 `instant` 和 `step`。`analysis_dimensions` 仍作为兼容参数保留，但两种写法在线路上都发送规范字段 `group_by`。
 
-传输走 `POST …/object-metrics/{metric_id}/data?version=N`，返回完整的 V1 `model`、`entries`、`status` 和 `warnings`。固定业务限定与统计粒度由指标定义决定，查询不能覆盖。
+没有交互上下文时，传输是裸的 ontology-query 请求 `POST …/object-metrics/{metric_id}/data?version=N`。在 `session(traced=True)` 中，或 context 已经携带 conversation / interaction ID 时，改走 Context Loader 托管的 `query_metric` 工具：查询字段与生成包的 branch 原样透传，托管响应归一成同一份 V1 `model`、`entries`、`status`、`warnings` 包络，并把回执累积到交互上。生命周期 `bkn_context` 绝不会塞进 ontology-query 的严格请求体。固定业务限定与统计粒度由指标定义决定，查询不能覆盖。
 
 ## 遍历
 
@@ -189,7 +189,7 @@ with bkn_osdk.session(traced=True):
 
 `order_by` 以 `sort` 发给工具。工具不接受 `need_total`、REST 的 cursor 和 REST 查询参数（`options(...)`），需要其中任一个的查询**即使在 traced 作用域里也走 REST** —— 带着该作用域的 turn，所以照样被记录，只是拿不到随包回执。不带 traced 的读全程走 REST，更快，不带回执。
 
-**哪些调用需要 turn，取决于"面"，不取决于工具。** 能力面 —— MCP 工具和它们在 `/kn/` 下的 REST 孪生 —— 拒绝没有上下文的调用：catalog 里除两个生命周期工具外，每个都把 `bkn_context` 标成 required。所以 `search`、`search_instances` 以及任何直接的 `call_tool` 第一次就带上 turn：作用域里有就用它的，没有就开一个短命的。`ontology-query` 下的读路由 —— 实例、子图、指标 —— 接受裸请求，所以先裸发、不凭空造 turn；只有拒绝它的部署才会为重试开一个。
+**哪些调用需要 turn，取决于"面"，不取决于工具。** 能力面 —— MCP 工具和它们在 `/kn/` 下的 REST 孪生 —— 拒绝没有上下文的调用：catalog 里除两个生命周期工具外，每个都把 `bkn_context` 标成 required。所以 `search`、`search_instances` 以及任何直接的 `call_tool` 第一次就带上 turn：作用域里有就用它的，没有就开一个短命的。`ontology-query` 下的实例、子图读路由，以及未跟踪的指标读，接受裸请求且不会凭空造 turn。已经有 turn 的指标读会明确走 Context Loader 托管工具；不会再把 `bkn_context` 加进严格的 ontology-query 请求体后重试。
 
 已经持有 turn 的调用方不必开 traced 作用域，直接传进来即可 —— 沙箱就是这么做的：`BKN_CONVERSATION_ID` 和 `BKN_INTERACTION_ID` 放在环境里，无需显式传参就被继承，并且 SDK 绝不去 finish 它，因为那不是它的。
 

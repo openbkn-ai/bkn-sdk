@@ -419,6 +419,7 @@ def get_kn_detail(
     kn_id: str,
     *,
     response_format: str | None = None,
+    branch: str | None = None,
     detail_level: str | None = None,
     context: Context | None = None,
 ) -> Any:
@@ -447,10 +448,13 @@ def get_kn_detail(
     1-3 个相关分组，用 [schema-search.yaml](schema-search.yaml) 的 `search_schema` 配合
     `search_scope.concept_groups` 收敛，再用 `get_object_types` 按 ID 取细节。
     收窄发生在逐对象类的属性授权读取之前：那一步每个对象类一次下游调用，为一份
-    不会返回的列表付这个代价没有意义。
+    不会返回的列表付这个代价没有意义。 非 main 分支目前不支持 search_schema 召回概念；请用相同
+    branch 调 get_object_types，不传 ids 按页列举对象类索引，再带选中的 ids
+    读取完整定义和关联指标。
 
     Args:
         kn_id: 知识网络 ID。与 `x-kn-id` 头二选一，本字段优先。
+        branch: 知识网络分支；省略时使用 main。
         detail_level: 详情级别，见端点说明。
 
     Returns the platform's own payload: action_type_count, action_types, comment,
@@ -465,6 +469,7 @@ def get_kn_detail(
         },
         {
             "kn_id": kn_id,
+            "branch": branch,
             "detail_level": detail_level,
         },
         context,
@@ -476,6 +481,7 @@ def get_object_types(
     ids: list[Any] | None = None,
     *,
     response_format: str | None = None,
+    branch: str | None = None,
     offset: int | None = None,
     limit: int | None = None,
     context: Context | None = None,
@@ -502,6 +508,7 @@ def get_object_types(
 
     Args:
         kn_id: 知识网络 ID。与 `x-kn-id` 头二选一，本字段优先。
+        branch: 对象类与关联指标所属的知识网络分支；省略时使用 main。
         ids: 要下钻的对象类 ID 列表（取自 `get_kn_detail` 或本接口的列举模式）。也接受
             名称作为兜底匹配。**留空即切换到列举模式**，不再返回 400。
         offset: 列举的起始位置。仅在不传 `ids` 时有效；续页请用响应里的 `next_offset`。
@@ -520,6 +527,7 @@ def get_object_types(
         },
         {
             "kn_id": kn_id,
+            "branch": branch,
             "ids": ids,
             "offset": offset,
             "limit": limit,
@@ -892,6 +900,7 @@ def query_metric(
     version: int,
     *,
     response_format: str | None = None,
+    branch: str | None = None,
     query: dict[str, Any] | None = None,
     context: Context | None = None,
 ) -> Any:
@@ -903,11 +912,13 @@ def query_metric(
     只负责独立的 工具型逻辑属性。指标参数由调用方显式给出，不经大模型。 `version`
     必填，必须使用已发布、不可变的版本；`query` 只包含定义允许的
     运行时选择（过滤条件、分析维度、毫秒时间范围）。固定口径和统计
-    粒度由指标定义决定，不能通过本请求覆盖。 响应保留对象指标 V1 的
-    `model`、`entries`、`status` 和 `warnings`。
+    粒度由指标定义决定，不能通过本请求覆盖。`branch` 指定指标所在的知识网络 分支，省略时只读取
+    `main`，不会回退到其他分支。 响应保留对象指标 V1 的 `model`、`entries`、`status` 和
+    `warnings`。
 
     Args:
         kn_id: 知识网络 ID。也可用 `x-kn-id` 头传。
+        branch: 指标所属知识网络分支；省略时使用 main。
         metric_id: 指标 ID，取自 `get_object_types` 返回的 `related_metrics[].id`。
         version: 已发布且不可变的对象指标版本，取自 `related_metrics[].version`。
 
@@ -922,6 +933,7 @@ def query_metric(
         },
         {
             "kn_id": kn_id,
+            "branch": branch,
             "metric_id": metric_id,
             "version": version,
             "query": query,

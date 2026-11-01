@@ -57,7 +57,6 @@ class Metric:
         both select from the published ``query_capabilities.analysis_dimensions``.
         """
         from .http import request
-        from .lifecycle import with_context_retry
 
         if (
             isinstance(cls.__version__, bool)
@@ -119,12 +118,46 @@ class Metric:
             "version": cls.__version__,
         }
 
-        def send(bkn_context: dict[str, str] | None) -> Any:
-            body = arguments if bkn_context is None else {**arguments, "bkn_context": bkn_context}
-            return request(ctx, path, body=body, query=query)
+        if ctx.traced or (ctx.conversation_id and ctx.interaction_id):
+            return cls._query_managed(ctx, arguments)
+        return request(ctx, path, body=arguments, query=query)
 
-        response = with_context_retry(ctx, cls.__kn_id__, send)
-        return response
+    @classmethod
+    def _query_managed(cls, ctx: Context, arguments: dict[str, Any]) -> Any:
+        """Query through Context Loader so lifecycle context never enters the metric body."""
+        from .lifecycle import ensure_interaction
+        from .mcp import call_tool
+
+        with ensure_interaction(ctx, cls.__kn_id__) as interaction:
+            branch = branch_param(cls.__branch__)
+            result = call_tool(
+                ctx,
+                cls.__kn_id__,
+                "query_metric",
+                {
+                    "kn_id": cls.__kn_id__,
+                    "metric_id": cls.__bkn_id__,
+                    "version": cls.__version__,
+                    "response_format": "json",
+                    **({"branch": branch} if branch is not None else {}),
+                    **({"query": arguments} if arguments else {}),
+                    "bkn_context": interaction.bkn_context,
+                },
+            )
+            if result.receipt is not None:
+                interaction.receipts.append(result.receipt)
+
+        # Context Loader adds route identity to the tool result. Metric.query's
+        # public contract is ontology-query's Object Metric V1 data envelope on
+        # both transports, so remove only that transport wrapper and retain all
+        # current and future result fields.
+        if isinstance(result.value, dict):
+            return {
+                key: value
+                for key, value in result.value.items()
+                if key not in {"kn_id", "metric_id", "version"}
+            }
+        return result.value
 
     @classmethod
     def _checked_dimensions(cls, requested: list[str | dict[str, str]]) -> list[dict[str, str]]:

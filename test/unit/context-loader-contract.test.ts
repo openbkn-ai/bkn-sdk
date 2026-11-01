@@ -68,6 +68,7 @@ describe("response_format defaults to json", () => {
     "run_sql",
     "explore_subgraph",
     "query_metric",
+    "drill_through_metric",
     "query_object_instance",
     "query_instance_subgraph",
     "get_logic_properties_values",
@@ -104,12 +105,18 @@ describe("response_format defaults to json", () => {
 });
 
 describe("kn_id travels in the tool arguments", () => {
-  it("fills kn_id for run_cypher and search_capabilities, which require it in the body", async () => {
+  it("fills kn_id for network-scoped tools that require it in the body", async () => {
     const calls = mockDeploy("{}");
     const ctx = freshCtx();
     await callTool(ctx, "kn-1", "run_cypher", { query: "MATCH (o:order) RETURN count(*) AS n" });
     await searchCapabilities(ctx, "kn-1", { query: "treatment" });
-    expect(calls.map((c) => c.arguments.kn_id)).toEqual(["kn-1", "kn-1"]);
+    await callTool(ctx, "kn-1", "drill_through_metric", {
+      metric_id: "m-1",
+      version: 2,
+      query: {},
+      bucket_key: "bucket-1",
+    });
+    expect(calls.map((c) => c.arguments.kn_id)).toEqual(["kn-1", "kn-1", "kn-1"]);
   });
 
   it("keeps a kn_id the caller set", async () => {

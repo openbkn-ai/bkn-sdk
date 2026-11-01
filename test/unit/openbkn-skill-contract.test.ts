@@ -25,4 +25,31 @@ describe("OpenBKN third-party Agent contract", () => {
     expect(first80Lines).not.toContain("lease_token");
     expect(first80Lines).not.toContain("bkn_complete_interaction");
   });
+
+  it("keeps create-skill metric guidance on Object Metric V1", async () => {
+    const sources = await Promise.all([
+      readFile(
+        new URL("../../skills/create-skill/assets/templates/SKILL.md.template", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL("../../skills/create-skill/assets/templates/function.py.template", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL(
+          "../../skills/create-skill/references/examples/demand-deliverability-assessment/SKILL.md",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ]);
+    const guidance = sources.join("\n");
+
+    expect(guidance).toContain("query.time={start,end}");
+    expect(guidance).toContain("query.group_by");
+    expect(guidance).toContain("entries[].value");
+    expect(guidance).not.toContain("time.instant");
+    expect(guidance).not.toContain("datas[0].values[0]");
+  });
 });

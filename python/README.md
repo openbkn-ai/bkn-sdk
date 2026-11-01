@@ -229,9 +229,15 @@ An undeclared or ambiguous dimension is refused locally. `start`/`end` must be
 integer Unix milliseconds; old `instant` and `step` fields are not accepted.
 `analysis_dimensions` is retained as a compatibility keyword, but both forms
 send the canonical runtime field `group_by`.
-The transport is `POST …/object-metrics/{metric_id}/data?version=N` and the
-result preserves the V1 `model`, `entries`, `status`, and `warnings` envelope.
-Fixed business qualifiers and statistical grain cannot be overridden at query time.
+Without an interaction, the transport is the bare ontology-query request
+`POST …/object-metrics/{metric_id}/data?version=N`. Inside
+`session(traced=True)`, or when the context already carries conversation and
+interaction IDs, it uses Context Loader's managed `query_metric` tool instead.
+The same query fields and generated branch are forwarded, the managed response
+is normalized to the same V1 `model`, `entries`, `status`, and `warnings`
+envelope, and its receipt is accumulated on the interaction. Lifecycle
+`bkn_context` is never added to ontology-query's strict request body. Fixed
+business qualifiers and statistical grain cannot be overridden at query time.
 
 ## Traverse
 
@@ -286,10 +292,11 @@ surface — the MCP tools and their REST twins under `/kn/` — refuses a
 context-free call: every tool in the catalog bar the two lifecycle ones declares
 `bkn_context` required. So `search`, `search_instances` and any direct
 `call_tool` carry a turn on the first attempt, joining the scope's own where
-there is one and opening a short-lived turn where there is not. The read routes
-under `ontology-query` — instances, subgraph, metrics — serve a bare request, so
-they send one and mint nothing; only a deploy that refuses gets a turn opened
-for the retry.
+there is one and opening a short-lived turn where there is not. The instance
+and subgraph read routes under `ontology-query`, and an untraced metric read,
+serve a bare request and mint nothing. A metric read that already has a turn
+deliberately uses Context Loader's managed tool; it never retries a strict
+ontology-query body with `bkn_context` added.
 
 A caller that already has a turn passes it in without a traced scope, which is
 how the sandbox does it — `BKN_CONVERSATION_ID` and `BKN_INTERACTION_ID` in the

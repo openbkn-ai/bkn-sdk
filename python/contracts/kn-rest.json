@@ -408,7 +408,7 @@
       "method": "POST",
       "operation": "get_kn_detail",
       "summary": "获取知识网络详情",
-      "description": "返回一张知识网络的概念全景：概念组、对象类、关系类、行动类。 **`detail_level` 决定返回多少**： | 级别 | 保留 | 剥掉 | |---|---|---| | `summary`（默认） | 骨架 + 每个属性的 `name` / `type` | 属性的 `display_name` / `comment` / `mapped_field` / `condition_operations`，逻辑属性的 `data_source` / `parameters`，关系类的 `mapping_rules` 与起终点对象类详情 | | `full` | 全部 | —— | 两种级别都会**去掉 `concept_groups` 里嵌套的对象类 / 关系类 / 行动类副本**： 这些是顶层数组的重复拷贝，概念组只保留 `object_type_ids` 作为分组边界。 被剥掉的细节按需用 `get_object_types` / `get_relation_types` 取回。 对象类条目带 `related_metric_count`（该对象类下已建模指标数），`>0` 才值得 为取指标下钻。 顶层带 `mounted_capabilities`：该网络已挂载的 Skill 与工具按类型计数。两个 `detail_level` 都会返回——它是网络的形状，不是可以剥掉的细节。同样只给计数： 要具体能力用 `search_capabilities`。 **超过 200 个对象类、或超过 600 个关系类的网络只返回导航壳**，两个 `detail_level` 都是：此时 `object_types` / `relation_types` / `action_types` **均回 `null`**，改由 `object_type_count` / `relation_type_count` / `action_type_count` 给出数量， `notice` 说明原因与下一步。概念组与 `mounted_capabilities` 照常返回。 **该网络没划概念组时**（存在这种网：一千个对象类、零个概念组），`concept_groups` 为空，`notice` 改为让调用方直接调 `search_schema` 按语义召回——把人指向一个空字段 等于没给出路。 这不是分页。一张一千对象类的网，summary 也有一兆多，翻页只是把同样的体积分几次 搬运；而按名称序翻页等于对知识模型做线性扫描。该规模下的路径是：从 `concept_groups` 选出 1-3 个相关分组，用 [schema-search.yaml](schema-search.yaml) 的 `search_schema` 配合 `search_scope.concept_groups` 收敛，再用 `get_object_types` 按 ID 取细节。 收窄发生在逐对象类的属性授权读取之前：那一步每个对象类一次下游调用，为一份 不会返回的列表付这个代价没有意义。",
+      "description": "返回一张知识网络的概念全景：概念组、对象类、关系类、行动类。 **`detail_level` 决定返回多少**： | 级别 | 保留 | 剥掉 | |---|---|---| | `summary`（默认） | 骨架 + 每个属性的 `name` / `type` | 属性的 `display_name` / `comment` / `mapped_field` / `condition_operations`，逻辑属性的 `data_source` / `parameters`，关系类的 `mapping_rules` 与起终点对象类详情 | | `full` | 全部 | —— | 两种级别都会**去掉 `concept_groups` 里嵌套的对象类 / 关系类 / 行动类副本**： 这些是顶层数组的重复拷贝，概念组只保留 `object_type_ids` 作为分组边界。 被剥掉的细节按需用 `get_object_types` / `get_relation_types` 取回。 对象类条目带 `related_metric_count`（该对象类下已建模指标数），`>0` 才值得 为取指标下钻。 顶层带 `mounted_capabilities`：该网络已挂载的 Skill 与工具按类型计数。两个 `detail_level` 都会返回——它是网络的形状，不是可以剥掉的细节。同样只给计数： 要具体能力用 `search_capabilities`。 **超过 200 个对象类、或超过 600 个关系类的网络只返回导航壳**，两个 `detail_level` 都是：此时 `object_types` / `relation_types` / `action_types` **均回 `null`**，改由 `object_type_count` / `relation_type_count` / `action_type_count` 给出数量， `notice` 说明原因与下一步。概念组与 `mounted_capabilities` 照常返回。 **该网络没划概念组时**（存在这种网：一千个对象类、零个概念组），`concept_groups` 为空，`notice` 改为让调用方直接调 `search_schema` 按语义召回——把人指向一个空字段 等于没给出路。 这不是分页。一张一千对象类的网，summary 也有一兆多，翻页只是把同样的体积分几次 搬运；而按名称序翻页等于对知识模型做线性扫描。该规模下的路径是：从 `concept_groups` 选出 1-3 个相关分组，用 [schema-search.yaml](schema-search.yaml) 的 `search_schema` 配合 `search_scope.concept_groups` 收敛，再用 `get_object_types` 按 ID 取细节。 收窄发生在逐对象类的属性授权读取之前：那一步每个对象类一次下游调用，为一份 不会返回的列表付这个代价没有意义。 非 main 分支目前不支持 search_schema 召回概念；请用相同 branch 调 get_object_types，不传 ids 按页列举对象类索引，再带选中的 ids 读取完整定义和关联指标。",
       "query": [
         {
           "name": "response_format",
@@ -427,6 +427,12 @@
           "type": "string",
           "required": false,
           "description": "知识网络 ID。与 `x-kn-id` 头二选一，本字段优先。"
+        },
+        {
+          "name": "branch",
+          "type": "string",
+          "required": false,
+          "description": "知识网络分支；省略时使用 main。"
         },
         {
           "name": "detail_level",
@@ -480,6 +486,12 @@
           "type": "string",
           "required": false,
           "description": "知识网络 ID。与 `x-kn-id` 头二选一，本字段优先。"
+        },
+        {
+          "name": "branch",
+          "type": "string",
+          "required": false,
+          "description": "对象类与关联指标所属的知识网络分支；省略时使用 main。"
         },
         {
           "name": "ids",
@@ -982,7 +994,7 @@
       "method": "POST",
       "operation": "query_metric",
       "summary": "按指标口径取数",
-      "description": "按已建模指标自身的口径计算取数，是 OT-first 指标路径的第 3 步： `search_schema` / `get_kn_detail` 锁定对象类 → `get_object_types` 从 `related_metrics` 里选定 `metric_id` 和 `version` → 本接口计算。 对象指标只支持实例集合，统一走本接口；`logic-property-resolver` 只负责独立的 工具型逻辑属性。指标参数由调用方显式给出，不经大模型。 `version` 必填，必须使用已发布、不可变的版本；`query` 只包含定义允许的 运行时选择（过滤条件、分析维度、毫秒时间范围）。固定口径和统计 粒度由指标定义决定，不能通过本请求覆盖。 响应保留对象指标 V1 的 `model`、`entries`、`status` 和 `warnings`。",
+      "description": "按已建模指标自身的口径计算取数，是 OT-first 指标路径的第 3 步： `search_schema` / `get_kn_detail` 锁定对象类 → `get_object_types` 从 `related_metrics` 里选定 `metric_id` 和 `version` → 本接口计算。 对象指标只支持实例集合，统一走本接口；`logic-property-resolver` 只负责独立的 工具型逻辑属性。指标参数由调用方显式给出，不经大模型。 `version` 必填，必须使用已发布、不可变的版本；`query` 只包含定义允许的 运行时选择（过滤条件、分析维度、毫秒时间范围）。固定口径和统计 粒度由指标定义决定，不能通过本请求覆盖。`branch` 指定指标所在的知识网络 分支，省略时只读取 `main`，不会回退到其他分支。 响应保留对象指标 V1 的 `model`、`entries`、`status` 和 `warnings`。",
       "query": [
         {
           "name": "response_format",
@@ -1003,6 +1015,12 @@
           "description": "知识网络 ID。也可用 `x-kn-id` 头传。"
         },
         {
+          "name": "branch",
+          "type": "string",
+          "required": false,
+          "description": "指标所属知识网络分支；省略时使用 main。"
+        },
+        {
           "name": "metric_id",
           "type": "string",
           "required": true,
@@ -1021,7 +1039,7 @@
           "description": ""
         }
       ],
-      "declares_context": false,
+      "declares_context": true,
       "returns": [
         "effective_window",
         "empty_reason",
