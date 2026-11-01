@@ -14,7 +14,7 @@ from typing import Any, ClassVar
 from urllib.parse import quote
 
 from .config import Context, resolve_context
-from .errors import InputError
+from .errors import BknError, InputError
 from .http import QueryValue
 from .query import QUERY_BASE, branch_param
 
@@ -126,10 +126,28 @@ class Metric:
     def _query_managed(cls, ctx: Context, arguments: dict[str, Any]) -> Any:
         """Query through Context Loader so lifecycle context never enters the metric body."""
         from .lifecycle import ensure_interaction
-        from .mcp import call_tool
+        from .mcp import call_tool, tool_catalog
+
+        branch = branch_param(cls.__branch__)
+        if branch is not None:
+            catalog = tool_catalog(ctx)
+            tools = catalog.get("tools") if isinstance(catalog, dict) else None
+            branch_supported = isinstance(tools, list) and any(
+                isinstance(tool, dict)
+                and tool.get("name") == "query_metric"
+                and isinstance(tool.get("input_schema"), dict)
+                and isinstance(tool["input_schema"].get("properties"), dict)
+                and isinstance(tool["input_schema"]["properties"].get("branch"), dict)
+                and tool["input_schema"]["properties"]["branch"].get("type") == "string"
+                for tool in tools
+            )
+            if not branch_supported:
+                raise BknError(
+                    "This Context Loader deployment does not advertise query_metric.branch; "
+                    "a managed query on a non-main branch cannot be read safely."
+                )
 
         with ensure_interaction(ctx, cls.__kn_id__) as interaction:
-            branch = branch_param(cls.__branch__)
             result = call_tool(
                 ctx,
                 cls.__kn_id__,

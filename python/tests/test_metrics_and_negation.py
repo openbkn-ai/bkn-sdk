@@ -12,7 +12,7 @@ from typing import Any
 import httpx
 import pytest
 
-from bkn_osdk import Context, InputError, Metric, session
+from bkn_osdk import BknError, Context, InputError, Metric, session
 from bkn_osdk import http as http_module
 from bkn_osdk import lifecycle as lifecycle_module
 from bkn_osdk import mcp as mcp_module
@@ -73,6 +73,7 @@ class ManagedDeploy:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.paths: list[str] = []
+        self.advertise_metric_branch = True
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.paths.append(request.url.path)
@@ -83,7 +84,14 @@ class ManagedDeploy:
                     "tools": [
                         {"name": "bkn_start_interaction"},
                         {"name": "bkn_finish_interaction"},
-                        {"name": "query_metric"},
+                        {
+                            "name": "query_metric",
+                            "input_schema": {
+                                "properties": {"branch": {"type": "string"}}
+                                if self.advertise_metric_branch
+                                else {},
+                            },
+                        },
                     ]
                 },
             )
@@ -302,6 +310,20 @@ def test_traced_metric_collects_the_receipt_and_forwards_a_non_main_branch(
         "conversation_id": "conv-opened",
         "interaction_id": "int-opened",
     }
+
+
+def test_managed_non_main_metric_rejects_a_deploy_without_branch_support(
+    managed_deploy: ManagedDeploy, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Gmv, "__branch__", "release")
+    managed_deploy.advertise_metric_branch = False
+    ctx = Context(PLATFORM, "t-1", conversation_id="conv-host", interaction_id="int-host")
+
+    with pytest.raises(BknError, match=r"does not advertise query_metric\.branch"):
+        Gmv.query(context=ctx)
+
+    assert managed_deploy.calls == []
+    assert managed_deploy.paths == ["/api/agent-retrieval/v1/mcp/info"]
 
 
 def test_group_by_aliases_are_mutually_exclusive(deploy: Deploy) -> None:
