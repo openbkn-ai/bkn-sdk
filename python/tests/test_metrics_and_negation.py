@@ -122,7 +122,9 @@ class ManagedDeploy:
         )
 
     @staticmethod
-    def _tool_result(value: dict[str, Any], receipt: dict[str, Any] | None = None) -> Any:
+    def _tool_result(
+        value: dict[str, Any], receipt: dict[str, Any] | None = None
+    ) -> httpx.Response:
         structured = {**value}
         if receipt is not None:
             structured["bkn_receipt"] = receipt
