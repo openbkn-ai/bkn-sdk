@@ -5,14 +5,17 @@
  * OAuth2 login for `openbkn auth login` against bkn-safe + Ory Hydra.
  *
  * bkn-safe seeds a single public CLI client (`openbkn-sdk`, device_code +
- * refresh, `token_endpoint_auth_method=none`), so every user login rides the
- * RFC 8628 device-code grant — there is no dynamic registration and no usable
- * authorization_code/password client:
+ * refresh, `token_endpoint_auth_method=none`), so the CLI's own login rides the
+ * RFC 8628 device-code grant:
  *  - deviceLogin: request a code, surface it (browser/print), poll the token.
  *  - credentialDeviceLogin: request a code, then drive bkn-safe's
  *    verify → /device → /login → /consent pages server-to-server with the
  *    supplied credentials (headless, no browser), then poll.
  * Returns a token triple; the command persists it.
+ *
+ * An app that signs its own users in registers its own public client with
+ * bkn-safe self-registration (releases after 0.2.0) and uses the
+ * authorization_code flow; that lives in `./oauth-app.ts`.
  */
 import { spawn } from "node:child_process";
 import { tlsFetch } from "../api/tls.js";
@@ -34,7 +37,7 @@ export function normalizeBaseUrl(value: string): string {
   return trimTrailingSlashes(value);
 }
 
-function mapToken(data: {
+export function mapToken(data: {
   access_token: string;
   refresh_token?: string;
   id_token?: string;
@@ -165,7 +168,7 @@ interface DeviceAuthResponse {
   interval?: number;
 }
 
-const form = (body: Record<string, string>) =>
+export const form = (body: Record<string, string>) =>
   ({
     method: "POST",
     headers: {

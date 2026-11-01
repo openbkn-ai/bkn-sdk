@@ -29,6 +29,7 @@ from __future__ import annotations
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _version
 
+from . import oauth
 from .config import (
     DEFAULT_TIMEOUT,
     Context,
@@ -37,6 +38,7 @@ from .config import (
     session,
 )
 from .errors import (
+    AuthError,
     BknError,
     FormatVersionError,
     HttpError,
@@ -74,6 +76,7 @@ except PackageNotFoundError:  # running from a source tree that was never instal
 
 __all__ = [
     "DEFAULT_TIMEOUT",
+    "AuthError",
     "BknError",
     "Comparison",
     "Composite",
@@ -108,6 +111,7 @@ __all__ = [
     "configure",
     "fingerprint",
     "me",
+    "oauth",
     "request",
     "resolve_context",
     "search",

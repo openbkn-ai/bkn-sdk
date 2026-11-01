@@ -106,6 +106,55 @@ with session(token=user_token):  # 每个请求一个作用域
 
 自签名证书（IP 部署基本都是）用 `--insecure` / `insecure=True`；`openbkn auth login -k` 会把它按平台记进 store，之后不用再说。[`examples/credentials.py`](examples/credentials.py) 会把每一级解析出什么打出来。
 
+## 让用户登录你的应用
+
+替用户办事的应用，每个用户都需要一份 OAuth token，并且得让它一直有效。`bkn_osdk.oauth` 负责登录（PKCE、回环回调、换取 code）和刷新；`configure` / `session` 会像刷新 store 里的会话那样刷新它返回的 token：
+
+```python
+import bkn_osdk
+from bkn_osdk import oauth
+
+# 一次性：为应用注册一个公开客户端（或者找运维要一个）。
+client = oauth.register_client(PLATFORM, "My app")
+
+# CLI、桌面应用、脚本、笔记本：打开浏览器，在
+# http://127.0.0.1:8765/callback 上等回调，再换 code。
+tokens = oauth.login(PLATFORM, client_id=client.client_id)
+save(tokens.to_dict())  # 一定要存下来，见下面的注意事项
+
+bkn_osdk.configure(
+    base_url=PLATFORM,
+    tokens=tokens,
+    client_id=client.client_id,  # 刷新必须报出签发这批 token 的客户端
+    on_refresh=lambda fresh: save(fresh.to_dict()),
+)
+People.take(10)  # 过期前不久和遇到 401 时自动刷新
+```
+
+多用户的服务端则为每个请求绑定各自的 token；作用域存在 `ContextVar` 里，一个用户的 token 不会漏进另一个用户的请求：
+
+```python
+with bkn_osdk.session(tokens=tokens_for(user), client_id=CLIENT_ID, on_refresh=save_for(user)):
+    People.take(10)
+```
+
+Web 应用在自己的处理器里接收回调。把 `AuthorizationRequest`（里面有 `state` 和 PKCE verifier）存在该用户的服务端会话里：
+
+```python
+req = oauth.authorization_request(PLATFORM, CLIENT_ID, redirect_uri="https://app.example/cb")
+# 把浏览器重定向到 req.url；之后在 /cb 处理器里：
+tokens = oauth.exchange_code(PLATFORM, req, code=params["code"], state=params["state"])
+```
+
+没有浏览器的机器用 `oauth.device_login(PLATFORM)`：它打印一个验证码，到别处批准即可（传 `on_prompt` 可自己展示）。它以 CLI 的 `openbkn-sdk` 客户端登录，这也正是 `configure` 里 `client_id` 的默认值。`oauth.refresh(PLATFORM, tokens, client_id=…)` 是单独的刷新授权。没有登录成功时会抛 `AuthError`，带 `error` 和 `description`。
+
+四件要知道的事：
+
+1. **每次回调拿到的 refresh token 都要存。** 每次刷新都会花掉旧的、签发新的；`on_refresh` 收到的是完整的新一套。只留了第一份的应用，下次启动就得让用户重新登录。
+2. **不要在两个进程里刷新同一个用户的 token。** 平台把被重复使用的 refresh token 当作被盗，会吊销整条链，用户在所有地方都被登出。一个进程里是安全的（并发请求共用一次刷新）；多个实例需要带锁的共享存储，或者只让一个地方负责刷新。
+3. **刷新失败就是要重新登录。** refresh token 过期、被吊销，或用户在「已连接的客户端」里断开了这个应用。此时请求会带着原来的 401 和相应提示失败。
+4. **`login` 只处理回环回调。** Web 应用在自己的处理器里用 `authorization_request` + `exchange_code`，并且需要运维为该客户端放行非回环的回调域名。平台没有自助注册时（0.2.0 没有，也可能被关闭），`register_client` 会抛 `AuthError`：改用 `device_login`，或找运维。
+
 ## 查询
 
 ```python

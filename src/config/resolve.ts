@@ -27,6 +27,24 @@ function resolveUserId(baseUrl: string, userOrName: string): string {
   );
 }
 
+/** The refresh wiring for an app's own tokens: `persist` hands the new set to the app. */
+function appRefresh(opts: ClientOptions, tokens: RefreshableTokens): RequestContext["refresh"] {
+  if (!tokens.refreshToken) return undefined;
+  // The grant may omit a rotated refresh token; the app must still get a full set.
+  let current = tokens.refreshToken;
+  return {
+    refreshToken: tokens.refreshToken,
+    clientId: opts.clientId ?? "openbkn-sdk",
+    ...(tokens.expiresAt ? { expiresAt: tokens.expiresAt } : {}),
+    app: true,
+    persist: (t: RefreshableTokens) => {
+      const next = { ...t, refreshToken: t.refreshToken ?? current };
+      current = next.refreshToken;
+      opts.onTokenRefresh?.(next);
+    },
+  };
+}
+
 export function resolveContext(opts: ClientOptions = {}): RequestContext {
   const baseUrl = opts.baseUrl ?? process.env.BKN_BASE_URL ?? activePlatform();
   if (!baseUrl) {
@@ -36,12 +54,23 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
   }
   const normalized = trimTrailingSlashes(baseUrl);
 
-  const user = opts.user ?? process.env.BKN_USER;
-  const stored = user
-    ? readToken(normalized, resolveUserId(normalized, user))
-    : readToken(normalized);
-  const explicit = opts.token ?? process.env.BKN_TOKEN;
-  const token = explicit ?? stored?.accessToken ?? "";
+  if (opts.tokens && opts.token !== undefined) {
+    throw new InputError("Pass either `token` or `tokens`, not both: only `tokens` can refresh.");
+  }
+  if (opts.tokens && !opts.tokens.accessToken) {
+    throw new InputError("`tokens.accessToken` is empty.");
+  }
+  // An app's own tokens stand alone: neither BKN_TOKEN nor a stored login mixes in.
+  const appTokens = opts.tokens;
+
+  const user = appTokens ? undefined : (opts.user ?? process.env.BKN_USER);
+  const stored = appTokens
+    ? undefined
+    : user
+      ? readToken(normalized, resolveUserId(normalized, user))
+      : readToken(normalized);
+  const explicit = appTokens ? undefined : (opts.token ?? process.env.BKN_TOKEN);
+  const token = appTokens?.accessToken ?? explicit ?? stored?.accessToken ?? "";
   if (!token) {
     throw new InputError("No access token. Set BKN_TOKEN or run `openbkn auth login`.");
   }
@@ -53,8 +82,9 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
   // radius is this one self-signed host, not a library consumer's whole process.
   const insecure = opts.insecure ?? stored?.tlsInsecure ?? false;
   // Auto-refresh only for stored credentials with a refresh token (not --token/env).
-  const refresh =
-    !explicit && stored?.refreshToken
+  const refresh = appTokens
+    ? appRefresh(opts, appTokens)
+    : !explicit && stored?.refreshToken
       ? {
           refreshToken: stored.refreshToken,
           ...(stored.expiresAt ? { expiresAt: stored.expiresAt } : {}),
@@ -82,7 +112,9 @@ export function resolveContext(opts: ClientOptions = {}): RequestContext {
     baseUrl: normalized,
     token,
     insecure,
-    ...(opts.token === undefined && process.env.BKN_TOKEN ? { tokenFromEnv: true } : {}),
+    ...(!appTokens && opts.token === undefined && process.env.BKN_TOKEN
+      ? { tokenFromEnv: true }
+      : {}),
     // Correlation ids come from `opts.trace` only. The CLI reads its flags and
     // env vars in `commands/_shared.ts`; a library client must not inherit an
     // ambient interaction id it would then freeze for its whole lifetime.

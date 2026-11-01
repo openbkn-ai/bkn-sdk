@@ -194,6 +194,86 @@ Dynamic-data responses (including Vega and ontology queries) may contain native
 `bigint` values for integers outside JavaScript's safe range. Serialize such a result with the exported
 `stringifyBigIntJSON()` helper instead of native `JSON.stringify()`.
 
+### Sign users in to your app
+
+An app that acts as its own users — a CLI, a desktop tool, a notebook, a web
+service — signs them in with the `oauth` namespace and hands the tokens to
+`createClient`, which then refreshes them the way a stored `openbkn auth login`
+session is refreshed. Nothing is read from or written to `~/.bkn/`.
+
+```ts
+import { createClient, oauth } from "@openbkn/bkn-sdk";
+
+const baseUrl = process.env.BKN_BASE_URL!;
+
+// Once per app: register a public client (loopback callbacks on any port).
+const { clientId } = await oauth.registerClient(baseUrl, { clientName: "My app" });
+
+// Per user: listen on 127.0.0.1:8765, open the browser, take the callback.
+const tokens = await oauth.login(baseUrl, { clientId });
+await save(tokens); // keep the refresh token — see below
+
+const bkn = createClient({
+  baseUrl,
+  tokens,
+  clientId, // the refresh grant must name the client the tokens were issued to
+  onTokenRefresh: save, // called with the full new set after every refresh
+});
+const networks = await bkn.kn.list({ limit: 10 });
+```
+
+`login` takes `{ clientId, redirectUri?, scope?, openBrowser?, onUrl?, timeoutMs?, insecure? }`.
+It listens on the redirect's host and port (default `oauth.DEFAULT_REDIRECT_URI`,
+`http://127.0.0.1:8765/callback`) before it opens the browser, passes the sign-in
+URL to `onUrl` (default: print it on stderr) and waits up to five minutes. It
+does not open a browser when `openBrowser` is `false` or the machine is headless.
+
+**Web apps** receive the callback in their own handler:
+
+```ts
+// 1. Send the user to the platform; keep `req` in their session.
+const req = oauth.authorizationRequest(baseUrl, { clientId, redirectUri: "https://app.example.com/cb" });
+res.redirect(req.url); // req = { url, state, codeVerifier, clientId, redirectUri }
+
+// 2. In the callback handler: checks `state`, then exchanges the code.
+const tokens = await oauth.exchangeCode(baseUrl, req, { code, state });
+```
+
+**Headless machines** (no browser, or a client you cannot register) use the device
+flow, which works with the built-in `openbkn-sdk` client:
+
+```ts
+const tokens = await oauth.deviceLogin(baseUrl, {
+  onPrompt: (p) => console.log(`Open ${p.verificationUri} and enter ${p.userCode}`),
+});
+const bkn = createClient({ baseUrl, tokens, onTokenRefresh: save }); // clientId defaults to "openbkn-sdk"
+```
+
+`oauth.refresh(baseUrl, tokens, { clientId })` runs the refresh grant by hand. Sign-in
+failures (denied, state mismatch, timeout, `invalid_grant`, no self-registration)
+throw `InputError` with the platform's reason; tokens never appear in messages.
+`registerClient` needs a platform with bkn-safe self-registration (releases after
+0.2.0, unless an operator disabled it); elsewhere it throws and says to use
+`deviceLogin` or ask an operator for a client.
+
+Things to know:
+
+1. **Save the refresh token from every callback.** Each refresh spends the old
+   one; an app that keeps only the first must sign the user in again on its next
+   start. `onTokenRefresh` receives the complete new set — store all of it. If it
+   throws, the refresh counts as failed.
+2. **Never refresh one user's token set from two processes.** The platform treats
+   a reused refresh token as theft and revokes the whole chain, signing the user
+   out everywhere. One process is safe (concurrent requests share one refresh);
+   several instances need a shared store with a lock, or a single place that
+   refreshes.
+3. **A failed refresh means sign in again.** The token expired, was revoked, or the
+   user disconnected the app under connected clients. The request then fails with
+   the original 401 and a hint saying to sign the user in again.
+4. **`login` serves loopback callbacks only** (CLIs, desktop apps, scripts,
+   notebooks). A web app writes its own handler with `authorizationRequest` and
+   `exchangeCode`, and an operator must allow its non-loopback callback origin.
+
 ## Develop
 
 ```bash
