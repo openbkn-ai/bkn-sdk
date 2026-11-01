@@ -47,7 +47,7 @@ Agent 用 `search_capabilities` 按**名称**在本网络内找到函数，用 `
 
 | 名称 | 类型 | 用途 | 调用方式 | 结果怎么读 | 需确认 |
 |------|------|------|----------|------------|--------|
-| 库存可用量 | 指标 | 可用库存总口径 | `query_metric`，传已发布版本及 `query.time={start,end}`（Unix 毫秒）；按物料拆分时传定义声明的 `analysis_dimensions` 属性引用 | 从 `entries[].value` 读取并检查 `model`、`status` | 否 |
+| 库存可用量 | 指标 | 可用库存总口径 | `query_metric`，传已发布版本及 `query.time={start,end}`（Unix 毫秒）；按物料拆分时在 `query.group_by` 中传定义声明的属性引用 | 从 `entries[].value` 读取并检查 `model`、`status` | 否 |
 | BOM清单 | 函数 | 展开产品一级主料 | `execute_tool`，参数 `product`（必填）、`depth=1` | `l1_lines[]` 为一级主料，`line_count` 为 BOM 行数 | 否 |
 | 要X套净需求与齐套 | 函数 | 齐套判断与缺料 | `execute_tool`，参数 `product`、`qty`、`substitute_enabled`（必须明确 true/false） | `kitting_ok` 为齐套结论；`gaps[]` 为缺料，取 `net_requirement` 与 `recommended_replenishment_qty` | 否 |
 | l1_kitting_check | 函数 | 一级主料快速齐套检查（不含在途与替代料） | `execute_tool`，参数 `kn_id`、`product`、`qty` | `kitting_ok`、`gap_count`、`gaps[]`（`net_requirement`） | 否 |

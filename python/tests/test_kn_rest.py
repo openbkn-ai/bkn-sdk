@@ -103,6 +103,7 @@ def test_required_arguments_and_legacy_object_type_ids_are_positional() -> None:
     }
     assert metric_kinds["metric_id"] is inspect.Parameter.POSITIONAL_OR_KEYWORD
     assert metric_kinds["version"] is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert metric_kinds["branch"] is inspect.Parameter.KEYWORD_ONLY
     assert metric_kinds["query"] is inspect.Parameter.KEYWORD_ONLY
 
 
@@ -203,6 +204,36 @@ def test_a_call_carries_a_turn_without_being_asked(deploy: Deploy) -> None:
     kn.list_resources(KN, context=CONTEXT)
 
     assert deploy.bodies[0]["bkn_context"] == {"conversation_id": "c1", "interaction_id": "i1"}
+
+
+def test_query_metric_forwards_branch_query_and_managed_context(deploy: Deploy) -> None:
+    kn.query_metric(
+        KN,
+        "gmv",
+        3,
+        branch="release",
+        query={"page_size": 10},
+        context=CONTEXT,
+    )
+
+    assert deploy.paths[0] == "/api/agent-retrieval/v1/kn/query_metric"
+    assert deploy.bodies[0] == {
+        "kn_id": KN,
+        "branch": "release",
+        "metric_id": "gmv",
+        "version": 3,
+        "query": {"page_size": 10},
+        "bkn_context": {"conversation_id": "c1", "interaction_id": "i1"},
+    }
+
+
+def test_metric_discovery_reads_the_requested_branch(deploy: Deploy) -> None:
+    kn.get_kn_detail(KN, branch="release", context=CONTEXT)
+    kn.get_object_types(KN, ["orders"], branch="release", context=CONTEXT)
+
+    assert deploy.bodies[0]["branch"] == "release"
+    assert deploy.bodies[1]["branch"] == "release"
+    assert deploy.bodies[1]["ids"] == ["orders"]
 
 
 def test_unset_optional_arguments_are_not_sent(deploy: Deploy) -> None:

@@ -63,7 +63,7 @@ describe("Object Metrics V1", () => {
         },
         group_by: [{ object_type_id: "orders", property_name: "channel" }],
       },
-      { version: 3 },
+      { branch: "release", version: 3 },
     );
 
     const [list, query] = calls(fetch);
@@ -71,6 +71,7 @@ describe("Object Metrics V1", () => {
     expect(new URL(String(list?.[0])).searchParams.get("owner_object_type_id")).toBe("orders");
     expect(new URL(String(list?.[0])).searchParams.get("status")).toBe("published");
     expect(new URL(String(query?.[0])).pathname).toBe(`${QUERY}/m-1/data`);
+    expect(new URL(String(query?.[0])).searchParams.get("branch")).toBe("release");
     expect(new URL(String(query?.[0])).searchParams.get("version")).toBe("3");
     expect(JSON.parse(String(query?.[1]?.body))).toMatchObject({
       group_by: [{ object_type_id: "orders", property_name: "channel" }],

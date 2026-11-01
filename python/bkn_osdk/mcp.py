@@ -16,9 +16,12 @@ clients. It carries what REST does not:
   deploys this SDK was tested against, while the tool name did not move;
 * the managed lifecycle, `bkn_start_interaction` / `bkn_finish_interaction`.
 
-REST still owns the typed read path — instances, metrics, subgraph — because
-only it sorts, totals and pages, and it needs no session. The two are a
-division of labour, not a migration.
+REST still owns untraced typed reads and the instance/subgraph options that the
+tools cannot express. A metric read that already belongs to an interaction uses
+the Context Loader ``query_metric`` tool instead: it has the same Object Metric
+V1 query choices and returns an in-band receipt. This also keeps
+``bkn_context`` out of ontology-query's strict metric body. The two transports
+are a division of labour, not a migration.
 
 `initialize` → the server hands back a session id in a header → an
 `initialized` notification → `tools/call`. The session is per (deploy, network)
