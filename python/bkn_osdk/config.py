@@ -319,10 +319,6 @@ def resolve_context() -> Context:
         )
     base_url = base_url.rstrip("/")
 
-    user = pick("user") or os.environ.get("BKN_USER")
-    user_id = _resolve_user_id(base_url, user) if user else _active_user_id(base_url)
-    stored = _read_token(base_url, user_id) or {}
-
     # `token` and `tokens` are one choice: the innermost level that sets either
     # wins outright, so a `session(token=…)` is never half-mixed with outer tokens.
     holder: TokenHolder | None = None
@@ -334,8 +330,17 @@ def resolve_context() -> Context:
         if level.token is not None:
             explicit = level.token
             break
+
+    # An app's own tokens stand alone, as in `resolveContext` on the TypeScript
+    # side: no `BKN_USER`, no `BKN_TOKEN`, and nothing from the CLI's store — a
+    # `-k` login there must not switch off TLS checks for the app's requests.
+    user_id: str | None = None
+    stored: dict[str, Any] = {}
     if holder is None:
         explicit = explicit or os.environ.get("BKN_TOKEN")
+        user = pick("user") or os.environ.get("BKN_USER")
+        user_id = _resolve_user_id(base_url, user) if user else _active_user_id(base_url)
+        stored = _read_token(base_url, user_id) or {}
     app_access = holder.tokens.access_token if holder is not None else None
     token = app_access or explicit or stored.get("accessToken")
     if not isinstance(token, str) or not token:

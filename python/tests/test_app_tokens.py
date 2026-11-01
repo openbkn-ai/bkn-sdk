@@ -9,10 +9,12 @@ import threading
 import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
+from conftest import write_store
 
 import bkn_osdk
 from bkn_osdk import HttpError, InputError, http, oauth
@@ -223,3 +225,25 @@ def test_each_configure_call_owns_its_own_token_set(platform: Platform) -> None:
 
     bkn_osdk.configure(base_url=PLATFORM, tokens=oauth.Tokens("at-1", "rt-1"))
     assert bkn_osdk.resolve_context().app_tokens is not first
+
+
+def test_app_tokens_ignore_the_cli_store_and_its_user(
+    isolated_config: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A `-k` CLI login on the same platform, and a BKN_USER the store has never seen:
+    # neither may leak into a context built from an app's own tokens.
+    write_store(
+        isolated_config,
+        PLATFORM,
+        token={"accessToken": "cli-token", "refreshToken": "cli-rt", "tlsInsecure": True},
+    )
+    monkeypatch.setenv("BKN_USER", "nobody-saved-this")
+    monkeypatch.setenv("BKN_TOKEN", "env-token")
+
+    bkn_osdk.configure(base_url=PLATFORM, tokens=oauth.Tokens("at-app", "rt-app"), client_id=CLIENT)
+    ctx = bkn_osdk.resolve_context()
+
+    assert ctx.token == "at-app"
+    assert ctx.insecure is False
+    assert ctx.credential is None
+    assert ctx.app_tokens is not None
