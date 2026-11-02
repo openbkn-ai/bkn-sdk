@@ -596,7 +596,7 @@ export interface QueryResourceOptions {
     aggr: "count" | "count_distinct" | "sum" | "max" | "min" | "avg";
     alias?: string;
     /** Defaults to true for count_distinct; false requires exact execution. */
-    allow_approximate?: boolean;
+    allowApproximate?: boolean;
   };
   groupBy?: Array<{
     property: string;
@@ -658,7 +658,18 @@ export function queryResource(
           ? { ignore_local_index: opts.ignoreLocalIndex }
           : {}),
         need_total: opts.needTotal ?? false,
-        ...(opts.aggregation !== undefined ? { aggregation: opts.aggregation } : {}),
+        ...(opts.aggregation !== undefined
+          ? {
+              aggregation: {
+                property: opts.aggregation.property,
+                aggr: opts.aggregation.aggr,
+                ...(opts.aggregation.alias !== undefined ? { alias: opts.aggregation.alias } : {}),
+                ...(opts.aggregation.allowApproximate !== undefined
+                  ? { allow_approximate: opts.aggregation.allowApproximate }
+                  : {}),
+              },
+            }
+          : {}),
         ...(opts.groupBy !== undefined
           ? {
               group_by: opts.groupBy.map((item) => ({
