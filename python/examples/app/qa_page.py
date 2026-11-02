@@ -80,14 +80,16 @@ const add = (parent, tag, className, text = "") => {
   parent.append(element);
   return element;
 };
-// A 401 means nobody is signed in, or the token stopped working.
+// Only the app with sign-in shows its sign-out link. There, a 401 means nobody is
+// signed in, or the token stopped working; without sign-in, it is just a failure.
+const signsIn = !$("logout").hidden;
 const signedOut = () => {
   $("app").hidden = true;
   $("signin").hidden = false;
 };
 async function load(url) {
   const response = await fetch(url);
-  if (response.status === 401) return signedOut();
+  if (signsIn && response.status === 401) return signedOut();
   if (!response.ok) throw new Error("Could not read: " + response.status);
   return response.json();
 }
@@ -120,7 +122,11 @@ async function showObjects(type, link) {
   }
 }
 async function start() {
-  const types = await load("/api/object-types");
+  // If the list cannot be read, show the page anyway, with the reason.
+  const types = await load("/api/object-types").catch((failure) => {
+    add($("objects"), "p", "text-red-600", failure.message);
+    return [];
+  });
   if (!types) return;
   for (const type of types) {
     const link = add($("types"), "button", "block w-full truncate rounded-lg px-3 py-1.5 "
@@ -161,7 +167,7 @@ $("ask").onsubmit = async (event) => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ question, thread_id: thread }),
   });
-  if (response.status === 401) return signedOut();
+  if (signsIn && response.status === 401) return signedOut();
   if (!response.ok) {
     answer.textContent = "Request failed: " + response.status;
     return;
