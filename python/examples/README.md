@@ -1,13 +1,16 @@
 # Examples
 
-Ten scripts, each runnable against a live platform. One is about getting
-connected at all; the rest are split by the layer they work at:
+Twelve scripts, each runnable against a live platform. One is about getting
+connected at all; most are split by the layer they work at, and the last two are
+a small web app that uses both:
 
 - [`credentials.py`](credentials.py) — which platform, as whom, and where that
   was decided.
 - [`ontology/`](ontology) — reading one knowledge network through classes
   generated from its schema.
 - [`platform/`](platform) — addressing the platform itself: any route, any tool.
+- [`app/`](app) — a Q&A web page: the network's object types and rows, and the
+  platform's Q&A agent, with or without users signing in.
 
 ## Running them
 
@@ -60,6 +63,7 @@ python examples/platform/networks.py
 python examples/platform/tools.py
 python examples/platform/capabilities.py
 python examples/platform/sandbox.py
+python examples/app/qa_web.py                         # then open http://127.0.0.1:8765
 ```
 
 Running them from a clone rather than an install works the same way, from the
@@ -131,3 +135,25 @@ than it pays.
 Nothing here is pinned to one network. The ontology examples read whichever
 object type `BKN_OBJECT_TYPE` names and use whatever properties it declares, so
 they run against a network they have never seen.
+
+## A web app
+
+Both read the network's object types into a side list, show the first rows of
+the one picked, and chat with the platform's Q&A agent (`studio_smart_qa`) over
+several turns — answers stream as they are written, with the tools the agent
+used, rendered as Markdown. They need FastAPI besides the SDK:
+
+```bash
+pip install fastapi uvicorn
+```
+
+| | |
+| --- | --- |
+| [`qa_web.py`](app/qa_web.py) | Nobody signs in: every visitor reads and asks as whatever the credential chain resolves to — your stored login, or an API key in `BKN_TOKEN` for a team's internal tool. Nothing is generated: the platform layer lists the object types, their property names and their rows, so the page keeps working when the network changes. |
+| [`qa_web_oauth.py`](app/qa_web_oauth.py) | Each person signs in with their own platform account (authorization code with PKCE, handled in the app's own callback) and reads with their own permissions. Needs `BKN_CLIENT_ID`, a client registered once with the callback `http://127.0.0.1:8765/callback`. Reads through the generated package, so values come back typed. |
+
+[`qa_page.py`](app/qa_page.py) holds what the two share: the page, static HTML
+whose script draws the side list, the table and the chat from the apps' JSON
+routes (Tailwind from its CDN suits a sample — build the CSS in production), and
+the call that starts an agent turn and hands its event stream to the page
+untouched. The apps answer with data only.
