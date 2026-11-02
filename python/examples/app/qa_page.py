@@ -23,12 +23,15 @@ HOST, PORT = "127.0.0.1", 8765
 
 # Tailwind from its CDN keeps the sample one file; build the CSS the Tailwind way
 # in production. Answers are Markdown, rendered by marked and sanitized by
-# DOMPurify; everything else is written as text, never as markup.
+# DOMPurify; everything else is written as text, never as markup. The one style
+# rule keeps hidden elements hidden, where Tailwind classes such as `grid` would
+# show them.
 PAGE = r"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Knowledge network Q&amp;A</title>
 <script src="https://cdn.tailwindcss.com/3.4.16?plugins=typography"></script>
+<style>[hidden] { display: none !important; }</style>
 <body class="min-h-screen bg-slate-50 text-slate-800">
 <main class="mx-auto max-w-6xl space-y-6 px-4 py-10">
 <h1 class="text-2xl font-semibold tracking-tight">Knowledge network Q&amp;A</h1>
