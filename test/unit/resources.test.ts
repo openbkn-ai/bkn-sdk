@@ -402,6 +402,27 @@ describe("queryResource", () => {
       need_total: true,
     });
   });
+  it.each([undefined, true, false])(
+    "maps allowApproximate=%s to the wire field and preserves actual accuracy",
+    async (allowApproximate) => {
+      const f = mockFetch({ entries: [{ value: 15020 }], is_approximate: false });
+      const result = await queryResource(ctx, "r-1", {
+        aggregation: {
+          property: "id",
+          aggr: "count_distinct",
+          alias: "distinct_ids",
+          ...(allowApproximate !== undefined ? { allowApproximate } : {}),
+        },
+      });
+      expect(JSON.parse(firstCall(f)[1].body as string).aggregation).toEqual({
+        property: "id",
+        aggr: "count_distinct",
+        alias: "distinct_ids",
+        ...(allowApproximate !== undefined ? { allow_approximate: allowApproximate } : {}),
+      });
+      expect(result.is_approximate).toBe(false);
+    },
+  );
 
   it("sends binary_mode and ignore_local_index on the initial request", async () => {
     const f = mockFetch();
@@ -418,6 +439,7 @@ describe("queryResource", () => {
       cursor: "cursor-1",
       binaryMode: "content",
       ignoreLocalIndex: true,
+      aggregation: { property: "id", aggr: "count_distinct", allowApproximate: false },
     });
     expect(JSON.parse(firstCall(f)[1].body as string)).toEqual({
       paging: { cursor: "cursor-1" },

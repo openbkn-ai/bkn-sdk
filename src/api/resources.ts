@@ -595,6 +595,8 @@ export interface QueryResourceOptions {
     property: string;
     aggr: "count" | "count_distinct" | "sum" | "max" | "min" | "avg";
     alias?: string;
+    /** Defaults to true for count_distinct; false requires exact execution. */
+    allowApproximate?: boolean;
   };
   groupBy?: Array<{
     property: string;
@@ -620,6 +622,8 @@ export interface ResourceDataPaging {
 }
 
 export interface QueryResourceResponse {
+  /** Actual execution accuracy, independently of the requested allowance. */
+  is_approximate?: boolean;
   /** Which data path answered: the table's local index, or its source. */
   query_source?: "local_index" | "source" | (string & {});
   entries: ResourceDocument[];
@@ -654,7 +658,18 @@ export function queryResource(
           ? { ignore_local_index: opts.ignoreLocalIndex }
           : {}),
         need_total: opts.needTotal ?? false,
-        ...(opts.aggregation !== undefined ? { aggregation: opts.aggregation } : {}),
+        ...(opts.aggregation !== undefined
+          ? {
+              aggregation: {
+                property: opts.aggregation.property,
+                aggr: opts.aggregation.aggr,
+                ...(opts.aggregation.alias !== undefined ? { alias: opts.aggregation.alias } : {}),
+                ...(opts.aggregation.allowApproximate !== undefined
+                  ? { allow_approximate: opts.aggregation.allowApproximate }
+                  : {}),
+              },
+            }
+          : {}),
         ...(opts.groupBy !== undefined
           ? {
               group_by: opts.groupBy.map((item) => ({

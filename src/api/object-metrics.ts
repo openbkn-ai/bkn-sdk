@@ -151,6 +151,8 @@ export interface ObjectMetricDataEntry {
 }
 
 export interface ObjectMetricData {
+  /** Whether this execution includes an approximate aggregate or dependency. */
+  is_approximate?: boolean;
   model: Record<string, unknown>;
   entries: ObjectMetricDataEntry[];
   status: "ok" | "no_data" | "unavailable" | "partial";
@@ -207,6 +209,7 @@ const ObjectMetricDataEntryResult = z
 
 export const ObjectMetricDataResult = z
   .object({
+    is_approximate: z.boolean().optional(),
     model: z.record(z.unknown()),
     entries: z.array(ObjectMetricDataEntryResult),
     status: z.enum(["ok", "no_data", "unavailable", "partial"]),
