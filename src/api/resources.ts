@@ -595,6 +595,8 @@ export interface QueryResourceOptions {
     property: string;
     aggr: "count" | "count_distinct" | "sum" | "max" | "min" | "avg";
     alias?: string;
+    /** Defaults to true for count_distinct; false requires exact execution. */
+    allow_approximate?: boolean;
   };
   groupBy?: Array<{
     property: string;
@@ -620,6 +622,8 @@ export interface ResourceDataPaging {
 }
 
 export interface QueryResourceResponse {
+  /** Actual execution accuracy, independently of the requested allowance. */
+  is_approximate?: boolean;
   /** Which data path answered: the table's local index, or its source. */
   query_source?: "local_index" | "source" | (string & {});
   entries: ResourceDocument[];

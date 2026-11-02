@@ -31,6 +31,21 @@ function calls(fetch: ReturnType<typeof vi.fn>) {
 }
 
 describe("Object Metrics V1", () => {
+  it("preserves approximation metadata on published results", async () => {
+    server({
+      model: {},
+      entries: [{ value: 15020, status: "ok" }],
+      is_approximate: true,
+      status: "ok",
+      total_count: 1,
+      overall_ms: 1,
+      evaluated_at: 1000,
+    });
+    const client = createClient({ baseUrl: BASE, token: "t" });
+    await expect(
+      client.kn.objectMetricQuery("kn-1", "m-1", {}, { version: 1 }),
+    ).resolves.toMatchObject({ is_approximate: true, entries: [{ value: 15020, status: "ok" }] });
+  });
   it("lists by owner and queries an explicit published version", async () => {
     const fetch = server({
       model: {},

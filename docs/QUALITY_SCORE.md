@@ -33,6 +33,8 @@ Update this table as each signal changes (e.g. live-parity count as commands are
 
 ## CLI reliability regression coverage
 
+- Object metric response tests preserve `is_approximate` on the overall result; resource aggregation types expose `allow_approximate`.
+
 - `test/unit/row-filter.test.ts` covers omitted user explanation flags, legacy
   explicit false, role-only semantics, invalid flag types, mapped policy sources,
   HTTP errors, and explanation after a mocked revision conflict through the public
