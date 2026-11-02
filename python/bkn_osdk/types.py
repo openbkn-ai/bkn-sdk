@@ -438,7 +438,10 @@ def decode(value: Any, python_type: type[Any] | None) -> Any:
     - a `decimal` arrives as a JSON string (`"14485.37"`), so `Decimal(str)` is
       both correct and lossless where `float` would already have rounded;
     - a `datetime` arrives ISO 8601 with an offset
-      (`2026-07-07T21:14:17.891674+08:00`), which `fromisoformat` reads.
+      (`2026-07-07T21:14:17.891674+08:00`), which `fromisoformat` reads;
+    - a `date` arrives either as a date or, from a SQL DATE column, as midnight
+      with an offset (`2025-04-01T00:00:00+08:00`); the date written in the
+      value is the one meant, so it is read in its own offset, not converted.
 
     Anything else passes through: the platform's JSON types already match.
     """
@@ -450,6 +453,8 @@ def decode(value: Any, python_type: type[Any] | None) -> Any:
         if python_type is datetime:
             return datetime.fromisoformat(value)
         if python_type is date:
+            if "T" in value:
+                return datetime.fromisoformat(value).date()
             return date.fromisoformat(value)
         if python_type is time:
             return time.fromisoformat(value)

@@ -163,6 +163,18 @@ def test_datetimes_dates_and_times_are_parsed() -> None:
     assert order.settled_at == time(21, 14, 17)
 
 
+def test_a_date_sent_as_midnight_with_an_offset_reads_as_that_date() -> None:
+    """A `date` property backed by a SQL DATE column arrives as a timestamp.
+
+    Seen on a MariaDB-backed network: `2025-04-01T00:00:00+08:00`, which
+    `date.fromisoformat` rejects, so reading the property raised `ValueError`.
+    The calendar date is the one written in the value, in its own offset.
+    """
+    assert decode("2025-04-01T00:00:00+08:00", date) == date(2025, 4, 1)
+    assert decode("2025-03-31T16:00:00+00:00", date) == date(2025, 3, 31)
+    assert decode("2025-04-01", date) == date(2025, 4, 1)
+
+
 def test_json_and_unknown_types_pass_through_untouched() -> None:
     assert Order(WIRE).payload == {"channel": "app"}
 
