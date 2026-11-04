@@ -6,7 +6,7 @@
  * command group. `src/resources/admin.ts` maps each of these onto the bkn-safe
  * client in `./safe.ts`, which is where the requests live.
  *
- * Every field here reaches bkn-safe `/api/safe/v1/admin/*`. The retired ISF
+ * Every field here reaches bkn-safe `/api/safe/v1/admin/*`. The retired identity-service
  * fields that bkn-safe has no column for (org status, user code/position/
  * remark/priority/confidentiality level) were removed rather than accepted and
  * dropped.

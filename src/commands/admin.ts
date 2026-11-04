@@ -46,7 +46,7 @@ async function newUserPassword(opts: {
   );
 }
 
-/** Department ids from a variadic flag; "-1" was the ISF spelling of "none". */
+/** Department ids from a variadic flag; "-1" was the legacy spelling of "none". */
 function departmentIds(values: string[] | undefined): string[] | undefined {
   if (values === undefined) return undefined;
   return values
@@ -125,7 +125,7 @@ export function adminCommand(): Command {
       printJson(
         await clientFrom(cmd).admin.orgCreate({
           name: opts.name,
-          // "-1" was the ISF spelling of "no parent"; bkn-safe wants none.
+          // "-1" was the legacy spelling of "no parent"; bkn-safe wants none.
           parentId: opts.parent === "-1" ? undefined : opts.parent,
           code: opts.code,
           remark: opts.remark,

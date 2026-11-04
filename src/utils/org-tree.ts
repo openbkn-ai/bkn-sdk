@@ -4,7 +4,7 @@
 /**
  * Render a department hierarchy as text. The tree itself is built by
  * `buildDepartmentTree` in `../api/safe.js` (nests on bkn-safe's `parent_id`);
- * the ISF `parent_deps[]` builder that used to live here went with ISF.
+ * the legacy `parent_deps[]` builder was retired with the old identity service.
  */
 
 export interface OrgNode {
