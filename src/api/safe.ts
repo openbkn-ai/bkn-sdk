@@ -7,8 +7,8 @@ import { z } from "zod";
  * bkn-safe admin API (`/api/safe/v1/admin/*`, token-gated; the gateway-exposed
  * replacement for the retired ISF UserManagement / Authorization / EACP). The
  * logged-in user must be an admin: 401 = no/invalid token, 403 = not an admin.
- * The audit trail is `/admin/audit-logs` (management mutations + refusals, not
- * the retired EACP login-log; needs `admin-audit:view`). Response
+ * Audit records are no longer read here: `admin audit` uses the observability
+ * service (see observability-logs.ts). Response
  * shapes: `{users|roles|departments, total}`; department `parent_id` (not the
  * ISF `parent_deps[]`). See docs/exec-plans/admin-bkn-safe-migration.md.
  * Also carries the cluster license hub (`/admin/license/*`, issue #224).
