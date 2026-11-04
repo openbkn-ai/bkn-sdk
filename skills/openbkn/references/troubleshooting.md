@@ -7,7 +7,7 @@
 - **403 on a specific box/resource** — owned by another user or outside the current account's grants (impex/upload).
 - **`discover only supports physical catalogs`** — `create-from-*` needs a physical (datasource-backed) catalog, not a logical one.
 - **`trace get`/`diagnose` return no spans** — they read the typed `/api/agent-observability/v1/traces` API, so missing data is an empty list, not an index error. Check `trace search --conversation-id <id>`; an empty `entries` means nothing was recorded for that conversation on this deploy.
-- **`403` on `admin audit list`** — the account lacks `admin-audit:view`. Audit and `auth change-password` both go to bkn-safe; neither touches EACP any more.
+- **`403` on `admin audit list`** — the account lacks audit access on the observability service (`audit.admin` / `audit.security` log categories); `admin audit` reads `GET /api/observability/v1/logs`, no longer bkn-safe. `auth change-password` still goes to bkn-safe.
 - **A bare nginx `404 Not Found` HTML page** — that service isn't installed on the deploy, so the command has nothing to talk to. Deploys vary in which optional services they ship.
 - **`skill content` / `read-file` says `skill not found`** — the skill is still `unpublish`. Read it with `--draft` first (read-only); publishing with `skill set-status <id> published` is a write — confirm before running it. The URLs they return point at the in-cluster MinIO host and only resolve from inside the cluster.
 - **Wide-table JSON truncation** — pass a small `--limit`/`condition` to `object-type query`.

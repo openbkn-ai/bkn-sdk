@@ -185,12 +185,7 @@ export function toolboxCommand(): Command {
     .command("export <box-id>")
     .description("Export a toolbox config to a local .adp file")
     .requiredOption("-o, --out <file>", "output .adp path")
-    .option(
-      "--type <t>",
-      "impex type: toolbox | mcp | operator",
-      oneOf("--type", IMPEX_TYPES),
-      "toolbox",
-    )
+    .option("--type <t>", "impex type: toolbox | mcp", oneOf("--type", IMPEX_TYPES), "toolbox")
     .action(async (boxId: string, opts, cmd: Command) => {
       printJson(
         await clientFrom(cmd).toolboxes.export(boxId, opts.out, opts.type),
@@ -200,12 +195,7 @@ export function toolboxCommand(): Command {
   cmd
     .command("import <file>")
     .description("Import a toolbox config from a local .adp file")
-    .option(
-      "--type <t>",
-      "impex type: toolbox | mcp | operator",
-      oneOf("--type", IMPEX_TYPES),
-      "toolbox",
-    )
+    .option("--type <t>", "impex type: toolbox | mcp", oneOf("--type", IMPEX_TYPES), "toolbox")
     .option(
       "--mode <m>",
       "create (fail if it exists; service default) | upsert (update if it exists)",

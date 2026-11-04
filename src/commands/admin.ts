@@ -9,8 +9,13 @@
 import { readFileSync } from "node:fs";
 import { Command, Option } from "commander";
 import { rawCall } from "../api/call.js";
+import {
+  AUDIT_FAILED_OUTCOMES,
+  AUDIT_LOG_CATEGORIES,
+  AUDIT_LOG_MAX_LIMIT,
+  AUDIT_LOG_MIN_LIMIT,
+} from "../api/observability-logs.js";
 import type { RowFilterPolicy } from "../api/safe.js";
-import { AUDIT_LOG_MAX_LIMIT } from "../api/safe.js";
 import { resolveContext } from "../config/resolve.js";
 import { activePlatform, setActivePlatform } from "../config/store.js";
 import { group, groupChildren, guide } from "../help/grouped-help.js";
@@ -678,21 +683,43 @@ Read a snapshot first and carry its revision into apply/delete. Omit
 
   const audit = admin
     .command("audit")
-    .description("Audit trail: management mutations and token-gate refusals (bkn-safe)");
+    .description(
+      "Operation audit trail: management and security audit records (observability service)",
+    );
+  const csv = (v: string): string[] =>
+    v
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
   audit
     .command("list")
-    .description("List audit log entries, newest first → {logs, total}")
+    .description(
+      "List audit records, newest first → {data, next_cursor, count, pagination, partial, source_status}",
+    )
+    .option(
+      "--category <list>",
+      `comma-separated log categories (default ${AUDIT_LOG_CATEGORIES.join(",")})`,
+      csv,
+    )
+    .option("--q <text>", "free-text search over the safe summary (max 512 chars)")
     .option("--actor-id <id>", "token subject id of the actor")
-    .option("--request-id <id>", "all rows written for one mutating HTTP request")
-    .option("--resource <noun>", "route noun, e.g. users, role-bindings, policies")
+    .option("--actor <name>", "actor display-name search")
+    .option("--request-id <id>", "records written for one request")
     .option("--action <verb>", "business verb, e.g. create, grant, revoke, reset_password")
+    .option("--target-type <type>", "target type, e.g. user, role, policy")
     .option("--target-id <id>", "target id")
-    .option("--failed-only", "only refused and failed attempts (HTTP 4xx/5xx)")
-    .option("--from <time>", "created at or after this RFC 3339 timestamp (inclusive)")
-    .option("--to <time>", "created before this RFC 3339 timestamp (exclusive)")
-    .option("--before-id <id>", "keyset tiebreaker for rows sharing the --to timestamp")
-    .option("--offset <n>", "rows to skip", int)
-    .option("--limit <n>", `page size, 0..${AUDIT_LOG_MAX_LIMIT}`, int, DEFAULT_LIST_LIMIT)
+    .option("--outcome <list>", "comma-separated: success,failure,denied,canceled,unknown", csv)
+    .option("--failed-only", "shorthand for --outcome failure,denied")
+    .option("--from <time>", "event time at or after this RFC 3339 timestamp (inclusive)")
+    .option("--to <time>", "event time before this RFC 3339 timestamp (exclusive)")
+    .option("--page <n>", "one-based page number (default 1)", int)
+    .option("--cursor <token>", "continue from a previous next_cursor (overrides --page)")
+    .option(
+      "--limit <n>",
+      `page size, ${AUDIT_LOG_MIN_LIMIT}..${AUDIT_LOG_MAX_LIMIT}`,
+      int,
+      DEFAULT_LIST_LIMIT,
+    )
     // Earlier spellings of the time bounds; hidden so help shows one name each.
     .addOption(new Option("--start <time>", "alias of --from").hideHelp())
     .addOption(new Option("--end <time>", "alias of --to").hideHelp())
@@ -703,18 +730,24 @@ Read a snapshot first and carry its revision into apply/delete. Omit
       if (opts.end !== undefined && opts.to !== undefined) {
         throw new InputError("--end is an alias of --to; pass only one.");
       }
+      if (opts.failedOnly && opts.outcome !== undefined) {
+        throw new InputError("--failed-only is shorthand for --outcome failure,denied; pass one.");
+      }
       printJson(
         await clientFrom(cmd).admin.auditList({
+          categories: opts.category,
+          q: opts.q,
           actorId: opts.actorId,
+          actor: opts.actor,
           requestId: opts.requestId,
-          resource: opts.resource,
           action: opts.action,
+          targetType: opts.targetType,
           targetId: opts.targetId,
-          failedOnly: Boolean(opts.failedOnly),
+          outcomes: opts.failedOnly ? AUDIT_FAILED_OUTCOMES : opts.outcome,
           from: opts.from ?? opts.start,
           to: opts.to ?? opts.end,
-          beforeId: opts.beforeId,
-          offset: opts.offset,
+          page: opts.page,
+          cursor: opts.cursor,
           limit: opts.limit,
         }),
         outputOptions(cmd),
@@ -722,7 +755,7 @@ Read a snapshot first and carry its revision into apply/delete. Omit
     });
   audit
     .command("get <id>")
-    .description("Get one audit log entry")
+    .description("Get one audit record by event_id → {data, field_projection}")
     .action(async (id: string, _opts, cmd: Command) => {
       printJson(await clientFrom(cmd).admin.auditGet(id), outputOptions(cmd));
     });

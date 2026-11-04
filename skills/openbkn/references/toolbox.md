@@ -5,8 +5,8 @@
 | `toolbox list [--name] [--status unpublish\|published\|offline] [--category] [--metadata-type openapi\|function] [--create-user] [--release-user] [--sort-by create_time\|update_time\|name] [--sort-order asc\|desc] [--limit n] [--page n] [--all]` | List toolboxes. 分页是 `--page`（从 1 起）+ `--limit`（即 `page_size`，1–100）；CLI 不给 `--limit` 时发 30，SDK `toolboxes.list()` 不传 `pageSize` 时服务端默认 10；服务端没有 offset。`--keyword` 仍作为 `--name` 的别名可用。 |
 | `toolbox create --name <n> [--type openapi\|function] [--service-url <url>] [--description] [--category <c>]` | Create（`--category` 即 `box_category`，缺省 `other_category`）。 `openapi` 箱子代理到 `--service-url`（必填）；`function` 箱子装平台函数，不填服务地址。 |
 | `toolbox publish <id>` / `unpublish <id>` / `delete <id>` | 生命周期。`unpublish` 发送 `status=offline`（下架；工具箱只有 `unpublish` / `published` / `offline` 三态，没有 `draft`）。**`execute` 要求箱子已 `published`**：未发布或已下线的箱子返回 400 `ToolNotAvailable`；`debug` 发布前就能用。 |
-| `toolbox export <id> -o box.adp [--type toolbox\|mcp\|operator]` | 导出整箱配置（impex，原始字节）。`--type` 只收这三个值，其他值 CLI 直接拒绝（服务端会 400）。 |
-| `toolbox import <file> [--type toolbox\|mcp\|operator] [--mode create\|upsert]` | 导入 `.adp`（multipart）。`--mode` 缺省由服务端按 `create` 处理：组件已存在返回 409 `CommonResourceIDConflict`；`upsert` 则原地更新已有的（不会产生重复箱子）。 |
+| `toolbox export <id> -o box.adp [--type toolbox\|mcp]` | 导出整箱配置（impex，原始字节）。`--type` 只收这两个值，其他值（包括旧的 `operator`）CLI 直接拒绝（服务端会 400）。 |
+| `toolbox import <file> [--type toolbox\|mcp] [--mode create\|upsert]` | 导入 `.adp`（multipart）。`--mode` 缺省由服务端按 `create` 处理：组件已存在返回 409 `CommonResourceIDConflict`；`upsert` 则原地更新已有的（不会产生重复箱子）。 |
 | `api import <openapi-file> --toolbox <id>` | 从 JSON 或 YAML 规范导入 OpenAPI Tools。一个规范可产生多个操作；`failure_count` 非零时命令以非零退出。 |
 | `api list\|get\|update\|delete\|enable\|disable\|execute\|debug … --toolbox <id>` | 管理和执行已注册的 OpenAPI Tools。`list`、`execute`/`debug` 的参数与下面的 `tool list`、`tool execute\|debug` 相同。 |
 | `function create\|list\|get\|update\|delete\|enable\|disable\|execute\|debug … --toolbox <id>` | 管理和执行已注册的 Function Tools（见 [function.md](function.md)）。函数代码试跑用 `sandbox`。 |

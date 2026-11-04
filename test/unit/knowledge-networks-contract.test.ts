@@ -297,8 +297,6 @@ describe("action logs", () => {
     const f = mockFetch();
     await listActionLogs(ctx, "kn-1", { searchAfter: ["", "id-1"] });
     expect(lastCall(f).url.searchParams.get("search_after")).toBe(",id-1");
-    await listObjectTypes(ctx, "kn-1", { searchAfter: "1704067200000,,id-2" });
-    expect(lastCall(f).url.searchParams.get("search_after")).toBe("1704067200000,,id-2");
     await listActionLogs(ctx, "kn-1", { searchAfter: "  " });
     expect(lastCall(f).url.searchParams.has("search_after")).toBe(false);
     await listActionLogs(ctx, "kn-1", { searchAfter: [] });
@@ -396,14 +394,14 @@ describe("knowledge network and schema items", () => {
       tag: "t",
       sort: "name",
       direction: "asc",
-      needTotal: false,
-      searchAfter: "a,b",
+      // Not options any more: the server list ignores them, so they must not be sent.
+      ...({ needTotal: false, searchAfter: "a,b" } as object),
     });
     let q = lastCall(f).url.searchParams;
     expect(q.get("name_pattern")).toBe("ord");
     expect(q.get("tag")).toBe("t");
-    expect(q.get("need_total")).toBe("false");
-    expect(q.get("search_after")).toBe("a,b");
+    expect(q.has("need_total")).toBe(false);
+    expect(q.has("search_after")).toBe(false);
 
     await listRelationTypes(ctx, "kn-1", {
       sourceObjectTypeId: "s",
