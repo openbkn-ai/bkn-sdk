@@ -1,6 +1,6 @@
 # `openbkn admin` → bkn-safe migration
 
-ISF is retired. The `admin` group moved off the four ISF base paths
+The legacy identity service is retired. The `admin` group moved off its four base paths
 (`/api/user-management/v1`, `/api/authorization/v1`, `/isfweb/api/ShareMgnt`,
 `/api/eacp/v1`) onto bkn-safe's **token-gated admin API** `/api/safe/v1/admin/*`.
 `src/api/safe.ts` holds the client; `src/resources/admin.ts` maps each command.
@@ -14,7 +14,7 @@ and the subject must be an admin (super-admin today). `401` = no/invalid token,
 ## Status
 
 **Migrated (audit included since bkn-safe audit.yaml).** Response shapes: `{users|roles|departments, total}`;
-department `parent_id` (not ISF `parent_deps[]`); ids-only for role bindings/members.
+department `parent_id` (not the legacy `parent_deps[]`); ids-only for role bindings/members.
 
 | group | commands | endpoint |
 | --- | --- | --- |
@@ -37,7 +37,7 @@ keeps name/parent. New users/roles are created custom; built-in roles
 2. Built-in roles immutable (`built_in:true`, source system/business) → 403.
 3. `org delete` is non-cascade → `409` when the department has children/members.
 4. Pagination: users limit ≤500, departments ≤1000, roles return all (filter
-   client-side; the old ISF `role` query param is dropped).
+   client-side; the old identity service's `role` query param is dropped).
 5. No RSA/thrift: `setUserPassword` and `change-password` send plaintext over TLS.
 
 ## Verification

@@ -213,7 +213,7 @@ describe("admin org", () => {
     expect(JSON.parse(printed)).toEqual({ users: [{ id: "b" }], total: 3 });
   });
 
-  it("create sends manager, code, remark and email, and no ISF '-1' parent", async () => {
+  it("create sends manager, code, remark and email, and no legacy '-1' parent", async () => {
     const fetchMock = mockFetch({ id: "d2" });
     await run([
       "org",
@@ -310,7 +310,7 @@ describe("admin user", () => {
     expect(bodyAt(fetchMock)).toEqual({ account: "bob", password: "from-env" });
   });
 
-  it("update sends department_ids and drops the ISF-only flags", async () => {
+  it("update sends department_ids and drops the legacy-only flags", async () => {
     expect(optionsOf(["user", "update"])).not.toContain("--csf-level");
     expect(optionsOf(["user", "create"])).not.toContain("--priority");
     const fetchMock = mockFetch({});
