@@ -182,7 +182,16 @@ describe("CLI refuses out-of-contract values before sending", () => {
     ["import", "/tmp/x.adp"],
   ])("toolbox %s --type outside the impex enum", async (...args) => {
     const err = await refused(["toolbox", ...args, "--type", "agent"]);
-    expect(err.message).toMatch(/--type must be one of: toolbox \| mcp \| operator/);
+    expect(err.message).toMatch(/--type must be one of: toolbox \| mcp \(got 'agent'\)/);
+  });
+
+  // The server binds `oneof=toolbox mcp`; `operator` was always a 400.
+  it.each([
+    ["export", "b1", "-o", "/tmp/x.adp"],
+    ["import", "/tmp/x.adp"],
+  ])("toolbox %s --type operator is refused locally", async (...args) => {
+    const err = await refused(["toolbox", ...args, "--type", "operator"]);
+    expect(err.message).toMatch(/--type must be one of: toolbox \| mcp \(got 'operator'\)/);
   });
 
   it("tool upload --metadata-type outside the enum", async () => {

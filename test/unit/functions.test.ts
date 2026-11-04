@@ -67,6 +67,15 @@ describe("function endpoints", () => {
     expect(body.timeout).toBe(30);
   });
 
+  it("execute sends working_directory only when given", async () => {
+    const f = mockFetch();
+    await executeFunction(ctx, { code: "x", workingDirectory: "sessions/s1" });
+    expect(JSON.parse(String(call(f)[1].body)).working_directory).toBe("sessions/s1");
+    const g = mockFetch();
+    await executeFunction(ctx, { code: "x" });
+    expect(Object.keys(JSON.parse(String(call(g)[1].body)))).not.toContain("working_directory");
+  });
+
   it("execute omits empty dependency lists rather than sending []", async () => {
     const f = mockFetch();
     await executeFunction(ctx, { code: "x", dependencies: [] });

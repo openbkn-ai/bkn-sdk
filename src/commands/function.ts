@@ -176,6 +176,10 @@ export function sandboxCommand(): Command {
     .option("--dep <name@version>", "install a package first (repeatable)", collectDep)
     .option("--index-url <url>", "package index to install from (default PyPI)")
     .option(
+      "--working-directory <dir>",
+      "run directory relative to the workspace root; artifacts are collected only from it",
+    )
+    .option(
       "--pass-token",
       "put your credential in the sandbox's BKN_TOKEN so `sandbox_sdk.bkn` calls BKN as you",
     )
@@ -187,6 +191,7 @@ export function sandboxCommand(): Command {
         timeout: opts.timeout,
         dependencies: opts.dep,
         dependenciesUrl: opts.indexUrl,
+        workingDirectory: opts.workingDirectory,
         source: "openbkn_cli",
         // The request headers carry these too, but they stop at the service:
         // the sandbox reads its own environment, which only these fields fill.

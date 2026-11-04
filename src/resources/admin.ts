@@ -12,6 +12,7 @@ import type {
   UpdateOrgInput,
   UpdateUserInput,
 } from "../api/admin.js";
+import { getAuditLog, listAuditLogs } from "../api/observability-logs.js";
 import {
   USER_PAGE_MAX,
   activateLicenseSafe,
@@ -25,7 +26,6 @@ import {
   deleteRoleSafe,
   deleteUserSafe,
   explainRowFilterPolicySafe,
-  getAuditLogSafe,
   getDepartmentMembersSafe,
   getDepartmentSafe,
   getLicenseFingerprintSafe,
@@ -35,7 +35,6 @@ import {
   getUserRolesSafe,
   getUserSafe,
   importLicenseSafe,
-  listAuditLogsSafe,
   listDepartmentsSafe,
   listRolesSafe,
   listUsersSafe,
@@ -211,9 +210,9 @@ export function admin(ctx: RequestContext) {
     ) => patchRowFilterPolicySafe(ctx, { ...input, policy: null }),
     rowFilterExplain: (target: RowFilterTarget) => explainRowFilterPolicySafe(ctx, target),
 
-    // ── audit trail (management mutations and token-gate refusals) ──
-    auditList: (opts?: AuditListOptions) => listAuditLogsSafe(ctx, opts),
-    auditGet: (id: string) => getAuditLogSafe(ctx, id),
+    // ── audit trail (observability operation-audit logs) ──
+    auditList: (opts?: AuditListOptions) => listAuditLogs(ctx, opts),
+    auditGet: (id: string) => getAuditLog(ctx, id),
 
     // ── license (cluster license hub; weak judgements — display/ops only) ──
     licenseGet: () => getLicenseSafe(ctx),

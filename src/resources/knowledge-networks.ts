@@ -36,6 +36,7 @@ import {
   updateConceptGroup,
   uploadBkn,
 } from "../api/bkn-backend.js";
+
 /** Knowledge-network resource surface (the exported SDK API). */
 import {
   type ActionLogGetOptions,
@@ -107,6 +108,54 @@ import { HttpError, InputError } from "../utils/errors.js";
 import { lostIndexWarnings, snapshotObjectTypes } from "../utils/push-integrity.js";
 import { extractTarToDirectory, packDirectoryToTar } from "../utils/tar.js";
 import { type CreateFromCatalogOptions, createFromCatalog } from "./bkn-create.js";
+
+/** Concurrent per-id detail reads when hydrating object-type summaries. */
+const DETAIL_CONCURRENCY = 6;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * List every object type with its `data_properties`. The list endpoint returns
+ * summaries without them (and `snapshotObjectTypes` would read that as "no
+ * properties"), so a summary is replaced by its per-id detail read. An entry
+ * that already carries `data_properties` is kept as is.
+ */
+async function listObjectTypesWithDetails(
+  ctx: RequestContext,
+  knId: string,
+  branch: string,
+): Promise<unknown> {
+  const listing = await listObjectTypes(ctx, knId, { branch });
+  if (!isRecord(listing) || !Array.isArray(listing.entries)) return listing;
+  const entries: unknown[] = [...listing.entries];
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (let i = next++; i < entries.length; i = next++) {
+      const entry = entries[i];
+      if (!isRecord(entry) || Array.isArray(entry.data_properties)) continue;
+      const id = entry.id;
+      if (typeof id !== "string" || !id) continue; // snapshotObjectTypes rejects it
+      const payload = await getSchemaItem(ctx, knId, "object-types", id, { branch });
+      const candidates =
+        isRecord(payload) && Array.isArray(payload.entries) ? payload.entries : [payload];
+      const detail = candidates.find((c) => isRecord(c) && c.id === id);
+      if (!isRecord(detail)) {
+        throw new InputError(
+          `Cannot verify BKN push integrity: object-type '${id}' detail is missing.`,
+        );
+      }
+      // The backend omits an empty data_properties (`omitempty`), which the
+      // snapshot reads as none; the detail read is authoritative either way.
+      entries[i] = detail;
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(DETAIL_CONCURRENCY, entries.length) }, () => worker()),
+  );
+  return { ...listing, entries };
+}
 
 export function kn(ctx: RequestContext) {
   return {
@@ -298,7 +347,7 @@ export function kn(ctx: RequestContext) {
       if (verify) {
         try {
           before = snapshotObjectTypes(
-            await listObjectTypes(ctx, validation.networkId, { branch }),
+            await listObjectTypesWithDetails(ctx, validation.networkId, branch),
           );
         } catch (error) {
           if (error instanceof HttpError && (error.status === 401 || error.status === 403)) {
@@ -320,7 +369,7 @@ export function kn(ctx: RequestContext) {
       try {
         warnings = lostIndexWarnings(
           before,
-          snapshotObjectTypes(await listObjectTypes(ctx, validation.networkId, { branch })),
+          snapshotObjectTypes(await listObjectTypesWithDetails(ctx, validation.networkId, branch)),
           { bindingPolicy: opts?.bindingPolicy },
         );
       } catch {

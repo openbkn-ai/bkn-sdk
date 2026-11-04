@@ -69,7 +69,7 @@ export interface OrgMembersOptions {
   limit?: number;
 }
 
-/** Audit list filters — the bkn-safe `GET /admin/audit-logs` query. */
-export type { AuditLogQuery as AuditListOptions } from "./safe.js";
+/** Audit list filters — the observability `GET /api/observability/v1/logs` query. */
+export type { AuditLogQuery as AuditListOptions } from "./observability-logs.js";
 
 export type MemberType = "user" | "department" | "group" | "app";

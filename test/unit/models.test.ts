@@ -227,6 +227,36 @@ describe("resolving a small-model name to its id", () => {
     expect(url.searchParams.get("limit")).toBeNull();
   });
 
+  it("maps mf-model-manager's 400 IdNotExist on a numeric id to the friendly error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              code: "ModelFactory.ExternalSmallModel.GetInfo.IdNotExist",
+              description: "model id not exist",
+            }),
+            { status: 400 },
+          ),
+      ),
+    );
+    await expect(resolveSmallModel(ctx, "999")).rejects.toThrow(/No small model found with id 999/);
+  });
+
+  it("keeps other 400s on a numeric id as HTTP errors", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ code: "ModelFactory.Router.ParamError.FormatError" }), {
+            status: 400,
+          }),
+      ),
+    );
+    await expect(resolveSmallModel(ctx, "999")).rejects.toMatchObject({ status: 400 });
+  });
+
   it("names a model the platform does not have", async () => {
     // The `name` query parameter is ignored by the deploy — it answers with
     // every model whatever is asked for — so a wrong name is only caught by

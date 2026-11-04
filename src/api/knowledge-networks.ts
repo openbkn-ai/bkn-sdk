@@ -449,12 +449,8 @@ export interface ListSchemaOptions {
   direction?: "asc" | "desc";
 }
 
-export interface ListObjectTypesOptions extends ListSchemaOptions {
-  /** Return total_count (backend default true). */
-  needTotal?: boolean;
-  /** Deep-paging cursor; a list is comma-joined. Offset is ignored once set. */
-  searchAfter?: string | Array<string | number>;
-}
+/** The server's object-type list reads only the shared filters, so it adds none. */
+export type ListObjectTypesOptions = ListSchemaOptions;
 
 export interface ListRelationTypesOptions extends ListSchemaOptions {
   sourceObjectTypeId?: string;
@@ -488,11 +484,7 @@ export function listObjectTypes(
   opts: ListObjectTypesOptions = {},
 ): Promise<unknown> {
   return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/object-types`, {
-    query: {
-      ...schemaListQuery(opts),
-      need_total: opts.needTotal === undefined ? undefined : String(opts.needTotal),
-      search_after: searchAfterParam(opts.searchAfter),
-    },
+    query: schemaListQuery(opts),
   });
 }
 
@@ -586,7 +578,10 @@ export function createSchemaItem(
 
 export type UpdateSchemaItemOptions = StrictWriteOptions;
 
-/** Update one schema item. The body carries `base_version`, the version it was read at. */
+/**
+ * Update one schema item. The server applies the body as a full replace and
+ * has no `base_version` optimistic lock, so read the item first.
+ */
 export function updateSchemaItem(
   ctx: RequestContext,
   knId: string,
