@@ -1,6 +1,6 @@
 # admin — operator CLI (nested 1:1)
 
-All org/user/role/audit/license commands call bkn-safe's `/api/safe/v1/admin/*` REST API with the caller's OAuth token; the account must hold the matching admin permission (403 otherwise).
+All org/user/role/license commands call bkn-safe's `/api/safe/v1/admin/*` REST API with the caller's OAuth token; `audit` reads the observability service (`/api/observability/v1/logs`). The account must hold the matching admin permission (403 otherwise).
 
 | Group | Commands |
 |-------|----------|
@@ -10,7 +10,7 @@ All org/user/role/audit/license commands call bkn-safe's `/api/safe/v1/admin/*` 
 | `row-filter` | `get`/`apply`/`delete`/`explain`, all with `--object-type <kn/object> --subject-type user\|role --subject-id <id>`. `apply` additionally needs `--reason` and a SDK-shaped `{relation, conditions}` JSON body; `delete` needs `--reason`. Read first and pass the returned opaque revision through `--expected-revision` when replacing or deleting an existing policy. A `409 revision_conflict` is returned to the caller and is never retried automatically. |
 | `llm` / `small-model` | `list [--name] [--type] [--page] [--size]`/`get/add/edit/delete/test` (granular flags or `--body`; mf-model-manager). `llm list` has no series filter (the server ignores it). |
 | `license` | `show`/`import <file.lic>`/`receipt <file.lic>`/`activate`/`remove`/`fingerprint` — cluster license hub on bkn-safe (super-admin). `import` auto-activates online; exit 1 + `stored:true` = stored but issuer refused activation. Offline flow: `fingerprint` → paste at license portal → `receipt <file>`. States: `valid`/`grace`/`fallback_community`/`invalid` (weak judgement, display only). |
-| `audit` | `list [--actor-id] [--request-id] [--resource users] [--action create] [--target-id] [--failed-only] [--from RFC3339] [--to RFC3339] [--before-id] [--offset] [--limit ≤500]` → `{logs, total}` / `get <id>`. bkn-safe audit trail of management mutations and 401/403 refusals (not login events); needs `admin-audit:view`. |
+| `audit` | `list [--category audit.admin,audit.security] [--q text] [--actor-id] [--actor name] [--request-id] [--action] [--target-type] [--target-id] [--outcome success,failure,denied,canceled,unknown] [--failed-only] [--from RFC3339] [--to RFC3339] [--page n] [--cursor c] [--limit 20..200]` → `{data, next_cursor, partial, count, pagination, source_status}` / `get <event-id>`. Operation audit records from the observability service (`GET /api/observability/v1/logs`), both audit categories by default; needs the audit access profile. `--failed-only` = `--outcome failure,denied`. Removed with the old bkn-safe reader: `--resource` (use `--target-type`), `--before-id`/`--offset` (use `--page`/`--cursor`). |
 | `auth` | Same leaves as top-level `openbkn auth`. |
 | `config` / `call` | Active-platform config / operator API passthrough. |
 

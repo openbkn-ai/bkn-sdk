@@ -4,10 +4,10 @@
 /**
  * Deploy probing — which commands this platform can actually answer.
  *
- * Deploys differ: a community build has no `admin audit list`, an MCP server
- * that advertises no prompts cannot serve `context prompts`, and a service can
- * simply be absent. A caller discovers that today by running the command and
- * reading the refusal. Probing asks the questions once, cheaply and read-only,
+ * Deploys differ: a deploy may lack the observability service behind
+ * `admin audit`, an MCP server that advertises no prompts cannot serve
+ * `context prompts`, and a service can simply be absent. A caller discovers
+ * that today by running the command and reading the refusal. Probing asks the questions once, cheaply and read-only,
  * so `describe` can say up front what will not work here.
  *
  * Every answer is one of three, never a guess dressed as a fact: available,
@@ -25,6 +25,8 @@ const SERVICE_PROBES: Array<{ service: string; path: string }> = [
     path: "/api/agent-operator-integration/v1/tool-box/list?page=1&page_size=1",
   },
   { service: "agent-observability", path: "/api/agent-observability/v1/conversations?limit=1" },
+  // `admin audit` reads operation audit records here, not from bkn-safe.
+  { service: "observability", path: "/api/observability/v1/logs?categories=audit.admin&limit=20" },
   { service: "mf-model-manager", path: "/api/mf-model-manager/v1/llm/list" },
   { service: "safe", path: "/api/safe/v1/me/api-keys" },
   { service: "agent-retrieval", path: "/api/agent-retrieval/v1/mcp/info" },
@@ -41,6 +43,7 @@ const COMMAND_SERVICE: Array<[RegExp, string]> = [
   [/^model\b/, "mf-model-manager"],
   [/^(auth|appkey)\b/, "safe"],
   [/^admin (llm|small-model)\b/, "mf-model-manager"],
+  [/^admin audit\b/, "observability"],
   [/^admin\b/, "safe"],
 ];
 

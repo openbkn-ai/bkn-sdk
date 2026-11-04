@@ -71,6 +71,7 @@ function cli(dir: string, extra: string[] = []): Promise<Command> {
 
 function server(...listResponses: Response[]): ReturnType<typeof vi.fn> {
   let read = 0;
+  let lastEntries: Array<Record<string, unknown>> = [];
   const fetch = vi.fn(async (url: string | URL) => {
     const parsed = new URL(String(url));
     if (parsed.pathname === listPath) {
@@ -79,8 +80,17 @@ function server(...listResponses: Response[]): ReturnType<typeof vi.fn> {
       const response = listResponses[read];
       read += 1;
       if (!response) throw new Error("unexpected list read");
+      // Summaries lacking data_properties are hydrated by a per-id read below.
+      const body = (await response.clone().json()) as { entries?: Array<Record<string, unknown>> };
+      lastEntries = Array.isArray(body.entries) ? body.entries : [];
       return response;
     }
+    const detail = parsed.pathname.startsWith(`${listPath}/`)
+      ? lastEntries.find(
+          (e) => e.id === decodeURIComponent(parsed.pathname.slice(listPath.length + 1)),
+        )
+      : undefined;
+    if (detail) return Response.json(detail);
     if (parsed.pathname === uploadPath) {
       expect(parsed.searchParams.get("branch")).toBe("release");
       return Response.json({ id: "kn1" });
@@ -163,6 +173,128 @@ describe("bkn push integrity verification", () => {
     });
   });
 
+  it("hydrates list summaries (no data_properties) so lost operators are detected", async () => {
+    // The real list endpoint returns summaries without data_properties; only the
+    // per-id read carries condition_operations.
+    const detailPath = `${listPath}/ot`;
+    let uploaded = false;
+    const fetch = vi.fn(async (url: string | URL) => {
+      const parsed = new URL(String(url));
+      if (parsed.pathname === listPath) {
+        return Response.json({
+          entries: [{ id: "ot", data_source: { type: "resource", id: "r1" } }],
+        });
+      }
+      if (parsed.pathname === detailPath) {
+        expect(parsed.searchParams.get("branch")).toBe("release");
+        return Response.json({
+          id: "ot",
+          data_source: { type: "resource", id: "r1" },
+          data_properties: [
+            {
+              name: "title",
+              condition_operations: uploaded ? ["=="] : ["==", "match", "knn"],
+            },
+          ],
+        });
+      }
+      if (parsed.pathname === uploadPath) {
+        uploaded = true;
+        return Response.json({ id: "kn1" });
+      }
+      throw new Error(`unexpected request ${parsed.pathname}`);
+    });
+    vi.stubGlobal("fetch", fetch);
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stderr: string[] = [];
+    vi.spyOn(process.stderr, "write").mockImplementation((part) => {
+      stderr.push(String(part));
+      return true;
+    });
+
+    await cli(packageDir());
+
+    expect(stderr.join("")).toContain(
+      "property 'title' lost condition_operations after push: match, knn",
+    );
+  });
+
+  it("keeps verifying when an object type is deleted between list and detail reads", async () => {
+    // A 404 on one detail read used to fall into the "new network" branch and
+    // silently skip the whole check.
+    let uploaded = false;
+    const fetch = vi.fn(async (url: string | URL) => {
+      const parsed = new URL(String(url));
+      if (parsed.pathname === listPath) {
+        return Response.json({
+          entries: uploaded
+            ? [{ id: "ot", data_source: { type: "resource", id: "r1" } }]
+            : [
+                { id: "ot", data_source: { type: "resource", id: "r1" } },
+                { id: "gone", data_source: { type: "resource", id: "r2" } },
+              ],
+        });
+      }
+      if (parsed.pathname === `${listPath}/gone`) {
+        return Response.json({ error: "not found" }, { status: 404 });
+      }
+      if (parsed.pathname === `${listPath}/ot`) {
+        return Response.json({
+          id: "ot",
+          data_source: { type: "resource", id: "r1" },
+          data_properties: [
+            { name: "title", condition_operations: uploaded ? ["=="] : ["==", "match"] },
+          ],
+        });
+      }
+      if (parsed.pathname === uploadPath) {
+        uploaded = true;
+        return Response.json({ id: "kn1" });
+      }
+      throw new Error(`unexpected request ${parsed.pathname}`);
+    });
+    vi.stubGlobal("fetch", fetch);
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stderr: string[] = [];
+    vi.spyOn(process.stderr, "write").mockImplementation((part) => {
+      stderr.push(String(part));
+      return true;
+    });
+
+    await cli(packageDir());
+
+    const out = stderr.join("");
+    expect(out).toContain("property 'title' lost condition_operations after push: match");
+    expect(out).not.toContain("gone");
+  });
+
+  it("warns and uploads when a pre-push detail read returns no matching entry", async () => {
+    const fetch = vi.fn(async (url: string | URL) => {
+      const parsed = new URL(String(url));
+      if (parsed.pathname === listPath) return Response.json({ entries: [{ id: "ot" }] });
+      if (parsed.pathname === `${listPath}/ot`) return Response.json({ entries: [] });
+      if (parsed.pathname === uploadPath) return Response.json({ id: "kn1" });
+      throw new Error(`unexpected request ${parsed.pathname}`);
+    });
+    vi.stubGlobal("fetch", fetch);
+    const stdout: string[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation((part) => {
+      stdout.push(String(part));
+      return true;
+    });
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    await cli(packageDir());
+
+    expect(fetch.mock.calls.map(([url]) => new URL(String(url)).pathname)).toContain(uploadPath);
+    expect(JSON.parse(stdout.join(""))).toMatchObject({
+      id: "kn1",
+      integrity_warnings: [
+        expect.stringMatching(/^integrity not verified: .*object-type 'ot' detail is missing/),
+      ],
+    });
+  });
+
   it("keeps an unchanged push response free of integrity warnings", async () => {
     const fetch = server(Response.json(before), Response.json(before));
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
@@ -228,7 +360,9 @@ describe("bkn push integrity verification", () => {
     const fetch = server(response);
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     await expect(cli(packageDir())).rejects.toThrow();
-    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch.mock.calls.some(([url]) => new URL(String(url)).pathname === uploadPath)).toBe(
+      false,
+    );
   });
 
   it("reads an object type without a data_properties key as having none", () => {
@@ -251,8 +385,10 @@ describe("bkn push integrity verification", () => {
 
     expect(fetch.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual([
       listPath,
+      `${listPath}/ot`,
       uploadPath,
       listPath,
+      `${listPath}/ot`,
     ]);
     expect(stderr).not.toHaveBeenCalled();
     expect(JSON.parse(stdout.join(""))).not.toHaveProperty("integrity_warnings");

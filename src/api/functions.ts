@@ -107,6 +107,12 @@ export interface ExecuteFunctionOptions {
   dependencies?: DependencyInfo[];
   /** Package index; point it at a mirror on a network that cannot reach PyPI. */
   dependenciesUrl?: string;
+  /**
+   * Run directory, relative to the workspace root. Artifact collection only
+   * covers this directory, so isolate per-session files by passing it —
+   * a `chdir` inside the code does not change the collected scope.
+   */
+  workingDirectory?: string;
   /** Tracing marks written into the sandbox environment, not arguments. */
   source?: string;
   taskId?: string;
@@ -160,6 +166,7 @@ export function executeFunction(
       ...(opts.timeout !== undefined ? { timeout: opts.timeout } : {}),
       ...(opts.dependencies?.length ? { dependencies: opts.dependencies } : {}),
       ...(opts.dependenciesUrl ? { dependencies_url: opts.dependenciesUrl } : {}),
+      ...(opts.workingDirectory ? { working_directory: opts.workingDirectory } : {}),
       ...(opts.source ? { source: opts.source } : {}),
       ...(opts.taskId ? { task_id: opts.taskId } : {}),
       ...(opts.capabilityId ? { capability_id: opts.capabilityId } : {}),

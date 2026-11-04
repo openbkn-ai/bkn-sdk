@@ -60,11 +60,10 @@ export interface SummaryPage<T> {
 }
 
 /**
- * Filters for `GET /traces`. The foundry spec lists limit (1..200), cursor,
- * trace_id, conversation_id, interaction_id, from, to, status, agent_or_app and
- * keyword; the live service also honours `service`, `tool` and `error_keyword`
- * (not yet in the spec). `errorKeyword` is an error-text filter distinct from
- * the broader `keyword`.
+ * Filters for `GET /traces`, all documented in the foundry spec: limit (1..200),
+ * cursor, trace_id, conversation_id, interaction_id, from, to, status,
+ * agent_or_app, keyword, service, tool and error_keyword. `errorKeyword` is an
+ * error-text filter distinct from the broader `keyword`.
  */
 export interface TechnicalTraceQuery {
   limit?: number;
@@ -72,16 +71,16 @@ export interface TechnicalTraceQuery {
   from?: string;
   to?: string;
   status?: string;
-  /** Exact producing (root) service. Live, not yet in the foundry spec. */
+  /** Exact producing (root) service. */
   service?: string;
-  /** Exact root tool. Live, not yet in the foundry spec. */
+  /** Exact root tool. */
   tool?: string;
   /** Agent or application name. */
   agentOrApp?: string;
   traceId?: string;
   /** Trace, request, operation, or error keyword. */
   keyword?: string;
-  /** Case-insensitive error text only. Live, not yet in the foundry spec. */
+  /** Case-insensitive error text only. */
   errorKeyword?: string;
   conversationId?: string;
   interactionId?: string;

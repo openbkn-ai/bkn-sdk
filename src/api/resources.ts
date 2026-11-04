@@ -69,6 +69,8 @@ export interface PropertyFeature {
 
 export interface ResourceProperty {
   name: string;
+  /** Server-generated, write-once API name; ignored on writes. */
+  api_name?: string;
   display_name?: string;
   type?: string;
   description?: string;
@@ -157,6 +159,8 @@ const ResourcePropertySchema: z.ZodType<ResourceProperty, z.ZodTypeDef, unknown>
   .object({
     name: z.string(),
     display_name: z.string().optional(),
+    // Server-generated, write-once; ignored on writes.
+    api_name: z.string().optional(),
     type: z.string().optional(),
     description: z.string().optional(),
     original_name: z.string().optional(),
@@ -187,6 +191,8 @@ export const Resource = z
     id: z.string(),
     catalog_id: z.string(),
     name: z.string().min(1),
+    // Server-generated, write-once; ignored on writes.
+    api_name: z.string().optional(),
     tags: z.array(z.string()).optional(),
     description: z.string().optional(),
     // Responses remain forward-compatible when the backend adds a category or
