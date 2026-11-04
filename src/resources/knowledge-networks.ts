@@ -116,6 +116,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+/** A schema read that answered but cannot back the integrity comparison. */
+class IntegrityReadError extends Error {}
+
 /**
  * List every object type with its `data_properties`. The list endpoint returns
  * summaries without them (and `snapshotObjectTypes` would read that as "no
@@ -137,14 +140,22 @@ async function listObjectTypesWithDetails(
       if (!isRecord(entry) || Array.isArray(entry.data_properties)) continue;
       const id = entry.id;
       if (typeof id !== "string" || !id) continue; // snapshotObjectTypes rejects it
-      const payload = await getSchemaItem(ctx, knId, "object-types", id, { branch });
+      let payload: unknown;
+      try {
+        payload = await getSchemaItem(ctx, knId, "object-types", id, { branch });
+      } catch (error) {
+        // Deleted between the listing and this read: nothing of it to compare.
+        if (error instanceof HttpError && error.status === 404 && !error.gateway) {
+          entries[i] = undefined;
+          continue;
+        }
+        throw error;
+      }
       const candidates =
         isRecord(payload) && Array.isArray(payload.entries) ? payload.entries : [payload];
       const detail = candidates.find((c) => isRecord(c) && c.id === id);
       if (!isRecord(detail)) {
-        throw new InputError(
-          `Cannot verify BKN push integrity: object-type '${id}' detail is missing.`,
-        );
+        throw new IntegrityReadError(`object-type '${id}' detail is missing`);
       }
       // The backend omits an empty data_properties (`omitempty`), which the
       // snapshot reads as none; the detail read is authoritative either way.
@@ -154,7 +165,7 @@ async function listObjectTypesWithDetails(
   await Promise.all(
     Array.from({ length: Math.min(DETAIL_CONCURRENCY, entries.length) }, () => worker()),
   );
-  return { ...listing, entries };
+  return { ...listing, entries: entries.filter((e) => e !== undefined) };
 }
 
 export function kn(ctx: RequestContext) {
@@ -350,7 +361,12 @@ export function kn(ctx: RequestContext) {
             await listObjectTypesWithDetails(ctx, validation.networkId, branch),
           );
         } catch (error) {
-          if (error instanceof HttpError && (error.status === 401 || error.status === 403)) {
+          if (error instanceof IntegrityReadError) {
+            // Not a gate either: the platform answered, just not usably.
+            warnings = [
+              `integrity not verified: cannot read object types on branch '${branch}' before push (${error.message})`,
+            ];
+          } else if (error instanceof HttpError && (error.status === 401 || error.status === 403)) {
             // The caller may be allowed to import without reading the schema.
             // The check is a safeguard, not a gate: say it was skipped and upload.
             warnings = [

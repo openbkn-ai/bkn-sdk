@@ -219,6 +219,82 @@ describe("bkn push integrity verification", () => {
     );
   });
 
+  it("keeps verifying when an object type is deleted between list and detail reads", async () => {
+    // A 404 on one detail read used to fall into the "new network" branch and
+    // silently skip the whole check.
+    let uploaded = false;
+    const fetch = vi.fn(async (url: string | URL) => {
+      const parsed = new URL(String(url));
+      if (parsed.pathname === listPath) {
+        return Response.json({
+          entries: uploaded
+            ? [{ id: "ot", data_source: { type: "resource", id: "r1" } }]
+            : [
+                { id: "ot", data_source: { type: "resource", id: "r1" } },
+                { id: "gone", data_source: { type: "resource", id: "r2" } },
+              ],
+        });
+      }
+      if (parsed.pathname === `${listPath}/gone`) {
+        return Response.json({ error: "not found" }, { status: 404 });
+      }
+      if (parsed.pathname === `${listPath}/ot`) {
+        return Response.json({
+          id: "ot",
+          data_source: { type: "resource", id: "r1" },
+          data_properties: [
+            { name: "title", condition_operations: uploaded ? ["=="] : ["==", "match"] },
+          ],
+        });
+      }
+      if (parsed.pathname === uploadPath) {
+        uploaded = true;
+        return Response.json({ id: "kn1" });
+      }
+      throw new Error(`unexpected request ${parsed.pathname}`);
+    });
+    vi.stubGlobal("fetch", fetch);
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stderr: string[] = [];
+    vi.spyOn(process.stderr, "write").mockImplementation((part) => {
+      stderr.push(String(part));
+      return true;
+    });
+
+    await cli(packageDir());
+
+    const out = stderr.join("");
+    expect(out).toContain("property 'title' lost condition_operations after push: match");
+    expect(out).not.toContain("gone");
+  });
+
+  it("warns and uploads when a pre-push detail read returns no matching entry", async () => {
+    const fetch = vi.fn(async (url: string | URL) => {
+      const parsed = new URL(String(url));
+      if (parsed.pathname === listPath) return Response.json({ entries: [{ id: "ot" }] });
+      if (parsed.pathname === `${listPath}/ot`) return Response.json({ entries: [] });
+      if (parsed.pathname === uploadPath) return Response.json({ id: "kn1" });
+      throw new Error(`unexpected request ${parsed.pathname}`);
+    });
+    vi.stubGlobal("fetch", fetch);
+    const stdout: string[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation((part) => {
+      stdout.push(String(part));
+      return true;
+    });
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    await cli(packageDir());
+
+    expect(fetch.mock.calls.map(([url]) => new URL(String(url)).pathname)).toContain(uploadPath);
+    expect(JSON.parse(stdout.join(""))).toMatchObject({
+      id: "kn1",
+      integrity_warnings: [
+        expect.stringMatching(/^integrity not verified: .*object-type 'ot' detail is missing/),
+      ],
+    });
+  });
+
   it("keeps an unchanged push response free of integrity warnings", async () => {
     const fetch = server(Response.json(before), Response.json(before));
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
