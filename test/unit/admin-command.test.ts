@@ -42,52 +42,63 @@ afterEach(() => {
 });
 
 describe("admin audit", () => {
-  it("list maps every flag onto the audit-logs query (previously always refused)", async () => {
-    const fetchMock = mockFetch({ logs: [], total: 0 });
+  const page = { data: [], next_cursor: null, partial: false };
+
+  it("list maps every flag onto the observability logs query", async () => {
+    const fetchMock = mockFetch(page);
     await run([
       "audit",
       "list",
+      "--category",
+      "audit.security",
+      "--q",
+      "grant",
       "--actor-id",
       "u-1",
+      "--actor",
+      "alice",
       "--request-id",
       "req-1",
-      "--resource",
-      "users",
       "--action",
       "create",
+      "--target-type",
+      "user",
       "--target-id",
       "t-1",
-      "--failed-only",
+      "--outcome",
+      "denied,failure",
       "--from",
       "2026-09-01T00:00:00Z",
       "--to",
       "2026-09-02T00:00:00Z",
-      "--before-id",
-      "a-9",
-      "--offset",
-      "20",
+      "--page",
+      "2",
       "--limit",
       "100",
     ]);
     const url = urlOf(fetchMock);
-    expect(url.pathname).toBe("/api/safe/v1/admin/audit-logs");
+    expect(url.pathname).toBe("/api/observability/v1/logs");
+    expect(url.searchParams.getAll("categories")).toEqual(["audit.security"]);
+    expect(url.searchParams.getAll("outcomes")).toEqual(["denied", "failure"]);
+    url.searchParams.delete("categories");
+    url.searchParams.delete("outcomes");
     expect(Object.fromEntries(url.searchParams)).toEqual({
+      q: "grant",
       actor_id: "u-1",
+      actor: "alice",
       request_id: "req-1",
-      resource: "users",
       action: "create",
+      target_type: "user",
       target_id: "t-1",
-      failed_only: "true",
-      from: "2026-09-01T00:00:00Z",
-      to: "2026-09-02T00:00:00Z",
-      before_id: "a-9",
-      offset: "20",
+      time_from: "2026-09-01T00:00:00Z",
+      time_to: "2026-09-02T00:00:00Z",
+      page: "2",
       limit: "100",
     });
   });
 
-  it("list defaults to the CLI list limit and accepts --start/--end as aliases", async () => {
-    const fetchMock = mockFetch({ logs: [], total: 0 });
+  it("list defaults to both audit categories, the CLI limit, and accepts --start/--end", async () => {
+    const fetchMock = mockFetch(page);
     await run([
       "audit",
       "list",
@@ -96,34 +107,57 @@ describe("admin audit", () => {
       "--end",
       "2026-09-02T00:00:00Z",
     ]);
-    expect(Object.fromEntries(urlOf(fetchMock).searchParams)).toEqual({
-      from: "2026-09-01T00:00:00Z",
-      to: "2026-09-02T00:00:00Z",
-      limit: "30",
-    });
+    const url = urlOf(fetchMock);
+    expect(url.searchParams.getAll("categories")).toEqual(["audit.admin", "audit.security"]);
+    expect(url.searchParams.get("time_from")).toBe("2026-09-01T00:00:00Z");
+    expect(url.searchParams.get("time_to")).toBe("2026-09-02T00:00:00Z");
+    expect(url.searchParams.get("limit")).toBe("30");
   });
 
-  it("list refuses --limit above 500 without sending", async () => {
-    const fetchMock = mockFetch({ logs: [], total: 0 });
-    await expect(run(["audit", "list", "--limit", "501"])).rejects.toThrow(/between 0 and 500/);
+  it("--failed-only becomes outcomes=failure,denied (the server rejects failed_only)", async () => {
+    const fetchMock = mockFetch(page);
+    await run(["audit", "list", "--failed-only"]);
+    const url = urlOf(fetchMock);
+    expect(url.searchParams.getAll("outcomes")).toEqual(["failure", "denied"]);
+    expect(url.searchParams.has("failed_only")).toBe(false);
+    await expect(run(["audit", "list", "--failed-only", "--outcome", "success"])).rejects.toThrow(
+      /pass one/,
+    );
+  });
+
+  it("list refuses --limit outside 20..200 without sending", async () => {
+    const fetchMock = mockFetch(page);
+    await expect(run(["audit", "list", "--limit", "201"])).rejects.toThrow(/between 20 and 200/);
+    await expect(run(["audit", "list", "--limit", "10"])).rejects.toThrow(/between 20 and 200/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("list no longer offers the unmappable --user/--page/--size", () => {
+  it("list drops the retired --resource/--before-id/--offset flags", () => {
     const list = adminCommand()
       .commands.find((c) => c.name() === "audit")
       ?.commands.find((c) => c.name() === "list");
-    const visible = list?.options.filter((o) => !o.hidden).map((o) => o.long);
-    expect(visible).not.toEqual(expect.arrayContaining(["--user"]));
-    expect(visible).not.toEqual(expect.arrayContaining(["--page"]));
-    expect(visible).not.toEqual(expect.arrayContaining(["--size"]));
-    expect(list?.description()).toMatch(/audit log entries/);
+    const visible = list?.options.filter((o) => !o.hidden).map((o) => o.long) ?? [];
+    for (const gone of ["--resource", "--before-id", "--offset"]) {
+      expect(visible).not.toContain(gone);
+    }
+    expect(visible).toEqual(expect.arrayContaining(["--target-type", "--page", "--cursor"]));
+    expect(list?.description()).toMatch(/audit records/);
   });
 
-  it("get reads one entry by id", async () => {
-    const fetchMock = mockFetch({ id: "a-1" });
+  it("get reads one record by event id from the logs API", async () => {
+    const fetchMock = mockFetch({ data: { event_id: "a-1", log_category: "audit.admin" } });
     await run(["audit", "get", "a-1"]);
-    expect(urlOf(fetchMock).pathname).toBe("/api/safe/v1/admin/audit-logs/a-1");
+    expect(urlOf(fetchMock).pathname).toBe("/api/observability/v1/logs/a-1");
+  });
+
+  it("never calls the retired /api/safe/v1/admin/audit-logs reader", async () => {
+    const list = mockFetch(page);
+    await run(["audit", "list"]);
+    const get = mockFetch({ data: { event_id: "a-1", log_category: "audit.admin" } });
+    await run(["audit", "get", "a-1"]);
+    for (const fn of [list, get]) {
+      expect(String(fn.mock.calls[0]?.[0])).not.toContain("/api/safe/v1/admin/audit-logs");
+    }
   });
 });
 

@@ -22,7 +22,7 @@ const PATH = "/api/agent-operator-integration/v1/tool-box";
 
 const IMPEX = "/api/agent-operator-integration/v1/impex";
 /** The impex component types (`ComponentType`); any other value is a 400. */
-export const IMPEX_TYPES = ["toolbox", "mcp", "operator"] as const;
+export const IMPEX_TYPES = ["toolbox", "mcp"] as const;
 export type ImpexType = (typeof IMPEX_TYPES)[number];
 /**
  * What an import does with a component that already exists: `create` refuses
@@ -31,7 +31,7 @@ export type ImpexType = (typeof IMPEX_TYPES)[number];
  */
 export type ImpexMode = "create" | "upsert";
 
-/** Export a toolbox/mcp/operator config as raw `.adp` bytes (GET impex/export). */
+/** Export a toolbox/mcp config as raw `.adp` bytes (GET impex/export). */
 export async function exportConfig(
   ctx: RequestContext,
   id: string,

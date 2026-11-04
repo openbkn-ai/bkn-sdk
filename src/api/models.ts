@@ -101,6 +101,21 @@ export interface SmallModelRef {
   name: string;
 }
 
+const SMALL_MODEL_ID_NOT_EXIST = "ModelFactory.ExternalSmallModel.GetInfo.IdNotExist";
+
+function isSmallModelIdNotExist(body: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    return (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      (parsed as { code?: unknown }).code === SMALL_MODEL_ID_NOT_EXIST
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Resolve a small-model reference to *both* forms.
  *
@@ -130,6 +145,11 @@ export async function resolveSmallModel(
   // wearing the status of the first: nothing behind the route saw the id.
   const detail = (await getSmallModel(ctx, model).catch((e: unknown) => {
     if (e instanceof HttpError && e.status === 404 && !e.gateway) return undefined;
+    // mf-model-manager answers an unknown small-model id with HTTP 400 and this
+    // code, not 404; the code (not the bare 400) is what marks "no such id".
+    if (e instanceof HttpError && e.status === 400 && isSmallModelIdNotExist(e.body)) {
+      return undefined;
+    }
     throw e;
   })) as { model_name?: string; data?: { model_name?: string } } | undefined;
   const name = detail?.model_name ?? detail?.data?.model_name;

@@ -355,10 +355,10 @@ export function bknCommand(): Command {
         );
       });
       g.command("update <kn-id> <id>")
-        .description(`Update ${name} (--body / --body-file); the body carries base_version`)
+        .description(`Update ${name} (--body / --body-file)`)
         .option(
           "--body <json>",
-          "body JSON, including base_version from `get` — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
+          "body JSON (full replacement; read it first with `get`) — docs: https://openbkn-ai.github.io/bkn-foundry/ (bkn-backend)",
         )
         .option("--body-file <path>", "read body JSON from a file")
         .option("--branch <b>", "branch (default: main)")
