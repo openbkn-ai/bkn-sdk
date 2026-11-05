@@ -48,9 +48,11 @@ jobs:
       - run: npm publish --access public --tag ${{ steps.tag.outputs.dist }}
 
   # The Python OSDK (`python/`, distribution `bkn-osdk`) ships from the same tag.
-  # Its own job, so a PyPI problem never holds back the npm release. The version
-  # is the tag's release in PEP 440 spelling (v0.2.1-rc.2 -> 0.2.1rc2), which
-  # scripts/check-version.mjs enforces against python/pyproject.toml.
+  # Its own job, so a failed build or upload here never holds back the npm
+  # release. The version check is shared on purpose: one tag names one release,
+  # so both jobs refuse a tag whose python/pyproject.toml version is not its
+  # PEP 440 spelling (v0.2.1-rc.2 -> 0.2.1rc2), and a prerelease label with no
+  # PEP 440 form (anything but a/alpha/b/beta/rc/dev) is refused for npm too.
   pypi:
     runs-on: ubuntu-latest
     environment: pypi
@@ -83,6 +85,8 @@ jobs:
           python -m build
       # Install the wheel that is about to ship and read back its version, so
       # what lands on PyPI is what `pip install bkn-osdk==<version>` will import.
+      # `-I` keeps python/ off sys.path: the import must come from the wheel,
+      # not the source tree this step runs in.
       - name: Smoke-test the built wheel
         working-directory: python
         shell: bash
@@ -91,7 +95,7 @@ jobs:
           EXPECTED="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)"
           python -m venv /tmp/smoke
           /tmp/smoke/bin/pip install dist/*.whl
-          ACTUAL="$(/tmp/smoke/bin/python -c 'import bkn_osdk; print(bkn_osdk.__version__)')"
+          ACTUAL="$(/tmp/smoke/bin/python -I -c 'import bkn_osdk; print(bkn_osdk.__version__)')"
           if [[ "$ACTUAL" != "$EXPECTED" ]]; then
             echo "::error::built wheel reports $ACTUAL, expected $EXPECTED"
             exit 1
