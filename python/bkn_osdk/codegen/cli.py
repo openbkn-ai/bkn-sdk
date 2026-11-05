@@ -33,7 +33,7 @@ from ..config import Context, session
 from ..errors import BknError
 from ..schema import KnSchema, fetch_schema, fingerprint
 from .diff import Delta, PackageView, compare, view_of_schema
-from .emit import FORMAT_VERSION, GenOptions, generate
+from .emit import DEFAULT_RUNTIME_REQUIREMENT, FORMAT_VERSION, GenOptions, generate
 
 __all__ = ["main"]
 
@@ -82,7 +82,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     generate.add_argument(
         "--runtime-requirement",
-        default=">=0.1,<0.2",
+        default=DEFAULT_RUNTIME_REQUIREMENT,
         help="version range of bkn-osdk the emitted package will declare",
     )
 

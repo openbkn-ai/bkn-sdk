@@ -27,17 +27,24 @@ bkn_osdk.call_tool(ctx, kn_id, "describe_resource", {"resource_id": "…", ...})
 
 ## 安装
 
-未发 PyPI。包在本仓库的子目录里，pip 可以直接寻址：
+从 PyPI 安装。版本号跟随发布它的 SDK 版本，写成 PEP 440 形式（`v0.2.1-rc.2` 即 `0.2.1rc2`）；预发布版本须钉版本号或加 `--pre`，pip 才会装：
 
 ```bash
-pip install "bkn-osdk @ git+https://github.com/openbkn-ai/bkn-sdk@<sha>#subdirectory=python"
+pip install "bkn-osdk==0.2.1"
 ```
 
 唯一依赖是 `httpx`，所以镜像构建就一行：
 
 ```dockerfile
-RUN pip install --no-cache-dir \
-    "bkn-osdk @ git+https://github.com/openbkn-ai/bkn-sdk@<sha>#subdirectory=python"
+RUN pip install --no-cache-dir "bkn-osdk==0.2.1"
+```
+
+生成的业务包会声明它所针对的运行时小版本线（`REQUIRES_RUNTIME`，默认 `>=0.2,<0.3`），不在范围内就拒绝导入。早先 `0.1.0` 运行时生成的包声明的是 `>=0.1,<0.2`，升级时需用本运行时重新生成。
+
+要装尚未发布的 commit，包在本仓库的子目录里，pip 可以直接寻址：
+
+```bash
+pip install "bkn-osdk @ git+https://github.com/openbkn-ai/bkn-sdk@<sha>#subdirectory=python"
 ```
 
 **钉 commit，不要钉分支。** 直接 URL 依赖没有索引，没人替你解析"最新版"，换版本就得改这一行 —— 这正是它的价值。分支名看着能省掉这次修改，其实不能：pip 的 wheel 缓存按 URL 命中，所以对同一分支重新构建可能装回它已有的旧构建，报成功、装的是上一个 commit。装完的 `direct_url.json` 里记着实际落地的是哪个 commit。
