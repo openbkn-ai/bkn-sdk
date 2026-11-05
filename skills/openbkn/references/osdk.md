@@ -35,9 +35,11 @@ bkn.Order.where(bkn.Order.total_amount > 100).order_by(bkn.Order.created_at.desc
 ## 装 + 指平台
 
 ```bash
+pip install "bkn-osdk==0.2.1"   # PyPI；版本跟 SDK 走，rc 写成 0.2.1rc2（须钉版本或 --pre）
+# 未发布的 commit：git 子目录；没有 git 的环境改用归档地址，fragment 不变：
 pip install "bkn-osdk @ git+https://github.com/openbkn-ai/bkn-sdk@<sha>#subdirectory=python"
-# 没有 git 的环境改用归档地址，fragment 不变：
 pip install "bkn-osdk @ https://github.com/openbkn-ai/bkn-sdk/archive/<sha>.zip#subdirectory=python"
+# 0.1.0 运行时生成的包声明 >=0.1,<0.2，在 0.2.x 下拒绝导入：升级后重新 generate
 
 openbkn -k auth login https://your-platform -u <user> -p <pass>   # 凭据 store 归 CLI 管
 bkn-osdk generate <kn-id> --out ./bkn                             # 生成本体层

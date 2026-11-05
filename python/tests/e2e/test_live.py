@@ -460,7 +460,7 @@ def test_a_package_that_no_longer_matches_the_network_is_caught(
     from bkn_osdk import meta as meta_module
 
     meta_module.validate_package(
-        "live_bkn", 2, ">=0.1,<0.2", kn_id=kn_id, branch="main", fingerprint="0" * 64
+        "live_bkn", 2, ">=0.2,<0.3", kn_id=kn_id, branch="main", fingerprint="0" * 64
     )
 
     with pytest.raises(SchemaDriftError):

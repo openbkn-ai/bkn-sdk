@@ -219,13 +219,13 @@ def clean_registry() -> Iterator[None]:
 
 def register(fingerprint_value: str) -> None:
     meta_module.validate_package(
-        "bkn", 2, ">=0.1,<0.2", kn_id=KN, branch="main", fingerprint=fingerprint_value
+        "bkn", 2, ">=0.2,<0.3", kn_id=KN, branch="main", fingerprint=fingerprint_value
     )
 
 
 def test_legacy_generated_metric_package_requires_regeneration() -> None:
     with pytest.raises(FormatVersionError, match="Regenerate"):
-        meta_module.validate_package("legacy_bkn", 1, ">=0.1,<0.2")
+        meta_module.validate_package("legacy_bkn", 1, ">=0.2,<0.3")
 
 
 def serve_schema(monkeypatch: pytest.MonkeyPatch, schema: Any) -> list[str]:
@@ -331,10 +331,10 @@ def test_two_branches_of_one_network_are_both_checked(
     network in one process; checking only whichever registered first would
     compare against the wrong one."""
     meta_module.validate_package(
-        "bkn", 2, ">=0.1,<0.2", kn_id=KN, branch="main", fingerprint=fingerprint(DEMO_SCHEMA)
+        "bkn", 2, ">=0.2,<0.3", kn_id=KN, branch="main", fingerprint=fingerprint(DEMO_SCHEMA)
     )
     meta_module.validate_package(
-        "bkn_release", 2, ">=0.1,<0.2", kn_id=KN, branch="release", fingerprint="a3f9c2e1" * 8
+        "bkn_release", 2, ">=0.2,<0.3", kn_id=KN, branch="release", fingerprint="a3f9c2e1" * 8
     )
     calls = serve_schema(monkeypatch, DEMO_SCHEMA)
     checked = replace(CONTEXT, check_schema=True)
