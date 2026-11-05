@@ -105,10 +105,11 @@ bkn/
   _meta.py           # fingerprint, format version, runtime range
 ```
 
-Commit the generated package, pin `bkn-osdk~=0.1`, and run `bkn-osdk check` in
-CI: it compares the live schema against the fingerprint and exits non-zero on
-drift, classifying it as *additive* (new object type or property — existing code
-keeps working) or *breaking* (removed, retyped, or rekeyed).
+Commit the generated package, pin `bkn-osdk>=0.2,<0.3` (the range the package
+declares), and run `bkn-osdk check` in CI: it compares the live schema against
+the fingerprint and exits non-zero on drift, classifying it as *additive* (new
+object type or property — existing code keeps working) or *breaking* (removed,
+retyped, or rekeyed).
 
 Object-type catalogues may contain summaries. Generation fetches missing object
 properties from each public detail endpoint using the same caller and branch;
