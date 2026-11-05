@@ -19,8 +19,11 @@ Three commands before the first script, in this order.
 **1. Install the SDK.** Python 3.10 or newer; its only dependency is `httpx`.
 
 ```bash
-pip install "bkn-osdk @ git+https://github.com/openbkn-ai/bkn-sdk@<sha>#subdirectory=python"
+pip install "bkn-osdk==0.2.1"
 ```
+
+An unreleased commit installs from this repository's `python/` subdirectory
+instead: `pip install "bkn-osdk @ git+https://github.com/openbkn-ai/bkn-sdk@<sha>#subdirectory=python"`.
 
 **2. Log in to a platform.** This writes `~/.bkn`, which every script reads —
 nothing below names a platform or a token. `-k` is for the self-signed

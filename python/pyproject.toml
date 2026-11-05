@@ -4,8 +4,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bkn-osdk"
-version = "0.1.0"
+version = "0.2.1"
 description = "Generated, read-only ontology SDK for BKN knowledge networks"
+readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 authors = [{ name = "OpenBKN" }]
@@ -23,6 +24,11 @@ classifiers = [
 # nothing else, so a consumer's dependency tree stays this short.
 dependencies = ["httpx>=0.27"]
 
+[project.urls]
+Homepage = "https://github.com/openbkn-ai/bkn-sdk"
+Source = "https://github.com/openbkn-ai/bkn-sdk/tree/main/python"
+Issues = "https://github.com/openbkn-ai/bkn-sdk/issues"
+
 [project.optional-dependencies]
 # `pyyaml` is a generation-time dependency only: `scripts/capture_kn_contract.py`
 # reads foundry's OpenAPI and freezes it as JSON, so the runtime keeps httpx alone.
@@ -33,6 +39,11 @@ bkn-osdk = "bkn_osdk.codegen.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["bkn_osdk"]
+
+# Only what a source build and its tests need; a local virtualenv or cache in
+# python/ must never ride along into the published sdist.
+[tool.hatch.build.targets.sdist]
+include = ["/bkn_osdk", "/tests", "/README.md", "/README.zh.md", "/pyproject.toml"]
 
 [tool.ruff]
 line-length = 100
