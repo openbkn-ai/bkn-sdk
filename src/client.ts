@@ -7,6 +7,7 @@ import { resolveContext } from "./config/resolve.js";
 import { admin } from "./resources/admin.js";
 import { appKeys } from "./resources/app-keys.js";
 import { context } from "./resources/context-loader.js";
+import { evals } from "./resources/evals.js";
 import { functions } from "./resources/functions.js";
 import { kn } from "./resources/knowledge-networks.js";
 import { mcp } from "./resources/mcp.js";
@@ -39,6 +40,7 @@ export interface BknClient {
   readonly resource: ReturnType<typeof resources>;
   readonly context: ReturnType<typeof context>;
   readonly models: ReturnType<typeof models>;
+  readonly evals: ReturnType<typeof evals>;
   readonly functions: ReturnType<typeof functions>;
   readonly mcp: ReturnType<typeof mcp>;
   readonly skills: ReturnType<typeof skills>;
@@ -96,6 +98,7 @@ function clientForContext(ctx: RequestContext): BknClient {
     context: context(ctx),
     models: models(ctx),
     functions: functions(ctx),
+    evals: evals(ctx),
     mcp: mcp(ctx),
     skills: skills(ctx),
     toolboxes: toolboxes(ctx),

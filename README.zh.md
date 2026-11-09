@@ -222,3 +222,15 @@ npx skills add openbkn-ai/bkn-sdk@create-skill -g -y   # 编写 Skill 包 / 函�
 
 BKN SDK 是 OpenBKN 项目的一部分，采用 **Apache License, Version 2.0**。
 见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。
+
+## 质量评测（专业版及以上）
+
+`client.evals.forNetwork(knId).request(operation, input, options)` 提供当前质量评测
+管理接口，操作名见导出的 `EVAL_OPERATIONS`，覆盖用例、测试集、规则配置与应用、
+日/周/月运行计划、结果及对比。动态业务响应为 `unknown`，由调用方按需校验。
+
+`client.evals.participant` 提供 `listSuites`、`startRun`、`nextCase`、`submitResult`、
+`getProgress` 五个外部参评调用；参评端不读取管理定义或标准答案，也不自行判分。
+通过既有知识网络 MCP 调用时，使用其发现的同名 `bkn_eval_*` 工具即可。
+这与 Trace 的 `evalSetBuild` 样本整理功能相互独立。完整流程见
+[Eval 接入说明](docs/product-specs/eval.md)。

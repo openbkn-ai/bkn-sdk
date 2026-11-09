@@ -48,4 +48,31 @@ describe("--dry-run preview", () => {
     });
     expect(req.body).toEqual({ items: [{ name: "a", password: "<redacted>" }] });
   });
+  it("redacts Eval run and task credentials in a participant RPC preview", () => {
+    const req = preview({
+      method: "POST",
+      url: "https://x/api/bkn-backend/v1/eval-mcp/call",
+      body: JSON.stringify({
+        name: "bkn_eval_submit_result",
+        arguments: {
+          run_id: "run-1",
+          run_token: "private-eval-run-token",
+          task_token: "private-eval-task-token",
+          answer: "Business answer",
+          structured_output: { leadtime_days: 14 },
+        },
+      }),
+    });
+    expect(req.body).toEqual({
+      name: "bkn_eval_submit_result",
+      arguments: {
+        run_id: "run-1",
+        run_token: "<redacted>",
+        task_token: "<redacted>",
+        answer: "Business answer",
+        structured_output: { leadtime_days: 14 },
+      },
+    });
+    expect(JSON.stringify(req)).not.toContain("private-eval");
+  });
 });
