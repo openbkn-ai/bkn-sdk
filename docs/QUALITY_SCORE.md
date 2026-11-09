@@ -33,6 +33,12 @@ Update this table as each signal changes (e.g. live-parity count as commands are
 
 ## CLI reliability regression coverage
 
+- `test/unit/resources.test.ts` and `test/unit/vega-command.test.ts` cover the
+  `logicalType` / `--logical-type` and
+  `logicalViewDefinition` / `--logical-view-definition` renames: create and update
+  send `logical_type` and `logical_view_definition`, omit the old wire fields, and preserve existing
+  definitions on unrelated updates. Creation rejects a missing or null definition.
+
 - Object metric response tests preserve `is_approximate` on the overall result; resource aggregation options expose `allowApproximate` and map it to the wire field `allow_approximate`. Resource tests cover omission, explicit true/false, alias preservation, and omission of aggregation options from cursor continuations.
 
 - `test/unit/row-filter.test.ts` covers omitted user explanation flags, legacy

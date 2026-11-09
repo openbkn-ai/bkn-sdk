@@ -305,7 +305,7 @@ describe("vega resource writes", () => {
       "view",
       "--category",
       "logical_view",
-      "--logic-type",
+      "--logical-type",
       "derived",
     ];
     await expect(cli().parseAsync(args, { from: "user" })).rejects.toThrow("--schema-definition");
@@ -314,7 +314,7 @@ describe("vega resource writes", () => {
         [...args, "--schema-definition", '[{"name":"id","original_name":"ID","type":"integer"}]'],
         { from: "user" },
       ),
-    ).rejects.toThrow("--logic-definition");
+    ).rejects.toThrow("--logical-view-definition");
     await expect(
       cli().parseAsync(
         [...args, "--schema-definition", '[{"name":"id","original_name":42,"type":"integer"}]'],
@@ -343,11 +343,11 @@ describe("vega resource writes", () => {
         "orders_view",
         "--category",
         "logical_view",
-        "--logic-type",
+        "--logical-type",
         "derived",
         "--schema-definition",
         '[{"name":"order_id","original_name":"ID","type":"integer"}]',
-        "--logic-definition",
+        "--logical-view-definition",
         '{"source_resource_id":"source-1"}',
       ],
       { from: "user" },
@@ -355,8 +355,10 @@ describe("vega resource writes", () => {
 
     const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
     expect(body.category).toBe("logical_view");
-    expect(body.logic_definition).toEqual({ source_resource_id: "source-1" });
-    expect(body.logic_type).toBe("derived");
+    expect(body.logical_view_definition).toEqual({ source_resource_id: "source-1" });
+    expect(body).not.toHaveProperty("logic_definition");
+    expect(body).not.toHaveProperty("logic_type");
+    expect(body.logical_type).toBe("derived");
     expect(body.schema_definition).toEqual([
       { name: "order_id", original_name: "ID", type: "integer" },
     ]);
@@ -442,6 +444,51 @@ describe("vega resource writes", () => {
     const body = JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string);
     expect(body.index_config).toEqual({ default_keyword_ignore_above: 256 });
     expect(body.expected_update_time).toBe(2);
+  });
+
+  it("updates a logical view definition through the renamed option", async () => {
+    const current = {
+      id: "r-1",
+      catalog_id: "c-1",
+      name: "orders_view",
+      category: "logical_view",
+      status: "active",
+      enabled: true,
+      source_identifier: "orders_view",
+      logical_type: "derived",
+      logical_view_definition: { source_resource_id: "source-1" },
+      creator: { id: "u-1", type: "user" },
+      create_time: 1,
+      updater: { id: "u-1", type: "user" },
+      update_time: 2,
+    };
+    const fetchMock = vi.fn(async (_input: string, init?: RequestInit) =>
+      init?.method === "PUT"
+        ? new Response(null, { status: 204 })
+        : new Response(JSON.stringify({ entries: [current] }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        ...cliBase,
+        "resource",
+        "update",
+        "r-1",
+        "--logical-view-definition",
+        '{"source_resource_id":"source-2"}',
+      ],
+      { from: "user" },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const body = JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string);
+    expect(body.logical_view_definition).toEqual({ source_resource_id: "source-2" });
+    expect(body.logical_type).toBe("derived");
+    expect(body.expected_update_time).toBe(2);
+    expect(body).not.toHaveProperty("logic_definition");
+    expect(body).not.toHaveProperty("logic_type");
   });
 
   it("deletes multiple resources", async () => {

@@ -86,7 +86,7 @@ describe("listResources", () => {
     expectTypeOf<ResourceSummary["index_config"]>().toEqualTypeOf<unknown>();
     expectTypeOf<ResourceSummary["row_count"]>().toEqualTypeOf<unknown>();
     expectTypeOf<ResourceSummary["estimated_row_count"]>().toEqualTypeOf<unknown>();
-    expectTypeOf<ResourceSummary["logic_definition"]>().toEqualTypeOf<unknown>();
+    expectTypeOf<ResourceSummary["logical_view_definition"]>().toEqualTypeOf<unknown>();
 
     mockFetch({
       entries: [
@@ -164,12 +164,16 @@ describe("listResources", () => {
 
     mockFetch({
       entries: [
-        resourceFixture({ category: "warehouse", status: "archived", logic_type: "materialized" }),
+        resourceFixture({
+          category: "warehouse",
+          status: "archived",
+          logical_type: "materialized",
+        }),
       ],
       total_count: 1,
     });
     await expect(listResources(ctx)).resolves.toMatchObject({
-      entries: [{ category: "warehouse", status: "archived", logic_type: "materialized" }],
+      entries: [{ category: "warehouse", status: "archived", logical_type: "materialized" }],
     });
 
     mockFetch({ entries: [resourceFixture({ local_status: "unknown" })], total_count: 1 });
@@ -265,13 +269,13 @@ describe("listResources", () => {
 });
 
 describe("updateResource", () => {
-  it("preserves logic_type on a logical view PUT", async () => {
+  it("preserves logical_type on a logical view PUT", async () => {
     const f = mockFetch({
       entries: [
         resourceFixture({
           category: "logical_view",
-          logic_type: "derived",
-          logic_definition: { source_resource_id: "source-1" },
+          logical_type: "derived",
+          logical_view_definition: { source_resource_id: "source-1" },
           schema_definition: [{ name: "alias", original_name: "ID", type: "string" }],
         }),
       ],
@@ -279,8 +283,33 @@ describe("updateResource", () => {
     await updateResource(ctx, "r-1", { name: "renamed" });
     const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
     const body = JSON.parse(calls[1]?.[1].body as string);
-    expect(body.logic_type).toBe("derived");
-    expect(body.logic_definition).toEqual({ source_resource_id: "source-1" });
+    expect(body.logical_type).toBe("derived");
+    expect(body.logical_view_definition).toEqual({ source_resource_id: "source-1" });
+    expect(body).not.toHaveProperty("logic_definition");
+    expect(body).not.toHaveProperty("logic_type");
+  });
+
+  it("replaces the logical view definition using the new public option", async () => {
+    const f = mockFetch({
+      entries: [
+        resourceFixture({
+          category: "logical_view",
+          logical_type: "derived",
+          logical_view_definition: { source_resource_id: "source-1" },
+        }),
+      ],
+    });
+    const definition = {
+      source_resource_id: "source-2",
+      filter_condition: { field: "active", operation: "eq", value: false },
+    };
+    await updateResource(ctx, "r-1", { logicalViewDefinition: definition });
+    const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+    const body = JSON.parse(calls[1]?.[1].body as string);
+    expect(body.logical_view_definition).toEqual(definition);
+    expect(body.logical_type).toBe("derived");
+    expect(body).not.toHaveProperty("logic_definition");
+    expect(body).not.toHaveProperty("logic_type");
   });
 
   it("merges required resource fields before PUT update", async () => {
@@ -455,8 +484,8 @@ describe("typed Resource and document APIs", () => {
       catalogId: "c-1",
       name: "view",
       category: "logical_view",
-      logicType: "derived",
-      logicDefinition: { source_resource_id: "source-1" },
+      logicalType: "derived",
+      logicalViewDefinition: { source_resource_id: "source-1" },
       schemaDefinition: [{ name: "id", original_name: "ID", type: "integer" }],
     };
     await expect(
@@ -464,14 +493,22 @@ describe("typed Resource and document APIs", () => {
         catalogId: "c-1",
         name: "view",
         category: "logical_view",
-        logicDefinition: { source_resource_id: "source-1" },
+        logicalViewDefinition: { source_resource_id: "source-1" },
       } as unknown as CreateResourceRequest),
-    ).rejects.toThrow("logicType must be derived");
+    ).rejects.toThrow("logicalType must be derived");
     await expect(createResource(ctx, { ...valid, schemaDefinition: [] })).rejects.toThrow(
       "non-empty schemaDefinition",
     );
+    for (const definition of [undefined, null]) {
+      await expect(
+        createResource(ctx, {
+          ...valid,
+          logicalViewDefinition: definition,
+        } as unknown as CreateResourceRequest),
+      ).rejects.toThrow("logicalViewDefinition.source_resource_id is required");
+    }
     await expect(
-      createResource(ctx, { ...valid, logicDefinition: { source_resource_id: " " } }),
+      createResource(ctx, { ...valid, logicalViewDefinition: { source_resource_id: " " } }),
     ).rejects.toThrow("source_resource_id");
     await expect(
       createResource(ctx, {
@@ -486,10 +523,13 @@ describe("typed Resource and document APIs", () => {
 
     await expect(createResource(ctx, valid)).resolves.toEqual({ id: "view-1" });
     expect(JSON.parse(firstCall(fetchMock)[1].body as string)).toMatchObject({
-      logic_type: "derived",
-      logic_definition: { source_resource_id: "source-1" },
+      logical_type: "derived",
+      logical_view_definition: { source_resource_id: "source-1" },
       schema_definition: [{ name: "id", original_name: "ID", type: "integer" }],
     });
+    expect(JSON.parse(firstCall(fetchMock)[1].body as string)).not.toHaveProperty(
+      "logic_definition",
+    );
   });
 
   it("creates a typed dataset resource", async () => {
@@ -516,15 +556,15 @@ describe("typed Resource and document APIs", () => {
     await expect(
       createResource(ctx, {
         ...dataset,
-        logicDefinition: { source_resource_id: "source-1" },
+        logicalViewDefinition: { source_resource_id: "source-1" },
       } as unknown as CreateResourceRequest),
-    ).rejects.toThrow("logicDefinition is only valid for logical_view");
+    ).rejects.toThrow("logicalViewDefinition is only valid for logical_view");
     await expect(
       createResource(ctx, {
         ...dataset,
-        logicType: "derived",
+        logicalType: "derived",
       } as unknown as CreateResourceRequest),
-    ).rejects.toThrow("logicType is only valid for logical_view");
+    ).rejects.toThrow("logicalType is only valid for logical_view");
     expect((fetchMock as unknown as { mock: { calls: CallArgs[] } }).mock.calls).toHaveLength(0);
   });
 
