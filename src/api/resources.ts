@@ -122,8 +122,8 @@ export interface ResourceLike {
   source_metadata?: Record<string, unknown>;
   schema_definition?: ResourceProperty[];
   index_config?: ResourceIndexConfig;
-  logic_definition?: unknown;
-  logic_type?: string;
+  logical_view_definition?: unknown;
+  logical_type?: string;
   update_time?: number;
 }
 
@@ -228,8 +228,8 @@ export const Resource = z
     column_count: z.number().optional(),
     row_count: z.union([z.number(), z.bigint()]).optional(),
     estimated_row_count: nullAsAbsent(z.union([z.number(), z.bigint()])),
-    logic_type: z.string().optional(),
-    logic_definition: z.unknown().optional(),
+    logical_type: z.string().optional(),
+    logical_view_definition: z.unknown().optional(),
     creator: ResourceAccountInfo,
     create_time: z.number(),
     updater: ResourceAccountInfo,
@@ -247,7 +247,7 @@ export const ResourceSummary = Resource.omit({
   schema_definition: true,
   index_config: true,
   estimated_row_count: true,
-  logic_definition: true,
+  logical_view_definition: true,
 });
 export type ResourceSummary = z.infer<typeof ResourceSummary>;
 
@@ -347,13 +347,13 @@ export type CreateResourceRequest =
       sourceIdentifier?: string;
       sourceMetadata?: Record<string, unknown>;
       schemaDefinition?: ResourceProperty[];
-      logicDefinition?: never;
-      logicType?: never;
+      logicalViewDefinition?: never;
+      logicalType?: never;
     })
   | (CreateResourceBase & {
       category: "logical_view";
-      logicType: "derived";
-      logicDefinition: { source_resource_id: string; filter_condition?: unknown };
+      logicalType: "derived";
+      logicalViewDefinition: { source_resource_id: string; filter_condition?: unknown };
       schemaDefinition: (ResourceProperty & { original_name: string; type: string })[];
       schema?: never;
       sourceIdentifier?: never;
@@ -365,8 +365,8 @@ export async function createResource(
   req: CreateResourceRequest,
 ): Promise<ResourceRef> {
   if (req.category === "logical_view") {
-    if (req.logicType !== "derived") {
-      throw new InputError("logicType must be derived for logical_view resources");
+    if (req.logicalType !== "derived") {
+      throw new InputError("logicalType must be derived for logical_view resources");
     }
     if (
       req.schema !== undefined ||
@@ -378,14 +378,14 @@ export async function createResource(
       );
     }
     if (
-      !req.logicDefinition ||
-      typeof req.logicDefinition !== "object" ||
-      Array.isArray(req.logicDefinition) ||
-      typeof req.logicDefinition.source_resource_id !== "string" ||
-      !req.logicDefinition.source_resource_id.trim()
+      !req.logicalViewDefinition ||
+      typeof req.logicalViewDefinition !== "object" ||
+      Array.isArray(req.logicalViewDefinition) ||
+      typeof req.logicalViewDefinition.source_resource_id !== "string" ||
+      !req.logicalViewDefinition.source_resource_id.trim()
     ) {
       throw new InputError(
-        "logicDefinition.source_resource_id is required for logical_view resources",
+        "logicalViewDefinition.source_resource_id is required for logical_view resources",
       );
     }
     if (!Array.isArray(req.schemaDefinition) || req.schemaDefinition.length === 0) {
@@ -404,11 +404,11 @@ export async function createResource(
       }
     }
   } else {
-    if (req.logicDefinition !== undefined) {
-      throw new InputError("logicDefinition is only valid for logical_view resources");
+    if (req.logicalViewDefinition !== undefined) {
+      throw new InputError("logicalViewDefinition is only valid for logical_view resources");
     }
-    if (req.logicType !== undefined) {
-      throw new InputError("logicType is only valid for logical_view resources");
+    if (req.logicalType !== undefined) {
+      throw new InputError("logicalType is only valid for logical_view resources");
     }
   }
   const result = await createResourceRaw(ctx, {
@@ -424,8 +424,10 @@ export async function createResource(
     ...(req.sourceMetadata !== undefined ? { source_metadata: req.sourceMetadata } : {}),
     ...(req.schemaDefinition !== undefined ? { schema_definition: req.schemaDefinition } : {}),
     ...(req.indexConfig !== undefined ? { index_config: req.indexConfig } : {}),
-    ...(req.logicDefinition !== undefined ? { logic_definition: req.logicDefinition } : {}),
-    ...(req.logicType !== undefined ? { logic_type: req.logicType } : {}),
+    ...(req.logicalViewDefinition !== undefined
+      ? { logical_view_definition: req.logicalViewDefinition }
+      : {}),
+    ...(req.logicalType !== undefined ? { logical_type: req.logicalType } : {}),
   });
   return ResourceRef.parse(result);
 }
@@ -436,7 +438,7 @@ export interface UpdateResourceOptions {
   description?: string;
   schemaDefinition?: ResourceProperty[];
   indexConfig?: ResourceIndexConfig;
-  logicDefinition?: unknown;
+  logicalViewDefinition?: unknown;
   /** Optimistic-lock version from an earlier Resource `update_time`. */
   expectedUpdateTime?: number;
 }
@@ -485,8 +487,8 @@ function resourceUpdateBody(
       patch.schemaDefinition ?? current.schema_definition,
     ),
     index_config: patch.indexConfig === undefined ? current.index_config : patch.indexConfig,
-    logic_definition: patch.logicDefinition ?? current.logic_definition,
-    ...(current.category === "logical_view" ? { logic_type: current.logic_type } : {}),
+    logical_view_definition: patch.logicalViewDefinition ?? current.logical_view_definition,
+    ...(current.category === "logical_view" ? { logical_type: current.logical_type } : {}),
   };
   const expectedUpdateTime = patch.expectedUpdateTime ?? current.update_time;
   if (expectedUpdateTime !== undefined) {

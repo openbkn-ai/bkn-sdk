@@ -1041,30 +1041,30 @@ export function vegaCommand(): Command {
     .requiredOption("--catalog-id <id>", "catalog id")
     .requiredOption("--name <s>", "resource name")
     .requiredOption("--category <category>", "resource category: dataset | logical_view")
-    .option("--logic-type <type>", "logical view type: derived")
+    .option("--logical-type <type>", "logical view type: derived")
     .option("--id <id>", "explicit resource id")
     .option("--tags <t1,t2>", "comma-separated tags")
     .option("--description <s>", "description")
     .option("--schema-definition <json>", "schema_definition JSON array")
     .option("--index-config <json>", "index_config JSON object")
-    .option("--logic-definition <json>", "derived logic_definition JSON object")
+    .option("--logical-view-definition <json>", "derived logical_view_definition JSON object")
     .action(async (opts, cmd: Command) => {
       if (opts.category !== "dataset" && opts.category !== "logical_view") {
         throw new InputError("--category must be dataset or logical_view");
       }
-      if (opts.category === "logical_view" && opts.logicType !== "derived") {
-        throw new InputError("--logic-type derived is required for logical_view");
+      if (opts.category === "logical_view" && opts.logicalType !== "derived") {
+        throw new InputError("--logical-type derived is required for logical_view");
       }
-      if (opts.category === "dataset" && opts.logicType !== undefined) {
-        throw new InputError("--logic-type is only valid for logical_view");
+      if (opts.category === "dataset" && opts.logicalType !== undefined) {
+        throw new InputError("--logical-type is only valid for logical_view");
       }
       const schemaDefinition =
         opts.schemaDefinition !== undefined
           ? parseResourceProperties(opts.schemaDefinition)
           : undefined;
-      const logicDefinition =
-        opts.logicDefinition !== undefined
-          ? parseJsonObject(opts.logicDefinition, "--logic-definition")
+      const logicalViewDefinition =
+        opts.logicalViewDefinition !== undefined
+          ? parseJsonObject(opts.logicalViewDefinition, "--logical-view-definition")
           : undefined;
       if (opts.category === "logical_view") {
         if (!schemaDefinition?.length) {
@@ -1081,13 +1081,15 @@ export function vegaCommand(): Command {
           }
         }
         if (
-          typeof logicDefinition?.source_resource_id !== "string" ||
-          !logicDefinition.source_resource_id.trim()
+          typeof logicalViewDefinition?.source_resource_id !== "string" ||
+          !logicalViewDefinition.source_resource_id.trim()
         ) {
-          throw new InputError("--logic-definition requires source_resource_id for logical_view");
+          throw new InputError(
+            "--logical-view-definition requires source_resource_id for logical_view",
+          );
         }
-      } else if (logicDefinition !== undefined) {
-        throw new InputError("--logic-definition is only valid for logical_view");
+      } else if (logicalViewDefinition !== undefined) {
+        throw new InputError("--logical-view-definition is only valid for logical_view");
       }
       const common = {
         id: opts.id,
@@ -1110,12 +1112,12 @@ export function vegaCommand(): Command {
             ? {
                 ...common,
                 category: "logical_view",
-                logicType: "derived",
+                logicalType: "derived",
                 schemaDefinition: schemaDefinition as (ResourceProperty & {
                   original_name: string;
                   type: string;
                 })[],
-                logicDefinition: logicDefinition as { source_resource_id: string },
+                logicalViewDefinition: logicalViewDefinition as { source_resource_id: string },
               }
             : {
                 ...common,
@@ -1134,7 +1136,10 @@ export function vegaCommand(): Command {
     .option("--description <s>", "description")
     .option("--schema-definition <json>", "replacement schema_definition JSON array")
     .option("--index-config <json>", "replacement index_config JSON object")
-    .option("--logic-definition <json>", "replacement derived logic_definition JSON object")
+    .option(
+      "--logical-view-definition <json>",
+      "replacement derived logical_view_definition JSON object",
+    )
     .option("--expected-update-time <ms>", "optimistic-lock update time", expectedUpdateTime)
     .action(async (id: string, opts, cmd: Command) => {
       const hasPatch = [
@@ -1143,7 +1148,7 @@ export function vegaCommand(): Command {
         opts.description,
         opts.schemaDefinition,
         opts.indexConfig,
-        opts.logicDefinition,
+        opts.logicalViewDefinition,
       ].some((value) => value !== undefined);
       if (!hasPatch) throw new InputError("provide at least one resource field to update");
       printJson(
@@ -1164,8 +1169,13 @@ export function vegaCommand(): Command {
                 ) as ResourceIndexConfig,
               }
             : {}),
-          ...(opts.logicDefinition !== undefined
-            ? { logicDefinition: parseJsonObject(opts.logicDefinition, "--logic-definition") }
+          ...(opts.logicalViewDefinition !== undefined
+            ? {
+                logicalViewDefinition: parseJsonObject(
+                  opts.logicalViewDefinition,
+                  "--logical-view-definition",
+                ),
+              }
             : {}),
           expectedUpdateTime: opts.expectedUpdateTime,
         }),
@@ -1475,7 +1485,7 @@ QUERYING DIRECTLY
   cursor paging, and --ignore-local-index to bypass a table's local index.
 
 CREATING A DERIVED LOGICAL VIEW
-  resource create --category logical_view requires --logic-type derived, a --logic-definition
+  resource create --category logical_view requires --logical-type derived, a --logical-view-definition
   object with source_resource_id, and a non-empty --schema-definition array. Each output
   field needs name (alias), original_name (source field), and type (matching the source).
   Source metadata, schema, and source identifier are generated by the server.
