@@ -1,4 +1,11 @@
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import {
+  configDir,
+  readVersionCheckCache,
+  writeVersionCheckCache,
+} from "../../src/config/store.js";
 import * as auth from "../../src/resources/auth.js";
 
 function jwt(claims: Record<string, unknown>): string {
@@ -235,5 +242,25 @@ describe("auth store round-trip", () => {
   it("stores a token whose sub is an ordinary opaque id", () => {
     const sub = "8f14e45f-ceea-467a-9575-4b0b6f3b1a2c";
     expect(auth.attachToken("https://demo.example.com", jwt({ sub })).userId).toBe(sub);
+  });
+});
+
+describe("platform config directory compatibility", () => {
+  it.each([
+    ["https://a.test", "aHR0cHM6Ly9hLnRlc3Q"],
+    ["https://ab.test", "aHR0cHM6Ly9hYi50ZXN0"],
+    ["https://abc.test", "aHR0cHM6Ly9hYmMudGVzdA"],
+    ["https://例子.测试/路径", "aHR0cHM6Ly_kvovlrZAu5rWL6K-VL-i3r-W-hA"],
+  ])("reads existing and writes new config under the unchanged key for %s", (url, key) => {
+    const directory = join(configDir(), "platforms", key);
+    mkdirSync(directory, { recursive: true });
+    const file = join(directory, "version-check.json");
+    const cached = { serverVersion: "0.2.2", checkedAt: "2026-11-09T09:00:00Z" };
+    writeFileSync(file, JSON.stringify(cached));
+    expect(readVersionCheckCache(url)).toEqual(cached);
+    const updated = { ...cached, checkedAt: "2026-11-09T10:00:00Z" };
+    writeVersionCheckCache(url, updated);
+    expect(existsSync(file)).toBe(true);
+    expect(readVersionCheckCache(url)).toEqual(updated);
   });
 });

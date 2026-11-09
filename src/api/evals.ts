@@ -30,7 +30,7 @@ function segment(value: string | number): string {
 }
 
 /** Closed management surface. Heterogeneous business payloads remain unknown. */
-export function evalRequest<K extends EvalOperation>(
+export async function evalRequest<K extends EvalOperation>(
   ctx: RequestContext,
   knId: string,
   operation: K,
@@ -90,43 +90,51 @@ const submissionInput = runInput
       ),
   })
   .strict();
-const runView = z.object({
-  run_id: identifier,
-  run_token: token.optional(),
-  agent,
-  execution_status: z.string(),
-  planned_cases: z.number().int().nonnegative(),
-  completed_cases: z.number().int().nonnegative(),
-  case_counts: z.record(z.unknown()).optional(),
-});
-const suitePage = z.object({
-  entries: z.array(
-    z.object({
-      suite_id: identifier,
-      name: z.string(),
-      version: z.number().int().min(1),
-      case_count: z.number().int().nonnegative(),
-      members_sha256: z.string(),
-    }),
-  ),
-  page: z.number().int().min(1),
-  limit: z.number().int().min(1).max(50),
-});
-const task = z.discriminatedUnion("done", [
-  z.object({ run_id: identifier, done: z.literal(true) }),
-  z.object({
+const runView = z
+  .object({
     run_id: identifier,
-    done: z.literal(false),
-    case_run_id: identifier,
-    case_id: identifier,
-    case_version: z.number().int().min(1),
-    title: z.string(),
-    question: z.string(),
-    task_token: token,
-    expires_at: z.string().datetime({ offset: true }),
-    bkn_context: z.record(z.string()),
-    instructions: z.string().optional(),
-  }),
+    run_token: token.optional(),
+    agent: agent.passthrough(),
+    execution_status: z.string(),
+    planned_cases: z.number().int().nonnegative(),
+    completed_cases: z.number().int().nonnegative(),
+    case_counts: z.record(z.unknown()).optional(),
+  })
+  .passthrough();
+const suitePage = z
+  .object({
+    entries: z.array(
+      z
+        .object({
+          suite_id: identifier,
+          name: z.string(),
+          version: z.number().int().min(1),
+          case_count: z.number().int().nonnegative(),
+          members_sha256: z.string(),
+        })
+        .passthrough(),
+    ),
+    page: z.number().int().min(1),
+    limit: z.number().int().min(1).max(50),
+  })
+  .passthrough();
+const task = z.discriminatedUnion("done", [
+  z.object({ run_id: identifier, done: z.literal(true) }).passthrough(),
+  z
+    .object({
+      run_id: identifier,
+      done: z.literal(false),
+      case_run_id: identifier,
+      case_id: identifier,
+      case_version: z.number().int().min(1),
+      title: z.string(),
+      question: z.string(),
+      task_token: token,
+      expires_at: z.string().datetime({ offset: true }),
+      bkn_context: z.record(z.string()),
+      instructions: z.string().optional(),
+    })
+    .passthrough(),
 ]);
 export type EvalExternalAgent = z.infer<typeof agent>;
 export type EvalExternalStartInput = z.infer<typeof startInput>;

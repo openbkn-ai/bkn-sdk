@@ -134,21 +134,25 @@ describe("quality Eval management", () => {
         .request("deleteEvalSuite", { path: { suite_id: "s1" } }),
     ).resolves.toBeUndefined();
   });
-  it("refuses traversal and missing path parameters before network I/O", () => {
+  it("rejects traversal and missing paths through promises before network I/O", async () => {
     const fetch = mockResponse({});
-    expect(() => evals(ctx).forNetwork("..").request("getEvalCapabilities", {})).toThrow(
+    await expect(evals(ctx).forNetwork("..").request("getEvalCapabilities", {})).rejects.toThrow(
       InputError,
     );
-    expect(() =>
+    await expect(
       evals(ctx)
         .forNetwork("kn")
         .request("getEvalRun", { path: {} } as never),
-    ).toThrow(/Missing Eval path parameter/);
-    expect(() =>
+    ).rejects.toThrow(/Missing Eval path parameter/);
+    await expect(
       evals(ctx)
         .forNetwork("kn")
         .request("toString" as never, {} as never),
-    ).toThrow(InputError);
+    ).rejects.toThrow(InputError);
+    const settled = await Promise.allSettled([
+      evals(ctx).forNetwork("..").request("getEvalCapabilities", {}),
+    ]);
+    expect(settled[0]).toMatchObject({ status: "rejected", reason: expect.any(InputError) });
     expect(fetch).not.toHaveBeenCalled();
   });
 });
@@ -270,5 +274,58 @@ describe("external participant protocol", () => {
       evals(ctx).participant.getProgress("kn", runInput, { signal: controller.signal }),
     ).rejects.toThrow();
     expect(fetch).not.toHaveBeenCalled();
+  });
+  it("preserves additive response fields across the participant protocol", async () => {
+    const suites = {
+      entries: [
+        {
+          suite_id: "s",
+          name: "Suite",
+          version: 1,
+          case_count: 1,
+          members_sha256: "sha",
+          description: "Regression checks",
+        },
+      ],
+      page: 1,
+      limit: 20,
+      total: 1,
+    };
+    mockResponse(suites);
+    await expect(evals(ctx).participant.listSuites("kn")).resolves.toEqual(suites);
+    const started = {
+      ...view,
+      run_token: runToken,
+      agent: { ...view.agent, provider: "declared" },
+      updated_at: "2026-11-09T09:00:00Z",
+    };
+    mockResponse(started);
+    await expect(
+      evals(ctx).participant.startRun("kn", {
+        suite_id: "s",
+        version: 1,
+        agent: { name: "Agent" },
+        idempotency_key: "stable-request-key",
+      }),
+    ).resolves.toEqual(started);
+    const extendedTask = { ...task, result_schema: { type: "object" } };
+    mockResponse(extendedTask);
+    await expect(evals(ctx).participant.nextCase("kn", runInput)).resolves.toEqual(extendedTask);
+    const submitted = { ...view, evidence_status: "complete" };
+    mockResponse(submitted);
+    await expect(
+      evals(ctx).participant.submitResult("kn", {
+        ...runInput,
+        case_run_id: "cr-1",
+        task_token: task.task_token,
+        answer: "Found it",
+        structured_output: {},
+      }),
+    ).resolves.toEqual(submitted);
+    mockResponse(submitted);
+    await expect(evals(ctx).participant.getProgress("kn", runInput)).resolves.toEqual(submitted);
+    const done = { run_id: "run-1", done: true, instructions: "Finished" };
+    mockResponse(done);
+    await expect(evals(ctx).participant.nextCase("kn", runInput)).resolves.toEqual(done);
   });
 });

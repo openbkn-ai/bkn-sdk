@@ -21,7 +21,9 @@ Run creation/cancellation/search, frozen definitions and results, revisions,
 historical/agent comparison and schedules. Dynamic management
 responses are `unknown`, not claimed to be fully typed business schemas. Error
 responses use the SDK's shared `HttpError` contract. Integer observations preserve
-precision. Successful 204 deletes return `undefined`. The two plan OAuth operations
+precision. Successful 204 deletes return `undefined`. Argument validation failures
+reject the returned Promise, so `.catch()` and `Promise.allSettled()` work
+consistently across management and participant methods. The two plan OAuth operations
 (`beginEvalRunPlanAuthorization` and `completeEvalRunPlanAuthorization`) belong
 to the Studio browser authorization flow and are outside this catalogue.
 
@@ -75,7 +77,8 @@ The participant must not end the platform-owned Interaction itself.
 Only supported, explicitly granted read-only Function Cases can be externally
 executed, at most 50 per Run. Both answer text and structured business output are
 required; deterministic grading uses the structured output and independently
-verified Trace. Brand/model are self-reported. No token consumption is estimated.
+verified Trace. Participant response validation preserves additional backend fields
+for forward compatibility; request validation remains strict. Brand/model are self-reported. No token consumption is estimated.
 The data baseline is a label, not a frozen business-data snapshot. Compare completed
 Runs of a shared Suite/version via `compareEvalAgentRuns`; the server reports any
 contract/data mismatch rather than asserting every Run is comparable.

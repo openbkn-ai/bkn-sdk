@@ -131,9 +131,13 @@ Update this table as each signal changes (e.g. live-parity count as commands are
   network/run paths, monthly scheduling, optimistic revisions, 204 responses,
   integer precision, all five participant protocol calls, credential checks,
   UTF-8 payload budgets, malformed task responses, permission/conflict failures
-  and cancellation. The backend independently checks all mounted Eval routes
+  cancellation, rejected validation promises, and additive response fields. The backend independently checks all mounted Eval routes
   against OpenAPI. Live external-agent execution remains an integration check.
 
 - `dry-run.test.ts` verifies that Eval participant `run_token` and `task_token`
   credentials are redacted inside the nested RPC body before request previews
   can be printed. Neither credential is sent during a dry run.
+
+- `auth-store.test.ts` checks that native base64url platform keys read existing
+  cache files and preserve the same directory mapping for all padding lengths
+  and Unicode URLs, without regex-based encoding.
