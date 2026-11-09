@@ -103,11 +103,7 @@ function statePath(): string {
 }
 
 function encodeKey(baseUrl: string): string {
-  return Buffer.from(baseUrl, "utf8")
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
+  return Buffer.from(baseUrl, "utf8").toString("base64url");
 }
 
 function platformDir(baseUrl: string): string {

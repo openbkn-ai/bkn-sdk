@@ -79,7 +79,8 @@ function redact(headers: HeaderInput): Record<string, string> {
 }
 
 /** Field names whose value is a credential wherever it appears. */
-const SECRET_FIELD = /^(bkn_token|token|access_token|refresh_token|password|secret|api_key)$/i;
+const SECRET_FIELD =
+  /^(bkn_token|token|access_token|refresh_token|run_token|task_token|password|secret|api_key)$/i;
 
 /**
  * The same rule as headers, applied to the body: a credential can travel as a

@@ -274,6 +274,25 @@ Things to know:
    notebooks). A web app writes its own handler with `authorizationRequest` and
    `exchangeCode`, and an operator must allow its non-loopback callback origin.
 
+### Quality evaluation (Professional and above)
+
+`client.evals` is separate from Trace's `evalSetBuild` fixture utility. Management
+calls use the closed `EVAL_OPERATIONS` catalogue and network-scoped permissions:
+
+```ts
+const evaluation = bkn.evals.forNetwork(knId);
+const runs = await evaluation.request("searchEvalRuns", {
+  query: { page: 1, limit: 30, status: "completed" },
+});
+```
+
+The catalogue covers assets, rule application, daily/weekly/monthly
+plans, frozen results, historical comparison and agent comparison. Management
+business responses are `unknown`; validate the fields your application consumes.
+See [Eval workflow](docs/product-specs/eval.md) for external participants. The five
+participant methods never fetch gold or invoke a local autonomous runner.
+
+
 ## Develop
 
 ```bash

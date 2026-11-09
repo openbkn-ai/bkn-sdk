@@ -9,6 +9,7 @@ Behavior per product domain. Each file: goals, user-visible behavior, CLI/SDK to
 | [model-factory.md](model-factory.md) | LLM + small-model management, invocation, OpenAI-compatible chat |
 | [skills-toolboxes.md](skills-toolboxes.md) | Skill registry/install, toolbox + tool execution |
 | [vega.md](vega.md) | Data catalog, resources, connectors, health checks |
+| [eval.md](eval.md) | Professional-or-higher quality Eval management, scheduling, results and external participant protocol |
 | [bkn-trace.md](bkn-trace.md) | Evidence chain, trace inspection, scan, diagnose, eval-set |
 | [identity-access.md](identity-access.md) | OAuth, org, user, role/permission, audit (operator side) |
 

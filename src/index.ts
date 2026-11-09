@@ -318,3 +318,19 @@ export type {
 // Low-level escape hatch for endpoints not yet wrapped.
 export { request } from "./api/http.js";
 export { resolveContext } from "./config/resolve.js";
+
+export { evals } from "./resources/evals.js";
+export { EVAL_OPERATIONS, type EvalOperation } from "./api/eval-operations.js";
+export type { EvalOperationBodies, EvalRunScope, EvalRunPlanSchedule } from "./api/eval-inputs.js";
+export type {
+  EvalExternalAgent,
+  EvalExternalStartInput,
+  EvalExternalRunInput,
+  EvalExternalSubmission,
+  EvalExternalRun,
+  EvalExternalTask,
+  EvalExternalSuitePage,
+  EvalOperationInput,
+  EvalQuery,
+  EvalRequestOptions,
+} from "./api/evals.js";

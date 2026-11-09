@@ -10,6 +10,7 @@ Phase 2 toolchain landed. Each criterion cites a concrete repo signal; write **T
 | Live validation | read commands work vs real backend | ✅ Validated on the deployed VM across rounds. This round live-verified: admin org get/members, user get/roles; bkn push/pull round-trip (CHECKSUM/SKILL.md/network.bkn); `model llm chat --stream` (qwen3.6-plus streamed a real reply). Caught+fixed 4 earlier bugs (`-k`, vega base path, model `size`, toolbox `/list`); this round corrected admin user/org-get to thrift after REST 400/404 |
 | Lint + format | `biome check` clean | ✅ `biome.json`; `npm run lint` (biome + tsc) clean |
 | E2E | separate entry, runs vs real backend | `test/e2e/live-smoke.sh` drives read paths; write-gated `test/e2e/live-write.sh` validates the ContextLoader `--receipt` envelope and same-identity authorized Receipt readback. Both are excluded from `vitest run` (`vitest.config.ts`) and run by hand. Two-identity denial plus response-drop exactly-once remains an approved-target release gate, not a mocked claim. |
+| Quality Eval | SDK management + unified MCP participant flow | `client.evals` covers 48 network management operations and 5 participant calls; the two browser-only plan OAuth operations are outside the catalogue; the CLI uses existing generic MCP invocation. Dynamic management responses are `unknown`; new Eval protocol and secret-preview unit tests are mocked. |
 | Docs freshness | spec updated in same PR as behavior | Enforced by review; see [PLANS.md](PLANS.md) workflows |
 | CI | lint + test on PR | ✅ `.github/workflows/ci.yml` on push to `main` + all PRs: `check:deps` (own step, legible failure), `lint`, `test`, `build`. Release via `.github/workflows/release.yml` (OIDC Trusted Publishing + provenance) |
 
@@ -125,3 +126,18 @@ Update this table as each signal changes (e.g. live-parity count as commands are
   Error controls: eight bilingual reasons reach actual `formatError` output,
   while explicit blank/null shared descriptions keep the stable code fallback.
   Trace details and metadata handling remain independent of the reason field.
+
+- `test/unit/evals.test.ts` covers the dedicated quality Eval resource, encoded
+  network/run paths, monthly scheduling, optimistic revisions, 204 responses,
+  integer precision, all five participant protocol calls, credential checks,
+  UTF-8 payload budgets, malformed task responses, permission/conflict failures
+  cancellation, rejected validation promises, and additive response fields. The backend independently checks all mounted Eval routes
+  against OpenAPI. Live external-agent execution remains an integration check.
+
+- `dry-run.test.ts` verifies that Eval participant `run_token` and `task_token`
+  credentials are redacted inside the nested RPC body before request previews
+  can be printed. Neither credential is sent during a dry run.
+
+- `auth-store.test.ts` checks that native base64url platform keys read existing
+  cache files and preserve the same directory mapping for all padding lengths
+  and Unicode URLs, without regex-based encoding.
