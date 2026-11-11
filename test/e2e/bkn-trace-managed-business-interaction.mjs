@@ -7,6 +7,22 @@ const knId = process.env.BKN_KN_ID ?? "supplychain_hd0202";
 const agentName = process.env.BKN_AGENT_NAME ?? "供应链分析助手";
 const client = createClient({ baseUrl });
 const hostConversationKey = `sdk-e2e:${Date.now()}`;
+// Defaults are the figures of supplychain_hd0202; override them to run against another copy.
+const expected = {
+  june: {
+    count: numeric(process.env.BKN_EXPECTED_JUNE_FORECAST_COUNT, 63),
+    total: numeric(process.env.BKN_EXPECTED_JUNE_TOTAL_DEMAND, 11_594),
+  },
+  july: {
+    count: numeric(process.env.BKN_EXPECTED_JULY_FORECAST_COUNT, 40),
+    total: numeric(process.env.BKN_EXPECTED_JULY_TOTAL_DEMAND, 4_586),
+  },
+  salesOrders: {
+    products: numeric(process.env.BKN_EXPECTED_SALES_PRODUCT_COUNT, 10),
+    orders: numeric(process.env.BKN_EXPECTED_SALES_ORDER_COUNT, 1_441),
+    quantity: numeric(process.env.BKN_EXPECTED_SALES_SIGNING_QUANTITY, 15_991),
+  },
+};
 
 let conversationId;
 
@@ -15,16 +31,13 @@ const june = await runInteraction({
   key: "june",
   question: juneQuestion,
   start: "2026-06-01",
-  end: "2026-07-01",
-  answerFor: (rows) => {
-    const forecastCount = Number(rows[0]?.forecast_count);
-    const totalDemand = Number(rows[0]?.total_demand);
-    if (forecastCount !== 63 || totalDemand !== 11_594) {
-      throw new Error(
-        `unexpected June forecast result: count=${forecastCount}, total=${totalDemand}`,
-      );
+  until: "2026-07-01",
+  answerFor: (rows, binding) => {
+    const { count, total } = aggregateByMonth(rows, binding)["2026-06"] ?? {};
+    if (count !== expected.june.count || total !== expected.june.total) {
+      throw new Error(`unexpected June forecast result: count=${count}, total=${total}`);
     }
-    return `6月份共有 ${forecastCount} 条需求预测，需求总量为 ${totalDemand}。`;
+    return `6月份共有 ${count} 条需求预测，需求总量为 ${total}。`;
   },
 });
 
@@ -33,17 +46,22 @@ const comparison = await runInteraction({
   key: "july-comparison",
   question: comparisonQuestion,
   start: "2026-06-01",
-  end: "2026-08-01",
+  until: "2026-08-01",
   answerFor: (rows, binding) => {
     const monthly = aggregateByMonth(rows, binding);
-    if (monthly["2026-06"]?.count !== 63 || monthly["2026-06"]?.total !== 11_594) {
-      throw new Error(`unexpected June comparison baseline: ${JSON.stringify(monthly["2026-06"])}`);
+    const juneTotals = monthly["2026-06"];
+    const julyTotals = monthly["2026-07"];
+    if (juneTotals?.count !== expected.june.count || juneTotals?.total !== expected.june.total) {
+      throw new Error(`unexpected June comparison baseline: ${JSON.stringify(juneTotals)}`);
     }
-    if (monthly["2026-07"]?.count !== 40 || monthly["2026-07"]?.total !== 4_586) {
-      throw new Error(`unexpected July forecast result: ${JSON.stringify(monthly["2026-07"])}`);
+    if (julyTotals?.count !== expected.july.count || julyTotals?.total !== expected.july.total) {
+      throw new Error(`unexpected July forecast result: ${JSON.stringify(julyTotals)}`);
     }
-    const decrease = monthly["2026-06"].total - monthly["2026-07"].total;
-    return `7月份共有 40 条需求预测，需求总量为 4586；相比6月减少 ${decrease}，约下降60%。`;
+    const change = julyTotals.total - juneTotals.total;
+    const percent = Math.round((Math.abs(change) / juneTotals.total) * 100);
+    const direction =
+      change < 0 ? `减少 ${-change}，约下降${percent}%` : `增加 ${change}，约上升${percent}%`;
+    return `7月份共有 ${julyTotals.count} 条需求预测，需求总量为 ${julyTotals.total}；相比6月${direction}。`;
   },
 });
 
@@ -70,18 +88,19 @@ async function runSalesOrderInteraction() {
     {
       query: "销售订单 产品 签约数量",
       response_format: "json",
-      include_columns: true,
       max_concepts: 20,
       bkn_context: businessContext(interaction.interaction_id),
     },
   );
   const binding = extractSalesOrderBinding(schemaCall.value);
+  // A query the compiler refuses (variable-length path), so the call fails with a durable receipt.
   const rejectedCall = await managedRejectedOperation(
     interaction.interaction_id,
-    "sales-orders:read-only-rejection",
-    "run_sql",
+    "sales-orders:unsupported-rejection",
+    "run_cypher",
     {
-      sql: "DELETE FROM forbidden",
+      kn_id: knId,
+      query: `MATCH (s:${quoteIdentifier(binding.objectTypeId)})-[*1..2]-(x) RETURN s LIMIT 1`,
       response_format: "json",
       bkn_context: businessContext(interaction.interaction_id),
     },
@@ -89,9 +108,9 @@ async function runSalesOrderInteraction() {
   const dataCall = await managedOperation(
     interaction.interaction_id,
     "sales-orders:data",
-    "run_sql",
+    "run_cypher",
     {
-      sql: buildSalesOrderSql(binding),
+      query: buildSalesOrderCypher(binding),
       response_format: "json",
       bkn_context: businessContext(interaction.interaction_id),
     },
@@ -99,7 +118,11 @@ async function runSalesOrderInteraction() {
   const rows = extractRows(dataCall.value);
   const orderCount = rows.reduce((sum, row) => sum + Number(row.order_count ?? 0), 0);
   const signingQuantity = rows.reduce((sum, row) => sum + Number(row.signing_quantity ?? 0), 0);
-  if (rows.length !== 10 || orderCount !== 1_441 || signingQuantity !== 15_991) {
+  if (
+    rows.length !== expected.salesOrders.products ||
+    orderCount !== expected.salesOrders.orders ||
+    signingQuantity !== expected.salesOrders.quantity
+  ) {
     throw new Error(
       `unexpected sales order result: products=${rows.length}, orders=${orderCount}, quantity=${signingQuantity}`,
     );
@@ -134,7 +157,7 @@ console.log(
   ),
 );
 
-async function runInteraction({ key, question, start, end, answerFor }) {
+async function runInteraction({ key, question, start, until, answerFor }) {
   const interaction = await startInteraction(key, question);
   assertString(interaction?.interaction_id, "interaction_id");
   rememberConversation(interaction);
@@ -146,19 +169,18 @@ async function runInteraction({ key, question, start, end, answerFor }) {
     {
       query: question,
       response_format: "json",
-      include_columns: true,
       max_concepts: 20,
       bkn_context: businessContext(interaction.interaction_id),
     },
   );
   const binding = extractForecastBinding(schemaCall.value);
-  const dataCall = await managedOperation(interaction.interaction_id, `${key}:data`, "run_sql", {
-    sql: buildForecastSql(binding, start, end),
+  const dataCall = await managedOperation(interaction.interaction_id, `${key}:data`, "run_cypher", {
+    ...buildForecastCypher(binding, start, until),
     response_format: "json",
     bkn_context: businessContext(interaction.interaction_id),
   });
   const rows = extractRows(dataCall.value);
-  if (rows.length === 0) throw new Error(`run_sql returned no rows for ${key}`);
+  if (rows.length === 0) throw new Error(`run_cypher returned no rows for ${key}`);
 
   const answer = answerFor(rows, binding);
   const receipts = [schemaCall.receipt, dataCall.receipt];
@@ -240,9 +262,11 @@ function startInteraction(key, question) {
     knId,
     "bkn_start_interaction",
     {
-      ...(conversationId ? { conversation_id: conversationId } : {}),
-      ...(!conversationId ? { agent_name: agentName } : {}),
+      agent_name: agentName,
       question,
+      ...(conversationId
+        ? { conversation_mode: "continue", conversation_id: conversationId }
+        : { conversation_mode: "new" }),
     },
     {
       hostConversationKey,
@@ -276,6 +300,7 @@ function extractForecastBinding(value) {
   const resourceId = sources
     .map((source) => source?.id ?? source?.resource_id)
     .find((id) => typeof id === "string" && id);
+  const objectTypeId = selected.item.id ?? selected.item.object_type_id ?? selected.item.concept_id;
   const month = propertyBinding(selected.properties, [
     "month",
     "startdate",
@@ -289,9 +314,10 @@ function extractForecastBinding(value) {
   ]);
   const product = propertyBinding(selected.properties, ["product_code", "material_number"]);
   const order = propertyBinding(selected.properties, ["confirmed_order", "billno", "id"]);
-  if (!resourceId) throw new Error("forecast schema binding is missing its data resource");
+  if (!resourceId || !objectTypeId) throw new Error("forecast schema binding is incomplete");
   return {
     resourceId,
+    objectTypeId,
     month,
     demand,
     product,
@@ -312,26 +338,24 @@ function extractSalesOrderBinding(value) {
     }
   });
   if (!selected) throw new Error("search_schema did not return the sales order binding");
-  const resourceId = selected.data_source.id ?? selected.data_source.resource_id;
-  if (!resourceId) throw new Error("sales order schema binding is missing its data resource");
+  const objectTypeId = selected.concept_id ?? selected.id;
+  if (!objectTypeId) throw new Error("sales order schema binding is missing its object type");
   return {
-    resourceId,
+    objectTypeId,
     productCode: propertyBinding(selected.data_properties, ["product_code"]),
     productName: propertyBinding(selected.data_properties, ["product_name"]),
     signingQuantity: propertyBinding(selected.data_properties, ["signing_quantity"]),
   };
 }
 
-function buildSalesOrderSql(binding) {
-  const productCode = quoteIdentifier(binding.productCode.column);
-  const productName = quoteIdentifier(binding.productName.column);
-  const signingQuantity = quoteIdentifier(binding.signingQuantity.column);
+function buildSalesOrderCypher(binding) {
+  const property = ({ logicalName }) => `s.${quoteIdentifier(logicalName)}`;
   return [
-    `SELECT ${productCode}, MAX(${productName}) AS product_name,`,
-    "COUNT(*) AS order_count,",
-    `SUM(CAST(${signingQuantity} AS DOUBLE)) AS signing_quantity`,
-    `FROM {{${binding.resourceId}}}`,
-    `GROUP BY ${productCode}`,
+    `MATCH (s:${quoteIdentifier(binding.objectTypeId)})`,
+    `RETURN ${property(binding.productCode)} AS product_code,`,
+    `max(${property(binding.productName)}) AS product_name,`,
+    "count(*) AS order_count,",
+    `sum(${property(binding.signingQuantity)}) AS signing_quantity`,
     "ORDER BY signing_quantity DESC",
   ].join(" ");
 }
@@ -344,37 +368,37 @@ function propertyBinding(properties, logicalNames) {
   const property = logicalNames
     .map((logicalName) => properties.find((item) => item.name === logicalName))
     .find(Boolean);
-  if (!property) throw new Error(`forecast schema is missing one of: ${logicalNames.join(", ")}`);
-  return {
-    logicalName: property.name,
-    column: property.column ?? property.mapped_field ?? property.name,
-  };
+  if (!property) throw new Error(`schema is missing one of: ${logicalNames.join(", ")}`);
+  return { logicalName: property.name };
 }
 
-function buildForecastSql(binding, start, end) {
-  const columns = [binding.product, binding.order, binding.demand, binding.month].map(
-    ({ column }) => quoteIdentifier(column),
-  );
-  const month = quoteIdentifier(binding.month.column);
-  const demand = quoteIdentifier(binding.demand.column);
-  return [
-    `SELECT ${columns.join(", ")},`,
-    "COUNT(*) OVER () AS forecast_count,",
-    `SUM(CAST(${demand} AS DOUBLE)) OVER () AS total_demand`,
-    `FROM {{${binding.resourceId}}}`,
-    `WHERE ${month} >= '${start}' AND ${month} < '${end}'`,
-    `ORDER BY ${month}, ${quoteIdentifier(binding.product.column)}`,
-  ].join(" ");
+// Lists the forecasts of the period; counts and totals per month are computed from the rows.
+function buildForecastCypher(binding, start, until) {
+  const returned = [binding.product, binding.order, binding.demand, binding.month]
+    .map(
+      ({ logicalName }) => `f.${quoteIdentifier(logicalName)} AS ${quoteIdentifier(logicalName)}`,
+    )
+    .join(", ");
+  const month = `f.${quoteIdentifier(binding.month.logicalName)}`;
+  return {
+    query: [
+      `MATCH (f:${quoteIdentifier(binding.objectTypeId)})`,
+      `WHERE ${month} >= date($period_start) AND ${month} < date($period_until)`,
+      `RETURN ${returned}`,
+      `ORDER BY ${quoteIdentifier(binding.month.logicalName)}, ${quoteIdentifier(binding.product.logicalName)}`,
+    ].join(" "),
+    parameters: { period_start: start, period_until: until },
+  };
 }
 
 function aggregateByMonth(rows, binding) {
   const result = {};
   for (const row of rows) {
-    const month = String(row[binding.month.column] ?? "").slice(0, 7);
+    const month = String(row[binding.month.logicalName] ?? "").slice(0, 7);
     if (!month) continue;
     result[month] ??= { count: 0, total: 0 };
     result[month].count += 1;
-    result[month].total += Number(row[binding.demand.column] ?? 0);
+    result[month].total += Number(row[binding.demand.logicalName] ?? 0);
   }
   return result;
 }
@@ -382,7 +406,7 @@ function aggregateByMonth(rows, binding) {
 function extractRows(value) {
   if (Array.isArray(value?.entries)) return value.entries;
   if (Array.isArray(value?.data?.entries)) return value.data.entries;
-  throw new Error("run_sql response does not contain entries");
+  throw new Error("run_cypher response does not contain entries");
 }
 
 function walk(value, visitor) {
@@ -392,7 +416,12 @@ function walk(value, visitor) {
 }
 
 function quoteIdentifier(value) {
-  return `"${String(value).replaceAll('"', '""')}"`;
+  return `\`${String(value).replaceAll("`", "``")}\``;
+}
+
+function numeric(value, fallback) {
+  const parsed = Number(value);
+  return value !== undefined && value !== "" && Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function assertString(value, name) {
