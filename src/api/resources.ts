@@ -73,6 +73,8 @@ export interface ResourceProperty {
   api_name?: string;
   display_name?: string;
   type?: string;
+  /** Whether this field may participate in filters. Does not control returned fields. */
+  filterable?: boolean;
   description?: string;
   original_name?: string;
   original_type?: string;
@@ -88,6 +90,9 @@ export interface ResourceIndexConfig {
   default_fulltext_analyzer?: string;
   default_embedding_model?: string;
 }
+
+/** A field submitted in a Resource schema update must explicitly declare its filterability. */
+export type ResourcePropertyUpdate = ResourceProperty & { filterable: boolean };
 
 export const ResourceCategory = z.enum([
   "table",
@@ -162,6 +167,7 @@ const ResourcePropertySchema: z.ZodType<ResourceProperty, z.ZodTypeDef, unknown>
     // Server-generated, write-once; ignored on writes.
     api_name: z.string().optional(),
     type: z.string().optional(),
+    filterable: z.boolean().optional(),
     description: z.string().optional(),
     original_name: z.string().optional(),
     original_type: z.string().optional(),
@@ -436,7 +442,7 @@ export interface UpdateResourceOptions {
   name?: string;
   tags?: string[];
   description?: string;
-  schemaDefinition?: ResourceProperty[];
+  schemaDefinition?: ResourcePropertyUpdate[];
   indexConfig?: ResourceIndexConfig;
   logicalViewDefinition?: unknown;
   /** Optimistic-lock version from an earlier Resource `update_time`. */
@@ -466,6 +472,14 @@ export async function updateResource(
   id: string,
   patch: UpdateResourceOptions,
 ): Promise<unknown> {
+  if (patch.schemaDefinition !== undefined) {
+    if (
+      !Array.isArray(patch.schemaDefinition) ||
+      patch.schemaDefinition.some((property) => typeof property?.filterable !== "boolean")
+    ) {
+      throw new InputError("schemaDefinition field filterable must be an explicit boolean");
+    }
+  }
   const current = firstResource(await getResource(ctx, id));
   return updateResourceRaw(ctx, id, resourceUpdateBody(id, current, patch));
 }
@@ -475,6 +489,23 @@ function resourceUpdateBody(
   current: ResourceLike,
   patch: UpdateResourceOptions,
 ): Record<string, unknown> {
+  let schemaDefinition: ResourceProperty[] | undefined = patch.schemaDefinition;
+  if (
+    schemaDefinition === undefined &&
+    (current.category === "dataset" || current.category === "logical_view")
+  ) {
+    // These categories require a complete schema even for metadata-only PUTs.
+    // Never invent flags when an older backend has not returned them.
+    if (
+      !current.schema_definition?.length ||
+      current.schema_definition.some((property) => typeof property.filterable !== "boolean")
+    ) {
+      throw new InputError(
+        `Updating ${current.category} requires a complete schemaDefinition with explicit boolean filterable for every field; pass schemaDefinition or use a compatible backend that returns those flags`,
+      );
+    }
+    schemaDefinition = current.schema_definition;
+  }
   const body: Record<string, unknown> = {
     id,
     name: patch.name ?? current.name,
@@ -483,9 +514,7 @@ function resourceUpdateBody(
     description: patch.description ?? current.description ?? "",
     category: current.category,
     enabled: current.enabled,
-    schema_definition: withoutReadOnlyFeatureConfig(
-      patch.schemaDefinition ?? current.schema_definition,
-    ),
+    schema_definition: withoutReadOnlyFeatureConfig(schemaDefinition),
     index_config: patch.indexConfig === undefined ? current.index_config : patch.indexConfig,
     logical_view_definition: patch.logicalViewDefinition ?? current.logical_view_definition,
     ...(current.category === "logical_view" ? { logical_type: current.logical_type } : {}),

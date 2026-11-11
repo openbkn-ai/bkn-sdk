@@ -4,7 +4,7 @@ import pkg from "../../package.json" with { type: "json" };
 
 import { vegaCommand } from "../../src/commands/vega.js";
 import { writeVersionCheckCache } from "../../src/config/store.js";
-import { InputError, toExitCode } from "../../src/utils/errors.js";
+import { HttpError, InputError, toExitCode } from "../../src/utils/errors.js";
 
 function cli(): Command {
   const root = new Command("openbkn")
@@ -292,6 +292,179 @@ describe("vega resource discovery commands", () => {
 });
 
 describe("vega resource writes", () => {
+  it("does not resend the table schema for a description-only CLI update", async () => {
+    const current = {
+      id: "r-1",
+      catalog_id: "c-1",
+      name: "orders",
+      category: "table",
+      status: "active",
+      enabled: true,
+      source_identifier: "orders",
+      creator: { id: "u-1", type: "user" },
+      create_time: 1,
+      updater: { id: "u-1", type: "user" },
+      update_time: 2,
+      schema_definition: [{ name: "payload", type: "binary", filterable: true }],
+    };
+    const fetchMock = vi.fn(async (_input: string, init?: RequestInit) => {
+      if (init?.method !== "PUT")
+        return new Response(JSON.stringify({ entries: [current] }), { status: 200 });
+      return JSON.parse(init.body as string).schema_definition
+        ? new Response(JSON.stringify({ error_code: "unsupported_schema" }), { status: 400 })
+        : new Response(null, { status: 204 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    suppressOutput();
+    await cli().parseAsync([...cliBase, "resource", "update", "r-1", "--description", "changed"], {
+      from: "user",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const body = JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string);
+    expect(body).not.toHaveProperty("schema_definition");
+    expect(body.description).toBe("changed");
+    expect(current.schema_definition[0]?.filterable).toBe(true);
+  });
+
+  it.each(["dataset", "logical_view"])(
+    "rejects a legacy %s CLI update before PUT",
+    async (category) => {
+      const current = {
+        id: "r-1",
+        catalog_id: "c-1",
+        name: "orders",
+        category,
+        status: "active",
+        enabled: true,
+        source_identifier: "orders",
+        creator: { id: "u-1", type: "user" },
+        create_time: 1,
+        updater: { id: "u-1", type: "user" },
+        update_time: 2,
+        schema_definition: [{ name: "title", original_name: "title", type: "string" }],
+        ...(category === "logical_view"
+          ? { logical_type: "derived", logical_view_definition: { source_resource_id: "source-1" } }
+          : {}),
+      };
+      const fetchMock = mockFetch({ entries: [current] });
+      suppressOutput();
+      const error = await cli()
+        .parseAsync([...cliBase, "resource", "update", "r-1", "--description", "changed"], {
+          from: "user",
+        })
+        .catch((error: unknown) => error);
+      expect(error).toBeInstanceOf(InputError);
+      expect(error).toHaveProperty("message", expect.stringContaining("schemaDefinition"));
+      expect(error).toHaveProperty(
+        "message",
+        expect.stringContaining("explicit boolean filterable"),
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls[0]?.[1]?.method ?? "GET").toBe("GET");
+    },
+  );
+
+  it("forwards a boolean enable request and reports the backend capability rejection", async () => {
+    const body = JSON.stringify({
+      error_code: "VegaBackend.InvalidParameter.RequestBody",
+      error_details: 'field "payload" does not support filtering',
+    });
+    const fetchMock = vi.fn(async (_input: string, init?: RequestInit) =>
+      init?.method === "PUT"
+        ? new Response(body, { status: 400, headers: { "Content-Type": "application/json" } })
+        : new Response(
+            JSON.stringify({
+              entries: [
+                {
+                  id: "r-1",
+                  catalog_id: "c-1",
+                  name: "orders",
+                  category: "table",
+                  status: "active",
+                  enabled: true,
+                  source_identifier: "orders",
+                  creator: { id: "u-1", type: "user" },
+                  create_time: 1,
+                  updater: { id: "u-1", type: "user" },
+                  update_time: 2,
+                },
+              ],
+            }),
+            { status: 200 },
+          ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    suppressOutput();
+    const schema = [{ name: "payload", type: "binary", filterable: true }];
+    const error = await cli()
+      .parseAsync(
+        [...cliBase, "resource", "update", "r-1", "--schema-definition", JSON.stringify(schema)],
+        { from: "user" },
+      )
+      .catch((error: unknown) => error);
+
+    expect(error).toBeInstanceOf(HttpError);
+    expect(error).toMatchObject({ status: 400, body });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string).schema_definition).toEqual(
+      schema,
+    );
+  });
+
+  it.each([undefined, null, "false", 0])(
+    "rejects update filterable=%s before sending requests",
+    async (filterable) => {
+      const fetchMock = mockFetch();
+      suppressOutput();
+      await expect(
+        cli().parseAsync(
+          [
+            ...cliBase,
+            "resource",
+            "update",
+            "r-1",
+            "--schema-definition",
+            JSON.stringify([{ name: "title", type: "text", filterable }]),
+          ],
+          { from: "user" },
+        ),
+      ).rejects.toThrow("filterable must be an explicit boolean");
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("preserves false when updating a field through CLI JSON", async () => {
+    const current = {
+      id: "r-1",
+      catalog_id: "c-1",
+      name: "orders",
+      category: "table",
+      status: "active",
+      enabled: true,
+      source_identifier: "orders",
+      creator: { id: "u-1", type: "user" },
+      create_time: 1,
+      updater: { id: "u-1", type: "user" },
+      update_time: 2,
+    };
+    const fetchMock = vi.fn(async (_input: string, init?: RequestInit) =>
+      init?.method === "PUT"
+        ? new Response(null, { status: 204 })
+        : new Response(JSON.stringify({ entries: [current] }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    suppressOutput();
+    const schema = [{ name: "title", type: "text", filterable: false }];
+    await cli().parseAsync(
+      [...cliBase, "resource", "update", "r-1", "--schema-definition", JSON.stringify(schema)],
+      { from: "user" },
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string).schema_definition).toEqual(
+      schema,
+    );
+  });
+
   it("rejects incomplete derived views without sending a request", async () => {
     const fetchMock = mockFetch({ id: "view-1" });
     suppressOutput();
@@ -457,6 +630,9 @@ describe("vega resource writes", () => {
       source_identifier: "orders_view",
       logical_type: "derived",
       logical_view_definition: { source_resource_id: "source-1" },
+      schema_definition: [
+        { name: "title", original_name: "title", type: "string", filterable: false },
+      ],
       creator: { id: "u-1", type: "user" },
       create_time: 1,
       updater: { id: "u-1", type: "user" },
@@ -1510,6 +1686,24 @@ describe("vega catalog create", () => {
 });
 
 describe("vega resource query", () => {
+  it.each(["like", "not_like"])(
+    "preserves SQL LIKE patterns passed through CLI %s",
+    async (operation) => {
+      suppressOutput();
+      for (const value of ["abc", "%abc%", "a_b", "a\\%\\_b", "a\\\\b", "abc\\"]) {
+        const fetchMock = mockFetch({ entries: [] });
+        const filterCondition = { field: "title", operation, value };
+        await cli().parseAsync(
+          [...cliBase, "resource", "query", "r-1", "--filter", JSON.stringify(filterCondition)],
+          { from: "user" },
+        );
+        expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+          filter_condition: filterCondition,
+        });
+      }
+    },
+  );
+
   it("sends filter, sort, output fields, cursor paging and index options", async () => {
     const fetchMock = mockFetch({ entries: [] });
     suppressOutput();

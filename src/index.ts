@@ -305,6 +305,7 @@ export type {
   Resource,
   ResourceIndexConfig,
   ResourceProperty,
+  ResourcePropertyUpdate,
   ResourceRef,
   ResourceSummary,
   ResourceCategory,

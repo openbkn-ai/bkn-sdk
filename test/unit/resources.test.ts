@@ -23,9 +23,12 @@ import type {
   CreateResourceRequest,
   ResourceIndexConfig,
   ResourceLocalStatus,
+  ResourceProperty,
+  ResourcePropertyUpdate,
+  UpdateResourceOptions,
 } from "../../src/index.js";
 import type { RequestContext } from "../../src/types.js";
-import { InputError } from "../../src/utils/errors.js";
+import { HttpError, InputError } from "../../src/utils/errors.js";
 import { verifiedContext } from "../setup/verified-context.js";
 
 const ctx = verifiedContext<RequestContext>({
@@ -76,6 +79,11 @@ describe("ResourceLocalStatus", () => {
     expectTypeOf<ResourceSummary["row_count_time"]>().toEqualTypeOf<unknown>();
     expectTypeOf<Resource["row_count"]>().toEqualTypeOf<number | bigint | undefined>();
     expectTypeOf<Resource["estimated_row_count"]>().toEqualTypeOf<number | bigint | undefined>();
+    expectTypeOf<ResourceProperty["filterable"]>().toEqualTypeOf<boolean | undefined>();
+    expectTypeOf<ResourcePropertyUpdate["filterable"]>().toEqualTypeOf<boolean>();
+    expectTypeOf<
+      NonNullable<UpdateResourceOptions["schemaDefinition"]>[number]
+    >().toEqualTypeOf<ResourcePropertyUpdate>();
   });
 });
 
@@ -266,9 +274,250 @@ describe("listResources", () => {
       "resource detail response contains no entries",
     );
   });
+
+  it("preserves backend filterability without computing a separate type default", async () => {
+    const schema = [
+      { name: "allowed", type: "integer", filterable: true },
+      { name: "disabled", type: "string", filterable: false },
+      { name: "explicit", type: "json", filterable: true },
+      { name: "legacy", type: "string" },
+    ];
+    mockFetch({ entries: [resourceFixture({ schema_definition: schema })] });
+    expect(firstResource(await getResource(ctx, "r-1")).schema_definition).toEqual(schema);
+  });
+
+  it.each([null, "false", 0])(
+    "rejects a malformed backend filterable value %s",
+    async (filterable) => {
+      mockFetch({
+        entries: [resourceFixture({ schema_definition: [{ name: "field", filterable }] })],
+      });
+      await expect(getResource(ctx, "r-1")).rejects.toThrow();
+    },
+  );
 });
 
 describe("updateResource", () => {
+  it.each(["create", "update"] as const)(
+    "delegates %s filterability support to the backend and preserves its rejection",
+    async (operation) => {
+      const body = JSON.stringify({
+        error_code: "VegaBackend.InvalidParameter.RequestBody",
+        error_details: 'field "payload" does not support filtering',
+      });
+      const fetchMock = vi.fn(async (_input: string, init?: RequestInit) =>
+        init?.method === "POST" || init?.method === "PUT"
+          ? new Response(body, { status: 400, headers: { "Content-Type": "application/json" } })
+          : new Response(JSON.stringify({ entries: [resourceFixture()] }), { status: 200 }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const schema = [{ name: "payload", type: "binary", filterable: true }];
+      const pending =
+        operation === "create"
+          ? createResource(ctx, {
+              catalogId: "c-1",
+              category: "dataset",
+              name: "documents",
+              schemaDefinition: schema,
+            })
+          : updateResource(ctx, "r-1", { schemaDefinition: schema });
+      const error = await pending.catch((error: unknown) => error);
+
+      expect(error).toBeInstanceOf(HttpError);
+      expect(error).toMatchObject({ status: 400, body });
+      const writes = fetchMock.mock.calls.filter(([, init]) =>
+        ["POST", "PUT"].includes(init?.method ?? "GET"),
+      );
+      expect(writes).toHaveLength(1);
+      expect(JSON.parse(writes[0]?.[1]?.body as string).schema_definition).toEqual(schema);
+      expect(schema[0]?.filterable).toBe(true);
+    },
+  );
+
+  it("omits unchanged table schemas and preserves explicit schema flags", async () => {
+    const schema = [
+      { name: "id", type: "integer", filterable: true },
+      { name: "secret", type: "string", filterable: false },
+    ];
+    const f = mockFetch({ entries: [resourceFixture({ schema_definition: schema })] });
+    await updateResource(ctx, "r-1", { description: "updated description" });
+    await updateResource(ctx, "r-1", {
+      schemaDefinition: schema.map((property) => ({ ...property, display_name: property.name })),
+    });
+    const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+    expect(JSON.parse(calls[1]?.[1].body as string)).not.toHaveProperty("schema_definition");
+    expect(JSON.parse(calls[3]?.[1].body as string).schema_definition).toEqual(
+      schema.map((property) => ({ ...property, display_name: property.name })),
+    );
+    expect(schema[1]?.filterable).toBe(false);
+  });
+
+  it.each(["table", "index", "fileset", "file", "api", "topic", "metric"])(
+    "omits an unchanged %s schema without revalidating its existing field flags",
+    async (category) => {
+      const schema = [
+        { name: "supported", type: "string", filterable: true },
+        { name: "unsupported", type: "binary", filterable: true },
+        { name: "disabled", type: "string", filterable: false },
+      ];
+      const current = resourceFixture({ category, schema_definition: schema });
+      const fetchMock = vi.fn(async (_input: string, init?: RequestInit) => {
+        if (init?.method !== "PUT") {
+          return new Response(JSON.stringify({ entries: [current] }), { status: 200 });
+        }
+        const body = JSON.parse(init.body as string);
+        return body.schema_definition
+          ? new Response(JSON.stringify({ error_code: "unsupported_schema" }), { status: 400 })
+          : new Response(null, { status: 204 });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      await expect(
+        updateResource(ctx, "r-1", { description: "updated description" }),
+      ).resolves.toBeUndefined();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const body = JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string);
+      expect(body).not.toHaveProperty("schema_definition");
+      expect(body.description).toBe("updated description");
+      expect(schema.map((field) => field.filterable)).toEqual([true, true, false]);
+    },
+  );
+
+  it.each(["dataset", "logical_view"])(
+    "preserves the required complete %s schema on unrelated updates",
+    async (category) => {
+      const schema = [
+        { name: "title", original_name: "title", type: "string", filterable: false },
+        { name: "id", original_name: "id", type: "integer", filterable: true },
+      ];
+      const f = mockFetch({
+        entries: [
+          resourceFixture({
+            category,
+            schema_definition: schema,
+            ...(category === "logical_view"
+              ? {
+                  logical_type: "derived",
+                  logical_view_definition: { source_resource_id: "source-1" },
+                }
+              : {}),
+          }),
+        ],
+      });
+      await updateResource(ctx, "r-1", { description: "updated description" });
+      const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+      const body = JSON.parse(calls[1]?.[1].body as string);
+      expect(body.schema_definition).toEqual(schema);
+      expect(body.description).toBe("updated description");
+      if (category === "logical_view") {
+        expect(body.logical_type).toBe("derived");
+        expect(body.logical_view_definition).toEqual({ source_resource_id: "source-1" });
+      }
+      expect(schema[0]?.filterable).toBe(false);
+    },
+  );
+
+  it.each(["dataset", "logical_view"])(
+    "rejects an incomplete read %s schema before PUT without inventing flags",
+    async (category) => {
+      for (const schema of [
+        undefined,
+        [],
+        [
+          { name: "id", filterable: false },
+          { name: "legacy", type: "string" },
+        ],
+      ]) {
+        const f = mockFetch({
+          entries: [
+            resourceFixture({
+              category,
+              schema_definition: schema,
+              ...(category === "logical_view"
+                ? {
+                    logical_type: "derived",
+                    logical_view_definition: { source_resource_id: "source-1" },
+                  }
+                : {}),
+            }),
+          ],
+        });
+        const error = await updateResource(ctx, "r-1", { name: "renamed" }).catch(
+          (error: unknown) => error,
+        );
+        expect(error).toBeInstanceOf(InputError);
+        expect(error).toHaveProperty("message", expect.stringContaining("schemaDefinition"));
+        expect(error).toHaveProperty(
+          "message",
+          expect.stringContaining("explicit boolean filterable"),
+        );
+        expect(error).toHaveProperty("message", expect.stringContaining("compatible backend"));
+        const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+        expect(calls).toHaveLength(1);
+        expect(calls[0]?.[1].method ?? "GET").toBe("GET");
+        if (schema?.length) expect(schema[1]).not.toHaveProperty("filterable");
+      }
+    },
+  );
+
+  it.each(["dataset", "logical_view"])(
+    "accepts an explicit complete %s schema over an older read response",
+    async (category) => {
+      const schema = [{ name: "title", original_name: "title", type: "string", filterable: false }];
+      const f = mockFetch({
+        entries: [
+          resourceFixture({
+            category,
+            schema_definition: [{ name: "title", original_name: "title", type: "string" }],
+            ...(category === "logical_view"
+              ? {
+                  logical_type: "derived",
+                  logical_view_definition: { source_resource_id: "source-1" },
+                }
+              : {}),
+          }),
+        ],
+      });
+      await updateResource(ctx, "r-1", { name: "renamed", schemaDefinition: schema });
+      const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+      expect(calls).toHaveLength(2);
+      const body = JSON.parse(calls[1]?.[1].body as string);
+      expect(body.schema_definition).toEqual(schema);
+      expect(body.name).toBe("renamed");
+      expect(schema[0]?.filterable).toBe(false);
+    },
+  );
+
+  it.each([undefined, null, "false", 0])(
+    "rejects schema filterable=%s before reading or writing the resource",
+    async (filterable) => {
+      const f = mockFetch();
+      await expect(
+        updateResource(ctx, "r-1", {
+          schemaDefinition: [{ name: "secret", type: "string", filterable }],
+        } as unknown as UpdateResourceOptions),
+      ).rejects.toThrow("filterable must be an explicit boolean");
+      expect(f).not.toHaveBeenCalled();
+    },
+  );
+
+  it("omits an older read schema with missing filterability on unrelated updates", async () => {
+    const f = mockFetch({
+      entries: [
+        resourceFixture({
+          schema_definition: [
+            { name: "id", type: "integer", filterable: false },
+            { name: "legacy", type: "string" },
+          ],
+        }),
+      ],
+    });
+    await updateResource(ctx, "r-1", { name: "renamed" });
+    const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+    const body = JSON.parse(calls[1]?.[1].body as string);
+    expect(body).not.toHaveProperty("schema_definition");
+    expect(body.name).toBe("renamed");
+  });
+
   it("preserves logical_type on a logical view PUT", async () => {
     const f = mockFetch({
       entries: [
@@ -276,7 +525,9 @@ describe("updateResource", () => {
           category: "logical_view",
           logical_type: "derived",
           logical_view_definition: { source_resource_id: "source-1" },
-          schema_definition: [{ name: "alias", original_name: "ID", type: "string" }],
+          schema_definition: [
+            { name: "alias", original_name: "ID", type: "string", filterable: false },
+          ],
         }),
       ],
     });
@@ -296,6 +547,9 @@ describe("updateResource", () => {
           category: "logical_view",
           logical_type: "derived",
           logical_view_definition: { source_resource_id: "source-1" },
+          schema_definition: [
+            { name: "alias", original_name: "ID", type: "string", filterable: false },
+          ],
         }),
       ],
     });
@@ -356,13 +610,18 @@ describe("updateResource", () => {
     const f = mockFetch({
       entries: [
         resourceFixture({
-          schema_definition: [{ name: "body", type: "text", features: [vector(768), keyword] }],
+          category: "dataset",
+          schema_definition: [
+            { name: "body", type: "text", filterable: false, features: [vector(768), keyword] },
+          ],
         }),
       ],
     });
     await updateResource(ctx, "r-1", { name: "renamed" });
     await updateResource(ctx, "r-1", {
-      schemaDefinition: [{ name: "body", type: "text", features: [vector(1024)] }],
+      schemaDefinition: [
+        { name: "body", type: "text", filterable: false, features: [vector(1024)] },
+      ],
     });
     const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
     const echoed = JSON.parse(calls[1]?.[1].body as string);
@@ -374,6 +633,8 @@ describe("updateResource", () => {
     expect(patched.schema_definition[0].features).toEqual([
       { feature_type: "vector", name: "emb", config: { embedding_model: "m-1" } },
     ]);
+    expect(echoed.schema_definition[0].filterable).toBe(false);
+    expect(patched.schema_definition[0].filterable).toBe(false);
   });
 
   it("uses action endpoints for independent enabled state", async () => {
@@ -391,6 +652,17 @@ describe("updateResource", () => {
 });
 
 describe("queryResource", () => {
+  it.each(["like", "not_like"])("preserves SQL LIKE patterns for %s", async (operation) => {
+    for (const value of ["abc", "%abc%", "a_b", "a\\%\\_b", "a\\\\b", "abc\\"]) {
+      const f = mockFetch({ entries: [] });
+      const filterCondition = { field: "title", operation, value };
+      await queryResource(ctx, "r-1", { filterCondition });
+      expect(JSON.parse(firstCall(f)[1].body as string)).toMatchObject({
+        filter_condition: filterCondition,
+      });
+    }
+  });
+
   it("preserves LARGEINT range bounds and response strings", async () => {
     const value = "170141183460469231731687303715884105727";
     const f = mockFetch({ entries: [{ wide: value }], total_count: 1 });
@@ -548,6 +820,21 @@ describe("typed Resource and document APIs", () => {
       category: "dataset",
       schema_definition: [{ name: "id", type: "string" }],
     });
+  });
+
+  it("preserves explicit filterability on resource creation", async () => {
+    const f = mockFetch({ id: "r-1" });
+    const schema = [
+      { name: "id", type: "integer", filterable: true },
+      { name: "secret", type: "string", filterable: false },
+    ];
+    await createResource(ctx, {
+      catalogId: "c-1",
+      name: "documents",
+      category: "dataset",
+      schemaDefinition: schema,
+    });
+    expect(JSON.parse(firstCall(f)[1].body as string).schema_definition).toEqual(schema);
   });
 
   it("rejects logical view fields on a dataset before sending a request", async () => {

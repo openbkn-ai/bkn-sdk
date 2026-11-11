@@ -7,6 +7,7 @@ import {
   ResourceCategory,
   type ResourceIndexConfig,
   type ResourceProperty,
+  type ResourcePropertyUpdate,
 } from "../api/resources.js";
 import {
   DiscoverScheduleSort,
@@ -153,13 +154,19 @@ const parseJsonArray = (value: string, flag: string): Record<string, unknown>[] 
   return parsed as Record<string, unknown>[];
 };
 
-const parseResourceProperties = (value: string): ResourceProperty[] =>
-  parseJsonArray(value, "--schema-definition").map((property) => {
+function parseResourceProperties(value: string, update: true): ResourcePropertyUpdate[];
+function parseResourceProperties(value: string): ResourceProperty[];
+function parseResourceProperties(value: string, update = false): ResourceProperty[] {
+  return parseJsonArray(value, "--schema-definition").map((property) => {
     if (typeof property.name !== "string" || property.name.length === 0) {
       throw new InputError("--schema-definition properties must have a non-empty string name");
     }
+    if (update && typeof property.filterable !== "boolean") {
+      throw new InputError("--schema-definition field filterable must be an explicit boolean");
+    }
     return property as unknown as ResourceProperty;
   });
+}
 
 const healthCheckSchedule = (
   mode?: string,
@@ -1134,7 +1141,10 @@ export function vegaCommand(): Command {
     .option("--name <s>", "resource name")
     .option("--tags <t1,t2>", "comma-separated tags")
     .option("--description <s>", "description")
-    .option("--schema-definition <json>", "replacement schema_definition JSON array")
+    .option(
+      "--schema-definition <json>",
+      "replacement schema_definition JSON array; each field requires boolean filterable",
+    )
     .option("--index-config <json>", "replacement index_config JSON object")
     .option(
       "--logical-view-definition <json>",
@@ -1158,7 +1168,7 @@ export function vegaCommand(): Command {
           description: opts.description,
           ...(opts.schemaDefinition !== undefined
             ? {
-                schemaDefinition: parseResourceProperties(opts.schemaDefinition),
+                schemaDefinition: parseResourceProperties(opts.schemaDefinition, true),
               }
             : {}),
           ...(opts.indexConfig !== undefined
