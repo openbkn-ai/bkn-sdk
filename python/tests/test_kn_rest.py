@@ -201,7 +201,7 @@ def test_object_instance_cursor_is_sent_only_in_the_body(
 
 
 def test_a_call_carries_a_turn_without_being_asked(deploy: Deploy) -> None:
-    kn.list_resources(KN, context=CONTEXT)
+    kn.list_skills(KN, context=CONTEXT)
 
     assert deploy.bodies[0]["bkn_context"] == {"conversation_id": "c1", "interaction_id": "i1"}
 
@@ -281,14 +281,14 @@ def test_a_route_that_sends_the_network_still_sends_it(deploy: Deploy) -> None:
     """`kn_id` is the first argument everywhere, but only the routes that declare
     it put it on the wire."""
     kn.search_capabilities(KN, context=CONTEXT)
-    kn.run_sql(KN, "SELECT 1 FROM {{r}}", context=CONTEXT)
+    kn.list_skills(KN, context=CONTEXT)
 
     assert deploy.bodies[0]["kn_id"] == KN
-    assert "kn_id" not in deploy.bodies[1]  # run_sql finds its data through the placeholder
+    assert "kn_id" not in deploy.bodies[1]  # list_skills does not declare it
 
 
 def test_a_cypher_query_carries_its_statement_and_values_in_the_body(deploy: Deploy) -> None:
-    """`run_cypher` names the network in the body, unlike `run_sql`: the statement
+    """`run_cypher` names the network in the body, unlike `list_skills`: the statement
     is written in model names, so the network is the only thing that says which
     model it is compiled against. Parameters travel as they were given — a value
     past 2^53 keeps every digit — and an unset branch is not sent."""

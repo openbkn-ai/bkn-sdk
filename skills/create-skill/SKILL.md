@@ -105,7 +105,7 @@ Hard rules, all verified against a live sandbox:
 Skeleton: [assets/templates/function.py.template](assets/templates/function.py.template).
 Full example (BOM level-1 kitting check):
 [references/examples/functions/l1_kitting_check.py](references/examples/functions/l1_kitting_check.py).
-Details of `kn.query_metric` / `kn.run_sql` and the generated ontology layer: the bkn-osdk
+Details of `kn.query_metric` / `kn.run_cypher` and the generated ontology layer: the bkn-osdk
 README under `python/`.
 
 ### Calling another function

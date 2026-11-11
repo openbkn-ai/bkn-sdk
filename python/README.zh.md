@@ -16,7 +16,7 @@ People.where(People.age > 30).take(10)
 
 ```python
 bkn_osdk.call("/api/agent-observability/v1/traces", query={"limit": 10})
-bkn_osdk.call_tool(ctx, kn_id, "describe_resource", {"resource_id": "…", ...})
+bkn_osdk.call_tool(ctx, kn_id, "get_object_types", {"ids": ["…"], ...})
 ```
 
 两层**按"寻址什么"命名，不按"怎么造出来的"** —— 一层是生成的、一层是手写的，那是实现事实，调用方不需要据此推理。两层走同一套凭据、同一套传输、同一个受管 turn，所以为一次调用下沉到平台层再回来，证据仍在同一条链上。
@@ -279,7 +279,7 @@ bkn_osdk.call("/api/safe/v1/me/api-keys")                                 # 别�
 
 ctx = bkn_osdk.resolve_context()
 bkn_osdk.tool_catalog(ctx)                            # 这个部署公布了什么
-bkn_osdk.call_tool(ctx, kn_id, "run_sql", {"kn_id": kn_id, "sql": …, "bkn_context": …})
+bkn_osdk.call_tool(ctx, kn_id, "run_cypher", {"kn_id": kn_id, "query": …, "bkn_context": …})
 ```
 
 `call_tool` 是裸接缝：它接受 catalog 声明的参数，返回工具答的东西，不加任何自己的形状 —— 包括信封，而信封随构建版本不同。这里的 `bkn_context` 要调用方自己给，`ensure_interaction` 是拿到它的办法：
@@ -306,13 +306,12 @@ user.departments, user.roles  # 部门 id；角色名
 
 ### 能力路由的命名函数
 
-context-loader 那一圈 —— `/api/agent-retrieval/v1/kn/` 下的 25 条路由 —— 也是生成的，源头是 foundry 自己的 OpenAPI：
+context-loader 那一圈 —— `/api/agent-retrieval/v1/kn/` 下的 22 条路由 —— 也是生成的，源头是 foundry 自己的 OpenAPI：
 
 ```python
 from bkn_osdk import kn
 
-kn.list_resources(KN_ID)
-kn.run_sql(KN_ID, "SELECT COUNT(*) AS n FROM {{d9hff…}}")
+kn.run_cypher(KN_ID, "MATCH (o:<object_type_id>) RETURN o.<prop>, count(*) AS n")
 kn.run_cypher(
     KN_ID,
     "MATCH (o:order)-[:rel_order_customer]->(c:customer) RETURN c.city AS city, count(*) AS n",

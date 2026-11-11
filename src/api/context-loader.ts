@@ -533,14 +533,11 @@ const RESPONSE_FORMAT_TOOLS = new Set([
   "list_action_executions",
   "query_metric",
   "drill_through_metric",
-  "run_sql",
   "run_cypher",
   "list_knowledge_networks",
   "get_kn_detail",
   "get_object_types",
   "get_relation_types",
-  "list_resources",
-  "describe_resource",
   "list_skills",
   "get_skill_content",
   "read_skill_file",
@@ -553,11 +550,7 @@ const RESPONSE_FORMAT_TOOLS = new Set([
  * Several (`run_cypher`, `search_capabilities`, `execute_tool`, the skill
  * readers) require it in the body; the rest accept the `x-kn-id` header as an
  * alternative, where the body wins. Excluded on purpose: tools with no `kn_id`
- * (`run_sql`, `describe_resource`, `list_skills`, `list_knowledge_networks`,
- * `run_code`, `run_shell`) and `list_resources`, where `kn_id` narrows an
- * account-wide listing to one network's bindings and so changes the answer.
- * That `kn_id` is MCP-only: the live tool declares it, while the REST
- * `ListResourcesRequest` (data-access.yaml) has no such field.
+ * (`list_skills`, `list_knowledge_networks`, `run_code`, `run_shell`).
  */
 const KN_SCOPED_TOOLS = new Set([
   "search_schema",
@@ -669,8 +662,7 @@ export async function callTool(
 /**
  * Tools whose `query` argument is a statement in a query language rather than the
  * user's words. Recording it as the interaction's question would put machine text
- * where Trace expects a person's question, so these are recorded by name, as
- * `run_sql` (whose statement is `sql`) already is.
+ * where Trace expects a person's question, so these are recorded by name.
  */
 const STATEMENT_QUERY_TOOLS = new Set(["run_cypher"]);
 
@@ -770,7 +762,7 @@ export interface SearchSchemaOptions {
   enableRerank?: boolean;
   /** Override the deploy's rerank model. Operator escape hatch — leave unset. */
   rerankModel?: string;
-  /** Add each data property's physical `column`, which `run_sql` needs. */
+  /** Add each data property's physical `column` (the `mapped_field` name). */
   includeColumns?: boolean;
 }
 

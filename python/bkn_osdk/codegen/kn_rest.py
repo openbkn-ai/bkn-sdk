@@ -34,10 +34,9 @@ OpenAPI. Every function here is one REST route under
 `/api/agent-retrieval/v1/kn/`; the managed turn is attached by the runtime, so
 `bkn_context` is never a parameter.
 
-    from bkn_osdk.kn import list_resources, run_sql
+    from bkn_osdk.kn import run_cypher
 
-    list_resources(kn_id)
-    run_sql(kn_id, "SELECT COUNT(*) AS n FROM {{d9hff…}}")
+    run_cypher(kn_id, "MATCH (o:<object_type_id>) RETURN o.<prop>, count(*) AS n")
 """
 
 from __future__ import annotations
@@ -115,8 +114,7 @@ def _function(op: dict[str, Any]) -> str:
     query, body = op["query"], op["body"]
     fields = query + body
     # `kn_id` is the first argument of every function, even the routes that do
-    # not send one: `run_sql` finds its data through the placeholder in the SQL,
-    # but the turn it runs on still belongs to a knowledge network.
+    # not send one: the turn it runs on still belongs to a knowledge network.
 
     required = [f for f in fields if f["required"] and f["name"] != "kn_id"]
     optional = [f for f in fields if not f["required"] and f["name"] != "kn_id"]

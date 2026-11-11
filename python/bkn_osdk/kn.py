@@ -6,10 +6,9 @@ OpenAPI. Every function here is one REST route under
 `/api/agent-retrieval/v1/kn/`; the managed turn is attached by the runtime, so
 `bkn_context` is never a parameter.
 
-    from bkn_osdk.kn import list_resources, run_sql
+    from bkn_osdk.kn import run_cypher
 
-    list_resources(kn_id)
-    run_sql(kn_id, "SELECT COUNT(*) AS n FROM {{d9hff…}}")
+    run_cypher(kn_id, "MATCH (o:<object_type_id>) RETURN o.<prop>, count(*) AS n")
 """
 
 from __future__ import annotations
@@ -21,7 +20,6 @@ from .http import request
 from .lifecycle import ensure_interaction
 
 __all__ = [
-    "describe_resource",
     "execute_action",
     "execute_skill",
     "execute_tool",
@@ -34,7 +32,6 @@ __all__ = [
     "get_skill_content",
     "list_action_executions",
     "list_knowledge_networks",
-    "list_resources",
     "list_skills",
     "logic_property_resolver",
     "query_instance_subgraph",
@@ -42,7 +39,6 @@ __all__ = [
     "query_object_instance",
     "read_skill_file",
     "run_cypher",
-    "run_sql",
     "search_capabilities",
     "search_instance",
     "search_schema",
@@ -73,43 +69,13 @@ def _send(
         )
 
 
-def describe_resource(
-    kn_id: str,
-    resource_id: str,
-    *,
-    response_format: str | None = None,
-    context: Context | None = None,
-) -> Any:
-    """查看资源的物理结构.
-
-    取单个资源的物理列与连接器类型——写 `run_sql` 之前该看的东西。 `connector_type`
-    决定实际目标方言；`run_sql` 仅支持 `mysql` / `mariadb` / `postgresql` / `sqlserver`
-    资源，统一接收 MySQL 方言。目标方言不是 MySQL 时由 Vega 转译，MySQL / MariaDB
-    资源则直接下发；其他连接器（如 `opensearch`）会被拒绝。
-
-    Args:
-        resource_id: 资源 ID。
-
-    Returns the platform's own payload: columns, connector_type, resource_id.
-    """
-    return _send(
-        "/api/agent-retrieval/v1/kn/describe_resource",
-        kn_id,
-        {
-            "response_format": response_format,
-        },
-        {
-            "resource_id": resource_id,
-        },
-        context,
-    )
-
-
 def execute_action(
     kn_id: str,
     at_id: str,
     *,
     response_format: str | None = None,
+    relation_target: dict[str, Any] | None = None,
+    object_input: dict[str, Any] | None = None,
     instance_identities: list[Any] | None = None,
     dynamic_params: dict[str, Any] | None = None,
     context: Context | None = None,
@@ -126,9 +92,12 @@ def execute_action(
     基础设施故障时，本接口经只读探测确认后可不带上下文执行， 并标记本次调用未记录 Trace。
 
     Args:
+        relation_target: One explicit directed instance pair. Keys are defined by the endpoint
+            object primary keys. No implicit pairing or cross join.
+        object_input: New object data for create operations; no existing-instance scan.
         kn_id: 知识网络 ID。
         at_id: 行动类 ID。
-        instance_identities: 目标对象实例。留空表示按行动类自身的条件扫描目标实例。
+        instance_identities: 修改和删除的明确目标实例；不传时拒绝执行，不按条件扫描。
         dynamic_params: 动态参数取值，对应行动定义中 `value_from=input` 的参数。完整性校验在 下游
             ontology-query 完成。
 
@@ -141,6 +110,8 @@ def execute_action(
             "response_format": response_format,
         },
         {
+            "relation_target": relation_target,
+            "object_input": object_input,
             "kn_id": kn_id,
             "at_id": at_id,
             "_instance_identities": instance_identities,
@@ -208,6 +179,11 @@ def execute_tool(
 ) -> Any:
     """执行一个已发布函数工具.
 
+    REST lifecycle context is optional, as for search_schema. Missing or empty bkn_context
+    permits ad-hoc execution without depending on Trace Core or capture policy. Explicit
+    nonempty context remains validated. Authentication, network execute permission and
+    mounted-tool authorization still apply. MCP managed execution continues to require
+    conversation/interaction IDs.
     以知识网络托管代理执行工具，返回工具的原始响应；真实调用者仍用于网络级鉴权和审计。
     `toolbox_id` 与 `tool_id` 必须取自 `search_capabilities`（`owner_id` /
     `capability_id`）；`arguments` 按其返回的 `input_schema` 填，只放业务参数——令牌、会话 id
@@ -372,6 +348,8 @@ def get_action_info(
     at_id: str,
     *,
     response_format: str | None = None,
+    relation_target: dict[str, Any] | None = None,
+    object_input: dict[str, Any] | None = None,
     instance_identities: list[Any] | None = None,
     instance_identity: dict[str, Any] | None = None,
     context: Context | None = None,
@@ -390,6 +368,9 @@ def get_action_info(
     服务地址，也不授予执行权限。读取绑定工具定义被拒绝时返回 403，而非依赖服务 不可用。
 
     Args:
+        relation_target: One explicit directed instance pair. Keys are defined by the endpoint
+            object primary keys. No implicit pairing or cross join.
+        object_input: New object data for create operations; no existing-instance scan.
         kn_id: 知识网络 ID。
         at_id: 行动类 ID（从 Schema 检索结果里取）。
         instance_identities: 目标对象实例标识列表。不传则返回行动类级别的定义。
@@ -406,6 +387,8 @@ def get_action_info(
             "response_format": response_format,
         },
         {
+            "relation_target": relation_target,
+            "object_input": object_input,
             "kn_id": kn_id,
             "at_id": at_id,
             "_instance_identities": instance_identities,
@@ -426,16 +409,23 @@ def get_kn_detail(
     """获取知识网络详情.
 
     返回一张知识网络的概念全景：概念组、对象类、关系类、行动类。 **`detail_level`
-    决定返回多少**： | 级别 | 保留 | 剥掉 | |---|---|---| | `summary`（默认） | 骨架 +
-    每个属性的 `name` / `type` | 属性的 `display_name` / `comment` / `mapped_field` /
+    决定返回多少**： | 级别 | 保留 | 剥掉 | |---|---|---| | `brief` | 网络的 `name` /
+    `comment`、概念组、`mounted_capabilities`，以及 `object_type_count` /
+    `relation_type_count` / `action_type_count` | 三个概念数组（回
+    `null`）；也不做逐对象类的属性授权读取，几 KB | | `summary`（默认） | 骨架 + 每个属性的
+    `name` / `type` | 属性的 `display_name` / `comment` / `mapped_field` /
     `condition_operations`，逻辑属性的 `data_source` / `parameters`，关系类的 `mapping_rules`
     与起终点对象类详情 | | `full` | 全部 | —— | 两种级别都会**去掉 `concept_groups`
     里嵌套的对象类 / 关系类 / 行动类副本**： 这些是顶层数组的重复拷贝，概念组只保留
-    `object_type_ids` 作为分组边界。 被剥掉的细节按需用 `get_object_types` /
-    `get_relation_types` 取回。 对象类条目带
-    `related_metric_count`（该对象类下已建模指标数），`>0` 才值得 为取指标下钻。 顶层带
-    `mounted_capabilities`：该网络已挂载的 Skill 与工具按类型计数。两个 `detail_level`
-    都会返回——它是网络的形状，不是可以剥掉的细节。同样只给计数： 要具体能力用
+    `object_type_ids` 作为分组边界。 两种级别都**不带 BKN 3.0 声明**，这些只由 `search_schema`
+    给出：对象类、关系类、 行动类的 `aliases`；对象类属性和间接关系 `mapping_rules.properties`
+    中关系属性的 `aliases` / `semantic` / `required` / `constraints`；关系类的 `reverse_name`
+    / `cardinality` / `constraints` / `verification`。关系类的 `lifecycle`、`importance`、
+    `fallback_for` 保留：它们说明弃用的关系由谁替代、哪条是替代路径，缺了调用方可能把
+    主关系和替代路径的结果相加。 被剥掉的细节按需用 `get_object_types` / `get_relation_types`
+    取回。 对象类条目带 `related_metric_count`（该对象类下已建模指标数），`>0` 才值得
+    为取指标下钻。 顶层带 `mounted_capabilities`：该网络已挂载的 Skill 与工具按类型计数。两个
+    `detail_level` 都会返回——它是网络的形状，不是可以剥掉的细节。同样只给计数： 要具体能力用
     `search_capabilities`。 **超过 200 个对象类、或超过 600 个关系类的网络只返回导航壳**，两个
     `detail_level` 都是：此时 `object_types` / `relation_types` / `action_types` **均回
     `null`**，改由 `object_type_count` / `relation_type_count` / `action_type_count`
@@ -446,11 +436,20 @@ def get_kn_detail(
     也有一兆多，翻页只是把同样的体积分几次
     搬运；而按名称序翻页等于对知识模型做线性扫描。该规模下的路径是：从 `concept_groups` 选出
     1-3 个相关分组，用 [schema-search.yaml](schema-search.yaml) 的 `search_schema` 配合
-    `search_scope.concept_groups` 收敛，再用 `get_object_types` 按 ID 取细节。
+    `search_scope.concept_groups` 收敛，再用 `get_object_types` 按 ID 取细节。 非 `main`
+    分支暂不支持通过 `search_schema` 召回概念。此时用相同 `branch` 调 `get_object_types`，不传
+    `ids` 按页列举对象类索引，再带选中的 `ids` 读取完整定义和关联指标。
     收窄发生在逐对象类的属性授权读取之前：那一步每个对象类一次下游调用，为一份
-    不会返回的列表付这个代价没有意义。 非 main 分支目前不支持 search_schema 召回概念；请用相同
-    branch 调 get_object_types，不传 ids 按页列举对象类索引，再带选中的 ids
-    读取完整定义和关联指标。
+    不会返回的列表付这个代价没有意义。 **返回体积另有上限：约 30000
+    字符**，按调用方实际读到的格式（JSON 或 TOON）计数， `summary` 与 `full`
+    都受限。个数在上限以内的网络，summary 仍可能有二十多万字符，
+    宿主会把它转存成文件、截断或直接丢弃，调用方在不知情的情况下丢掉部分模型。超过时
+    逐级收窄，并在 `notice` 里说明： 1. **大纲**：三个概念数组都在，对象类去掉
+    `data_properties` / `logic_properties` / `effective_permissions` 与说明文字，改给
+    `data_property_count` / `logic_property_count`；关系类保留起终点，去掉映射规则。要属性用
+    `get_object_types` 按 ID 取。 2. **导航壳**：大纲仍超过上限时，返回与 `brief`
+    相同的导航壳；壳本身仍超过上限时， 再去掉各概念组的 `object_type_ids`。
+    体积收窄发生在属性授权读取之后、证据快照之前，证据记录的就是调用方拿到的内容。
 
     Args:
         kn_id: 知识网络 ID。与 `x-kn-id` 头二选一，本字段优先。
@@ -488,10 +487,12 @@ def get_object_types(
 ) -> Any:
     """按 ID 批量取对象类完整定义.
 
-    取 `get_kn_detail` 在 summary 级别剥掉的对象类细节：属性的 `mapped_field` （写 `run_sql`
-    要的物理列名）、`condition_operations`（该属性可用的查询算子）、 逻辑属性的 `data_source`
-    与 `parameters`。 同时返回 `related_metrics`——挂在该对象类下的已发布实例集合指标。这是
-    Agent 选指标的权威清单，选定后统一走 `query_metric`。`logic_properties` 只包含工具型
+    取 `get_kn_detail` 在 summary 级别剥掉的对象类细节：属性的 `mapped_field`
+    （物理列名）、`condition_operations`（该属性可用的查询算子）、 逻辑属性的 `data_source` 与
+    `parameters`。与 `get_kn_detail` 相同，不带对象类与属性的 BKN 3.0 声明（`aliases` /
+    `semantic` / `required` / `constraints`），用 `search_schema` 取。 同时返回
+    `related_metrics`——挂在该对象类下的已发布实例集合指标。这是 Agent
+    选指标的权威清单，选定后统一走 `query_metric`。`logic_properties` 只包含工具型
     逻辑属性，通过 [logic-property.yaml](logic-property.yaml) 的 `logic-property-resolver`
     按对象实例求值；二者不建立绑定关系。 `ids` 里既可以传对象类 ID，也可以传对象类名（ID
     优先，名称仅作兜底）； 匹配不到的 ID 原样回填在 `missing` 里，不报错。属性的
@@ -538,22 +539,50 @@ def get_object_types(
 
 def get_relation_types(
     kn_id: str,
-    ids: list[Any],
     *,
     response_format: str | None = None,
+    branch: str | None = None,
+    ids: list[Any] | None = None,
+    object_type_ids: list[Any] | None = None,
+    offset: int | None = None,
+    limit: int | None = None,
     context: Context | None = None,
 ) -> Any:
-    """按 ID 批量取关系类完整定义.
+    """按 ID 批量取关系类完整定义，或列举关系类索引.
 
     `get_object_types` 的关系类版本：取回 summary 级别剥掉的 `mapping_rules`
-    与起终点对象类详情。同样支持按名称兜底匹配，未命中的 ID 落 `missing`。
+    与起终点对象类详情。同样支持按名称兜底匹配，未命中的 ID 落 `missing`。 **不传 `ids` 时按
+    `offset` / `limit` 列举关系类索引**，与 `get_object_types` 的 列举模式相同：默认 50
+    条、上限 200，按名称排序，带 `total_count` 与 `next_offset`。 索引条目只有 `id` / `name` /
+    `comment` / `tags` / `source_object_type_id` / `target_object_type_id` / `type`，不含
+    `mapping_rules` 与起终点对象类详情； `comment` 只保留前 120
+    个字符，超出部分以「…」结尾，完整说明按 ID 取。 单页内容超过约 30000
+    字符时提前截断，`next_offset` 指向截断处，`notice` 说明原因。 传 `object_type_ids`
+    时只列起点或终点是其中之一的关系类。已经选好对象类、
+    要找它们之间有哪些关系时优先用它，通常一页就能列完。 需要列举的情形：`get_kn_detail`
+    只返回导航壳时 `relation_types` 为 `null`； 在非 `main` 分支上 `search_schema`
+    不能召回概念。`branch` 对两种模式都有效。 与 `get_kn_detail` 相同，不带 BKN 3.0
+    声明：关系类的 `aliases` / `reverse_name` / `cardinality` / `constraints` /
+    `verification`，以及间接关系 `mapping_rules.properties` 中关系属性的 `aliases` /
+    `semantic` / `required` / `constraints`，用 `search_schema` 取。 关系属性的 `name` /
+    `display_name` / `type` / `comment` / `mapped_field` 照常返回；
+    `lifecycle`、`importance`、`fallback_for` 保留。
 
     Args:
         kn_id: 知识网络 ID。与 `x-kn-id` 头二选一，本字段优先。
-        ids: 要下钻的概念 ID 列表（取自 `get_kn_detail`）。也接受概念名称作为兜底匹配。 为空时返回
-            400。
+        branch: 关系类所属的知识网络分支；省略时使用 main。
+        ids: 要下钻的关系类 ID 列表（取自 `get_kn_detail`、`search_schema` 或本接口的列举
+            模式）。也接受名称作为兜底匹配。**留空即切换到列举模式**，不再返回 400；传了 `ids` 时
+            `object_type_ids` / `offset` / `limit` 无效。
+        object_type_ids: 列举时只返回起点或终点是这些对象类之一的关系类。仅在不传 `ids` 时有效。
+            已经选好对象类时优先用它，通常一页就能列完。
+        offset: 列举的起始位置。仅在不传 `ids` 时有效；续页请用响应里的 `next_offset`。
+        limit: 列举的单页条数，默认 50、上限 200。仅在不传 `ids` 时有效。超过上限不报错，
+            按上限返回，并在响应的 `notice` 里说明；单页内容超过约 30000 字符时也会提前
+            截断，同样在 `notice` 里说明。
 
-    Returns the platform's own payload: kn_id, missing, relation_types.
+    Returns the platform's own payload: kn_id, missing, next_offset, notice, relation_types,
+    total_count.
     """
     return _send(
         "/api/agent-retrieval/v1/kn/get_relation_types",
@@ -563,7 +592,11 @@ def get_relation_types(
         },
         {
             "kn_id": kn_id,
+            "branch": branch,
             "ids": ids,
+            "object_type_ids": object_type_ids,
+            "offset": offset,
+            "limit": limit,
         },
         context,
     )
@@ -695,46 +728,6 @@ def list_knowledge_networks(
             "offset": offset,
             "sort": sort,
             "direction": direction,
-        },
-        context,
-    )
-
-
-def list_resources(
-    kn_id: str,
-    *,
-    response_format: str | None = None,
-    catalog_id: str | None = None,
-    type_: str | None = None,
-    offset: int | None = None,
-    limit: int | None = None,
-    context: Context | None = None,
-) -> Any:
-    """列出可查询的数据资源.
-
-    列出当前账户有权查看的数据资源，输出精简字段（够用来挑一个 `resource_id`）。
-    请求体可选，不传则按 vega 默认分页返回。
-
-    Args:
-        catalog_id: 限定某个 catalog。
-        type_: 资源类别，映射 vega 的 category：`table` / `file` / `fileset` / `api` / `metric` /
-            `topic` / `index` / `logical_view` / `dataset`。
-        offset: 分页偏移；不传由 vega 取默认值 0。
-        limit: 分页大小；不传由 vega 取默认值 20。
-
-    Returns the platform's own payload: entries, total_count.
-    """
-    return _send(
-        "/api/agent-retrieval/v1/kn/list_resources",
-        kn_id,
-        {
-            "response_format": response_format,
-        },
-        {
-            "catalog_id": catalog_id,
-            "type": type_,
-            "offset": offset,
-            "limit": limit,
         },
         context,
     )
@@ -923,7 +916,8 @@ def query_metric(
         version: 已发布且不可变的对象指标版本，取自 `related_metrics[].version`。
 
     Returns the platform's own payload: effective_window, empty_reason, entries, evaluated_at,
-    kn_id, metric_id, model, next_cursor, overall_ms, status, total_count, version, warnings.
+    is_approximate, kn_id, metric_id, model, next_cursor, overall_ms, status, total_count,
+    version, warnings.
     """
     return _send(
         "/api/agent-retrieval/v1/kn/query_metric",
@@ -1071,34 +1065,62 @@ def run_cypher(
     response_format: str | None = None,
     branch: str | None = None,
     parameters: dict[str, Any] | None = None,
+    object_properties: dict[str, Any] | None = None,
+    explain: bool | None = None,
+    timeout_sec: int | None = None,
     context: Context | None = None,
 ) -> Any:
     """对知识网络执行只读 Cypher.
 
     编译并执行一条只读 Cypher 语句。**支持的子集**： - **MATCH**：一个或多个 MATCH 子句；一个
-    MATCH 里可以写逗号分隔的多条路径。 同名变量指同一个节点；不共享变量的两部分是笛卡尔积。 -
-    **节点**：变量首次出现时必须带标签（对象类 id 或名称），可带内联属性 `{prop: value}`。 -
-    **关系**：`-[:R]->`、`<-[:R]-`、无向 `-[:R]-`，每条必须指名一个关系类； 一条查询的模式最多
-    8 条关系、9 个节点（不与其他节点相连的节点也各算一张表）。 关系变量（`-[r:R]->`）不支持。
-    - **OPTIONAL MATCH**：写一条关系，把一个新节点挂到前面子句已经找到的节点上。
+    MATCH 里可以写逗号分隔的多条路径。
+    同名变量指同一个节点；不共享变量的部分两两组合，但有两部分既没连起来、又都没有任何条件时，
+    查询会被拒（400 `Unsupported`）。 - **节点**：变量首次出现时必须带标签（对象类 id
+    或名称），可带内联属性 `{prop: value}`。 - **关系**：`-[:R]->`、`<-[:R]-`、无向
+    `-[:R]-`，每条必须指名一个关系类； 一条查询的模式最多 8 条关系、9
+    个节点（不与其他节点相连的节点也各算一张表）。 关系可以带变量（`-[r:R]->`），用于在 RETURN
+    里返回关系本身；关系没有自己的属性，`r.x` 会被拒绝。 - **OPTIONAL
+    MATCH**：写一条关系，把一个新节点挂到前面子句已经找到的节点上。
     匹配不到时该行保留，新节点的列为 NULL，所以 `count(可选侧的属性)` 得 0 而不是整行
     消失（`count(*)` 仍然算 1 行）——按邻居数排序又不丢零度邻居，用的就是这一点。 它自带的
     `WHERE` 与内联属性决定这条关系匹配到什么，不决定哪些行留下。 限制：首个子句必须是
     `MATCH`；一条 `OPTIONAL MATCH` 只能写一条关系、只能引入一个
     新节点（两端都已匹配或两端都是新节点都会被拒）；它引入的节点不能被后面的 `MATCH` 或查询的
     `WHERE` 再要求，否则留下来的行会被重新删掉，这类查询一律拒绝而不是照做。 - **WHERE**：`=`
-    `<>` `<` `>` `<=` `>=`、`IN [...]`、`IS NULL` / `IS NOT NULL`， `STARTS WITH` / `ENDS
-    WITH` / `CONTAINS`，用 `AND` / `OR` / `NOT` 组合，可加括号。 值可写 `$name` 参数；`IN
-    $list` 可把整个列表作为一个参数传入。字符串谓词左侧须为
-    `变量.属性`，右侧须为字符串字面量或取值为字符串的参数；按 openCypher 语义做字面
-    子串匹配（`%`、`_` 等不是通配符），属性为 null 时不匹配；大小写是否敏感取决于
+    `<>` `<` `>` `<=` `>=`（不等于写 `<>`，`!=` 也接受，按 `<>` 处理），
+    两边可以都是属性（`o.shipped < o.ordered`、`a.code =
+    b.code`；模型声明为字符串和数字的属性不能互比）， 日期写 `date('2026-08-13')` /
+    `datetime(...)`，只能和日期类属性比较；`IN [...]`、`IS NULL` / `IS NOT NULL`， `STARTS
+    WITH` / `ENDS WITH` / `CONTAINS`，用 `AND` / `OR` / `NOT` 组合，可加括号。 值可写 `$name`
+    参数；`IN $list` 可把整个列表作为一个参数传入。 `($x IS NULL OR a.p = $x)`
+    是可选条件：`$x` 有值时按它过滤，传 null 或不传时条件不生效，
+    执行前就按传入的值化简，可写在 MATCH、OPTIONAL MATCH 和 WITH 的 `WHERE`
+    里。字符串谓词左侧须为 `变量.属性`，右侧须为字符串字面量或取值为字符串的参数；按
+    openCypher 语义做字面 子串匹配（`%`、`_` 等不是通配符），属性为 null
+    时不匹配；大小写是否敏感取决于
     数据源列的排序规则（collation）。只能用于字符串属性，用在数值、日期等属性上返回 400。 -
     **RETURN**：属性、`AS` 别名、`DISTINCT`，以及 `count` / `sum` / `avg` / `min` / `max`（含
-    `count(*)` 与 `DISTINCT` 形式）。有聚合时按 RETURN 中其余 列自动分组——这是 Cypher 的隐式
-    GROUP BY，无需也不能自己写 GROUP BY。 - **算术**：`+` `-` `*` `/` `%`
-    与取负，可加括号，可写在 RETURN（含聚合的参数）、 `WHERE` 比较的两侧和 `ORDER BY` 里，如
-    `count(*) * 2`、`sum(o.price * o.qty)`、 `count(o.x) * 1.0 / count(*)`、`WHERE o.amount *
-    o.rate > $floor`、 `ORDER BY count(g.id) * 0.5 + p.rank * 0.3
+    `count(*)` 与 `DISTINCT` 形式）。`count(n)` 统计节点 n 存在的行， `count(DISTINCT n)`
+    按主键统计不同对象（多个主键属性按组合区分，没有主键的对象类不能用）。有聚合时按 RETURN
+    中其余 列自动分组——这是 Cypher 的隐式 GROUP BY，无需也不能自己写 GROUP
+    BY（写了会报语法错误并提示）。 RETURN 也可以返回条件，写法与 `WHERE` 相同，如
+    `g.tournament_name CONTAINS 'Men' AS mens`： 值为 `true` / `false`，无法判定时（属性为
+    null，或 OPTIONAL MATCH 没匹配到节点）为
+    `null`；它和其他返回值一样参与分组。要按条件排序，请先起别名再按别名排序。 -
+    **图值**：RETURN 可以直接返回节点 `t` 与关系
+    `r`。节点返回对象类和完整主键（主键值按声明类型 以精确文本给出），再加上
+    `object_properties` 里点名的属性；关系返回关系类、两端节点的标识和
+    连接两端的键值对。`collect(x)` 把每组的 `x` 收成列表（保留重复、跳过 null），`{k: x}`
+    构造映射。 节点和关系按标识分组，所以 `RETURN t AS team, count(*) AS n`
+    按每个对象计数，一次调用就拿到 对象和计数。这类查询总是作为一条 SQL 执行；带 `collect`
+    时每个结果行是一个结论（`collect` 以外的 返回值），`LIMIT`
+    按结论计数，保留下来的结论带全部证据。证据达到 10000 行时返回 400
+    `BknBackend.Cypher.ReadBudgetExceeded`，不会返回部分证据。图值不能用于 `ORDER BY` 或
+    `DISTINCT`， `collect` 不能和其他聚合混用，`collect`
+    旁只能返回节点、关系、属性或常量，并只能按返回属性的别名排序。 - **算术**：`+` `-` `*` `/`
+    `%` 与取负，可加括号，可写在 RETURN（含聚合的参数）、 `WHERE` 比较的两侧和 `ORDER BY`
+    里，如 `count(*) * 2`、`sum(o.price * o.qty)`、 `count(o.x) * 1.0 / count(*)`、`WHERE
+    o.amount * o.rate > $floor`、 `ORDER BY count(g.id) * 0.5 + p.rank * 0.3
     DESC`。操作数是数值属性、聚合、数字或 取值为数字的参数；字符串、布尔、null
     与非数值属性返回 400。与 openCypher 语义不一致的
     写法一律拒绝而不是照做：两个整数相除（Cypher 丢余数，各 SQL 库不一致），要小数结果把
@@ -1106,13 +1128,68 @@ def run_cypher(
     里，不能写在 `WHERE` 中。一个列或排序键既有聚合又在聚合外直接读属性（如 `o.x -
     avg(o.x)`）时，该属性须同时作为单独的列返回，结果按它分组；DISTINCT 结果要按
     算出来的值排序，请在 RETURN 里给它起别名再按别名排序。没有声明类型的属性交给数据源决定。
-    `IN` 列表、内联属性、`SKIP` / `LIMIT` 里仍不能写算术。 - **ORDER BY / SKIP /
-    LIMIT**：ORDER BY 可用属性、返回列名或聚合。结果被聚合 或 DISTINCT
-    折叠后，只能按返回的值排序。 **不支持**（会被拒绝，报错指名是哪个语法与位置）：`WITH`、
-    `UNION`、变长路径 `[:R*1..3]`、`XOR`、返回整个节点、函数调用、`^` 乘方、写操作（`CREATE` /
-    `MERGE` / `DELETE` / `SET` / `REMOVE`）。 **行数**：不写 `LIMIT` 默认返回 1000 行；`LIMIT`
-    不得超过 10000。 **关系唯一性**：按 openCypher
-    语义，同一条路径里共用同一关系类的多跳互不相同，
+    `IN` 列表、内联属性、`SKIP` / `LIMIT` 里仍不能写算术。 - **CASE 与 coalesce**：`CASE WHEN
+    … THEN … ELSE … END`、`CASE x WHEN v THEN … END` 与 `coalesce(a, b, …)`
+    能写在算术能写的地方：RETURN、WITH、ORDER BY、比较两侧和聚合参数，如 `sum(CASE WHEN
+    g.penalty = '1' THEN 1 ELSE 0 END)`、`count(CASE WHEN … THEN 1 END)`。没有 ELSE
+    且没命中时为 null。 各分支（或参数）须都是数字或都不是数字（null
+    字面量可搭配任一种），不能返回布尔；字符串结果不能参与算术或 `sum` /
+    `avg`；分支条件里的聚合要先在 WITH 里命名再用；简单形式不能写 `WHEN null`。这类查询总走
+    SQL 路径。 - **标量函数**：`round(x)`、`round(x, n)`（n 为 0 到 30
+    的整数字面量，结果是数字）、`abs(x)`、
+    `toInteger(x)`（向零截断）、`toFloat(x)`、`toUpper(s)`、`toLower(s)`、`toString(x)`，能写在
+    CASE 能写的地方。 `round` / `abs` / `toInteger` / `toFloat` 只接受数字，`toUpper` /
+    `toLower` 只接受字符串，类型不对返回 400。 decimal 值（含对它的 `sum()`）以字符串返回，如
+    `"13833141.000000"`，要数字用 `toFloat(...)` 或 `round(..., n)`。 这类查询总走 SQL 路径。
+    - **ORDER BY / SKIP / LIMIT**：ORDER BY 可用属性、返回列名或聚合。结果被聚合 或 DISTINCT
+    折叠后，只能按返回的值排序。SKIP、LIMIT 可写整数或参数（`SKIP $from LIMIT $size`），
+    参数值须为非负整数，LIMIT 同样不能超过 10000。 -
+    **比较两组对象**：如「两个产品共用哪些物料」，在一个 MATCH
+    里让两条路径共享节点即可，不需要 WITH： `MATCH (p1:产品 {material_number:
+    $a})-[:产品关联产品bom]->(b1:产品BOM)-[:产品bom关联物料]->(m:物料)<-[:产品bom关联物料]-(b2:产品BOM)<-[:产品关联产品bom]-(p2:产品
+    {material_number: $b}) RETURN DISTINCT m.material_code`。 - **比较两个列表**：两段各自
+    `collect([DISTINCT] x.p)`，第二个 WITH 把第一个列表传下去，RETURN 只写大小： `MATCH … WITH
+    collect(DISTINCT a.p) AS l1 MATCH … WITH l1, collect(DISTINCT b.q) AS l2 RETURN size([x IN
+    l1 WHERE x IN l2]) AS common, size(l1) AS n1, size(l2) AS n2`，返回一行；
+    第二段没匹配到时没有行。不能直接返回列表，要列出共有的值用上面的共享节点写法；不支持
+    UNWIND。 - **WITH**：一条查询可以在所有 MATCH 之后写一个 WITH，用于先聚合再过滤，如 `MATCH
+    (g:goal)-[:rel_goal_team]->(t:team) WITH t, count(*) AS n WHERE n > 100 RETURN t.name AS
+    team, n ORDER BY n DESC`。 WITH 里的值须用 `AS` 命名，节点可直接传下去（`WITH
+    t`，按对象的主键分组，同名对象不会合并）。 WITH 的 `WHERE` 用 WITH
+    传下来的名字、节点的属性、由它们算出的值、字面量或参数比较：只涉及分组键的条件在分组前过滤，
+    涉及聚合的条件对每个分组判断。可以连写多个
+    WITH：只有第一个能聚合，后面的用前面的名字算新值并各自过滤， 如 `WITH code, stock - usage
+    * 50 AS gap WHERE gap < 0`。第一个 WITH 里的 `collect(x.p) AS s` 只能写成
+    `size(s)`，即收集到的个数（如 `WHERE size(s) = 3`）。RETURN 取 WITH
+    的名字、传下来节点的属性或由它们算出的值； 不聚合的 WITH 之后可以再写 `count(*)`；聚合的
+    WITH 之后，RETURN 也可以只写聚合（如 `RETURN count(*) AS n`、
+    `max(n)`），对分组再统计，返回一行。以下仍拒绝：第二个 WITH 之后再写 MATCH、第二段 MATCH
+    之后再接 WITH（比较两个列表除外）、`WITH DISTINCT`、`WITH *`、WITH 上的 ORDER BY / SKIP /
+    LIMIT、WITH 的 WHERE 里写 IN / 字符串谓词、第一个之后的 WITH 再聚合。 -
+    **开头定义常量**：查询可以用只含字面量、字面量列表或参数的 WITH 开头，如 `WITH
+    ['382-000005', 'P61-000351'] AS products MATCH (p:产品) WHERE p.material_number IN
+    products …`， 后面 MATCH 的条件按名字使用这些值。 - **按上一段的值过滤**：`MATCH … WITH
+    DISTINCT x.p AS v MATCH … WHERE y.q = v RETURN …`，或 `WITH collect(x.p) AS s MATCH …
+    WHERE y.q IN s`；`v` 也可以写在内联属性里（`{q: v}`）。第二段的每一行
+    只要值在第一段的值里就保留一次，不随第一段的重复而重复（半连接）。第一段的属性和行范围与查询中其他部分一样
+    受授权约束。WITH 只能有一项；不写 DISTINCT 时，RETURN 须写 DISTINCT 且不聚合；`v` 只能在
+    WHERE 顶层以 `=` 使用、`s` 只能以 `IN` 使用，不能放在 OR / NOT 下；第二段之后不能再接
+    WITH。 - **把节点传给下一个 MATCH**：`WITH p, count(g) AS total WHERE total >= 10 MATCH
+    (p)<-[:R]-(g2)-[:S]->(t) RETURN p, t, count(g2) AS n, total`。WITH
+    传下来的每一行按主键和下一段 匹配到的行连接，下一段里节点可不写标签；`total` 可在 RETURN /
+    ORDER BY 中使用和计算，用在含聚合的表达式里 时要同时单独返回；不能写在下一段的 WHERE
+    里。每个传下来的节点都要在下一段用到，下一段不能是 OPTIONAL MATCH， 之后不能再接
+    WITH。任何 WITH 之后，RETURN 都可以直接返回传下来的节点。这类查询总走 SQL 路径。
+    **数据集和索引**：对象类绑定数据集或索引（不是 SQL
+    数据源），或一条查询跨多个数据源时，改为通过资源数据接口
+    逐表读取再关联，只支持基础写法；CASE、coalesce、标量函数、对分组再统计、比较两个列表、把节点传给下一个
+    MATCH、 collect 会返回 400，读取量过大或超时也返回 400；返回节点、关系和虚拟边与 SQL
+    数据源上相同；UNION 也可用，每段各自读取。
+    **不支持**（会被拒绝，报错指名是哪个语法与位置）： 变长路径 `[:R*1..3]`、`XOR`、`date()` /
+    `datetime()` / `localdatetime()`、`coalesce()`、上面的标量函数、`size()`（只用于 WITH
+    收集的列表）和聚合以外的函数调用、`^` 乘方、写操作（`CREATE` / `MERGE` / `DELETE` / `SET`
+    / `REMOVE`）。 **行数**：不写 `LIMIT` 默认返回 1000 行；`LIMIT` 不得超过 10000。
+    **关系唯一性**：按 openCypher 语义，同一条路径里共用同一关系类的多跳互不相同，
     编译器会自动补上主键不等的条件，调用方不必自己写。该规则按子句划分，因此 `OPTIONAL MATCH`
     的那一跳不参与——它补出的条件会落在 `WHERE` 里，正好删掉外连接 保住的行。
 
@@ -1121,12 +1198,33 @@ def run_cypher(
         branch: 分支名。不传按主分支查。
         query: 只读 Cypher 语句，语法子集见端点说明。
         parameters: 语句里 `$name` 的取值。只能是字符串、数字或布尔值——参数是值，不会变成
-            表名或列名，因此不能用来拼标签、关系类型或属性名。`null` 会被拒绝： 判空写 `IS
-            NULL`。用在 `IN $name` 右侧的参数须为非空数组，元素为同一类标量
-            （整数与小数都算数字），不能含 `null`，最多 500 个，如 `{"keys": [6, 7, 8]}`。
-            一条查询里多个长列表合计过大时会返回 400，需拆成多次查询。
+            表名或列名，因此不能用来拼标签、关系类型或属性名。`null` 只能用于 `$name IS
+            NULL` 判空（可选条件，不传也算 null），用在其他地方会被拒绝。用在 `IN $name`
+            右侧的参数须为数组，元素为同一类标量 （整数与小数都算数字），不能含
+            `null`，最多 500 个，如 `{"keys": [6, 7, 8]}`； 空数组不匹配任何行，与直接写
+            `IN []` 相同。与日期、日期时间属性比较的字符串 必须是日期，如
+            `2026-08-13`、`2026-08-13T09:30:00`（可带 RFC 3339 时区偏移）， 其他字符串返回
+            400，不会被当成某个时间。 一条查询里多个长列表合计过大时会返回
+            400，需拆成多次查询。
+        object_properties: 返回的节点除标识外还要带哪些属性，按节点变量给出，如 `{"t":
+            ["team_name"]}`。 变量必须是 RETURN 里返回的节点，所有变量合计最多 128
+            个属性；这些属性和查询里其他属性一样 受授权约束。不传时节点只带标识。
+        explain: 为 true 时不执行查询、不读数据，只返回 `plan`（此时 `entries`
+            为空）：查询形状、对象和关系、条件、
+            分组、返回列及类型、行数上限、会读的属性、行范围被收窄的对象类和提醒。查询的解析、授权和编译与执行时
+            完全相同，所以会被拒的写法返回与执行时相同的错误和改写提示。不返回
+            SQL。例外：explain 看不出数据存在哪里，
+            对象类绑定数据集、索引或跨多个数据源时才被拒的写法（CASE、coalesce 等），explain
+            照样通过，执行时才被拒。
+        timeout_sec: 查询在数据源上的执行时限（秒），查询执行的所有语句（UNION 的各分支、bind-join
+            及其 SQL 回退）共用这一个时限。不传则使用 bkn-backend 配置的时限（默认 55
+            秒，部署可通过 `BKN_CYPHER_QUERY_TIMEOUT_SEC`
+            调整）。只能比配置值更短：超过配置值或小于 1 返回
+            `BknBackend.Cypher.InvalidParameter`。仅本 REST 接口接受；MCP 工具
+            `run_cypher` 不接受此参数，传了也会被忽略。
 
-    Returns the platform's own payload: columns, entries.
+    Returns the platform's own payload: columns, entries, execution, limited, plan,
+    value_types.
     """
     return _send(
         "/api/agent-retrieval/v1/kn/run_cypher",
@@ -1139,66 +1237,9 @@ def run_cypher(
             "branch": branch,
             "query": query,
             "parameters": parameters,
-        },
-        context,
-    )
-
-
-def run_sql(
-    kn_id: str,
-    sql: str,
-    *,
-    response_format: str | None = None,
-    query_timeout: int | None = None,
-    context: Context | None = None,
-) -> Any:
-    """对数据资源执行只读 SQL.
-
-    以 MySQL 方言执行**只读** SQL。表名不写物理表名，写占位符
-    `{{<resource_id>}}`，由服务端解析到真实数据源。 **权限**：调用者必须对 SQL
-    引用的每个数据资源都持有 Vega 资源的 `view_detail`
-    权限——与其他遵循知识网络授权的查询接口不同，通过对象类获得的授权不覆盖本接口，
-    仅通过对象类获得授权的调用方应改用 `/kn/query_object_instance` 或 `/kn/run_cypher`。
-    标识符需要引用时使用反引号（如 `` `order_id` ``）；双引号在 MySQL 方言下是
-    字符串字面量，不能用于标识符。 **两条硬约束，违反直接 400，SQL 不会下发**： 1.
-    **必须引用占位符**。SQL 里没有 `{{resource_id}}` 时报 `sql must reference at least one
-    data resource via the {{resource_id}} placeholder`
-    ——这既是定位数据源的唯一途径，也挡住了绕开权限直接写物理表名。 2. **必须是单条只读
-    `SELECT` 语句**。端到端兼容性以 vega 的只读策略为准； 虽然本服务的本地守卫可接受以 `WITH`
-    开头的语句，但 vega 当前会拒绝 CTE， 因此调用方**不得使用 `WITH` / CTE 或 `UNION` /
-    `INTERSECT` / `EXCEPT`**。 守卫会先剥掉注释、字符串字面量、反引号标识符与占位符，
-    再判定：不允许多语句（剥离后仍含 `;`）、必须以 `SELECT` 或 `WITH` 开头、不得含 写入 / DDL
-    / 权限 / 过程类关键字（INSERT、UPDATE、DELETE、DROP、ALTER、
-    CREATE、TRUNCATE、GRANT、REVOKE、REPLACE、MERGE、UPSERT、CALL、EXEC、
-    EXECUTE、RENAME、LOAD、COPY、INTO、ATTACH、DETACH、USE、VACUUM、ANALYZE、
-    REFRESH、COMMENT、PREPARE、DEALLOCATE）。 当前保证可用的只读语法为：单表或同一 catalog
-    内的 `JOIN`、`WHERE`、 `GROUP BY` / `HAVING`、`ORDER BY`、`LIMIT` 及常用聚合函数（如
-    `COUNT`、`SUM`、
-    `AVG`、`MIN`、`MAX`）。子查询和窗口函数不属于当前兼容性承诺，调用方不得依赖。 SQL Server
-    资源还要求 `SELECT` 输出列名唯一；使用 `JOIN` 时，`*` 必须带表别名 限定（如
-    `o.*`），不能使用裸 `*`。 守卫不是完整 SQL 解析器，是纵深防御的一层：vega 侧统一使用公共
-    Go Parser 做最终只读策略校验（拒绝非顶层 SELECT、WITH/CTE、集合运算等），两层都不可省。
-    **不分页**：固定单次返回，上限 10000 行。要更多数据请在 SQL 里自己收敛 （聚合、加条件、加
-    LIMIT）。
-
-    Args:
-        sql: MySQL 方言 SQL。表名必须写成 `{{<resource_id>}}` 占位符， `resource_id` 必须匹配
-            `[a-z0-9][a-z0-9_-]{0,39}`（小写，最长 40 个字符），否则占位符不会被识别。
-            标识符需要引用时使用反引号；双引号在 MySQL 方言下是字符串字面量，不能用于
-            标识符。只允许单条 `SELECT`（不支持 `WITH` / CTE）。
-        query_timeout: 查询超时（秒）。不传走下游默认。
-
-    Returns the platform's own payload: columns, entries, paging, total_count, warnings.
-    """
-    return _send(
-        "/api/agent-retrieval/v1/kn/run_sql",
-        kn_id,
-        {
-            "response_format": response_format,
-        },
-        {
-            "sql": sql,
-            "query_timeout": query_timeout,
+            "object_properties": object_properties,
+            "explain": explain,
+            "timeout_sec": timeout_sec,
         },
         context,
     )
@@ -1364,14 +1405,15 @@ def search_schema(
     enable_rerank: bool | None = None,
     rerank_model: str | None = None,
     include_columns: bool | None = None,
+    enum_query: str | None = None,
     context: Context | None = None,
 ) -> Any:
     """探索知识网络 Schema.
 
     统一的 Schema 探索入口。适用于还不确定该继续调用哪个 `query_*` / `find_*` / `get_*`
-    接口时，先探索相关概念。 **写 SQL 时注意 `include_columns`**：`data_properties[].name`
-    是逻辑名， 物理列名在 `mapped_field` 里，二者可以不同（同一份资源可被多个对象类以不同
-    逻辑名映射）。要用 `run_sql` 直查时置 `include_columns=true` 拿物理列名。
+    接口时，先探索相关概念。 **`include_columns`**：`data_properties[].name` 是逻辑名，
+    物理列名在 `mapped_field` 里，二者可以不同（同一份资源可被多个对象类以不同
+    逻辑名映射）。置 `include_columns=true` 可拿到物理列名。
 
     Args:
         query: 用户查询问题或关键词。
@@ -1385,8 +1427,13 @@ def search_schema(
             （`concept_search_config.rerank_model`）。**不建议由 Agent
             自行选择模型名**。
         include_columns: 是否在每个对象类的 `data_properties` 上附带物理列名（取自
-            `mapped_field`）。 写 `run_sql` 需要物理列名时置 true；默认 false
-            以保持响应精简。
+            `mapped_field`）。 默认 false 以保持响应精简。
+        enum_query:
+            按显示名或编码检索枚举项，多个词用空格隔开，任一词命中即返回。用于没有展开的枚举：
+            超过展开上限（默认 50
+            项）的大字典，以及精简模式下的所有枚举。不传时这些枚举只给 `value_type` 与
+            `enum_count`。命中超过展开上限时只列前面一部分，另给 `enum_match_count`
+            表示命中总数。
 
     Returns the platform's own payload: action_types, message, metric_types, nodes,
     object_types, relation_types.
@@ -1406,6 +1453,7 @@ def search_schema(
             "enable_rerank": enable_rerank,
             "rerank_model": rerank_model,
             "include_columns": include_columns,
+            "enum_query": enum_query,
         },
         context,
     )
