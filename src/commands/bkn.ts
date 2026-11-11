@@ -332,10 +332,15 @@ export function bknCommand(): Command {
       });
     if (name === "action-type") {
       listCommand
-        .option("--operation-kind <kind>", "filter by object, relation or tool")
+        .option(
+          "--operation-kind <kind>",
+          "filter by object, relation or tool",
+          oneOf("--operation-kind", ["object", "relation", "tool"] as const),
+        )
         .option(
           "--relation-operation <operation>",
           "filter by create or delete relation operation",
+          oneOf("--relation-operation", ["create", "delete"] as const),
         );
     }
     if (crud) {

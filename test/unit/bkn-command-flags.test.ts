@@ -17,6 +17,8 @@ const kn = vi.hoisted(() => {
     relationTypeDelete: ok(),
     objectTypeUpdate: ok(),
     objectTypes: ok(),
+    relationTypes: ok(),
+    actionTypes: ok(),
     conceptGroups: ok(),
     actionSchedules: ok(),
     actionTypeQuery: ok(),
@@ -130,6 +132,12 @@ describe("openbkn bkn flags", () => {
   });
 
   it("refuses an out-of-enum value before calling the deploy", async () => {
+    await expect(
+      run("action-type", "list", "kn-1", "--operation-kind", "Relation"),
+    ).rejects.toThrow("--operation-kind must be one of");
+    await expect(
+      run("action-type", "list", "kn-1", "--relation-operation", "unlink"),
+    ).rejects.toThrow("--relation-operation must be one of");
     await expect(run("action-log", "list", "kn-1", "--status", "done")).rejects.toThrow(
       "--status must be one of",
     );
@@ -151,6 +159,34 @@ describe("openbkn bkn flags", () => {
     expect(kn.actionLogs).not.toHaveBeenCalled();
     expect(kn.subgraph).not.toHaveBeenCalled();
     expect(kn.objectTypeQuery).not.toHaveBeenCalled();
+    expect(kn.actionTypes).not.toHaveBeenCalled();
+  });
+
+  it("action-type list forwards operation filters, while other schema lists reject them", async () => {
+    await run(
+      "action-type",
+      "list",
+      "kn-1",
+      "--operation-kind",
+      "relation",
+      "--relation-operation",
+      "delete",
+    );
+    expect(kn.actionTypes).toHaveBeenCalledWith("kn-1", {
+      branch: "main",
+      namePattern: undefined,
+      tag: undefined,
+      operationKind: "relation",
+      relationOperation: "delete",
+    });
+    await expect(
+      run("object-type", "list", "kn-1", "--operation-kind", "relation"),
+    ).rejects.toThrow();
+    await expect(
+      run("relation-type", "list", "kn-1", "--relation-operation", "delete"),
+    ).rejects.toThrow();
+    expect(kn.objectTypes).not.toHaveBeenCalled();
+    expect(kn.relationTypes).not.toHaveBeenCalled();
   });
 
   it("subgraph passes --query-type relation_path", async () => {
