@@ -311,7 +311,8 @@ export function bknCommand(): Command {
   ];
   for (const [name, listMethod, crud] of schemaGroups) {
     const g = bkn.command(name).description(`${name} list/get/...`);
-    g.command("list <kn-id>")
+    const listCommand = g
+      .command("list <kn-id>")
       .description(`List ${name}s`)
       .option("--branch <b>", "branch", "main")
       .option("--name-pattern <s>", "fuzzy name filter")
@@ -322,10 +323,26 @@ export function bknCommand(): Command {
             branch: opts.branch,
             namePattern: opts.namePattern,
             tag: opts.tag,
+            ...(name === "action-type"
+              ? { operationKind: opts.operationKind, relationOperation: opts.relationOperation }
+              : {}),
           }),
           outputOptions(cmd),
         );
       });
+    if (name === "action-type") {
+      listCommand
+        .option(
+          "--operation-kind <kind>",
+          "filter by object, relation or tool",
+          oneOf("--operation-kind", ["object", "relation", "tool"] as const),
+        )
+        .option(
+          "--relation-operation <operation>",
+          "filter by create or delete relation operation",
+          oneOf("--relation-operation", ["create", "delete"] as const),
+        );
+    }
     if (crud) {
       g.command("get <kn-id> <id>")
         // The backend route takes a list of ids, so a single get answers an envelope.
