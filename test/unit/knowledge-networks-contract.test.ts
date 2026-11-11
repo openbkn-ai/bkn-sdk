@@ -140,6 +140,53 @@ describe("action-type query", () => {
   });
 });
 
+describe("new action contract", () => {
+  it("forwards precise directed targets and object input envelopes unchanged", async () => {
+    const f = mockFetch();
+    const body = {
+      relation_target: {
+        source_identity: { id: 9223372036854775807n },
+        target_identity: { code: "0001" },
+      },
+      dynamic_params: { notify: false },
+    };
+    await executeActionType(ctx, "kn", "link", body);
+    expect(lastCall(f).init.body).toBe(
+      '{"relation_target":{"source_identity":{"id":9223372036854775807},"target_identity":{"code":"0001"}},"dynamic_params":{"notify":false}}',
+    );
+    await executeActionType(ctx, "kn", "create", { object_input: { id: "N1" } });
+    expect(JSON.parse(lastCall(f).init.body as string)).toEqual({ object_input: { id: "N1" } });
+    await queryActionType(ctx, "kn", "link", {});
+    expect(lastCall(f).init.body).toBe("{}");
+    expect(header(lastCall(f).init, "X-HTTP-Method-Override")).toBe("GET");
+  });
+  it("keeps operation metadata in schema writes and filters on the server", async () => {
+    const f = mockFetch();
+    const action = {
+      id: "link",
+      operation_config: {
+        type: "relation",
+        relation_type_id: "orders_supplier",
+        relation_operation: "create",
+        anchor_role: "source",
+      },
+      parameters: [{ name: "supplier", value_from: "target_identity" }],
+    };
+    await createSchemaItem(ctx, "kn", "action-types", [action]);
+    expect(JSON.parse(lastCall(f).init.body as string).entries).toEqual([action]);
+    await listActionTypes(ctx, "kn", {
+      operationKind: "relation",
+      relationOperation: "delete",
+      offset: 5,
+      limit: 2,
+    });
+    const query = lastCall(f).url.searchParams;
+    expect(query.get("operation_kind")).toBe("relation");
+    expect(query.get("relation_operation")).toBe("delete");
+    expect(query.get("offset")).toBe("5");
+  });
+});
+
 describe("schema creates carry the POST override", () => {
   it("object-type batch create (create-from-catalog path)", async () => {
     const f = mockFetch();

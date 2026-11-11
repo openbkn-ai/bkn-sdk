@@ -460,6 +460,8 @@ export interface ListRelationTypesOptions extends ListSchemaOptions {
 }
 
 export interface ListActionTypesOptions extends ListSchemaOptions {
+  operationKind?: "object" | "relation" | "tool";
+  relationOperation?: "create" | "delete";
   /** Action category: `add` | `modify` | `delete`. */
   actionType?: string;
   /** Bound object type. */
@@ -529,6 +531,8 @@ export function listActionTypes(
     query: {
       ...schemaListQuery(opts),
       action_type: opts.actionType || undefined,
+      operation_kind: opts.operationKind,
+      relation_operation: opts.relationOperation,
       object_type_id: opts.objectTypeId || undefined,
     },
   });

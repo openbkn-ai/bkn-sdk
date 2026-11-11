@@ -141,3 +141,10 @@ Update this table as each signal changes (e.g. live-parity count as commands are
 - `auth-store.test.ts` checks that native base64url platform keys read existing
   cache files and preserve the same directory mapping for all padding lengths
   and Unicode URLs, without regex-based encoding.
+
+- Action contract regressions for Foundry #3059 verify operation metadata in
+  schema writes, explicit relation/object targets, precise numeric identities,
+  definition-only discovery, and operation filters before server pagination.
+  The local branch passed lint, build, and 1458 unit tests (one optional live
+  test skipped). The shared deployment returned 401 after its stored login
+  expired; real new-model execution remains an integration acceptance item.
