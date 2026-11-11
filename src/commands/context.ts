@@ -311,8 +311,9 @@ Supported: several MATCH clauses and comma-separated paths, OPTIONAL MATCH (one
 relationship); -[:R]->, <-[:R]- and undirected -[:R]-; WHERE with comparisons, IN,
 IS NULL, AND/OR/NOT, string predicates and \$name parameters; RETURN with aliases,
 DISTINCT, count/sum/avg/min/max (grouping by the other returned columns), arithmetic,
-CASE, coalesce and date()/datetime(); collect + size; one WITH after the MATCHes
-(aggregate, then filter); UNION / UNION ALL; ORDER BY, SKIP, LIMIT.
+CASE, coalesce and date()/datetime(); collect + size; WITH after the MATCHes, more
+than one if needed (only the first may aggregate); UNION / UNION ALL; ORDER BY, SKIP,
+LIMIT.
 Refused with the construct and its position: variable-length paths, UNWIND, ORDER BY /
 SKIP / LIMIT on WITH, aggregating again after the first WITH, writes. A query holds at
 most 8 relationships and 9 nodes; without LIMIT it returns 1000 rows, and LIMIT may
