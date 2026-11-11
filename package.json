@@ -37,7 +37,7 @@
     "lint": "npm run check:deps && biome check . && tsc --noEmit",
     "format": "biome format --write .",
     "test": "vitest run",
-    "test:e2e:trace-business": "npm run build && node test/e2e/bkn-trace-business-interaction.mjs",
+    "test:e2e:trace-business": "npm run build && node test/e2e/bkn-trace-managed-business-interaction.mjs",
     "test:e2e:smoke": "npm run build && test/e2e/live-smoke.sh",
     "test:e2e:suite": "npm run build && test/e2e/live-suite.sh",
     "test:e2e:write": "npm run build && test/e2e/live-write.sh",

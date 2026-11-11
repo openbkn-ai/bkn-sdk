@@ -14,8 +14,7 @@ it by hand: `kn_id` in the body of `query_object_instance` answers
 
 Every route here needs a managed turn. It is attached by the runtime, so
 `bkn_context` is never an argument — and `kn_id` leads every signature, because
-the turn belongs to a network even where the route does not send one (`run_sql`
-finds its data through the placeholder in the SQL).
+the turn belongs to a network even where the route does not send one.
 
 Most of these need an id that only an earlier call produces, which is why this
 reads as a chain rather than a list.
@@ -74,35 +73,19 @@ def main() -> None:
     ot = chosen_object_type([t for t in types if t])
     print(f"reading through: {ot}")
 
-    # 2. Which data resource backs this object type — `run_sql` names tables by
-    #    resource id, never by physical table name.
-    found = flat(
-        attempt("search_schema", lambda: kn.search_schema(network, ot, include_columns=True))
+    # 2. Aggregation lives here: the typed read cannot group, so COUNT /
+    #    SUM / GROUP BY goes through Cypher, which respects the network's
+    #    property-level rules.
+    counted = flat(
+        attempt(
+            "run_cypher",
+            lambda: kn.run_cypher(network, f"MATCH (o:{ot}) RETURN count(*) AS n"),
+        )
     )
-    types = found.get("object_types") or []
-    resource = ((types[0].get("data_source") or {}).get("id")) if types else None
-    print(f"{ot} is backed by resource: {resource}")
+    if counted:
+        print(f"  run_cypher: {counted.get('entries') or counted.get('rows')}")
 
-    if resource:
-        described = flat(
-            attempt("describe_resource", lambda: kn.describe_resource(network, resource))
-        )
-        if described:
-            columns = [c.get("name") for c in (described.get("columns") or [])][:5]
-            print(f"  connector {described.get('connector_type')}, columns {columns}")
-
-        # 3. Aggregation lives here: the typed read cannot group, so SUM /
-        #    COUNT / GROUP BY is what this route is for.
-        counted = flat(
-            attempt(
-                "run_sql",
-                lambda: kn.run_sql(network, "SELECT COUNT(*) AS n FROM {{" + resource + "}}"),
-            )
-        )
-        if counted:
-            print(f"  run_sql: {counted.get('entries')}")
-
-    # 4. Instances. `kn_id` and `ot_id` go in the query string here — the
+    # 3. Instances. `kn_id` and `ot_id` go in the query string here — the
     #    wrapper knows, a hand-built call does not.
     rows = flat(
         attempt(
@@ -113,7 +96,7 @@ def main() -> None:
     if rows:
         print(f"query_object_instance: {len(rows.get('datas') or [])} rows")
 
-    # 5. Published Object Metric V1 ids and immutable versions.
+    # 4. Published Object Metric V1 ids and immutable versions.
     metrics = (
         flat(
             attempt(
@@ -140,7 +123,7 @@ def main() -> None:
             if measured:
                 print(f"query_metric({metric_id}, v{version}): {list(measured)[:3]}")
 
-    # 6. Skills: list, then read one's manifest, then a file out of it.
+    # 5. Skills: list, then read one's manifest, then a file out of it.
     skills = flat(attempt("list_skills", lambda: kn.list_skills(network))).get("entries") or []
     if skills:
         skill = skills[0].get("id") or skills[0].get("skill_id")
@@ -151,7 +134,7 @@ def main() -> None:
             read = flat(kn.read_skill_file(network, skill, files[0]))
             print(f"  {files[0]}: {read.get('mime_type')}, {len(read.get('content') or '')} chars")
 
-    # 7. Actions, where the network has them.
+    # 6. Actions, where the network has them.
     actions = [a.get("id") or a.get("concept_id") for a in (detail.get("action_types") or [])]
     if actions and actions[0]:
         info = flat(attempt("get_action_info", lambda: kn.get_action_info(network, actions[0])))
@@ -162,7 +145,7 @@ def main() -> None:
     )
     print(f"action executions: {len(history.get('entries') or [])}")
 
-    # 8. Discovery over the graph: no path given, the engine spreads from a
+    # 7. Discovery over the graph: no path given, the engine spreads from a
     #    starting type. `query_instance_subgraph` is the other one — a path you
     #    can already name.
     walked = flat(
@@ -175,11 +158,11 @@ def main() -> None:
     # so the evidence chain reads as a single piece of work — wrap the lot:
     #
     #     with bkn_osdk.session(traced=True):
-    #         kn.list_resources(network)
-    #         kn.run_sql(network, ...)
+    #         kn.run_cypher(network, ...)
+    #         kn.list_skills(network)
     with bkn_osdk.session(traced=True):
-        kn.list_resources(network)
         kn.list_skills(network)
+        kn.list_action_executions(network, limit=1)
     print("two calls in one traced scope: the same turn carried both")
 
 

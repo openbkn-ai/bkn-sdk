@@ -18,7 +18,7 @@ and any tool the deploy publishes by name.
 
 ```python
 bkn_osdk.call("/api/agent-observability/v1/traces", query={"limit": 10})
-bkn_osdk.call_tool(ctx, kn_id, "describe_resource", {"resource_id": "…", ...})
+bkn_osdk.call_tool(ctx, kn_id, "get_object_types", {"ids": ["…"], ...})
 ```
 
 The layers are named for what they address, not for how they were built — one
@@ -426,7 +426,7 @@ bkn_osdk.call("/api/safe/v1/me/api-keys")                                 # anyt
 
 ctx = bkn_osdk.resolve_context()
 bkn_osdk.tool_catalog(ctx)                            # what this deploy publishes
-bkn_osdk.call_tool(ctx, kn_id, "run_sql", {"kn_id": kn_id, "sql": …, "bkn_context": …})
+bkn_osdk.call_tool(ctx, kn_id, "run_cypher", {"kn_id": kn_id, "query": …, "bkn_context": …})
 ```
 
 `call_tool` is the raw seam: it takes the arguments the catalog declares and
@@ -462,14 +462,13 @@ a connection error.
 
 ### Named functions for the capability routes
 
-The context-loader surface — 25 routes under `/api/agent-retrieval/v1/kn/` — is
+The context-loader surface — 22 routes under `/api/agent-retrieval/v1/kn/` — is
 also generated, from foundry's own OpenAPI:
 
 ```python
 from bkn_osdk import kn
 
-kn.list_resources(KN_ID)
-kn.run_sql(KN_ID, "SELECT COUNT(*) AS n FROM {{d9hff…}}")
+kn.run_cypher(KN_ID, "MATCH (o:<object_type_id>) RETURN o.<prop>, count(*) AS n")
 kn.run_cypher(
     KN_ID,
     "MATCH (o:order)-[:rel_order_customer]->(c:customer) RETURN c.city AS city, count(*) AS n",

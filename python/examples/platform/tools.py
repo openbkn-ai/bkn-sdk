@@ -102,43 +102,26 @@ def main() -> None:
         print(f"  receipt {(detail.receipt or {}).get('operation_id')}")
 
         # Aggregation has no typed form — `query_object_instance` cannot group —
-        # so SUM/COUNT/GROUP BY is what `run_sql` is for. The table name is a
-        # placeholder filled with the object type's `data_source.id`, which
-        # `search_schema` is where you read from.
-        found = call_tool(
+        # so COUNT/SUM/GROUP BY goes through `run_cypher`, written in model
+        # names so the network's property-level rules still apply.
+        counted = call_tool(
             ctx,
             network,
-            "search_schema",
+            "run_cypher",
             {
                 "kn_id": network,
-                "query": "orders",
+                "query": "MATCH (o:orders) RETURN count(*) AS n",
                 "response_format": "json",
-                "include_columns": True,
                 "bkn_context": turn.bkn_context,
             },
         ).value
-        types = payload(found).get("object_types") or []
-        if types:
-            resource = (types[0].get("data_source") or {}).get("id")
-            print(f"{types[0].get('concept_id')} is backed by resource: {resource}")
-            if resource:
-                counted = call_tool(
-                    ctx,
-                    network,
-                    "run_sql",
-                    {
-                        "kn_id": network,
-                        "sql": "SELECT COUNT(*) AS n FROM {{" + resource + "}}",
-                        "bkn_context": turn.bkn_context,
-                    },
-                ).value
-                answered = payload(counted)
-                print(f"  run_sql: {answered.get('entries')} columns {answered.get('columns')}")
+        answered = payload(counted)
+        print(f"  run_cypher: {answered.get('entries') or answered.get('rows')}")
 
     # ---- one turn across both layers ---------------------------------------
     with bkn_osdk.session(traced=True) as scoped:
         turn = current_interaction(scoped, network)
-        for name in ("list_resources", "list_skills"):
+        for name in ("list_skills", "list_knowledge_networks"):
             result = call_tool(
                 scoped, network, name, {"kn_id": network, "bkn_context": turn.bkn_context}
             )

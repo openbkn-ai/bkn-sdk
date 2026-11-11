@@ -1,40 +1,6 @@
 {
   "operations": [
     {
-      "path": "/api/agent-retrieval/v1/kn/describe_resource",
-      "method": "POST",
-      "operation": "describe_resource",
-      "summary": "查看资源的物理结构",
-      "description": "取单个资源的物理列与连接器类型——写 `run_sql` 之前该看的东西。 `connector_type` 决定实际目标方言；`run_sql` 仅支持 `mysql` / `mariadb` / `postgresql` / `sqlserver` 资源，统一接收 MySQL 方言。目标方言不是 MySQL 时由 Vega 转译，MySQL / MariaDB 资源则直接下发；其他连接器（如 `opensearch`）会被拒绝。",
-      "query": [
-        {
-          "name": "response_format",
-          "type": "string",
-          "required": false,
-          "description": "",
-          "enum": [
-            "json",
-            "toon"
-          ]
-        }
-      ],
-      "body": [
-        {
-          "name": "resource_id",
-          "type": "string",
-          "required": true,
-          "description": "资源 ID。"
-        }
-      ],
-      "declares_context": true,
-      "returns": [
-        "columns",
-        "connector_type",
-        "resource_id"
-      ],
-      "source": "data-access.yaml"
-    },
-    {
       "path": "/api/agent-retrieval/v1/kn/execute_action",
       "method": "POST",
       "operation": "execute_action",
@@ -467,7 +433,7 @@
       "method": "POST",
       "operation": "get_object_types",
       "summary": "按 ID 批量取对象类完整定义",
-      "description": "取 `get_kn_detail` 在 summary 级别剥掉的对象类细节：属性的 `mapped_field` （写 `run_sql` 要的物理列名）、`condition_operations`（该属性可用的查询算子）、 逻辑属性的 `data_source` 与 `parameters`。 同时返回 `related_metrics`——挂在该对象类下的已发布实例集合指标。这是 Agent 选指标的权威清单，选定后统一走 `query_metric`。`logic_properties` 只包含工具型 逻辑属性，通过 [logic-property.yaml](logic-property.yaml) 的 `logic-property-resolver` 按对象实例求值；二者不建立绑定关系。 `ids` 里既可以传对象类 ID，也可以传对象类名（ID 优先，名称仅作兜底）； 匹配不到的 ID 原样回填在 `missing` 里，不报错。属性的 `display_name` （纯 UI 标签）在本接口也会被去掉。 **不传 `ids` 就是列举对象类索引**：按名称升序返回一页，每条只有 `id` / `name` / `comment` / `tags` / `data_source`，**没有 `data_properties`、 `logic_properties` 与 `related_metrics`**。`limit` 默认 50、上限 200，响应带 `total_count`（当前账号可见总数）与 `next_offset`（走完最后一页即不再出现， 别自己用 `offset + len` 推）。 这是给拿不到 ID 的调用方准备的——`get_kn_detail` 对超过上限的网络只回导航壳， 那条路给不出 ID。挑好之后把 ID 传回本接口取完整定义。传了 `ids` 则 `offset` / `limit` 无效。 索引而非定义，是因为完整定义在大网络上一条约 60KB：一页 20 条就超过一兆， 正是导航壳要避免的那种返回值；而且每条还要付一次属性级授权读取。索引条目 只有几百字节，且一次下游读取就能取回整页。",
+      "description": "取 `get_kn_detail` 在 summary 级别剥掉的对象类细节：属性的 `mapped_field` （物理列名）、`condition_operations`（该属性可用的查询算子）、 逻辑属性的 `data_source` 与 `parameters`。 同时返回 `related_metrics`——挂在该对象类下的已发布实例集合指标。这是 Agent 选指标的权威清单，选定后统一走 `query_metric`。`logic_properties` 只包含工具型 逻辑属性，通过 [logic-property.yaml](logic-property.yaml) 的 `logic-property-resolver` 按对象实例求值；二者不建立绑定关系。 `ids` 里既可以传对象类 ID，也可以传对象类名（ID 优先，名称仅作兜底）； 匹配不到的 ID 原样回填在 `missing` 里，不报错。属性的 `display_name` （纯 UI 标签）在本接口也会被去掉。 **不传 `ids` 就是列举对象类索引**：按名称升序返回一页，每条只有 `id` / `name` / `comment` / `tags` / `data_source`，**没有 `data_properties`、 `logic_properties` 与 `related_metrics`**。`limit` 默认 50、上限 200，响应带 `total_count`（当前账号可见总数）与 `next_offset`（走完最后一页即不再出现， 别自己用 `offset + len` 推）。 这是给拿不到 ID 的调用方准备的——`get_kn_detail` 对超过上限的网络只回导航壳， 那条路给不出 ID。挑好之后把 ID 传回本接口取完整定义。传了 `ids` 则 `offset` / `limit` 无效。 索引而非定义，是因为完整定义在大网络上一条约 60KB：一页 20 条就超过一兆， 正是导航壳要避免的那种返回值；而且每条还要付一次属性级授权读取。索引条目 只有几百字节，且一次下游读取就能取回整页。",
       "query": [
         {
           "name": "response_format",
@@ -759,57 +725,6 @@
         "total_count"
       ],
       "source": "kn-explore.yaml"
-    },
-    {
-      "path": "/api/agent-retrieval/v1/kn/list_resources",
-      "method": "POST",
-      "operation": "list_resources",
-      "summary": "列出可查询的数据资源",
-      "description": "列出当前账户有权查看的数据资源，输出精简字段（够用来挑一个 `resource_id`）。 请求体可选，不传则按 vega 默认分页返回。",
-      "query": [
-        {
-          "name": "response_format",
-          "type": "string",
-          "required": false,
-          "description": "",
-          "enum": [
-            "json",
-            "toon"
-          ]
-        }
-      ],
-      "body": [
-        {
-          "name": "catalog_id",
-          "type": "string",
-          "required": false,
-          "description": "限定某个 catalog。"
-        },
-        {
-          "name": "type",
-          "type": "string",
-          "required": false,
-          "description": "资源类别，映射 vega 的 category：`table` / `file` / `fileset` / `api` / `metric` / `topic` / `index` / `logical_view` / `dataset`。"
-        },
-        {
-          "name": "offset",
-          "type": "integer",
-          "required": false,
-          "description": "分页偏移；不传由 vega 取默认值 0。"
-        },
-        {
-          "name": "limit",
-          "type": "integer",
-          "required": false,
-          "description": "分页大小；不传由 vega 取默认值 20。"
-        }
-      ],
-      "declares_context": true,
-      "returns": [
-        "entries",
-        "total_count"
-      ],
-      "source": "data-access.yaml"
     },
     {
       "path": "/api/agent-retrieval/v1/kn/list_skills",
@@ -1212,7 +1127,7 @@
       "method": "POST",
       "operation": "run_cypher",
       "summary": "对知识网络执行只读 Cypher",
-      "description": "编译并执行一条只读 Cypher 语句。**支持的子集**： - **MATCH**：一个或多个 MATCH 子句；一个 MATCH 里可以写逗号分隔的多条路径。 同名变量指同一个节点；不共享变量的两部分是笛卡尔积。 - **节点**：变量首次出现时必须带标签（对象类 id 或名称），可带内联属性 `{prop: value}`。 - **关系**：`-[:R]->`、`<-[:R]-`、无向 `-[:R]-`，每条必须指名一个关系类； 一条查询的模式最多 8 条关系、9 个节点（不与其他节点相连的节点也各算一张表）。 关系变量（`-[r:R]->`）不支持。 - **OPTIONAL MATCH**：写一条关系，把一个新节点挂到前面子句已经找到的节点上。 匹配不到时该行保留，新节点的列为 NULL，所以 `count(可选侧的属性)` 得 0 而不是整行 消失（`count(*)` 仍然算 1 行）——按邻居数排序又不丢零度邻居，用的就是这一点。 它自带的 `WHERE` 与内联属性决定这条关系匹配到什么，不决定哪些行留下。 限制：首个子句必须是 `MATCH`；一条 `OPTIONAL MATCH` 只能写一条关系、只能引入一个 新节点（两端都已匹配或两端都是新节点都会被拒）；它引入的节点不能被后面的 `MATCH` 或查询的 `WHERE` 再要求，否则留下来的行会被重新删掉，这类查询一律拒绝而不是照做。 - **WHERE**：`=` `<>` `<` `>` `<=` `>=`、`IN [...]`、`IS NULL` / `IS NOT NULL`， `STARTS WITH` / `ENDS WITH` / `CONTAINS`，用 `AND` / `OR` / `NOT` 组合，可加括号。 值可写 `$name` 参数；`IN $list` 可把整个列表作为一个参数传入。字符串谓词左侧须为 `变量.属性`，右侧须为字符串字面量或取值为字符串的参数；按 openCypher 语义做字面 子串匹配（`%`、`_` 等不是通配符），属性为 null 时不匹配；大小写是否敏感取决于 数据源列的排序规则（collation）。只能用于字符串属性，用在数值、日期等属性上返回 400。 - **RETURN**：属性、`AS` 别名、`DISTINCT`，以及 `count` / `sum` / `avg` / `min` / `max`（含 `count(*)` 与 `DISTINCT` 形式）。有聚合时按 RETURN 中其余 列自动分组——这是 Cypher 的隐式 GROUP BY，无需也不能自己写 GROUP BY。 - **算术**：`+` `-` `*` `/` `%` 与取负，可加括号，可写在 RETURN（含聚合的参数）、 `WHERE` 比较的两侧和 `ORDER BY` 里，如 `count(*) * 2`、`sum(o.price * o.qty)`、 `count(o.x) * 1.0 / count(*)`、`WHERE o.amount * o.rate > $floor`、 `ORDER BY count(g.id) * 0.5 + p.rank * 0.3 DESC`。操作数是数值属性、聚合、数字或 取值为数字的参数；字符串、布尔、null 与非数值属性返回 400。与 openCypher 语义不一致的 写法一律拒绝而不是照做：两个整数相除（Cypher 丢余数，各 SQL 库不一致），要小数结果把 一边乘 `1.0`；`%` 只用于整数；除以字面量 0；`^` 乘方。聚合只能出现在 RETURN 与 ORDER BY 里，不能写在 `WHERE` 中。一个列或排序键既有聚合又在聚合外直接读属性（如 `o.x - avg(o.x)`）时，该属性须同时作为单独的列返回，结果按它分组；DISTINCT 结果要按 算出来的值排序，请在 RETURN 里给它起别名再按别名排序。没有声明类型的属性交给数据源决定。 `IN` 列表、内联属性、`SKIP` / `LIMIT` 里仍不能写算术。 - **ORDER BY / SKIP / LIMIT**：ORDER BY 可用属性、返回列名或聚合。结果被聚合 或 DISTINCT 折叠后，只能按返回的值排序。 **不支持**（会被拒绝，报错指名是哪个语法与位置）：`WITH`、 `UNION`、变长路径 `[:R*1..3]`、`XOR`、返回整个节点、函数调用、`^` 乘方、写操作（`CREATE` / `MERGE` / `DELETE` / `SET` / `REMOVE`）。 **行数**：不写 `LIMIT` 默认返回 1000 行；`LIMIT` 不得超过 10000。 **关系唯一性**：按 openCypher 语义，同一条路径里共用同一关系类的多跳互不相同， 编译器会自动补上主键不等的条件，调用方不必自己写。该规则按子句划分，因此 `OPTIONAL MATCH` 的那一跳不参与——它补出的条件会落在 `WHERE` 里，正好删掉外连接 保住的行。",
+      "description": "编译并执行一条只读 Cypher 语句。**支持的子集**： - **MATCH**：一个或多个 MATCH 子句；一个 MATCH 里可以写逗号分隔的多条路径。 同名变量指同一个节点；不共享变量的部分两两组合，但有两部分既没连起来、又都没有任何条件时， 查询会被拒（400 `Unsupported`）。 - **节点**：变量首次出现时必须带标签（对象类 id 或名称），可带内联属性 `{prop: value}`。 - **关系**：`-[:R]->`、`<-[:R]-`、无向 `-[:R]-`，每条必须指名一个关系类； 一条查询的模式最多 8 条关系、9 个节点（不与其他节点相连的节点也各算一张表）。 关系可以带变量（`-[r:R]->`），用于在 RETURN 里返回关系本身；关系没有自己的属性，`r.x` 会被拒绝。 - **OPTIONAL MATCH**：写一条关系，把一个新节点挂到前面子句已经找到的节点上。 匹配不到时该行保留，新节点的列为 NULL，所以 `count(可选侧的属性)` 得 0 而不是整行 消失（`count(*)` 仍然算 1 行）——按邻居数排序又不丢零度邻居，用的就是这一点。 它自带的 `WHERE` 与内联属性决定这条关系匹配到什么，不决定哪些行留下。 限制：首个子句必须是 `MATCH`；一条 `OPTIONAL MATCH` 只能写一条关系、只能引入一个 新节点（两端都已匹配或两端都是新节点都会被拒）；它引入的节点不能被后面的 `MATCH` 或查询的 `WHERE` 再要求，否则留下来的行会被重新删掉，这类查询一律拒绝而不是照做。 - **WHERE**：`=` `<>` `<` `>` `<=` `>=`（不等于写 `<>`，`!=` 也接受，按 `<>` 处理）， 两边可以都是属性（`o.shipped < o.ordered`、`a.code = b.code`；模型声明为字符串和数字的属性不能互比）， 日期写 `date('2026-08-13')` / `datetime(...)`，只能和日期类属性比较；`IN [...]`、`IS NULL` / `IS NOT NULL`， `STARTS WITH` / `ENDS WITH` / `CONTAINS`，用 `AND` / `OR` / `NOT` 组合，可加括号。 值可写 `$name` 参数；`IN $list` 可把整个列表作为一个参数传入。 `($x IS NULL OR a.p = $x)` 是可选条件：`$x` 有值时按它过滤，传 null 或不传时条件不生效， 执行前就按传入的值化简，可写在 MATCH、OPTIONAL MATCH 和 WITH 的 `WHERE` 里。字符串谓词左侧须为 `变量.属性`，右侧须为字符串字面量或取值为字符串的参数；按 openCypher 语义做字面 子串匹配（`%`、`_` 等不是通配符），属性为 null 时不匹配；大小写是否敏感取决于 数据源列的排序规则（collation）。只能用于字符串属性，用在数值、日期等属性上返回 400。 - **RETURN**：属性、`AS` 别名、`DISTINCT`，以及 `count` / `sum` / `avg` / `min` / `max`（含 `count(*)` 与 `DISTINCT` 形式）。`count(n)` 统计节点 n 存在的行， `count(DISTINCT n)` 按主键统计不同对象（多个主键属性按组合区分，没有主键的对象类不能用）。有聚合时按 RETURN 中其余 列自动分组——这是 Cypher 的隐式 GROUP BY，无需也不能自己写 GROUP BY（写了会报语法错误并提示）。 RETURN 也可以返回条件，写法与 `WHERE` 相同，如 `g.tournament_name CONTAINS 'Men' AS mens`： 值为 `true` / `false`，无法判定时（属性为 null，或 OPTIONAL MATCH 没匹配到节点）为 `null`；它和其他返回值一样参与分组。要按条件排序，请先起别名再按别名排序。 - **图值**：RETURN 可以直接返回节点 `t` 与关系 `r`。节点返回对象类和完整主键（主键值按声明类型 以精确文本给出），再加上 `object_properties` 里点名的属性；关系返回关系类、两端节点的标识和 连接两端的键值对。`collect(x)` 把每组的 `x` 收成列表（保留重复、跳过 null），`{k: x}` 构造映射。 节点和关系按标识分组，所以 `RETURN t AS team, count(*) AS n` 按每个对象计数，一次调用就拿到 对象和计数。这类查询总是作为一条 SQL 执行；带 `collect` 时每个结果行是一个结论（`collect` 以外的 返回值），`LIMIT` 按结论计数，保留下来的结论带全部证据。证据达到 10000 行时返回 400 `BknBackend.Cypher.ReadBudgetExceeded`，不会返回部分证据。图值不能用于 `ORDER BY` 或 `DISTINCT`， `collect` 不能和其他聚合混用，`collect` 旁只能返回节点、关系、属性或常量，并只能按返回属性的别名排序。 - **算术**：`+` `-` `*` `/` `%` 与取负，可加括号，可写在 RETURN（含聚合的参数）、 `WHERE` 比较的两侧和 `ORDER BY` 里，如 `count(*) * 2`、`sum(o.price * o.qty)`、 `count(o.x) * 1.0 / count(*)`、`WHERE o.amount * o.rate > $floor`、 `ORDER BY count(g.id) * 0.5 + p.rank * 0.3 DESC`。操作数是数值属性、聚合、数字或 取值为数字的参数；字符串、布尔、null 与非数值属性返回 400。与 openCypher 语义不一致的 写法一律拒绝而不是照做：两个整数相除（Cypher 丢余数，各 SQL 库不一致），要小数结果把 一边乘 `1.0`；`%` 只用于整数；除以字面量 0；`^` 乘方。聚合只能出现在 RETURN 与 ORDER BY 里，不能写在 `WHERE` 中。一个列或排序键既有聚合又在聚合外直接读属性（如 `o.x - avg(o.x)`）时，该属性须同时作为单独的列返回，结果按它分组；DISTINCT 结果要按 算出来的值排序，请在 RETURN 里给它起别名再按别名排序。没有声明类型的属性交给数据源决定。 `IN` 列表、内联属性、`SKIP` / `LIMIT` 里仍不能写算术。 - **CASE 与 coalesce**：`CASE WHEN … THEN … ELSE … END`、`CASE x WHEN v THEN … END` 与 `coalesce(a, b, …)` 能写在算术能写的地方：RETURN、WITH、ORDER BY、比较两侧和聚合参数，如 `sum(CASE WHEN g.penalty = '1' THEN 1 ELSE 0 END)`、`count(CASE WHEN … THEN 1 END)`。没有 ELSE 且没命中时为 null。 各分支（或参数）须都是数字或都不是数字（null 字面量可搭配任一种），不能返回布尔；字符串结果不能参与算术或 `sum` / `avg`；分支条件里的聚合要先在 WITH 里命名再用；简单形式不能写 `WHEN null`。这类查询总走 SQL 路径。 - **标量函数**：`round(x)`、`round(x, n)`（n 为 0 到 30 的整数字面量，结果是数字）、`abs(x)`、 `toInteger(x)`（向零截断）、`toFloat(x)`、`toUpper(s)`、`toLower(s)`、`toString(x)`，能写在 CASE 能写的地方。 `round` / `abs` / `toInteger` / `toFloat` 只接受数字，`toUpper` / `toLower` 只接受字符串，类型不对返回 400。 decimal 值（含对它的 `sum()`）以字符串返回，如 `\"13833141.000000\"`，要数字用 `toFloat(...)` 或 `round(..., n)`。 这类查询总走 SQL 路径。 - **ORDER BY / SKIP / LIMIT**：ORDER BY 可用属性、返回列名或聚合。结果被聚合 或 DISTINCT 折叠后，只能按返回的值排序。SKIP、LIMIT 可写整数或参数（`SKIP $from LIMIT $size`）， 参数值须为非负整数，LIMIT 同样不能超过 10000。 - **比较两组对象**：如「两个产品共用哪些物料」，在一个 MATCH 里让两条路径共享节点即可，不需要 WITH： `MATCH (p1:产品 {material_number: $a})-[:产品关联产品bom]->(b1:产品BOM)-[:产品bom关联物料]->(m:物料)<-[:产品bom关联物料]-(b2:产品BOM)<-[:产品关联产品bom]-(p2:产品 {material_number: $b}) RETURN DISTINCT m.material_code`。 - **比较两个列表**：两段各自 `collect([DISTINCT] x.p)`，第二个 WITH 把第一个列表传下去，RETURN 只写大小： `MATCH … WITH collect(DISTINCT a.p) AS l1 MATCH … WITH l1, collect(DISTINCT b.q) AS l2 RETURN size([x IN l1 WHERE x IN l2]) AS common, size(l1) AS n1, size(l2) AS n2`，返回一行； 第二段没匹配到时没有行。不能直接返回列表，要列出共有的值用上面的共享节点写法；不支持 UNWIND。 - **WITH**：一条查询可以在所有 MATCH 之后写一个 WITH，用于先聚合再过滤，如 `MATCH (g:goal)-[:rel_goal_team]->(t:team) WITH t, count(*) AS n WHERE n > 100 RETURN t.name AS team, n ORDER BY n DESC`。 WITH 里的值须用 `AS` 命名，节点可直接传下去（`WITH t`，按对象的主键分组，同名对象不会合并）。 WITH 的 `WHERE` 用 WITH 传下来的名字、节点的属性、由它们算出的值、字面量或参数比较：只涉及分组键的条件在分组前过滤， 涉及聚合的条件对每个分组判断。可以连写多个 WITH：只有第一个能聚合，后面的用前面的名字算新值并各自过滤， 如 `WITH code, stock - usage * 50 AS gap WHERE gap < 0`。第一个 WITH 里的 `collect(x.p) AS s` 只能写成 `size(s)`，即收集到的个数（如 `WHERE size(s) = 3`）。RETURN 取 WITH 的名字、传下来节点的属性或由它们算出的值； 不聚合的 WITH 之后可以再写 `count(*)`；聚合的 WITH 之后，RETURN 也可以只写聚合（如 `RETURN count(*) AS n`、 `max(n)`），对分组再统计，返回一行。以下仍拒绝：第二个 WITH 之后再写 MATCH、第二段 MATCH 之后再接 WITH（比较两个列表除外）、`WITH DISTINCT`、`WITH *`、WITH 上的 ORDER BY / SKIP / LIMIT、WITH 的 WHERE 里写 IN / 字符串谓词、第一个之后的 WITH 再聚合。 - **开头定义常量**：查询可以用只含字面量、字面量列表或参数的 WITH 开头，如 `WITH ['382-000005', 'P61-000351'] AS products MATCH (p:产品) WHERE p.material_number IN products …`， 后面 MATCH 的条件按名字使用这些值。 - **按上一段的值过滤**：`MATCH … WITH DISTINCT x.p AS v MATCH … WHERE y.q = v RETURN …`，或 `WITH collect(x.p) AS s MATCH … WHERE y.q IN s`；`v` 也可以写在内联属性里（`{q: v}`）。第二段的每一行 只要值在第一段的值里就保留一次，不随第一段的重复而重复（半连接）。第一段的属性和行范围与查询中其他部分一样 受授权约束。WITH 只能有一项；不写 DISTINCT 时，RETURN 须写 DISTINCT 且不聚合；`v` 只能在 WHERE 顶层以 `=` 使用、`s` 只能以 `IN` 使用，不能放在 OR / NOT 下；第二段之后不能再接 WITH。 - **把节点传给下一个 MATCH**：`WITH p, count(g) AS total WHERE total >= 10 MATCH (p)<-[:R]-(g2)-[:S]->(t) RETURN p, t, count(g2) AS n, total`。WITH 传下来的每一行按主键和下一段 匹配到的行连接，下一段里节点可不写标签；`total` 可在 RETURN / ORDER BY 中使用和计算，用在含聚合的表达式里 时要同时单独返回；不能写在下一段的 WHERE 里。每个传下来的节点都要在下一段用到，下一段不能是 OPTIONAL MATCH， 之后不能再接 WITH。任何 WITH 之后，RETURN 都可以直接返回传下来的节点。这类查询总走 SQL 路径。 **数据集和索引**：对象类绑定数据集或索引（不是 SQL 数据源），或一条查询跨多个数据源时，改为通过资源数据接口 逐表读取再关联，只支持基础写法；CASE、coalesce、标量函数、对分组再统计、比较两个列表、把节点传给下一个 MATCH、 collect 会返回 400，读取量过大或超时也返回 400；返回节点、关系和虚拟边与 SQL 数据源上相同；UNION 也可用，每段各自读取。 **不支持**（会被拒绝，报错指名是哪个语法与位置）： 变长路径 `[:R*1..3]`、`XOR`、`date()` / `datetime()` / `localdatetime()`、`coalesce()`、上面的标量函数、`size()`（只用于 WITH 收集的列表）和聚合以外的函数调用、`^` 乘方、写操作（`CREATE` / `MERGE` / `DELETE` / `SET` / `REMOVE`）。 **行数**：不写 `LIMIT` 默认返回 1000 行；`LIMIT` 不得超过 10000。 **关系唯一性**：按 openCypher 语义，同一条路径里共用同一关系类的多跳互不相同， 编译器会自动补上主键不等的条件，调用方不必自己写。该规则按子句划分，因此 `OPTIONAL MATCH` 的那一跳不参与——它补出的条件会落在 `WHERE` 里，正好删掉外连接 保住的行。",
       "query": [
         {
           "name": "response_format",
@@ -1248,57 +1163,37 @@
           "name": "parameters",
           "type": "object",
           "required": false,
-          "description": "语句里 `$name` 的取值。只能是字符串、数字或布尔值——参数是值，不会变成 表名或列名，因此不能用来拼标签、关系类型或属性名。`null` 会被拒绝： 判空写 `IS NULL`。用在 `IN $name` 右侧的参数须为非空数组，元素为同一类标量 （整数与小数都算数字），不能含 `null`，最多 500 个，如 `{\"keys\": [6, 7, 8]}`。 一条查询里多个长列表合计过大时会返回 400，需拆成多次查询。"
-        }
-      ],
-      "declares_context": true,
-      "returns": [
-        "columns",
-        "entries"
-      ],
-      "source": "cypher.yaml"
-    },
-    {
-      "path": "/api/agent-retrieval/v1/kn/run_sql",
-      "method": "POST",
-      "operation": "run_sql",
-      "summary": "对数据资源执行只读 SQL",
-      "description": "以 MySQL 方言执行**只读** SQL。表名不写物理表名，写占位符 `{{<resource_id>}}`，由服务端解析到真实数据源。 **权限**：调用者必须对 SQL 引用的每个数据资源都持有 Vega 资源的 `view_detail` 权限——与其他遵循知识网络授权的查询接口不同，通过对象类获得的授权不覆盖本接口， 仅通过对象类获得授权的调用方应改用 `/kn/query_object_instance` 或 `/kn/run_cypher`。 标识符需要引用时使用反引号（如 `` `order_id` ``）；双引号在 MySQL 方言下是 字符串字面量，不能用于标识符。 **两条硬约束，违反直接 400，SQL 不会下发**： 1. **必须引用占位符**。SQL 里没有 `{{resource_id}}` 时报 `sql must reference at least one data resource via the {{resource_id}} placeholder` ——这既是定位数据源的唯一途径，也挡住了绕开权限直接写物理表名。 2. **必须是单条只读 `SELECT` 语句**。端到端兼容性以 vega 的只读策略为准； 虽然本服务的本地守卫可接受以 `WITH` 开头的语句，但 vega 当前会拒绝 CTE， 因此调用方**不得使用 `WITH` / CTE 或 `UNION` / `INTERSECT` / `EXCEPT`**。 守卫会先剥掉注释、字符串字面量、反引号标识符与占位符， 再判定：不允许多语句（剥离后仍含 `;`）、必须以 `SELECT` 或 `WITH` 开头、不得含 写入 / DDL / 权限 / 过程类关键字（INSERT、UPDATE、DELETE、DROP、ALTER、 CREATE、TRUNCATE、GRANT、REVOKE、REPLACE、MERGE、UPSERT、CALL、EXEC、 EXECUTE、RENAME、LOAD、COPY、INTO、ATTACH、DETACH、USE、VACUUM、ANALYZE、 REFRESH、COMMENT、PREPARE、DEALLOCATE）。 当前保证可用的只读语法为：单表或同一 catalog 内的 `JOIN`、`WHERE`、 `GROUP BY` / `HAVING`、`ORDER BY`、`LIMIT` 及常用聚合函数（如 `COUNT`、`SUM`、 `AVG`、`MIN`、`MAX`）。子查询和窗口函数不属于当前兼容性承诺，调用方不得依赖。 SQL Server 资源还要求 `SELECT` 输出列名唯一；使用 `JOIN` 时，`*` 必须带表别名 限定（如 `o.*`），不能使用裸 `*`。 守卫不是完整 SQL 解析器，是纵深防御的一层：vega 侧统一使用公共 Go Parser 做最终只读策略校验（拒绝非顶层 SELECT、WITH/CTE、集合运算等），两层都不可省。 **不分页**：固定单次返回，上限 10000 行。要更多数据请在 SQL 里自己收敛 （聚合、加条件、加 LIMIT）。",
-      "query": [
-        {
-          "name": "response_format",
-          "type": "string",
-          "required": false,
-          "description": "",
-          "enum": [
-            "json",
-            "toon"
-          ]
-        }
-      ],
-      "body": [
-        {
-          "name": "sql",
-          "type": "string",
-          "required": true,
-          "description": "MySQL 方言 SQL。表名必须写成 `{{<resource_id>}}` 占位符， `resource_id` 必须匹配 `[a-z0-9][a-z0-9_-]{0,39}`（小写，最长 40 个字符），否则占位符不会被识别。 标识符需要引用时使用反引号；双引号在 MySQL 方言下是字符串字面量，不能用于 标识符。只允许单条 `SELECT`（不支持 `WITH` / CTE）。"
+          "description": "语句里 `$name` 的取值。只能是字符串、数字或布尔值——参数是值，不会变成 表名或列名，因此不能用来拼标签、关系类型或属性名。`null` 只能用于 `$name IS NULL` 判空（可选条件，不传也算 null），用在其他地方会被拒绝。用在 `IN $name` 右侧的参数须为数组，元素为同一类标量 （整数与小数都算数字），不能含 `null`，最多 500 个，如 `{\"keys\": [6, 7, 8]}`； 空数组不匹配任何行，与直接写 `IN []` 相同。与日期、日期时间属性比较的字符串 必须是日期，如 `2026-08-13`、`2026-08-13T09:30:00`（可带 RFC 3339 时区偏移）， 其他字符串返回 400，不会被当成某个时间。 一条查询里多个长列表合计过大时会返回 400，需拆成多次查询。"
         },
         {
-          "name": "query_timeout",
+          "name": "object_properties",
+          "type": "object",
+          "required": false,
+          "description": "返回的节点除标识外还要带哪些属性，按节点变量给出，如 `{\"t\": [\"team_name\"]}`。 变量必须是 RETURN 里返回的节点，所有变量合计最多 128 个属性；这些属性和查询里其他属性一样 受授权约束。不传时节点只带标识。"
+        },
+        {
+          "name": "explain",
+          "type": "boolean",
+          "required": false,
+          "description": "为 true 时不执行查询、不读数据，只返回 `plan`（此时 `entries` 为空）：查询形状、对象和关系、条件、 分组、返回列及类型、行数上限、会读的属性、行范围被收窄的对象类和提醒。查询的解析、授权和编译与执行时 完全相同，所以会被拒的写法返回与执行时相同的错误和改写提示。不返回 SQL。例外：explain 看不出数据存在哪里， 对象类绑定数据集、索引或跨多个数据源时才被拒的写法（CASE、coalesce 等），explain 照样通过，执行时才被拒。"
+        },
+        {
+          "name": "timeout_sec",
           "type": "integer",
           "required": false,
-          "description": "查询超时（秒）。不传走下游默认。"
+          "description": "查询在数据源上的执行时限（秒），查询执行的所有语句（UNION 的各分支、bind-join 及其 SQL 回退）共用这一个时限。不传则使用 bkn-backend 配置的时限（默认 55 秒，部署可通过 `BKN_CYPHER_QUERY_TIMEOUT_SEC` 调整）。只能比配置值更短：超过配置值或小于 1 返回 `BknBackend.Cypher.InvalidParameter`。仅本 REST 接口接受；MCP 工具 `run_cypher` 不接受此参数，传了也会被忽略。"
         }
       ],
       "declares_context": true,
       "returns": [
         "columns",
         "entries",
-        "paging",
-        "total_count",
-        "warnings"
+        "execution",
+        "limited",
+        "plan",
+        "value_types"
       ],
-      "source": "data-access.yaml"
+      "source": "cypher.yaml"
     },
     {
       "path": "/api/agent-retrieval/v1/kn/search_capabilities",
@@ -1452,7 +1347,7 @@
       "method": "POST",
       "operation": "search_schema",
       "summary": "探索知识网络 Schema",
-      "description": "统一的 Schema 探索入口。适用于还不确定该继续调用哪个 `query_*` / `find_*` / `get_*` 接口时，先探索相关概念。 **写 SQL 时注意 `include_columns`**：`data_properties[].name` 是逻辑名， 物理列名在 `mapped_field` 里，二者可以不同（同一份资源可被多个对象类以不同 逻辑名映射）。要用 `run_sql` 直查时置 `include_columns=true` 拿物理列名。",
+      "description": "统一的 Schema 探索入口。适用于还不确定该继续调用哪个 `query_*` / `find_*` / `get_*` 接口时，先探索相关概念。 **写 SQL 时注意 `include_columns`**：`data_properties[].name` 是逻辑名， 物理列名在 `mapped_field` 里，二者可以不同（同一份资源可被多个对象类以不同 逻辑名映射）。置 `include_columns=true` 可拿到物理列名。",
       "query": [
         {
           "name": "response_format",
@@ -1512,7 +1407,7 @@
           "name": "include_columns",
           "type": "boolean",
           "required": false,
-          "description": "是否在每个对象类的 `data_properties` 上附带物理列名（取自 `mapped_field`）。 写 `run_sql` 需要物理列名时置 true；默认 false 以保持响应精简。"
+          "description": "是否在每个对象类的 `data_properties` 上附带物理列名（取自 `mapped_field`）。 默认 false 以保持响应精简。"
         }
       ],
       "declares_context": true,

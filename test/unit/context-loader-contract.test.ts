@@ -65,7 +65,7 @@ afterEach(() => {
 
 describe("response_format defaults to json", () => {
   it.each([
-    "run_sql",
+    "run_cypher",
     "explore_subgraph",
     "query_metric",
     "drill_through_metric",
@@ -84,8 +84,8 @@ describe("response_format defaults to json", () => {
 
   it("keeps a response_format the caller chose", async () => {
     const calls = mockDeploy("entries[1]{n}:\n  1");
-    const value = await callTool(freshCtx(), "kn-1", "run_sql", {
-      sql: "SELECT 1",
+    const value = await callTool(freshCtx(), "kn-1", "run_cypher", {
+      query: "MATCH (o:order) RETURN count(*) AS n",
       response_format: "toon",
     });
     expect(calls[0]?.arguments.response_format).toBe("toon");
@@ -125,8 +125,8 @@ describe("kn_id travels in the tool arguments", () => {
     expect(calls[0]?.arguments.kn_id).toBe("kn-other");
   });
 
-  it.each(["run_sql", "list_resources", "describe_resource", "list_knowledge_networks"])(
-    "does not add kn_id to %s, where it is absent or changes the answer",
+  it.each(["list_skills", "list_knowledge_networks"])(
+    "does not add kn_id to %s, which does not take one",
     async (tool) => {
       const calls = mockDeploy("{}");
       await callTool(freshCtx(), "kn-1", tool, {});

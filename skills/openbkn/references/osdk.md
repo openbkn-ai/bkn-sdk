@@ -23,7 +23,7 @@ import bkn_osdk
 bkn_osdk.call("/api/agent-observability/v1/traces", query={"limit": 10})
 bkn_osdk.tool_catalog(bkn_osdk.resolve_context())      # 这个部署公布了什么
 from bkn_osdk import kn
-kn.run_sql(KN_ID, "SELECT COUNT(*) AS n FROM {{<resource_id>}}")
+kn.run_cypher(KN_ID, "MATCH (o:<object_type_id>) RETURN o.<prop>, count(*) AS n")
 
 # 本体层：某个知识网络的本体 —— 从它的 schema 生成的类
 import bkn
@@ -63,7 +63,7 @@ bkn-osdk generate <kn-id> --out ./bkn                             # 生成本体
 ```python
 with bkn_osdk.session(traced=True, conversation_id=cid, interaction_id=iid):
     paid = bkn.Order.where(bkn.Order.status == "paid").take(50)   # 经 Context Loader 的 MCP 工具
-    kn.run_sql(KN_ID, "SELECT ...")                                 # 带同一个 bkn_context
+    kn.run_cypher(KN_ID, "MATCH ...")                                 # 带同一个 bkn_context
 ```
 
 - 作用域加入这个 turn，不另开，也**不会替你 finish**；本轮照常以 `bkn_finish_interaction` 收尾。
@@ -98,9 +98,9 @@ kn.query_object_instance(KN_ID, "order", limit=10, response_format="json")
 ## 三件容易踩的
 
 **1. 聚合不在对象集上。** 没有 `sum()` / `group_by()`，因为平台没有这个端点。
-聚合走指标（`bkn.Gmv.query(...)`）或 `kn.run_sql(...)`；后者表名写
-`{{<resource_id>}}` 占位符，resource_id 从 `kn.search_schema(..., include_columns=True)`
-的 `data_source.id` 取，**不是物理表名**。
+聚合走指标（`bkn.Gmv.query(...)`，或 `kn.query_metric(...)`，metric_id / version 取自
+`get_object_types` 的 `related_metrics`）或 `kn.run_cypher(...)`；后者按对象类与属性的
+模型名书写，不涉及资源 id 与物理列名。
 
 **2. 能力面必须带 turn，读路径不用。** MCP 工具与 `/kn/` REST 拒绝无上下文调用；
 `ontology-query` 的实例/子图/指标不拒。没有 turn 时 SDK 自己补：`kn.*` 和 `search()`

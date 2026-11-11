@@ -242,7 +242,7 @@ Flag mapping → MCP `search_schema`:
 | `--only object,relation` | `search_scope.include_{object,relation,action,metric}_types` — listed kinds `true`, the rest `false` (`--scope` is a kept alias) |
 | `--max n` | `max_concepts` |
 | `--schema-brief` / `--no-schema-brief` | `schema_brief` (MCP tool default `true`; REST default `false`; sent only when you pass a flag) |
-| `--include-columns` | `include_columns` (physical column names for `run-sql`) |
+| `--include-columns` | `include_columns` (physical column names, i.e. `mapped_field`) |
 | `--rerank` / `--no-rerank` | `enable_rerank` |
 | `--rerank-model <name>` | `rerank_model` (operators only) |
 
@@ -301,21 +301,22 @@ openbkn context run-cypher <kn> \
 
 - Supported: several `MATCH` clauses and comma-separated paths (a repeated variable is
   the same node); `-[:R]->`, `<-[:R]-`, undirected `-[:R]-`; `WHERE` with comparisons,
-  `IN`, `IS NULL`, `AND`/`OR`/`NOT`; `RETURN` with `AS`, `DISTINCT` and
-  `count`/`sum`/`avg`/`min`/`max` — aggregating groups by the other returned columns;
-  `ORDER BY`, `SKIP`, `LIMIT`.
-- Refused, naming the construct and its position: `OPTIONAL MATCH`, `WITH`, `UNION`,
-  variable-length paths `[:R*1..3]`, functions and arithmetic, returning a whole node
-  (`RETURN n` — return its properties instead), relationship variables `-[r:R]->`.
+  `IN`, `IS NULL`, `AND`/`OR`/`NOT`, string predicates, `$name` parameters; `OPTIONAL MATCH`
+  (one relationship); `RETURN` with `AS`, `DISTINCT`, `count`/`sum`/`avg`/`min`/`max`
+  (aggregating groups by the other returned columns), arithmetic, `CASE`, `coalesce`,
+  `date()`/`datetime()`/`localdatetime()`, `collect` + `size`; one `WITH` after the
+  `MATCH` clauses (aggregate, then filter); `UNION` / `UNION ALL`; `ORDER BY`, `SKIP`, `LIMIT`.
+- Refused, naming the construct and its position: variable-length paths `[:R*1..3]`,
+  `UNWIND`, `ORDER BY` / `SKIP` / `LIMIT` on a `WITH`, aggregating again after the first
+  `WITH`, writes.
 - Limits: at most 8 relationships and 9 nodes per query; 1000 rows without `LIMIT`;
   `LIMIT` above 10000 is refused.
 - `--params` is a JSON object of values. A parameter never becomes a label, relationship
   type or property name. Quote `$name` in the shell (`\$floor` inside double quotes).
-- Fall back to `run-sql` only for what the subset cannot express (CTEs, `UNION`, window
-  functions) or for resources never modelled as object types.
+- A modelled metric goes through `query-metric`, not a hand-written aggregation.
 - `openbkn bkn cypher <kn> --query ...` runs the same statement outside any Trace session.
 
-### Topology, metrics and SQL
+### Topology and metrics
 
 ```bash
 # explore-subgraph: walk relations outward from one object type without naming a path.
@@ -327,9 +328,6 @@ openbkn context explore-subgraph <kn> <ot-id> --hops 2 --direction bidirectional
 # --args: analysis_dimensions, time, condition, having, order_by, limit, fill_null.
 openbkn context query-metric <kn> <metric-id> --args '{"time":{"instant":true}}'
 
-# run-sql: read-only MySQL; tables are {{<resource_id>}} placeholders, ids and
-# physical columns from `search-schema <kn> "<q>" --include-columns`. --timeout <sec>.
-openbkn context run-sql <kn> --sql 'SELECT COUNT(*) FROM {{<resource_id>}}'
 ```
 
 Every command that takes `--args <json>` also accepts `--args-file <path>`

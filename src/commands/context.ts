@@ -112,7 +112,7 @@ export function contextCommand(): Command {
       "trimmed schema: property name/type only (MCP tool default true; REST default false)",
     )
     .option("--no-schema-brief", "full schema: adds property comments, primary keys and tags")
-    .option("--include-columns", "add each data property's physical column (needed for run-sql)")
+    .option("--include-columns", "add each data property's physical column name (mapped_field)")
     .option("--rerank", "re-rank relation types (the server default)")
     .option("--no-rerank", "skip relation-type re-ranking")
     .option("--rerank-model <name>", "override the deploy's rerank model (operators only)")
@@ -278,47 +278,11 @@ export function contextCommand(): Command {
   };
 
   cmd
-    .command("run-sql <kn-id>")
-    .description(
-      "Aggregate, rank or join with read-only SQL — what query-object-instance cannot do",
-    )
-    // Not a requiredOption: `--schema` is a valid call that sends no SQL at all.
-    .option("--sql <sql>", "read-only MySQL over data resources, tables named as {{<resource-id>}}")
-    .option("--timeout <sec>", "query timeout in seconds", (v) => Number.parseInt(v, 10))
-    .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
-    .addHelpText(
-      "after",
-      `
-A table is named by resource id, never by the name it carries on the source:
-
-  openbkn context search-schema <kn-id> "<what you are after>" --json
-      → object_types[].data_source.id
-
-  openbkn context run-sql <kn-id> \\
-    --sql "SELECT supplier_id, COUNT(*) c FROM {{d9g387peef0be1ifnurg}} GROUP BY supplier_id"
-
-Joining two resources means two ids, one placeholder each. Column names are the
-physical ones. Answers {columns, entries, paging} plus a bkn_receipt recording
-the operation in BKN Trace. Row limits belong in the SQL — this tool takes no
-limit argument.
-
-The same SQL runs without a knowledge network through \`openbkn vega sql\`, which
-adds paging and --need-total but records nothing in Trace.`,
-    )
-    .action(async (knId: string, opts, cmd: Command) => {
-      if (opts.schema) return printToolSchema(cmd, knId, "run_sql");
-      if (!opts.sql) throw new InputError("--sql is required (or use --schema to see the shape)");
-      const args: Record<string, unknown> = { sql: opts.sql };
-      if (opts.timeout !== undefined) args.query_timeout = opts.timeout;
-      printJson(await clientFrom(cmd).context.toolCall(knId, "run_sql", args), outputOptions(cmd));
-    });
-
-  cmd
     .command("run-cypher <kn-id>")
     .description(
       "Filter along a path and aggregate across object types with read-only Cypher over the model",
     )
-    // Not a requiredOption, for the same reason as run-sql: `--schema` sends no query.
+    // Not a requiredOption: `--schema` is a valid call that sends no query.
     .option(
       "--query <cypher>",
       "read-only Cypher: labels are object types, relationship types are relation types",
@@ -343,17 +307,20 @@ Everything is named the way the model names it — no resource id, no physical c
              RETURN o.status AS status, count(*) AS orders ORDER BY orders DESC LIMIT 20" \\
     --params '{"floor": 100}'
 
-Supported: several MATCH clauses and comma-separated paths; -[:R]->, <-[:R]- and
-undirected -[:R]-; WHERE with comparisons, IN, IS NULL, AND/OR/NOT; RETURN with
-aliases, DISTINCT and count/sum/avg/min/max (grouping by the other returned columns);
-ORDER BY, SKIP, LIMIT. Refused with the construct and its position: OPTIONAL MATCH,
-WITH, UNION, variable-length paths, functions and arithmetic, returning a whole node.
-A query holds at most 8 relationships and 9 nodes; without LIMIT it returns 1000 rows,
-and LIMIT may not exceed 10000.
+Supported: several MATCH clauses and comma-separated paths, OPTIONAL MATCH (one
+relationship); -[:R]->, <-[:R]- and undirected -[:R]-; WHERE with comparisons, IN,
+IS NULL, AND/OR/NOT, string predicates and \$name parameters; RETURN with aliases,
+DISTINCT, count/sum/avg/min/max (grouping by the other returned columns), arithmetic,
+CASE, coalesce and date()/datetime(); collect + size; WITH after the MATCHes, more
+than one if needed (only the first may aggregate); UNION / UNION ALL; ORDER BY, SKIP,
+LIMIT.
+Refused with the construct and its position: variable-length paths, UNWIND, ORDER BY /
+SKIP / LIMIT on WITH, aggregating again after the first WITH, writes. A query holds at
+most 8 relationships and 9 nodes; without LIMIT it returns 1000 rows, and LIMIT may
+not exceed 10000.
 
-What Cypher cannot say — CTEs, UNION, window functions — or a resource never modelled
-as an object type belongs in run-sql. The same query runs outside any Trace session
-through \`openbkn bkn cypher\`.`,
+Modelled metrics go through \`query-metric\`. The same query runs outside any Trace
+session through \`openbkn bkn cypher\`.`,
     )
     .action(async (knId: string, opts, cmd: Command) => {
       if (opts.schema) return printToolSchema(cmd, knId, "run_cypher");
@@ -371,7 +338,7 @@ through \`openbkn bkn cypher\`.`,
   cmd
     .command("explore-subgraph <kn-id> <object-type-id>")
     .description("Follow relations outward from one object type without naming a path first")
-    // Same reason as run-sql: `--schema` answers without walking anything.
+    // Not a requiredOption: `--schema` answers without walking anything.
     .option("--hops <n>", "how many hops to walk, 1-3", (v) => Number.parseInt(v, 10))
     .option(
       "--direction <d>",
@@ -426,7 +393,7 @@ Paths multiply with each hop, so start at 1 or 2.`,
       `
 Metric ids come from an object type: \`context object-types <kn-id> <ot-id>\`
 lists them under related_metrics. The definition owns the arithmetic, so
-rewriting it with \`run-sql\` produces a number the platform will not agree with.`,
+rewriting it as a Cypher aggregation produces a number the platform will not agree with.`,
     )
     .action(async (knId: string, metricId: string, opts, cmd: Command) => {
       if (opts.schema) return printToolSchema(cmd, knId, "query_metric");
@@ -604,7 +571,6 @@ rewriting it with \`run-sql\` produces a number the platform will not agree with
     ],
     RUN: [
       "query-object-instance",
-      "run-sql",
       "run-cypher",
       "explore-subgraph",
       "query-metric",
@@ -629,7 +595,7 @@ PICKING THE RIGHT QUERY
   Aggregation, ranking, GROUP BY or joins are not query-object-instance. When the question
   can be stated in object types and relation types — filter along a path, aggregate what
   it reaches — use \`run-cypher <kn-id>\`: model names only, no resource ids or physical
-  columns. SQL through \`run-sql <kn-id>\` is for what the Cypher subset cannot say.
+  columns. A modelled metric goes through \`query-metric\`, not a hand-written aggregation.
   Unknown topology is \`explore-subgraph <kn-id> <ot-id> --hops <n>\`, not a hand-built path.
 
 THE SAME ID, FOUR NAMES
