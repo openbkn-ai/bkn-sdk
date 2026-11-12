@@ -959,7 +959,7 @@ export function getLogicProperties(
   return callTool(ctx, knId, "get_logic_properties_values", args);
 }
 
-/** Layer-3 action info / dynamic tools for an instance (`get_action_info`). */
+/** Read an action type's business meaning and execution schema (`get_action_info`). Targets are optional. */
 export function getActionInfo(
   ctx: RequestContext,
   knId: string,
