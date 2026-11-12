@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  applySemanticUnderstandingTask,
   createSemanticUnderstandingTask,
   deleteSemanticUnderstandingTasks,
   getSemanticUnderstandingTask,
   listSemanticUnderstandingTasks,
 } from "../../src/api/vega-semantic.js";
+import { createClient } from "../../src/client.js";
 import type { RequestContext } from "../../src/types.js";
 import { verifiedContext } from "../setup/verified-context.js";
 
@@ -80,6 +82,74 @@ describe("SemanticUnderstandingTask APIs", () => {
     const url = new URL(firstCall(f)[0]);
     expect(url.searchParams.getAll("status")).toEqual(["completed", "failed"]);
     expect(url.searchParams.get("applied")).toBe("false");
+  });
+
+  it.each(["fill_empty", "force"] as const)(
+    "applies a saved result with %s while retaining the original task mode",
+    async (applyMode) => {
+      const savedResult = '{"fields":[{"name":"order_id","display_name":"Order"}]}';
+      const response = {
+        ...task,
+        status: "completed",
+        apply_mode: "dry_run",
+        result_json: savedResult,
+        confidence: 0.9,
+        applied: true,
+        apply_detail_json: JSON.stringify({ apply_mode: applyMode }),
+      };
+      const f = mockFetch(response);
+      await expect(
+        applySemanticUnderstandingTask(ctx, "st/1", { applyMode }),
+      ).resolves.toMatchObject({
+        apply_mode: "dry_run",
+        result_json: savedResult,
+        applied: true,
+        apply_detail_json: response.apply_detail_json,
+      });
+      const [url, init] = firstCall(f);
+      expect(new URL(url).pathname).toBe(
+        "/api/vega-backend/v1/semantic-understanding-tasks/st%2F1/apply",
+      );
+      expect(init.method).toBe("POST");
+      expect(JSON.parse(init.body as string)).toEqual({ apply_mode: applyMode });
+      expect(f).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("preserves successful application with no resource changes through the public client", async () => {
+    const client = createClient({ baseUrl: ctx.baseUrl, token: "t" });
+    verifiedContext(client.ctx);
+    const response = {
+      ...task,
+      status: "completed",
+      apply_mode: "dry_run",
+      confidence: 0.9,
+      applied: true,
+      apply_detail_json: '{"apply_mode":"fill_empty","reason":"no_resource_changes"}',
+    };
+    const f = mockFetch(response);
+    await expect(
+      client.vega.applySemanticUnderstandingTask("st-1", { applyMode: "fill_empty" }),
+    ).resolves.toEqual(response);
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+
+  it("propagates a schema mismatch without recreating or retrying the task", async () => {
+    const f = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            error_code: "VegaBackend.SemanticUnderstandingTask.SchemaMismatch",
+            description: "Resource schema has changed",
+          }),
+          { status: 409 },
+        ),
+    );
+    vi.stubGlobal("fetch", f);
+    await expect(
+      applySemanticUnderstandingTask(ctx, "st-1", { applyMode: "force" }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(f).toHaveBeenCalledTimes(1);
   });
 
   it("gets and deletes task ids", async () => {

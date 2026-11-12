@@ -1864,3 +1864,82 @@ describe("vega semantic-task output language", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe("vega semantic-task apply", () => {
+  function applicationCli(): Command {
+    const root = cli();
+    const vega = root.commands.find((command) => command.name() === "vega");
+    const tasks = vega?.commands.find((command) => command.name() === "semantic-task");
+    tasks?.commands.find((command) => command.name() === "apply")?.exitOverride();
+    return root;
+  }
+
+  it.each(["fill_empty", "force"])("applies the existing task with %s", async (applyMode) => {
+    const task = {
+      id: "st-1",
+      scope: "resource",
+      catalog_id: "c-1",
+      resource_id: "r-1",
+      agent_id: "resource-semantic-understanding",
+      input: "{}",
+      input_hash: "hash",
+      status: "completed",
+      apply_mode: "dry_run",
+      confidence_threshold: 0.75,
+      confidence: 0.9,
+      applied: true,
+      creator: { id: "u-1", type: "user" },
+      create_time: 1,
+    };
+    const fetchMock = mockFetch(task);
+    const output = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    await applicationCli().parseAsync(
+      [...cliBase, "semantic-task", "apply", "st-1", "--apply-mode", applyMode],
+      { from: "user" },
+    );
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(new URL(url).pathname).toBe(
+      "/api/vega-backend/v1/semantic-understanding-tasks/st-1/apply",
+    );
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ apply_mode: applyMode });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(output.mock.calls.map(([value]) => String(value)).join("")).toContain('"dry_run"');
+  });
+
+  it.each([
+    { flags: [] },
+    { flags: ["--apply-mode", "dry_run"] },
+    { flags: ["--apply-mode", "invalid"] },
+  ])("rejects missing or invalid write strategies: $flags", async ({ flags }) => {
+    const fetchMock = mockFetch();
+    suppressOutput();
+    await expect(
+      applicationCli().parseAsync([...cliBase, "semantic-task", "apply", "st-1", ...flags], {
+        from: "user",
+      }),
+    ).rejects.toThrow(/apply-mode/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not expose an override for the original confidence threshold", async () => {
+    const fetchMock = mockFetch();
+    suppressOutput();
+    await expect(
+      applicationCli().parseAsync(
+        [
+          ...cliBase,
+          "semantic-task",
+          "apply",
+          "st-1",
+          "--apply-mode",
+          "force",
+          "--confidence-threshold",
+          "0",
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow(/unknown option/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

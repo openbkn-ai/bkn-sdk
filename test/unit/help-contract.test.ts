@@ -73,4 +73,24 @@ describe("command tree", () => {
     expect(help).toContain("--receipt");
     expect(help).toContain("requires --json or --compact");
   });
+
+  it("describes semantic result application as a write with a resolvable task id", () => {
+    const apply = describeCommandTree(buildProgram(), {
+      path: ["vega", "semantic-task", "apply"],
+    });
+    expect(apply).toMatchObject({
+      section: "WRITE",
+      arguments: [{ name: "id", from: "openbkn vega semantic-task list" }],
+    });
+    const semantic = describeCommandTree(buildProgram(), { path: ["vega", "semantic-task"] });
+    expect(semantic).toMatchObject({
+      guide: expect.stringContaining("--apply-mode dry_run"),
+    });
+    expect(semantic).toMatchObject({
+      guide: expect.stringContaining("successful apply sets applied=true"),
+    });
+    expect(semantic).toMatchObject({
+      guide: expect.stringContaining("different strategy requires a new task"),
+    });
+  });
 });
