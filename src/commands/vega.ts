@@ -899,6 +899,22 @@ export function vegaCommand(): Command {
       printJson(await clientFrom(cmd).vega.getSemanticUnderstandingTask(id), outputOptions(cmd));
     });
   semanticTask
+    .command("apply <id>")
+    .description("Apply a saved dry-run understanding result to its resource")
+    .requiredOption(
+      "--apply-mode <mode>",
+      "write strategy: fill_empty | force",
+      oneOf("--apply-mode", ["fill_empty", "force"] as const),
+    )
+    .action(async (id: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).vega.applySemanticUnderstandingTask(id, {
+          applyMode: opts.applyMode,
+        }),
+        outputOptions(cmd),
+      );
+    });
+  semanticTask
     .command("delete <ids...>")
     .description("Delete completed semantic-understanding tasks")
     .option("--ignore-missing", "ignore missing task ids")
@@ -1475,6 +1491,36 @@ export function vegaCommand(): Command {
     RUN: ["start", "stop"],
     WRITE: ["delete"],
   });
+
+  groupChildren(semanticTask, {
+    READ: ["list", "get"],
+    WRITE: ["create", "apply", "delete"],
+  });
+
+  guide(
+    semanticTask,
+    `REVIEWING BEFORE APPLYING
+  create --scope resource --resource-id <id> --apply-mode dry_run saves an understanding
+  result without changing the resource. Use get <task-id> to inspect it, then
+  apply <task-id> --apply-mode fill_empty|force to apply that saved result without
+  invoking the model again. fill_empty preserves existing business metadata; force
+  uses the existing overwrite rules. Catalog-scope creation remains unavailable.
+
+APPLICATION REQUIREMENTS
+  Only completed Resource dry-run tasks whose result meets the original confidence
+  threshold and matches the current schema fingerprint can be applied. force does
+  not bypass these checks. A mismatch or a lower desired threshold requires a new
+  task. Applying needs Catalog task_manage and Resource modify permission.
+  The task retains apply_mode=dry_run; apply_detail_json records the actual strategy.
+  A successful apply sets applied=true even when no resource metadata changes;
+  inspect apply_detail_json for those changes or the no-change reason. Repeating
+  an already-applied task does not write again. A different strategy requires a new task.
+
+REQUEST PREVIEW
+  The global --dry-run only previews the HTTP request and sends nothing. Creating
+  a task with --apply-mode dry_run does send a request and runs the understanding.
+  The apply action requires a backend implementing saved-result application.`,
+  );
 
   groupChildren(catalog, {
     READ: ["list", "get", "stats", "resources", "health", "health-check-schedule"],

@@ -283,6 +283,7 @@ export type {
 } from "./api/vega-discovery.js";
 
 export type {
+  ApplySemanticUnderstandingTaskRequest,
   CreateSemanticUnderstandingTaskRequest,
   DeleteSemanticUnderstandingTasksOptions,
   ListSemanticUnderstandingTasksOptions,

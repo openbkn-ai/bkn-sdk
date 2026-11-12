@@ -83,6 +83,11 @@ export type CreateSemanticUnderstandingTaskRequest =
       samplePolicy?: { masked?: false; maxRows?: number };
     });
 
+export interface ApplySemanticUnderstandingTaskRequest {
+  /** Write strategy for an existing dry-run result; server checks its saved threshold and schema. */
+  applyMode: "fill_empty" | "force";
+}
+
 export interface ListSemanticUnderstandingTasksOptions {
   scope?: SemanticUnderstandingScope;
   catalogId?: string;
@@ -162,6 +167,18 @@ export async function getSemanticUnderstandingTask(
   id: string,
 ): Promise<SemanticUnderstandingTask> {
   const result = await request<unknown>(ctx, `${BASE}/${encodeURIComponent(id)}`);
+  return SemanticUnderstandingTask.parse(result);
+}
+
+export async function applySemanticUnderstandingTask(
+  ctx: RequestContext,
+  id: string,
+  req: ApplySemanticUnderstandingTaskRequest,
+): Promise<SemanticUnderstandingTask> {
+  const result = await request<unknown>(ctx, `${BASE}/${encodeURIComponent(id)}/apply`, {
+    method: "POST",
+    body: { apply_mode: req.applyMode },
+  });
   return SemanticUnderstandingTask.parse(result);
 }
 

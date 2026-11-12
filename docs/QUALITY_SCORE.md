@@ -114,6 +114,7 @@ Update this table as each signal changes (e.g. live-parity count as commands are
   empty catalogs, and rejection of cancellation-only responses.
 
 - `test/unit/vega-semantic.test.ts` and `vega-command.test.ts` cover explicit semantic output language forwarding and CLI validation. Live model output-language acceptance remains a separate environment check.
+- The same semantic tests cover the saved-result apply request and public resource method, unchanged original dry-run mode, successful no-change responses with `applied=true`, conflict propagation without another task request, required CLI write modes, and rejection of threshold overrides. `vega-semantic-dry-run.test.ts` verifies request preview sends no business or version-preflight requests; `help-contract.test.ts` checks the apply WRITE section, task ID source, and review/apply guide, including that successful application ends the task's apply lifecycle even with no metadata changes and another strategy needs a new task. Backend schema/concurrency checks and a deployed end-to-end apply remain separate acceptance work.
 
 - `test/unit/vega-discovery.test.ts` verifies typed resource-level exact count
   failures, historical results without failure details, rejection of malformed

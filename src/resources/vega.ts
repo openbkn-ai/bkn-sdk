@@ -21,9 +21,11 @@ import {
   updateDiscoverSchedule,
 } from "../api/vega-discovery.js";
 import {
+  type ApplySemanticUnderstandingTaskRequest,
   type CreateSemanticUnderstandingTaskRequest,
   type DeleteSemanticUnderstandingTasksOptions,
   type ListSemanticUnderstandingTasksOptions,
+  applySemanticUnderstandingTask,
   createSemanticUnderstandingTask,
   deleteSemanticUnderstandingTasks,
   getSemanticUnderstandingTask,
@@ -156,6 +158,8 @@ export function vega(ctx: RequestContext) {
     semanticUnderstandingTasks: (opts?: ListSemanticUnderstandingTasksOptions) =>
       listSemanticUnderstandingTasks(ctx, opts),
     getSemanticUnderstandingTask: (id: string) => getSemanticUnderstandingTask(ctx, id),
+    applySemanticUnderstandingTask: (id: string, req: ApplySemanticUnderstandingTaskRequest) =>
+      applySemanticUnderstandingTask(ctx, id, req),
     deleteSemanticUnderstandingTasks: (
       ids: string | string[],
       opts?: DeleteSemanticUnderstandingTasksOptions,
