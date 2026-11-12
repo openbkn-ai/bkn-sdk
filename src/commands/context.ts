@@ -541,7 +541,7 @@ rewriting it as a Cypher aggregation produces a number the platform will not agr
     });
   cmd
     .command("get-action-info <kn-id>")
-    .description("Fetch action info / dynamic tools for an instance")
+    .description("Read an action type's business meaning and execution schema")
     .option(
       "--args <json>",
       "tool arguments as JSON (- for stdin); kn_id is filled from <kn-id> unless given; --schema prints the shape",

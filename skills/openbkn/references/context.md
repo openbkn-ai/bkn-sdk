@@ -343,7 +343,9 @@ openbkn context get-logic-properties <kn> --args '{
   "properties": ["status", "cpu"]
 }'
 
-# get-action-info: action metadata / dynamic tools for one instance
+# get-action-info: business meaning and execution schema; a target is optional
+openbkn context get-action-info <kn> --args '{"at_id": "at-1"}'
+# Preview for a specific existing object instance when needed
 openbkn context get-action-info <kn> --args '{"at_id": "at-1", "_instance_identities": [{"id": "123"}]}'
 ```
 
