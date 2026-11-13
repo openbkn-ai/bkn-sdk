@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
+  type Catalog,
   type CatalogDeletionImpact,
   type CatalogSummary,
   CreateBuildTaskRequest,
@@ -237,9 +238,12 @@ describe("vega uses the vega-backend base path", () => {
   });
 
   it("parses typed catalog responses with update_time", async () => {
+    expectTypeOf<Catalog["category"]>().toEqualTypeOf<string | undefined>();
+    expectTypeOf<CatalogSummary["category"]>().toEqualTypeOf<string | undefined>();
     const catalog = {
       id: "c-1",
       name: "orders",
+      category: "table",
       type: "physical",
       enabled: true,
       built_in: true,
@@ -248,13 +252,13 @@ describe("vega uses the vega-backend base path", () => {
     };
     mockFetch({ entries: [catalog], total_count: 1 });
     await expect(listCatalogs(ctx)).resolves.toMatchObject({
-      entries: [{ built_in: true, id: "c-1", update_time: 1720000000123 }],
+      entries: [{ built_in: true, category: "table", id: "c-1", update_time: 1720000000123 }],
       total_count: 1,
     });
 
     mockFetch({ entries: [catalog] });
     await expect(getCatalog(ctx, "c-1")).resolves.toMatchObject({
-      entries: [{ built_in: true, id: "c-1", update_time: 1720000000123 }],
+      entries: [{ built_in: true, category: "table", id: "c-1", update_time: 1720000000123 }],
     });
   });
 
@@ -270,6 +274,7 @@ describe("vega uses the vega-backend base path", () => {
           enabled: false,
           built_in: true,
           connector_type: "",
+          category: "",
           connector_config: null,
           metadata: {},
           health_check_result: "",
@@ -277,7 +282,7 @@ describe("vega uses the vega-backend base path", () => {
       ],
     });
     await expect(getCatalog(ctx, "c-int")).resolves.toMatchObject({
-      entries: [{ id: "c-int", connector_config: null }],
+      entries: [{ id: "c-int", category: "", connector_config: null }],
     });
   });
 
@@ -798,6 +803,42 @@ describe("runSql", () => {
 });
 
 describe("createCatalog", () => {
+  it("preserves Catalog variables, sensitive names and the independent login request", async () => {
+    const config = {
+      base_url: "https://api.example.com",
+      options: { timeout_seconds: 30, max_response_mib: 10 },
+      variables: {
+        token: "example-token",
+        api_key: "example-key",
+        app_id: "app",
+        arbitrary: "protected-input",
+        lcid: "2052",
+      },
+      sensitive_variables: ["token", "api_key", "arbitrary"],
+      login_request: {
+        request: {
+          method: "POST",
+          path: "/login",
+          headers: { Authorization: "Bearer {{ token }}" },
+          body: {
+            type: "object",
+            properties: { credential: { type: "string", value: "{{ arbitrary }}" } },
+          },
+        },
+        response: {
+          "200": {
+            description: "Login response",
+            content: { "application/json": { schema: { type: "object" } } },
+          },
+        },
+        success_rule: { http_status: [200] },
+      },
+    };
+    const f = mockFetch({ id: "api" });
+    await createCatalog(ctx, { name: "API", connectorType: "http", connectorConfig: config });
+    expect(JSON.parse(firstCall(f)[1].body as string).connector_config).toEqual(config);
+  });
+
   it("POSTs connector fields to /catalogs", async () => {
     const f = mockFetch({ id: "c-9" });
     await createCatalog(ctx, {
@@ -876,6 +917,7 @@ const currentCatalog = {
   type: "physical",
   enabled: true,
   connector_type: "mysql",
+  category: "table",
   tags: ["prod", "sales"],
   description: "orders db",
   update_time: 1720000000999,
