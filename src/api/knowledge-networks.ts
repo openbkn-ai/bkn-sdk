@@ -528,6 +528,7 @@ export function listActionTypes(
   opts: ListActionTypesOptions = {},
 ): Promise<unknown> {
   return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/action-types`, {
+    responseParser: parseBigIntJSON,
     query: {
       ...schemaListQuery(opts),
       action_type: opts.actionType || undefined,
@@ -562,6 +563,7 @@ export function getSchemaItem(
 ): Promise<unknown> {
   return request(ctx, `${ONTOLOGY_BASE}/${encodeURIComponent(knId)}/${kind}/${idSegment(id)}`, {
     query: { branch: opts.branch || undefined },
+    responseParser: parseBigIntJSON,
   });
 }
 /** Create schema items: `{entries:[…]}` (a bare array is wrapped). */

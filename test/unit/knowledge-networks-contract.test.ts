@@ -481,6 +481,56 @@ describe("knowledge network and schema items", () => {
     await deleteSchemaItem(ctx, "kn-1", "relation-types", "rt-1", { forceDelete: true });
     expect(lastCall(f).url.searchParams.has("force_delete")).toBe(false);
   });
+
+  it("preserves dynamic integers in action lists and all schema item reads", async () => {
+    const raw =
+      '{"entries":[{"parameters":[{"value":{"safe":9007199254740991,"edge":9007199254740992,"unsafe":9007199254740993,"negative":-9007199254740993,"int64_max":9223372036854775807,"int64_min":-9223372036854775808,"decimal":1.5,"zero":0,"false_value":false,"empty":[],"text":"中文","nothing":null}}]}]}';
+    const f = vi.fn(async () => new Response(raw, { status: 200 }));
+    vi.stubGlobal("fetch", f);
+    const expected = {
+      safe: 9007199254740991,
+      edge: 9007199254740992n,
+      unsafe: 9007199254740993n,
+      negative: -9007199254740993n,
+      int64_max: 9223372036854775807n,
+      int64_min: -9223372036854775808n,
+      decimal: 1.5,
+      zero: 0,
+      false_value: false,
+      empty: [],
+      text: "中文",
+      nothing: null,
+    };
+    const dynamicValue = (response: unknown) =>
+      (response as { entries: { parameters: { value: unknown }[] }[] }).entries[0]!.parameters[0]!
+        .value;
+
+    expect(dynamicValue(await listActionTypes(ctx, "kn"))).toEqual(expected);
+    for (const kind of ["action-types", "object-types", "relation-types"] as const) {
+      expect(dynamicValue(await getSchemaItem(ctx, "kn", kind, "item"))).toEqual(expected);
+    }
+    expect(f).toHaveBeenCalledTimes(4);
+  });
+
+  it("keeps the original number literal when an action definition is read and saved", async () => {
+    const f = vi.fn(
+      async (_url: string | URL, _init?: RequestInit) =>
+        new Response(
+          '{"entries":[{"parameters":[{"value":{"large_integer":9007199254740993}}]}]}',
+          {
+            status: 200,
+          },
+        ),
+    );
+    vi.stubGlobal("fetch", f);
+    const response = (await getSchemaItem(ctx, "kn", "action-types", "at")) as {
+      entries: unknown[];
+    };
+    await updateSchemaItem(ctx, "kn", "action-types", "at", response.entries[0]);
+    const requestBody = lastCall(f).init.body as string;
+    expect(requestBody).toContain('"large_integer":9007199254740993');
+    expect(requestBody).not.toContain('"large_integer":9007199254740992');
+  });
 });
 
 describe("bkn push", () => {
