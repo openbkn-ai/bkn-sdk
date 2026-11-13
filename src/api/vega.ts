@@ -163,6 +163,9 @@ export const Catalog = z
     enabled: z.boolean(),
     built_in: z.boolean().optional(),
     connector_type: z.string(),
+    // Read-only connector category; logical catalogs return an empty string.
+    // Optional for responses from deployments predating this field.
+    category: z.string().optional(),
     // A built-in (logical) catalog has no connector: the service answers
     // `connector_config: null` there, so null must parse.
     connector_config: z.record(z.unknown()).nullish(),

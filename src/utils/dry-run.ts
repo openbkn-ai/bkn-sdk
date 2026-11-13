@@ -82,6 +82,17 @@ function redact(headers: HeaderInput): Record<string, string> {
 const SECRET_FIELD =
   /^(bkn_token|token|access_token|refresh_token|run_token|task_token|password|secret|api_key)$/i;
 
+/** An invalid declaration cannot safely identify which variable values are public. */
+function declaredVariableNames(value: unknown): Set<string> | undefined {
+  if (
+    !Array.isArray(value) ||
+    !value.every((name) => typeof name === "string" && /^[A-Za-z][A-Za-z0-9_]*$/.test(name))
+  )
+    return undefined;
+  if (new Set(value).size !== value.length) return undefined;
+  return new Set(value as string[]);
+}
+
 /**
  * The same rule as headers, applied to the body: a credential can travel as a
  * field too — `sandbox run --pass-token` puts one in `bkn_token` so the
@@ -91,9 +102,24 @@ const SECRET_FIELD =
 function redactBody(body: unknown): unknown {
   if (Array.isArray(body)) return body.map(redactBody);
   if (!body || typeof body !== "object") return body;
+  const source = body as Record<string, unknown>;
+  const hasDeclaration = Object.hasOwn(source, "sensitive_variables");
+  const names = hasDeclaration ? declaredVariableNames(source.sensitive_variables) : undefined;
   const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(body)) {
-    out[k] = SECRET_FIELD.test(k) ? "<redacted>" : redactBody(v);
+  for (const [k, v] of Object.entries(source)) {
+    if (k === "variables" && hasDeclaration) {
+      out[k] =
+        names && v && typeof v === "object" && !Array.isArray(v)
+          ? Object.fromEntries(
+              Object.entries(v).map(([name, value]) => [
+                name,
+                names.has(name) || SECRET_FIELD.test(name) ? "<redacted>" : redactBody(value),
+              ]),
+            )
+          : "<redacted>";
+    } else {
+      out[k] = SECRET_FIELD.test(k) ? "<redacted>" : redactBody(v);
+    }
   }
   return out;
 }
