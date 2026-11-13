@@ -116,10 +116,13 @@ A KN is the schema/ontology layer; it **references** already-built Catalog resou
 ## Edge cases
 
 - Large networks: paginate; never load full instance sets into memory.
-- Dynamic ontology-query values preserve unsafe decimal integers as native
-  `bigint` in the SDK and CLI. CLI JSON bodies preserve those literals on the
+- Dynamic ontology-query values, action-type lists, and object/relation/action
+  schema item details preserve unsafe decimal integers as native `bigint` in
+  the SDK and CLI. This includes nested action parameter constants used in
+  read-modify-write workflows. CLI JSON bodies preserve those literals on the
   request path; use `stringifyBigIntJSON()` instead of native `JSON.stringify()`
-  when serializing a result.
+  when serializing a result. A JavaScript `number` that was already rounded
+  before reaching the SDK cannot be recovered.
 - Push of a non-normalized `.bkn` with non-UTF-8 content must warn or normalize per flags.
 - Re-push should be idempotent.
 

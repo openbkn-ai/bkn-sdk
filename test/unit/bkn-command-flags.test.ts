@@ -19,6 +19,7 @@ const kn = vi.hoisted(() => {
     objectTypes: ok(),
     relationTypes: ok(),
     actionTypes: ok(),
+    actionTypeGet: ok(),
     conceptGroups: ok(),
     actionSchedules: ok(),
     actionTypeQuery: ok(),
@@ -187,6 +188,27 @@ describe("openbkn bkn flags", () => {
     ).rejects.toThrow();
     expect(kn.objectTypes).not.toHaveBeenCalled();
     expect(kn.relationTypes).not.toHaveBeenCalled();
+  });
+
+  it("prints exact action definition numbers in list and get output", async () => {
+    const response = {
+      ok: true,
+      entries: [{ parameters: [{ value: { large_integer: 9007199254740993n } }] }],
+    };
+    const stdout = vi.mocked(process.stdout.write);
+
+    kn.actionTypes.mockResolvedValueOnce(response);
+    await run("action-type", "list", "kn-1");
+    expect(stdout.mock.calls.map(([chunk]) => String(chunk)).join("")).toMatch(
+      /"large_integer":\s*9007199254740993/,
+    );
+
+    stdout.mockClear();
+    kn.actionTypeGet.mockResolvedValueOnce(response);
+    await run("action-type", "get", "kn-1", "at-1");
+    expect(stdout.mock.calls.map(([chunk]) => String(chunk)).join("")).toMatch(
+      /"large_integer":\s*9007199254740993/,
+    );
   });
 
   it("subgraph passes --query-type relation_path", async () => {
