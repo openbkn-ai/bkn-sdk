@@ -11,6 +11,7 @@
 属性声明、值类型、别名、关系声明与生命周期**全部被忽略**。
 
 - 3.0 需要 0.2.1 及以上的平台；0.2.0 平台只读 2.x。用 `openbkn --version` 确认目标平台：CLI 只连与自己同版本的平台。
+- 本文与示例按 0.2.2 写：每个行动类都有 `### Operation Config`。0.2.1 不认这个小节，会把它当作未知小节拒收 3.0 包，目标是 0.2.1 时所有行动类都不写它。
 - 用户要求 2.x，或目标平台只读 2.x 时，按「[2.x 规范写法](#2x-规范写法)」写。
 - 3.0 **每样东西只有一种写法**：未列出的 frontmatter 字段、未知的 `###` 小节、未知或重复的表格列、
   旧列名、同义写法都会被拒绝导入，错误信息会指出文件与位置。只按本文写。
@@ -440,6 +441,13 @@ action_intent: modify
 
 撤销尚未采样的检验申请。已采样或已出报告的申请不能撤销。
 
+### Operation Config
+
+```yaml
+operation_config:
+  type: object
+```
+
 ### Bound Object
 
 | Bound Object |
@@ -474,12 +482,15 @@ value: N
 |------|------------|
 ````
 
-frontmatter：`action_intent`（`add` / `modify` / `delete`）、`aliases`（不得与网络内其他行动类的 `name` 相同）、`lifecycle`。不要写 `action_type`、`enabled`、`risk_level`、`requires_approval`。
+frontmatter：`action_intent`（`add` / `modify` / `delete`，必填）、`aliases`（不得与网络内其他行动类的 `name` 相同）、`lifecycle`。不要写 `action_type`、`enabled`、`risk_level`、`requires_approval`。
+
+每个行动类只调用一个工具，执行一种操作。
 
 | 小节 | 说明 |
 |------|------|
-| `Bound Object` | 一列 `Bound Object`：绑定的对象类 ID。可以不绑定，此时不能写触发条件，参数也不能取自属性 |
-| `Affect Object` | 可选，列 `Affect Object \| Affect Description`：受影响的对象类与说明 |
+| `Operation Config` | 必需（OpenBKN 0.2.2 起），YAML：`operation_config:` 下写 `type`（`object` / `relation` / `tool`）及关系字段，见下文「三类操作」 |
+| `Bound Object` | 一列 `Bound Object`：绑定的对象类 ID。`object`、`relation` 必须绑定；`tool` 不绑定（表中不写数据行），此时不能写触发条件，参数也不能取自属性 |
+| `Affect Object` | 可选，列 `Affect Object \| Affect Description`：受影响的对象类与说明。关系操作不能写 |
 | `Impact Contracts` | 可选，YAML：`impact_contracts:` 下的列表，每项 `object_type_id`、`expected_operation`（`add` / `modify` / `delete`）、`description`、`affected_fields` |
 | `Trigger Condition` | 可选，条件 YAML，直接写条件（不要包在 `condition:` 下） |
 | `Action Source` | 列 `Type \| BoxID \| ToolID \| McpID \| ToolName`；`tool` 填 `BoxID`、`ToolID`，`mcp` 填 `McpID`、`ToolName`，其余留空 |
@@ -488,9 +499,88 @@ frontmatter：`action_intent`（`add` / `modify` / `delete`）、`aliases`（不
 
 参数表：
 
-- `ValueFrom` 必须是 `property`（对象属性）、`input`（运行时输入）或 `const`（常量）。
-- `Value`：`property` 写属性名，`const` 写常量，`input` 留空。
+- `ValueFrom` 必须是 `property`（对象属性）、`input`（运行时输入）或 `const`（常量）；关系操作另用 `source_identity`、`target_identity`。
+- `Value`：`property` 写属性名，`const` 写常量，`input`、`source_identity`、`target_identity` 留空。
+- `const` 按 JSON 解析：数字、`true` / `false`、数组、对象直接写 JSON；字符串常量写成带双引号的 JSON 字符串，
+  如 `"P1"`、`"123"`。不加引号的 `123`、`true`、`null` 会被当成数字、布尔或空值：工具收到数字或 `null` 而不是字符串，布尔则执行时失败。
+- `property` 参数的类型须与属性类型一致（整数可以传给 `number`）。
+- 参数名不能重复；点分名称（`order.id`）表示嵌套位置，两个参数的路径不能互为前缀。
 - `Source` 是参数在工具请求中的位置：`Query`、`Body`、`Header`、`Path`。值的来源写在 `ValueFrom`，不是 `Source`。
+
+### 三类操作
+
+| `type` | `Bound Object` | `Trigger Condition` | 执行时的目标 |
+|--------|----------------|---------------------|--------------|
+| `object` | 必须 | 新建（`action_intent: add`）不能写；修改、删除可以写 | 新建：调用方填写被 `property` 参数引用的属性，且必须全部填写；修改、删除：调用方指定实例主键 |
+| `relation` | 必须，是关系的一端 | 可写，约束 `Bound Object` 一端 | 调用方指定一对起点与终点实例 |
+| `tool` | 不绑定 | 不能写 | 无对象，只传参数 |
+
+条件只校验调用方指定的实例能否执行，不会按条件扫描实例。要对已有实例执行（读取它的属性），用 `object` 加 `modify` 或 `delete`，
+不要用 `add`：`add` 表示新建实例，属性值由调用方填写。
+
+关系操作（为采购订单指定供应商）：
+
+````markdown
+### Operation Config
+
+```yaml
+operation_config:
+  type: relation
+  relation_type_id: po_supplier
+  relation_operation: create
+  anchor_role: source
+  other_object_condition:
+    field: status
+    operation: ==
+    value: active
+```
+
+### Bound Object
+
+| Bound Object |
+|--------------|
+| purchase_order |
+
+### Parameter Binding
+
+| Name | Type | Source | Operation | ValueFrom | Value | Description |
+|------|------|--------|-----------|-----------|-------|-------------|
+| order_id | string | Body | | source_identity | | 采购订单编号 |
+| supplier_id | string | Body | | target_identity | | 供应商编号 |
+````
+
+- `relation_type_id` 是包内的关系类，它的一端必须是 `Bound Object`；`relation_operation` 为 `create`（建立）或 `delete`（解除）。
+- `anchor_role`（`source` / `target`）说明 `Bound Object` 是关系的起点还是终点；普通关系可省略，自关联关系必须写。
+- 必须各有一个 `source_identity` 与 `target_identity` 参数，取两端实例的主键；两端对象类都只能有一个主键，参数类型与主键一致。
+- `Trigger Condition` 约束 `Bound Object` 一端，`other_object_condition`（结构同条件 YAML，可省略 `object_type_id`）约束另一端。
+- 影响写在 `Impact Contracts`，不写 `Affect Object`。
+
+工具调用（不绑定对象）：
+
+````markdown
+### Operation Config
+
+```yaml
+operation_config:
+  type: tool
+```
+
+### Action Source
+
+| Type | BoxID | ToolID | McpID | ToolName |
+|------|-------|--------|-------|----------|
+| tool | box_purchase | tool_sync_supplier | | |
+
+### Parameter Binding
+
+| Name | Type | Source | Operation | ValueFrom | Value | Description |
+|------|------|--------|-----------|-----------|-------|-------------|
+| since | datetime | Body | | input | | 增量起始时间 |
+| full | boolean | Body | | const | false | 是否全量同步 |
+````
+
+`operation_config` 只能写上面列出的字段，写错或多写即拒绝；非关系操作不能写关系字段。
+目标平台是 0.2.1 及更早版本时不要写 `Operation Config`（3.0 包会被拒绝，2.x 包会把它并入描述），字符串常量也不要加双引号。
 
 工具必须在目标平台上存在：引用的工具箱工具或 MCP 工具找不到时 `push` 失败；
 只想导入模型时用 `openbkn bkn push <dir> --binding-policy detach`，导入后在平台上重新绑定。
@@ -519,6 +609,9 @@ sub_conds:
 | 文本 | `like`、`not_like`、`prefix`、`not_prefix`、`regex` |
 | 空值与存在 | `empty`、`not_empty`、`null`、`not_null`、`exist`、`not_exist` |
 | 布尔 | `true`、`false` |
+
+`like`、`not_like` 的值是 SQL LIKE 模式，匹配整个属性值：`%` 任意长度文本，`_` 一个字符，`\` 转义下一个字符。
+匹配“包含某段文本”要两端写 `%`（如 `%超时%`）；不能以单独的 `\` 结尾。
 
 ## 风险类（risk_types/*.bkn）
 
@@ -620,6 +713,7 @@ capabilities:
 
 其余写法与 3.0 相同，2.x 都能读：`### Action Source` 与列 `BoxID`、`ToolID`、`McpID`、`ToolName`，
 参数表 `Name | Type | Source | Operation | ValueFrom | Value | Description`，直接写的条件 YAML，`action_intent`。
+`### Operation Config` 不是 3.0 专有内容：目标平台为 0.2.2 及以上时，2.x 包同样必须写。
 不要退回 2.x 的旧写法（`### Tool Configuration`、`Parameter | Source | Binding`、`condition:` 包装、
 `enabled` / `risk_level` 等字段、`Pre-conditions` 等小节）：2.x 对它们要么丢参数，要么静默忽略。
 
@@ -637,5 +731,5 @@ capabilities:
 3. 引用的 ID（端点、映射属性、`value_type`、`fallback_for`、`replaced_by`、绑定对象、概念分组成员）必须在包内已定义。
 4. 表格列名、小节标题严格按本文；不要写 HTML 注释、引用块或其他说明文字到小节里。
 5. ID 用小写字母、数字、下划线；显示名和描述用中文（除非另有要求）。
-6. 必需内容：所有定义 `type`、`id`、`name`；对象类 `Data Properties`、`Keys`；关系类 `Endpoint` 与对应映射小节；值类型 `Definition`；概念分组 `Object Types`。
+6. 必需内容：所有定义 `type`、`id`、`name`；对象类 `Data Properties`、`Keys`；关系类 `Endpoint` 与对应映射小节；行动类 `action_intent` 与 `Operation Config`；值类型 `Definition`；概念分组 `Object Types`。
 7. 写默认值等于不写，但不要写出来：`importance: primary`、`lifecycle.status: active`、`Required: false`、主键的 `Required: true`。

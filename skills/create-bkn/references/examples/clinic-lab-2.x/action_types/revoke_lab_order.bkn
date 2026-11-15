@@ -9,6 +9,13 @@ action_intent: modify
 
 撤销尚未采样的检验申请，状态改为已撤销（C）。已采样或已出报告的申请不能撤销。
 
+### Operation Config
+
+```yaml
+operation_config:
+  type: object
+```
+
 ### Bound Object
 
 | Bound Object |

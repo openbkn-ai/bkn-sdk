@@ -854,3 +854,109 @@ name: R
     ]);
   });
 });
+
+describe("bkn validate: action Operation Config", () => {
+  const action = (config: string | undefined) => `---
+type: action_type
+id: a
+name: A
+action_intent: modify
+---
+
+## ActionType: A
+${config === undefined ? "" : `\n### Operation Config\n\n${config}\n`}
+### Bound Object
+
+| Bound Object |
+|--------------|
+| a |
+`;
+  const yamlBlock = (body: string) => `\`\`\`yaml\n${body}\`\`\`\n`;
+  const check = (config: string | undefined) =>
+    validateBknDirectory(
+      bkn({
+        "network.bkn": network,
+        "object_types/a.bkn": ot("a", "Alpha"),
+        "action_types/a.bkn": action(config),
+      }),
+    );
+
+  it("accepts object, tool and relation operations, with YAML comments inside the block", () => {
+    for (const body of [
+      "operation_config:\n  type: object\n",
+      "# no object\noperation_config:\n  type: tool\n",
+      "operation_config:\n  type: relation\n  relation_type_id: r\n  relation_operation: delete\n  anchor_role: target\n  other_object_condition:\n    operation: and\n    sub_conds:\n      - field: status\n        operation: ==\n        value: active\n",
+    ]) {
+      const r = check(yamlBlock(body));
+      expect(r.errors).toEqual([]);
+      expect(r.warnings).toEqual([]);
+    }
+  });
+
+  it("only warns when the section is missing, since platforms before 0.2.2 do not know it", () => {
+    const r = check(undefined);
+    expect(r.valid).toBe(true);
+    expect(r.warnings).toEqual([
+      "action_types/a.bkn: no '### Operation Config' section; OpenBKN 0.2.2 and later reject action types without it. Leave it out only for platforms 0.2.1 and earlier.",
+    ]);
+  });
+
+  it("rejects what the 0.2.2 parser rejects, naming the section line", () => {
+    const cases: Array<[string, string]> = [
+      ["operation_config: {type: object}\n", "Operation Config requires a ```yaml block"],
+      [yamlBlock("type: object\n"), "Operation Config: unknown field 'type'"],
+      [
+        yamlBlock("operation_config:\n  type: query\n"),
+        "operation_config.type must be object, relation or tool",
+      ],
+      [
+        yamlBlock("operation_config:\n  type: object\n  target: x\n"),
+        "operation_config: unknown field 'target'",
+      ],
+      // `kind` names a masking rule; it is no field of an operation, at any level.
+      [
+        yamlBlock("operation_config:\n  type: object\nkind: object\n"),
+        "Operation Config: unknown field 'kind'",
+      ],
+      [
+        yamlBlock("operation_config:\n  type: object\n  kind: object\n"),
+        "operation_config: unknown field 'kind'",
+      ],
+      [
+        yamlBlock(
+          "operation_config:\n  type: relation\n  relation_type_id: r\n  relation_operation: create\n  other_object_condition:\n    kind: x\n",
+        ),
+        "operation_config.other_object_condition: unknown field 'kind'",
+      ],
+      [
+        yamlBlock("operation_config:\n  type: object\n  relation_type_id: r\n"),
+        "operation_config.relation_type_id is only valid for relation operations",
+      ],
+      [
+        yamlBlock("operation_config:\n  type: relation\n  relation_operation: create\n"),
+        "a relation operation requires operation_config.relation_type_id",
+      ],
+      [
+        yamlBlock(
+          "operation_config:\n  type: relation\n  relation_type_id: r\n  relation_operation: link\n",
+        ),
+        "operation_config.relation_operation must be create or delete",
+      ],
+      [
+        yamlBlock(
+          "operation_config:\n  type: relation\n  relation_type_id: r\n  relation_operation: create\n  anchor_role: both\n",
+        ),
+        "operation_config.anchor_role must be source or target",
+      ],
+      [
+        yamlBlock(
+          "operation_config:\n  type: relation\n  relation_type_id: r\n  relation_operation: create\n  other_object_condition:\n    sub_conds:\n      - feild: status\n",
+        ),
+        "operation_config.other_object_condition.sub_conds[0]: unknown field 'feild'",
+      ],
+    ];
+    for (const [config, detail] of cases) {
+      expect(check(config).errors).toEqual([`action_types/a.bkn:10: ${detail}`]);
+    }
+  });
+});
