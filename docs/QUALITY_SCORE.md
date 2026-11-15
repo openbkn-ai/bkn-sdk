@@ -107,6 +107,10 @@ Update this table as each signal changes (e.g. live-parity count as commands are
   precedence and caller Authorization on the wire. Live capability acceptance
   distinguishes candidate source loaded for one verification call from the SDK
   actually pinned in the running sandbox image.
+- `python/tests/test_kn_rest.py` checks that `execute_action` sends
+  `object_input` for a create, one `relation_target` pair for a relation and
+  no target for a tool, regenerated from the Context Loader contract in which an
+  action no longer scans its condition for targets.
 
 - `test/unit/vega.test.ts` and `vega-command.test.ts` verify SQL and DSL requests using only `query_format`, initial paging and opaque cursor continuation. SQL uses the shared MySQL SELECT subset; the resource Catalog selects its output dialect. The removed dialect CLI option is rejected before HTTP.
 

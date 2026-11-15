@@ -74,25 +74,35 @@ def execute_action(
     at_id: str,
     *,
     response_format: str | None = None,
+    relation_target: dict[str, Any] | None = None,
+    object_input: dict[str, Any] | None = None,
     instance_identities: list[Any] | None = None,
     dynamic_params: dict[str, Any] | None = None,
     context: Context | None = None,
 ) -> Any:
     """触发行动执行（异步）.
 
-    对一批对象实例执行某个行动类。**异步**：返回 `execution_id` 即代表已受理， 执行结果用
-    `get_action_execution` 轮询。 `dynamic_params` 填 `get_action_info` 返回的 schema 里
-    `value_from=input` 的那些参数。`_instance_identities`
-    留空表示按行动类自身的条件扫描目标实例 （由下游决定命中范围），不是「不执行」。
-    必须提供有效的 `bkn_context`；缺失或传空时，执行前返回 400 `conversation_required`，附
-    `required_action: create_conversation`。 平台明确关闭证据采集时，`bkn_start_interaction`
-    不签发 ID，本接口可不带 `bkn_context` 执行，且不生成受管 Trace 记录。 Trace Core
+    执行对象实例操作、关系操作或独立工具行动。**异步**：返回 `execution_id`
+    即代表已受理，执行结果用 `get_action_execution` 轮询。 `dynamic_params` 按
+    `get_action_info` 返回的 `_dynamic_tools[].parameters.properties.dynamic_params` 填写；该
+    Schema 已根据行动类 中 `value_from=input` 的映射生成。修改或删除对象实例必须传
+    `_instance_identities` 指定具体目标；
+    适用条件只验证所选实例，不能代替目标身份。新建对象实例使用 `object_input`
+    填写已映射的新实例属性；建立或解除关系使用 `relation_target` 指定一对起点
+    和终点实例；独立工具行动不传目标身份。具体必填字段以 `get_action_info` 返回的执行参数
+    schema 为准。 必须提供有效的 `bkn_context`；缺失或传空时，执行前返回 400
+    `conversation_required`，附 `required_action: create_conversation`。
+    平台明确关闭证据采集时，`bkn_start_interaction` 不签发 ID，本接口可不带 `bkn_context`
+    执行，且不生成受管 Trace 记录。 Trace Core
     基础设施故障时，本接口经只读探测确认后可不带上下文执行， 并标记本次调用未记录 Trace。
 
     Args:
+        relation_target: One explicit directed instance pair. Keys are defined by the endpoint
+            object primary keys. No implicit pairing or cross join.
+        object_input: New object data for create operations; no existing-instance scan.
         kn_id: 知识网络 ID。
         at_id: 行动类 ID。
-        instance_identities: 目标对象实例。留空表示按行动类自身的条件扫描目标实例。
+        instance_identities: 修改和删除的明确目标实例；不传时拒绝执行，不按条件扫描。
         dynamic_params: 动态参数取值，对应行动定义中 `value_from=input` 的参数。完整性校验在 下游
             ontology-query 完成。
 
@@ -105,6 +115,8 @@ def execute_action(
             "response_format": response_format,
         },
         {
+            "relation_target": relation_target,
+            "object_input": object_input,
             "kn_id": kn_id,
             "at_id": at_id,
             "_instance_identities": instance_identities,
@@ -172,6 +184,11 @@ def execute_tool(
 ) -> Any:
     """执行一个已发布函数工具.
 
+    REST lifecycle context is optional, as for search_schema. Missing or empty bkn_context
+    permits ad-hoc execution without depending on Trace Core or capture policy. Explicit
+    nonempty context remains validated. Authentication, network execute permission and
+    mounted-tool authorization still apply. MCP managed execution continues to require
+    conversation/interaction IDs.
     以知识网络托管代理执行工具，返回工具的原始响应；真实调用者仍用于网络级鉴权和审计。
     `toolbox_id` 与 `tool_id` 必须取自 `search_capabilities`（`owner_id` /
     `capability_id`）；`arguments` 按其返回的 `input_schema` 填，只放业务参数——令牌、会话 id
@@ -336,15 +353,23 @@ def get_action_info(
     at_id: str,
     *,
     response_format: str | None = None,
+    relation_target: dict[str, Any] | None = None,
+    object_input: dict[str, Any] | None = None,
     instance_identities: list[Any] | None = None,
     instance_identity: dict[str, Any] | None = None,
     context: Context | None = None,
 ) -> Any:
-    """召回行动的可执行定义.
+    """查询行动类定义与执行参数.
 
-    按行动类 ID（可选再加对象实例标识）召回行动，返回符合 Function Call 规范的 工具定义
-    `_dynamic_tools`。Agent 可以直接把它塞进自己的工具列表。 不传 `_instance_identities`
-    时召回的是行动类级别的定义；传了则返回已就该批 实例实例化过的参数。
+    按行动类 ID（可选再加明确目标身份）查询指定行动类。`action_type` 给出行动类的
+    业务名称、说明、操作意图及对象/关系/独立工具操作配置；`_dynamic_tools` 是 符合 Function
+    Call 规范的底层工具定义。工具名和说明仍取自执行资源，调用方 应使用 `action_type`
+    判断业务意图，使用 `_dynamic_tools.parameters` 填写参数。 本接口必须指定
+    `at_id`，不能仅凭对象实例标识发现候选行动类。旧版行动查询
+    在未指定实例时曾按适用条件扫描对象；当前版本不扫描，返回定义与执行参数 schema。
+    若要列出适用于某个实例的全部行动类，需要另行提供候选行动发现能力。 不传
+    `_instance_identities`、`relation_target` 或 `object_input` 等目标参数时，
+    返回行动类级别的定义；传入明确目标后，返回针对该目标实例化的参数。
     工具声明了输出契约时，还会带上 `output_schema`——执行结果的形状，供 Agent 把
     `get_action_execution` 拿到的 `result` 复述成自然语言。 **权限**：调用方需具备该行动类的
     `view_detail` 权限，以及绑定对象类的 `query_data` 权限；无需另行授予底层工具或 MCP
@@ -354,6 +379,9 @@ def get_action_info(
     服务地址，也不授予执行权限。读取绑定工具定义被拒绝时返回 403，而非依赖服务 不可用。
 
     Args:
+        relation_target: One explicit directed instance pair. Keys are defined by the endpoint
+            object primary keys. No implicit pairing or cross join.
+        object_input: New object data for create operations; no existing-instance scan.
         kn_id: 知识网络 ID。
         at_id: 行动类 ID（从 Schema 检索结果里取）。
         instance_identities: 目标对象实例标识列表。不传则返回行动类级别的定义。
@@ -361,7 +389,7 @@ def get_action_info(
             `query_object_instance` 或 `query_instance_subgraph` 结果里的
             `_instance_identity`。
 
-    Returns the platform's own payload: _dynamic_tools, headers.
+    Returns the platform's own payload: _dynamic_tools, action_type, headers.
     """
     return _send(
         "/api/agent-retrieval/v1/kn/get_action_info",
@@ -370,6 +398,8 @@ def get_action_info(
             "response_format": response_format,
         },
         {
+            "relation_target": relation_target,
+            "object_input": object_input,
             "kn_id": kn_id,
             "at_id": at_id,
             "_instance_identities": instance_identities,
@@ -390,16 +420,23 @@ def get_kn_detail(
     """获取知识网络详情.
 
     返回一张知识网络的概念全景：概念组、对象类、关系类、行动类。 **`detail_level`
-    决定返回多少**： | 级别 | 保留 | 剥掉 | |---|---|---| | `summary`（默认） | 骨架 +
-    每个属性的 `name` / `type` | 属性的 `display_name` / `comment` / `mapped_field` /
+    决定返回多少**： | 级别 | 保留 | 剥掉 | |---|---|---| | `brief` | 网络的 `name` /
+    `comment`、概念组、`mounted_capabilities`，以及 `object_type_count` /
+    `relation_type_count` / `action_type_count` | 三个概念数组（回
+    `null`）；也不做逐对象类的属性授权读取，几 KB | | `summary`（默认） | 骨架 + 每个属性的
+    `name` / `type` | 属性的 `display_name` / `comment` / `mapped_field` /
     `condition_operations`，逻辑属性的 `data_source` / `parameters`，关系类的 `mapping_rules`
     与起终点对象类详情 | | `full` | 全部 | —— | 两种级别都会**去掉 `concept_groups`
     里嵌套的对象类 / 关系类 / 行动类副本**： 这些是顶层数组的重复拷贝，概念组只保留
-    `object_type_ids` 作为分组边界。 被剥掉的细节按需用 `get_object_types` /
-    `get_relation_types` 取回。 对象类条目带
-    `related_metric_count`（该对象类下已建模指标数），`>0` 才值得 为取指标下钻。 顶层带
-    `mounted_capabilities`：该网络已挂载的 Skill 与工具按类型计数。两个 `detail_level`
-    都会返回——它是网络的形状，不是可以剥掉的细节。同样只给计数： 要具体能力用
+    `object_type_ids` 作为分组边界。 两种级别都**不带 BKN 3.0 声明**，这些只由 `search_schema`
+    给出：对象类、关系类、 行动类的 `aliases`；对象类属性和间接关系 `mapping_rules.properties`
+    中关系属性的 `aliases` / `semantic` / `required` / `constraints`；关系类的 `reverse_name`
+    / `cardinality` / `constraints` / `verification`。关系类的 `lifecycle`、`importance`、
+    `fallback_for` 保留：它们说明弃用的关系由谁替代、哪条是替代路径，缺了调用方可能把
+    主关系和替代路径的结果相加。 被剥掉的细节按需用 `get_object_types` / `get_relation_types`
+    取回。 对象类条目带 `related_metric_count`（该对象类下已建模指标数），`>0` 才值得
+    为取指标下钻。 顶层带 `mounted_capabilities`：该网络已挂载的 Skill 与工具按类型计数。两个
+    `detail_level` 都会返回——它是网络的形状，不是可以剥掉的细节。同样只给计数： 要具体能力用
     `search_capabilities`。 **超过 200 个对象类、或超过 600 个关系类的网络只返回导航壳**，两个
     `detail_level` 都是：此时 `object_types` / `relation_types` / `action_types` **均回
     `null`**，改由 `object_type_count` / `relation_type_count` / `action_type_count`
@@ -410,11 +447,20 @@ def get_kn_detail(
     也有一兆多，翻页只是把同样的体积分几次
     搬运；而按名称序翻页等于对知识模型做线性扫描。该规模下的路径是：从 `concept_groups` 选出
     1-3 个相关分组，用 [schema-search.yaml](schema-search.yaml) 的 `search_schema` 配合
-    `search_scope.concept_groups` 收敛，再用 `get_object_types` 按 ID 取细节。
+    `search_scope.concept_groups` 收敛，再用 `get_object_types` 按 ID 取细节。 非 `main`
+    分支暂不支持通过 `search_schema` 召回概念。此时用相同 `branch` 调 `get_object_types`，不传
+    `ids` 按页列举对象类索引，再带选中的 `ids` 读取完整定义和关联指标。
     收窄发生在逐对象类的属性授权读取之前：那一步每个对象类一次下游调用，为一份
-    不会返回的列表付这个代价没有意义。 非 main 分支目前不支持 search_schema 召回概念；请用相同
-    branch 调 get_object_types，不传 ids 按页列举对象类索引，再带选中的 ids
-    读取完整定义和关联指标。
+    不会返回的列表付这个代价没有意义。 **返回体积另有上限：约 30000
+    字符**，按调用方实际读到的格式（JSON 或 TOON）计数， `summary` 与 `full`
+    都受限。个数在上限以内的网络，summary 仍可能有二十多万字符，
+    宿主会把它转存成文件、截断或直接丢弃，调用方在不知情的情况下丢掉部分模型。超过时
+    逐级收窄，并在 `notice` 里说明： 1. **大纲**：三个概念数组都在，对象类去掉
+    `data_properties` / `logic_properties` / `effective_permissions` 与说明文字，改给
+    `data_property_count` / `logic_property_count`；关系类保留起终点，去掉映射规则。要属性用
+    `get_object_types` 按 ID 取。 2. **导航壳**：大纲仍超过上限时，返回与 `brief`
+    相同的导航壳；壳本身仍超过上限时， 再去掉各概念组的 `object_type_ids`。
+    体积收窄发生在属性授权读取之后、证据快照之前，证据记录的就是调用方拿到的内容。
 
     Args:
         kn_id: 知识网络 ID。与 `x-kn-id` 头二选一，本字段优先。
@@ -454,7 +500,9 @@ def get_object_types(
 
     取 `get_kn_detail` 在 summary 级别剥掉的对象类细节：属性的 `mapped_field`
     （物理列名）、`condition_operations`（该属性可用的查询算子）、 逻辑属性的 `data_source` 与
-    `parameters`。 同时返回 `related_metrics`——挂在该对象类下的已发布实例集合指标。这是 Agent
+    `parameters`。与 `get_kn_detail` 相同，不带对象类与属性的 BKN 3.0 声明（`aliases` /
+    `semantic` / `required` / `constraints`），用 `search_schema` 取。 同时返回
+    `related_metrics`——挂在该对象类下的已发布实例集合指标。这是 Agent
     选指标的权威清单，选定后统一走 `query_metric`。`logic_properties` 只包含工具型
     逻辑属性，通过 [logic-property.yaml](logic-property.yaml) 的 `logic-property-resolver`
     按对象实例求值；二者不建立绑定关系。 `ids` 里既可以传对象类 ID，也可以传对象类名（ID
@@ -502,22 +550,50 @@ def get_object_types(
 
 def get_relation_types(
     kn_id: str,
-    ids: list[Any],
     *,
     response_format: str | None = None,
+    branch: str | None = None,
+    ids: list[Any] | None = None,
+    object_type_ids: list[Any] | None = None,
+    offset: int | None = None,
+    limit: int | None = None,
     context: Context | None = None,
 ) -> Any:
-    """按 ID 批量取关系类完整定义.
+    """按 ID 批量取关系类完整定义，或列举关系类索引.
 
     `get_object_types` 的关系类版本：取回 summary 级别剥掉的 `mapping_rules`
-    与起终点对象类详情。同样支持按名称兜底匹配，未命中的 ID 落 `missing`。
+    与起终点对象类详情。同样支持按名称兜底匹配，未命中的 ID 落 `missing`。 **不传 `ids` 时按
+    `offset` / `limit` 列举关系类索引**，与 `get_object_types` 的 列举模式相同：默认 50
+    条、上限 200，按名称排序，带 `total_count` 与 `next_offset`。 索引条目只有 `id` / `name` /
+    `comment` / `tags` / `source_object_type_id` / `target_object_type_id` / `type`，不含
+    `mapping_rules` 与起终点对象类详情； `comment` 只保留前 120
+    个字符，超出部分以「…」结尾，完整说明按 ID 取。 单页内容超过约 30000
+    字符时提前截断，`next_offset` 指向截断处，`notice` 说明原因。 传 `object_type_ids`
+    时只列起点或终点是其中之一的关系类。已经选好对象类、
+    要找它们之间有哪些关系时优先用它，通常一页就能列完。 需要列举的情形：`get_kn_detail`
+    只返回导航壳时 `relation_types` 为 `null`； 在非 `main` 分支上 `search_schema`
+    不能召回概念。`branch` 对两种模式都有效。 与 `get_kn_detail` 相同，不带 BKN 3.0
+    声明：关系类的 `aliases` / `reverse_name` / `cardinality` / `constraints` /
+    `verification`，以及间接关系 `mapping_rules.properties` 中关系属性的 `aliases` /
+    `semantic` / `required` / `constraints`，用 `search_schema` 取。 关系属性的 `name` /
+    `display_name` / `type` / `comment` / `mapped_field` 照常返回；
+    `lifecycle`、`importance`、`fallback_for` 保留。
 
     Args:
         kn_id: 知识网络 ID。与 `x-kn-id` 头二选一，本字段优先。
-        ids: 要下钻的概念 ID 列表（取自 `get_kn_detail`）。也接受概念名称作为兜底匹配。 为空时返回
-            400。
+        branch: 关系类所属的知识网络分支；省略时使用 main。
+        ids: 要下钻的关系类 ID 列表（取自 `get_kn_detail`、`search_schema` 或本接口的列举
+            模式）。也接受名称作为兜底匹配。**留空即切换到列举模式**，不再返回 400；传了 `ids` 时
+            `object_type_ids` / `offset` / `limit` 无效。
+        object_type_ids: 列举时只返回起点或终点是这些对象类之一的关系类。仅在不传 `ids` 时有效。
+            已经选好对象类时优先用它，通常一页就能列完。
+        offset: 列举的起始位置。仅在不传 `ids` 时有效；续页请用响应里的 `next_offset`。
+        limit: 列举的单页条数，默认 50、上限 200。仅在不传 `ids` 时有效。超过上限不报错，
+            按上限返回，并在响应的 `notice` 里说明；单页内容超过约 30000 字符时也会提前
+            截断，同样在 `notice` 里说明。
 
-    Returns the platform's own payload: kn_id, missing, relation_types.
+    Returns the platform's own payload: kn_id, missing, next_offset, notice, relation_types,
+    total_count.
     """
     return _send(
         "/api/agent-retrieval/v1/kn/get_relation_types",
@@ -527,7 +603,11 @@ def get_relation_types(
         },
         {
             "kn_id": kn_id,
+            "branch": branch,
             "ids": ids,
+            "object_type_ids": object_type_ids,
+            "offset": offset,
+            "limit": limit,
         },
         context,
     )
@@ -847,7 +927,8 @@ def query_metric(
         version: 已发布且不可变的对象指标版本，取自 `related_metrics[].version`。
 
     Returns the platform's own payload: effective_window, empty_reason, entries, evaluated_at,
-    kn_id, metric_id, model, next_cursor, overall_ms, status, total_count, version, warnings.
+    is_approximate, kn_id, metric_id, model, next_cursor, overall_ms, status, total_count,
+    version, warnings.
     """
     return _send(
         "/api/agent-retrieval/v1/kn/query_metric",
@@ -1069,12 +1150,12 @@ def run_cypher(
     的整数字面量，结果是数字）、`abs(x)`、
     `toInteger(x)`（向零截断）、`toFloat(x)`、`toUpper(s)`、`toLower(s)`、`toString(x)`，能写在
     CASE 能写的地方。 `round` / `abs` / `toInteger` / `toFloat` 只接受数字，`toUpper` /
-    `toLower` 只接受字符串，类型不对返回 400。 decimal 值（含对它的 `sum()`）以字符串返回，如
-    `"13833141.000000"`，要数字用 `toFloat(...)` 或 `round(..., n)`。 这类查询总走 SQL 路径。
-    - **ORDER BY / SKIP / LIMIT**：ORDER BY 可用属性、返回列名或聚合。结果被聚合 或 DISTINCT
-    折叠后，只能按返回的值排序。SKIP、LIMIT 可写整数或参数（`SKIP $from LIMIT $size`），
-    参数值须为非负整数，LIMIT 同样不能超过 10000。 -
-    **比较两组对象**：如「两个产品共用哪些物料」，在一个 MATCH
+    `toLower` 只接受字符串，类型不对返回 400。 数值列（含 DECIMAL 及对它的 `sum()`）以 JSON
+    数字返回并保留精确十进制位，文本列保持字符串。客户端应使用精确数值解码，避免 IEEE 754
+    舍入。 这类查询总走 SQL 路径。 - **ORDER BY / SKIP / LIMIT**：ORDER BY
+    可用属性、返回列名或聚合。结果被聚合 或 DISTINCT 折叠后，只能按返回的值排序。SKIP、LIMIT
+    可写整数或参数（`SKIP $from LIMIT $size`）， 参数值须为非负整数，LIMIT 同样不能超过
+    10000。 - **比较两组对象**：如「两个产品共用哪些物料」，在一个 MATCH
     里让两条路径共享节点即可，不需要 WITH： `MATCH (p1:产品 {material_number:
     $a})-[:产品关联产品bom]->(b1:产品BOM)-[:产品bom关联物料]->(m:物料)<-[:产品bom关联物料]-(b2:产品BOM)<-[:产品关联产品bom]-(p2:产品
     {material_number: $b}) RETURN DISTINCT m.material_code`。 - **比较两个列表**：两段各自
@@ -1335,13 +1416,14 @@ def search_schema(
     enable_rerank: bool | None = None,
     rerank_model: str | None = None,
     include_columns: bool | None = None,
+    enum_query: str | None = None,
     context: Context | None = None,
 ) -> Any:
     """探索知识网络 Schema.
 
     统一的 Schema 探索入口。适用于还不确定该继续调用哪个 `query_*` / `find_*` / `get_*`
-    接口时，先探索相关概念。 **写 SQL 时注意 `include_columns`**：`data_properties[].name`
-    是逻辑名， 物理列名在 `mapped_field` 里，二者可以不同（同一份资源可被多个对象类以不同
+    接口时，先探索相关概念。 **`include_columns`**：`data_properties[].name` 是逻辑名，
+    物理列名在 `mapped_field` 里，二者可以不同（同一份资源可被多个对象类以不同
     逻辑名映射）。置 `include_columns=true` 可拿到物理列名。
 
     Args:
@@ -1357,6 +1439,12 @@ def search_schema(
             自行选择模型名**。
         include_columns: 是否在每个对象类的 `data_properties` 上附带物理列名（取自
             `mapped_field`）。 默认 false 以保持响应精简。
+        enum_query:
+            按显示名或编码检索枚举项，多个词用空格隔开，任一词命中即返回。用于没有展开的枚举：
+            超过展开上限（默认 50
+            项）的大字典，以及精简模式下的所有枚举。不传时这些枚举只给 `value_type` 与
+            `enum_count`。命中超过展开上限时只列前面一部分，另给 `enum_match_count`
+            表示命中总数。
 
     Returns the platform's own payload: action_types, message, metric_types, nodes,
     object_types, relation_types.
@@ -1376,6 +1464,7 @@ def search_schema(
             "enable_rerank": enable_rerank,
             "rerank_model": rerank_model,
             "include_columns": include_columns,
+            "enum_query": enum_query,
         },
         context,
     )

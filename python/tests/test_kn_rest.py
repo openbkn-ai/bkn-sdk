@@ -277,6 +277,28 @@ def test_action_execution_results_pagination_is_optional(deploy: Deploy) -> None
     assert deploy.bodies[2]["results_offset"] == 0
 
 
+def test_execute_action_names_its_target_by_operation(deploy: Deploy) -> None:
+    """Since 0.2.2 an action no longer scans its condition for targets: a change
+    names its instances, a create gives the new object, a relation gives one pair,
+    and a tool gives none. The first two used to be unreachable from Python."""
+    kn.execute_action(KN, "at_create", object_input={"name": "A"}, context=CONTEXT)
+    kn.execute_action(
+        KN,
+        "at_link",
+        relation_target={"source_identity": {"id": "po-1"}, "target_identity": {"id": "s-1"}},
+        context=CONTEXT,
+    )
+    kn.execute_action(KN, "at_sync", dynamic_params={"full": False}, context=CONTEXT)
+
+    create, link, tool = deploy.bodies
+    assert create["object_input"] == {"name": "A"}
+    assert "_instance_identities" not in create
+    assert link["relation_target"]["target_identity"] == {"id": "s-1"}
+    assert "_instance_identities" not in link and "object_input" not in link
+    assert not {"_instance_identities", "object_input", "relation_target"} & set(tool)
+    assert "按条件扫描" not in (kn.execute_action.__doc__ or "").replace("不按条件扫描", "")
+
+
 def test_a_route_that_sends_the_network_still_sends_it(deploy: Deploy) -> None:
     """`kn_id` is the first argument everywhere, but only the routes that declare
     it put it on the wire."""
