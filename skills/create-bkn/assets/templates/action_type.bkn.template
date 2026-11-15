@@ -11,6 +11,13 @@ action_intent: modify
 
 {详细描述：做什么、什么情况下不能执行}
 
+### Operation Config
+
+```yaml
+operation_config:
+  type: object
+```
+
 ### Bound Object
 
 | Bound Object |

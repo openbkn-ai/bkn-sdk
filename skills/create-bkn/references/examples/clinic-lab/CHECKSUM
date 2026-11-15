@@ -1,8 +1,8 @@
 # BKN Directory Checksum
 # format: 2
-# generated: 2026-10-29T04:22:13+01:00
+# generated: 2026-11-12T04:02:40+01:00
 SKILL.md  sha256:e08094769537e2b8
-action_type:revoke_lab_order  sha256:c8abff8caa9a1a80
+action_type:revoke_lab_order  sha256:55079b59a90d8cff
 concept_group:lab  sha256:4b9db9e98f2898fb
 network  sha256:396d02f18cd29713
 object_type:department  sha256:7a9ac15faee7c816

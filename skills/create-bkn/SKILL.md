@@ -65,7 +65,7 @@ Do not hand-write a `CHECKSUM`, and delete it when you copy the example and chan
 6. **Create `value_types/*.bkn`** (3.0 only) — one per code table (enum), fixed format (pattern / length) or bounded number (range / unit) that properties share
 7. **Create `object_types/*.bkn`** — one file per object, `{id}.bkn`; for 3.0 declare semantic, required, aliases and constraints
 8. **Create `relation_types/*.bkn`** — one file per relation; for 3.0 declare reverse name, cardinality, constraints; mark helper relations `secondary` and link fallback paths with `fallback_for`
-9. **Create `action_types/*.bkn`** — one file per action
+9. **Create `action_types/*.bkn`** — one file per action, one tool per action; `### Operation Config` says whether it acts on an object (`object`), links or unlinks two objects (`relation`) or just calls a tool (`tool`)
 10. **Create `concept_groups/*.bkn`** — optional
 11. **Add root `SKILL.md` in the BKN directory** — same folder as `network.bkn` (this is **not** the create-bkn skill file); agent-facing guide for that network (see [Delivered BKN: root SKILL.md](#delivered-bkn-root-skillmd))
 12. **Review (MUST)** — cross-check [Validation checklist](#validation-checklist) and [Business rules placement](#business-rules-placement); fix IDs, cross-refs, headings
@@ -89,7 +89,7 @@ Export: `openbkn bkn pull <kn-id> [<dir>]`. More subcommands: `openbkn bkn --hel
 
 ## Validation
 
-`openbkn bkn validate <dir>` — must pass before delivery or upload. It is an offline structural check: it loads `network.bkn` and sibling `.bkn` files, checks frontmatter, ids, table shape and relation endpoints, and prints counts (object types, relation types, concept groups, value types). The 3.0 declaration rules are checked by the platform on push; follow the spec to get them right the first time.
+`openbkn bkn validate <dir>` — must pass before delivery or upload. It is an offline structural check: it loads `network.bkn` and sibling `.bkn` files, checks frontmatter, ids, table shape, relation endpoints and each action's `Operation Config` (a missing one only warns, for platforms 0.2.1 and earlier), and prints counts (object types, relation types, concept groups, value types). The 3.0 declaration rules are checked by the platform on push; follow the spec to get them right the first time.
 
 A `capabilities:` section in `network.bkn` never fails validation. Read `capabilities.skipped` and the warnings instead: an entry listed there binds on no platform. After `push`, the answer's `capabilities.skipped` names what this platform could not resolve.
 
@@ -144,7 +144,10 @@ Rules must sit in spec-defined places so import persists them. Full wording: [re
 - [ ] `Semantic` values fit the property `Type` and appear at most once per definition; `end_time` has an `event_time`; `latitude` / `longitude` come in pairs
 - [ ] Primary keys leave `Required` empty; no `Required: false`, `importance: primary` or `lifecycle.status: active` written out
 - [ ] A property with `value_type` has no `range` / `length` / `pattern` / `unit`
-- [ ] Parameter tables put `property` | `input` | `const` in `ValueFrom`, the property name or constant in `Value`, and the request position (`Query` / `Body` / …) in `Source`
+- [ ] Parameter tables put `property` | `input` | `const` (or `source_identity` / `target_identity` in a relation operation) in `ValueFrom`, the property name or constant in `Value`, and the request position (`Query` / `Body` / …) in `Source`
+- [ ] Every action has `### Operation Config` (required from OpenBKN 0.2.2, 2.x packages too): `object` actions bind an object and a creating one (`add`) has no trigger condition; `relation` actions name a relation that ends at the bound object and have one `source_identity` and one `target_identity` parameter; `tool` actions bind no object
+- [ ] An action that runs on an existing object uses `modify` or `delete`; `add` creates a new object from values the caller fills in
+- [ ] String constants are JSON strings (`"123"`, `"P1"`): a bare `123` or `true` is read as a number or boolean
 - [ ] Condition YAML is written directly (no `condition:` wrapper); every YAML block parses
 - [ ] Heading hierarchy has no skipped levels; no HTML comments or notes left inside sections
 - [ ] Business rules only in allowed places (see [Business rules placement](#business-rules-placement))

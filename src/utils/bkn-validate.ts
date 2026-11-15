@@ -578,6 +578,126 @@ function declaresSpec3(networkText: string): boolean {
   }
 }
 
+const OPERATION_CONFIG_FIELDS = [
+  "type",
+  "relation_type_id",
+  "relation_operation",
+  "anchor_role",
+  "other_object_condition",
+] as const;
+const CONDITION_FIELDS = [
+  "object_type_id",
+  "field",
+  "operation",
+  "sub_conds",
+  "value_from",
+  "value",
+];
+
+function conditionFieldError(value: unknown, path: string): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value !== "object" || Array.isArray(value))
+    return `${path} must be a condition object`;
+  const condition = value as Record<string, unknown>;
+  const unknown = expectKeys(condition, CONDITION_FIELDS);
+  if (unknown) return `${path}: ${unknown}`;
+  const children = condition.sub_conds;
+  if (children === undefined || children === null) return undefined;
+  if (!Array.isArray(children)) return `${path}.sub_conds must be a list`;
+  for (const [index, child] of children.entries()) {
+    const error = conditionFieldError(child, `${path}.sub_conds[${index}]`);
+    if (error) return error;
+  }
+  return undefined;
+}
+
+/**
+ * OpenBKN 0.2.2 rejects an action type without `### Operation Config` and parses that section
+ * strictly. Platforms 0.2.1 and earlier do not know the section, so its absence only warns.
+ */
+function validateOperationConfig(
+  text: string,
+  rel: string,
+): { errors: string[]; warnings: string[] } {
+  const lines = text.split(/\r?\n/);
+  const heading = lines.findIndex((line) => /^###\s+Operation Config\s*$/.test(line));
+  if (heading < 0) {
+    return {
+      errors: [],
+      warnings: [
+        `${rel}: no '### Operation Config' section; OpenBKN 0.2.2 and later reject action types without it. Leave it out only for platforms 0.2.1 and earlier.`,
+      ],
+    };
+  }
+  const fail = (detail: string) => ({ errors: [`${rel}:${heading + 1}: ${detail}`], warnings: [] });
+  // The section ends at the next heading outside a code fence; YAML comments start with '#'.
+  let end = lines.length;
+  let fenced = false;
+  for (let index = heading + 1; index < lines.length; index++) {
+    const line = lines[index] ?? "";
+    if (/^```/.test(line)) fenced = !fenced;
+    else if (!fenced && /^#{1,3}\s/.test(line)) {
+      end = index;
+      break;
+    }
+  }
+  const body = lines.slice(heading + 1, end).join("\n");
+  const block = /```yaml\s*\n([\s\S]*?)```/.exec(body);
+  if (!block) return fail("Operation Config requires a ```yaml block");
+  let payload: unknown;
+  try {
+    payload = yaml.load(block[1] ?? "");
+  } catch (error) {
+    return fail(`Operation Config is not valid YAML (${(error as Error).message.split("\n")[0]})`);
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return fail("Operation Config requires an operation_config key");
+  }
+  const outer = expectKeys(payload as Record<string, unknown>, ["operation_config"]);
+  if (outer) return fail(`Operation Config: ${outer}`);
+  const config = (payload as Record<string, unknown>).operation_config;
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    return fail("Operation Config requires an operation_config object");
+  }
+  const fields = config as Record<string, unknown>;
+  const unknown = expectKeys(fields, OPERATION_CONFIG_FIELDS);
+  if (unknown) return fail(`operation_config: ${unknown}`);
+  const type = fields.type;
+  if (type !== "object" && type !== "relation" && type !== "tool") {
+    return fail("operation_config.type must be object, relation or tool");
+  }
+  const relationFields = OPERATION_CONFIG_FIELDS.filter(
+    (key) =>
+      key !== "type" && fields[key] !== undefined && fields[key] !== null && fields[key] !== "",
+  );
+  if (type !== "relation") {
+    return relationFields.length > 0
+      ? fail(`operation_config.${relationFields[0]} is only valid for relation operations`)
+      : { errors: [], warnings: [] };
+  }
+  if (typeof fields.relation_type_id !== "string" || fields.relation_type_id.trim() === "") {
+    return fail("a relation operation requires operation_config.relation_type_id");
+  }
+  if (fields.relation_operation !== "create" && fields.relation_operation !== "delete") {
+    return fail("operation_config.relation_operation must be create or delete");
+  }
+  const role = fields.anchor_role;
+  if (
+    role !== undefined &&
+    role !== null &&
+    role !== "" &&
+    role !== "source" &&
+    role !== "target"
+  ) {
+    return fail("operation_config.anchor_role must be source or target");
+  }
+  const condition = conditionFieldError(
+    fields.other_object_condition,
+    "operation_config.other_object_condition",
+  );
+  return condition ? fail(condition) : { errors: [], warnings: [] };
+}
+
 const SPEC3_SECTION = /^###\s+(Property Constraints|Relation Constraints)\s*$/m;
 // An object type has Data Properties in either spec; only a relation's are 3.0 content.
 const SPEC3_RELATION_SECTION =
@@ -677,6 +797,11 @@ export function validateBknDirectory(dirPath: string): ValidationResult {
       const rel = file.slice(dir.length + 1);
       errors.push(...validateMarkdownTables(text, rel, kind));
       errors.push(...validateResourceName(parseFrontmatter(text)?.name, rel, kind.slice(0, -1)));
+      if (kind === "action_types") {
+        const operation = validateOperationConfig(text, rel);
+        errors.push(...operation.errors);
+        warnings.push(...operation.warnings);
+      }
     }
   }
   const vtFiles = bknFiles(join(dir, "value_types"));
