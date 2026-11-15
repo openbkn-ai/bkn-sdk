@@ -88,15 +88,16 @@ def test_every_function_takes_the_network_first() -> None:
 def test_required_arguments_and_legacy_object_type_ids_are_positional() -> None:
     import inspect
 
-    signature = inspect.signature(kn.get_object_types)
-    kinds = {name: p.kind for name, p in signature.parameters.items()}
+    for listing in (kn.get_object_types, kn.get_relation_types):
+        signature = inspect.signature(listing)
+        kinds = {name: p.kind for name, p in signature.parameters.items()}
 
-    # Index listing may omit ids, but older callers still pass them positionally.
-    assert kinds["ids"] is inspect.Parameter.POSITIONAL_OR_KEYWORD
-    assert signature.parameters["ids"].default is None
-    assert kinds["offset"] is inspect.Parameter.KEYWORD_ONLY
-    assert kinds["limit"] is inspect.Parameter.KEYWORD_ONLY
-    assert kinds["context"] is inspect.Parameter.KEYWORD_ONLY
+        # Index listing may omit ids, but older callers still pass them positionally.
+        assert kinds["ids"] is inspect.Parameter.POSITIONAL_OR_KEYWORD, listing.__name__
+        assert signature.parameters["ids"].default is None
+        assert kinds["offset"] is inspect.Parameter.KEYWORD_ONLY
+        assert kinds["limit"] is inspect.Parameter.KEYWORD_ONLY
+        assert kinds["context"] is inspect.Parameter.KEYWORD_ONLY
     metric_kinds = {
         name: parameter.kind
         for name, parameter in inspect.signature(kn.query_metric).parameters.items()
@@ -261,6 +262,21 @@ def test_object_type_ids_remain_positional_while_index_listing_can_omit_them(
     assert deploy.bodies[2]["limit"] == 10
 
 
+def test_relation_type_ids_remain_positional_while_index_listing_can_omit_them(
+    deploy: Deploy,
+) -> None:
+    kn.get_relation_types(KN, ["places"], context=CONTEXT)
+    kn.get_relation_types(KN, ids=["ships"], context=CONTEXT)
+    kn.get_relation_types(KN, object_type_ids=["order"], limit=10, context=CONTEXT)
+
+    assert deploy.paths == ["/api/agent-retrieval/v1/kn/get_relation_types"] * 3
+    assert deploy.bodies[0]["ids"] == ["places"]
+    assert deploy.bodies[1]["ids"] == ["ships"]
+    assert "ids" not in deploy.bodies[2]
+    assert deploy.bodies[2]["object_type_ids"] == ["order"]
+    assert deploy.bodies[2]["limit"] == 10
+
+
 def test_action_execution_results_pagination_is_optional(deploy: Deploy) -> None:
     kn.get_action_execution(KN, "execution-1", context=CONTEXT)
     kn.get_action_execution(
@@ -275,6 +291,28 @@ def test_action_execution_results_pagination_is_optional(deploy: Deploy) -> None
     assert deploy.bodies[1]["results_offset"] == 200
     assert "results_limit" not in deploy.bodies[2]
     assert deploy.bodies[2]["results_offset"] == 0
+
+
+def test_execute_action_names_its_target_by_operation(deploy: Deploy) -> None:
+    """Since 0.2.2 an action no longer scans its condition for targets: a change
+    names its instances, a create gives the new object, a relation gives one pair,
+    and a tool gives none. The first two used to be unreachable from Python."""
+    kn.execute_action(KN, "at_create", object_input={"name": "A"}, context=CONTEXT)
+    kn.execute_action(
+        KN,
+        "at_link",
+        relation_target={"source_identity": {"id": "po-1"}, "target_identity": {"id": "s-1"}},
+        context=CONTEXT,
+    )
+    kn.execute_action(KN, "at_sync", dynamic_params={"full": False}, context=CONTEXT)
+
+    create, link, tool = deploy.bodies
+    assert create["object_input"] == {"name": "A"}
+    assert "_instance_identities" not in create
+    assert link["relation_target"]["target_identity"] == {"id": "s-1"}
+    assert "_instance_identities" not in link and "object_input" not in link
+    assert not {"_instance_identities", "object_input", "relation_target"} & set(tool)
+    assert "按条件扫描" not in (kn.execute_action.__doc__ or "").replace("不按条件扫描", "")
 
 
 def test_a_route_that_sends_the_network_still_sends_it(deploy: Deploy) -> None:
