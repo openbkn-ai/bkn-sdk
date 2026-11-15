@@ -913,6 +913,21 @@ ${config === undefined ? "" : `\n### Operation Config\n\n${config}\n`}
         yamlBlock("operation_config:\n  type: object\n  target: x\n"),
         "operation_config: unknown field 'target'",
       ],
+      // `kind` names a masking rule; it is no field of an operation, at any level.
+      [
+        yamlBlock("operation_config:\n  type: object\nkind: object\n"),
+        "Operation Config: unknown field 'kind'",
+      ],
+      [
+        yamlBlock("operation_config:\n  type: object\n  kind: object\n"),
+        "operation_config: unknown field 'kind'",
+      ],
+      [
+        yamlBlock(
+          "operation_config:\n  type: relation\n  relation_type_id: r\n  relation_operation: create\n  other_object_condition:\n    kind: x\n",
+        ),
+        "operation_config.other_object_condition: unknown field 'kind'",
+      ],
       [
         yamlBlock("operation_config:\n  type: object\n  relation_type_id: r\n"),
         "operation_config.relation_type_id is only valid for relation operations",

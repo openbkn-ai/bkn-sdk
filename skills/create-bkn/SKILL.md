@@ -29,7 +29,7 @@ Pick the spec version before writing anything:
 
 | Write | When | `network.bkn` | Example |
 |-------|------|---------------|---------|
-| **BKN 3.0** (default) | Target platform 0.2.1 or later | `bkn_spec: "3.0"` | [references/examples/clinic-lab/](references/examples/clinic-lab/) |
+| **BKN 3.0** (default) | Target platform 0.2.2 or later; 0.2.1 too, without `### Operation Config` (see below) | `bkn_spec: "3.0"` | [references/examples/clinic-lab/](references/examples/clinic-lab/) |
 | **BKN 2.x** | The user asks for 2.x, or the target platform only reads 2.x (0.2.0) | no `bkn_spec` | [references/examples/clinic-lab-2.x/](references/examples/clinic-lab-2.x/) |
 
 - Find the target platform with `openbkn --version`: the CLI only talks to a platform of its own version. If the user names a version, use that; if neither the spec nor the platform is known, ask.
@@ -37,6 +37,7 @@ Pick the spec version before writing anything:
 - Never mix the two: 2.x readers (no `bkn_spec`, or a 0.2.0 platform) import 3.0 content without an error, but `### Property Constraints` and `### Relation Constraints` become description text, value types and aliases are dropped, and fallback paths and deprecated relations become ordinary relations.
 - 3.0 accepts **one way to write each thing**. Unknown frontmatter fields, unknown `###` sections, unknown or legacy columns and wrappers are rejected on push with the file and position. Write only what the spec lists.
 - The templates are 3.0; for 2.x drop the 3.0 parts the spec lists.
+- The templates and examples write `### Operation Config` on every action, which 0.2.2 requires. A 0.2.1 platform rejects the section in a 3.0 package as unknown, so for 0.2.1 leave it out of every action type.
 
 ## Directory layout
 

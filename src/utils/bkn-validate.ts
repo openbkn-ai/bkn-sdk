@@ -322,10 +322,19 @@ function markdownTable(section: string): Array<Record<string, string>> {
   });
 }
 
-function expectKeys(rule: Record<string, unknown>, allowed: readonly string[]): string | undefined {
-  const allowedSet = new Set(["kind", ...allowed]);
-  const unknown = Object.keys(rule).find((key) => !allowedSet.has(key));
+/** The first key not in `allowed`, as an error; nothing else is let through. */
+function strictKeys(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+): string | undefined {
+  const allowedSet = new Set(allowed);
+  const unknown = Object.keys(value).find((key) => !allowedSet.has(key));
   return unknown ? `unknown field '${unknown}'` : undefined;
+}
+
+/** A masking rule's keys: `kind`, which names the rule, and the ones that rule takes. */
+function expectKeys(rule: Record<string, unknown>, allowed: readonly string[]): string | undefined {
+  return strictKeys(rule, ["kind", ...allowed]);
 }
 
 function replacementError(value: unknown): string | undefined {
@@ -599,7 +608,7 @@ function conditionFieldError(value: unknown, path: string): string | undefined {
   if (typeof value !== "object" || Array.isArray(value))
     return `${path} must be a condition object`;
   const condition = value as Record<string, unknown>;
-  const unknown = expectKeys(condition, CONDITION_FIELDS);
+  const unknown = strictKeys(condition, CONDITION_FIELDS);
   if (unknown) return `${path}: ${unknown}`;
   const children = condition.sub_conds;
   if (children === undefined || children === null) return undefined;
@@ -653,14 +662,14 @@ function validateOperationConfig(
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return fail("Operation Config requires an operation_config key");
   }
-  const outer = expectKeys(payload as Record<string, unknown>, ["operation_config"]);
+  const outer = strictKeys(payload as Record<string, unknown>, ["operation_config"]);
   if (outer) return fail(`Operation Config: ${outer}`);
   const config = (payload as Record<string, unknown>).operation_config;
   if (!config || typeof config !== "object" || Array.isArray(config)) {
     return fail("Operation Config requires an operation_config object");
   }
   const fields = config as Record<string, unknown>;
-  const unknown = expectKeys(fields, OPERATION_CONFIG_FIELDS);
+  const unknown = strictKeys(fields, OPERATION_CONFIG_FIELDS);
   if (unknown) return fail(`operation_config: ${unknown}`);
   const type = fields.type;
   if (type !== "object" && type !== "relation" && type !== "tool") {
