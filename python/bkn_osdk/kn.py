@@ -550,10 +550,10 @@ def get_object_types(
 
 def get_relation_types(
     kn_id: str,
+    ids: list[Any] | None = None,
     *,
     response_format: str | None = None,
     branch: str | None = None,
-    ids: list[Any] | None = None,
     object_type_ids: list[Any] | None = None,
     offset: int | None = None,
     limit: int | None = None,

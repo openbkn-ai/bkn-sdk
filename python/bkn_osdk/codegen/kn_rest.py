@@ -110,6 +110,9 @@ def generate_kn_module(contract: dict[str, Any]) -> str:
     return "\n".join(line.rstrip() for line in "".join(lines).split("\n"))
 
 
+POSITIONAL_IDS_OPERATIONS = frozenset({"get_object_types", "get_relation_types"})
+
+
 def _function(op: dict[str, Any]) -> str:
     query, body = op["query"], op["body"]
     fields = query + body
@@ -118,10 +121,13 @@ def _function(op: dict[str, Any]) -> str:
 
     required = [f for f in fields if f["required"] and f["name"] != "kn_id"]
     optional = [f for f in fields if not f["required"] and f["name"] != "kn_id"]
-    # The object-type route made ids optional for index listing, but existing callers may still
-    # pass it positionally. Keep that one argument positional-or-keyword across regeneration.
+    # The object-type and relation-type routes made ids optional for index listing, but existing
+    # callers may still pass it positionally. Keep that one argument positional-or-keyword across
+    # regeneration.
     positional_optional = (
-        [f for f in optional if f["name"] == "ids"] if op["operation"] == "get_object_types" else []
+        [f for f in optional if f["name"] == "ids"]
+        if op["operation"] in POSITIONAL_IDS_OPERATIONS
+        else []
     )
     keyword_optional = [f for f in optional if f not in positional_optional]
 
