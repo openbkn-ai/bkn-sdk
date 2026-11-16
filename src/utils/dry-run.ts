@@ -82,15 +82,38 @@ function redact(headers: HeaderInput): Record<string, string> {
 const SECRET_FIELD =
   /^(bkn_token|token|access_token|refresh_token|run_token|task_token|password|secret|api_key)$/i;
 
-/** An invalid declaration cannot safely identify which variable values are public. */
-function declaredVariableNames(value: unknown): Set<string> | undefined {
-  if (
-    !Array.isArray(value) ||
-    !value.every((name) => typeof name === "string" && /^[A-Za-z][A-Za-z0-9_]*$/.test(name))
-  )
-    return undefined;
-  if (new Set(value).size !== value.length) return undefined;
-  return new Set(value as string[]);
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Only Catalog connector_config variables use value/sensitive wrappers. */
+function redactCatalogVariables(variables: unknown): unknown {
+  if (!isRecord(variables)) return "<redacted>";
+  return Object.fromEntries(
+    Object.entries(variables).map(([name, spec]) => {
+      if (
+        !/^[A-Za-z][A-Za-z0-9_]*$/.test(name) ||
+        !isRecord(spec) ||
+        Object.keys(spec).some((key) => key !== "value" && key !== "sensitive") ||
+        (Object.hasOwn(spec, "sensitive") && typeof spec.sensitive !== "boolean") ||
+        (!Object.hasOwn(spec, "value") && spec.sensitive !== true) ||
+        (Object.hasOwn(spec, "value") && (spec.value === null || spec.value === undefined)) ||
+        (spec.sensitive === true && Object.hasOwn(spec, "value") && typeof spec.value !== "string")
+      ) {
+        return [name, "<redacted>"];
+      }
+      const secret = spec.sensitive === true || SECRET_FIELD.test(name);
+      return [
+        name,
+        Object.fromEntries(
+          Object.entries(spec).map(([key, value]) => [
+            key,
+            key === "value" ? (secret ? "<redacted>" : redactBody(value)) : value,
+          ]),
+        ),
+      ];
+    }),
+  );
 }
 
 /**
@@ -99,24 +122,16 @@ function declaredVariableNames(value: unknown): Set<string> | undefined {
  * sandbox can call BKN as the caller — and a preview is something a caller
  * pastes into a terminal, an issue, or a log.
  */
-function redactBody(body: unknown): unknown {
-  if (Array.isArray(body)) return body.map(redactBody);
+function redactBody(body: unknown, catalogConfig = false): unknown {
+  if (Array.isArray(body)) return body.map((value) => redactBody(value));
   if (!body || typeof body !== "object") return body;
   const source = body as Record<string, unknown>;
-  const hasDeclaration = Object.hasOwn(source, "sensitive_variables");
-  const names = hasDeclaration ? declaredVariableNames(source.sensitive_variables) : undefined;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(source)) {
-    if (k === "variables" && hasDeclaration) {
-      out[k] =
-        names && v && typeof v === "object" && !Array.isArray(v)
-          ? Object.fromEntries(
-              Object.entries(v).map(([name, value]) => [
-                name,
-                names.has(name) || SECRET_FIELD.test(name) ? "<redacted>" : redactBody(value),
-              ]),
-            )
-          : "<redacted>";
+    if (k === "variables" && catalogConfig) {
+      out[k] = redactCatalogVariables(v);
+    } else if (k === "connector_config") {
+      out[k] = v === null ? null : isRecord(v) ? redactBody(v, true) : "<redacted>";
     } else {
       out[k] = SECRET_FIELD.test(k) ? "<redacted>" : redactBody(v);
     }
