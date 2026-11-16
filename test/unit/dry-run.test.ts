@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { tlsFetch } from "../../src/api/tls.js";
 import { DryRunSignal, enableDryRun, previewRequest } from "../../src/utils/dry-run.js";
 
 function preview(input: Parameters<typeof previewRequest>[0]) {
@@ -13,16 +14,19 @@ function preview(input: Parameters<typeof previewRequest>[0]) {
 }
 
 describe("--dry-run preview", () => {
-  it("redacts declared variable values independently of their names without changing the input", () => {
+  it("redacts sensitive wrapper values independently of names without changing metadata or input", () => {
     const config = {
       options: { timeout_seconds: 30, max_response_mib: 10 },
       variables: {
-        tenant: "public",
-        arbitrary: "private-option",
-        api_key: "private-key",
-        token: "private-token",
+        tenant: { value: "public" },
+        disabled: { value: false, sensitive: false },
+        count: { value: 0 },
+        empty: { value: "" },
+        nested: { value: { value: "business-data", sensitive: true, values: [false, null] } },
+        arbitrary: { value: "private-option", sensitive: true },
+        api_key: { value: "private-key" },
+        token: { value: "private-token", sensitive: false },
       },
-      sensitive_variables: ["arbitrary", "api_key", "token"],
     };
     const req = preview({
       method: "POST",
@@ -31,105 +35,239 @@ describe("--dry-run preview", () => {
     });
     expect(req.body).toEqual({
       connector_config: {
-        options: { timeout_seconds: 30, max_response_mib: 10 },
+        options: config.options,
         variables: {
-          tenant: "public",
-          arbitrary: "<redacted>",
-          api_key: "<redacted>",
-          token: "<redacted>",
+          tenant: { value: "public" },
+          disabled: { value: false, sensitive: false },
+          count: { value: 0 },
+          empty: { value: "" },
+          nested: config.variables.nested,
+          arbitrary: { value: "<redacted>", sensitive: true },
+          api_key: { value: "<redacted>" },
+          token: { value: "<redacted>", sensitive: false },
         },
-        sensitive_variables: ["arbitrary", "api_key", "token"],
       },
     });
-    expect(config.variables.arbitrary).toBe("private-option");
-    expect(config.variables.token).toBe("private-token");
-    expect(JSON.stringify(req)).not.toContain("private-option");
-    expect(JSON.stringify(req)).not.toContain("private-key");
-    expect(JSON.stringify(req)).not.toContain("private-token");
+    expect(config.variables.arbitrary.value).toBe("private-option");
+    expect(config.variables.token.value).toBe("private-token");
+    expect(JSON.stringify(req)).not.toContain("private-");
   });
 
-  it.each(["_secret", "__paging"])(
-    "hides all variables when a declared variable name starts with an underscore: %s",
-    (name) => {
-      const req = preview({
+  it("keeps sensitive metadata when ordinary reads omit the value", () => {
+    expect(
+      preview({
         method: "PUT",
         url: "https://x/catalogs/id",
         body: {
+          connector_config: { variables: { arbitrary: { sensitive: true } } },
+        },
+      }).body,
+    ).toEqual({ connector_config: { variables: { arbitrary: { sensitive: true } } } });
+  });
+
+  it.each([
+    { value: null },
+    { value: null, sensitive: false },
+    { value: null, sensitive: true },
+    { value: undefined },
+    { value: undefined, sensitive: false },
+    { value: undefined, sensitive: true },
+    {},
+    { sensitive: false },
+  ])("hides Catalog declarations without a non-null value %j", (spec) => {
+    const req = preview({
+      method: "POST",
+      url: "https://x/catalogs",
+      body: { connector_config: { variables: { tenant: spec } } },
+    });
+    expect(req.body).toEqual({ connector_config: { variables: { tenant: "<redacted>" } } });
+  });
+
+  it("preserves case-sensitive names and flags through parsed JSON previews", () => {
+    const req = preview({
+      method: "POST",
+      url: "https://x/catalogs",
+      body: JSON.stringify({
+        connector_config: {
+          variables: {
+            Client_key2: { value: "private-option", sensitive: true },
+            client_key2: { value: "public", sensitive: false },
+          },
+        },
+      }),
+    });
+    expect(req.body).toEqual({
+      connector_config: {
+        variables: {
+          Client_key2: { value: "<redacted>", sensitive: true },
+          client_key2: { value: "public", sensitive: false },
+        },
+      },
+    });
+  });
+
+  it.each(["_secret", "__paging", "1key"])(
+    "hides wrappers with invalid variable names: %s",
+    (name) => {
+      const req = preview({
+        method: "POST",
+        url: "https://x/catalogs",
+        body: {
           connector_config: {
-            variables: { [name]: "private-option", tenant: "public" },
-            sensitive_variables: [name],
+            variables: { [name]: { value: "private-option" }, tenant: { value: "public" } },
           },
         },
       });
       expect(req.body).toEqual({
-        connector_config: {
-          variables: "<redacted>",
-          sensitive_variables: [name],
+        connector_config: { variables: { [name]: "<redacted>", tenant: { value: "public" } } },
+      });
+    },
+  );
+
+  it.each([null, "false", "true", 0, 1, [], {}])(
+    "fails closed for invalid sensitive flags %j",
+    (sensitive) => {
+      const req = preview({
+        method: "POST",
+        url: "https://x/catalogs",
+        body: {
+          connector_config: { variables: { arbitrary: { value: "private-option", sensitive } } },
         },
       });
+      expect(req.body).toEqual({ connector_config: { variables: { arbitrary: "<redacted>" } } });
       expect(JSON.stringify(req)).not.toContain("private-option");
     },
   );
 
-  it("accepts a letter-leading variable name with an internal underscore and digit", () => {
+  it.each([
+    "private-option",
+    false,
+    null,
+    [],
+    { value: "private-option", type: "string" },
+    { value: "private-option", sensitive: true, extra: "private-extra" },
+    { sensitive: false },
+    { value: { nested: "private-option" }, sensitive: true },
+    { value: 42, sensitive: true },
+  ])("fails closed for malformed or bare Catalog variable values %j", (value) => {
     const req = preview({
       method: "POST",
       url: "https://x/catalogs",
       body: {
-        connector_config: {
-          variables: { Client_key2: "private-option", tenant: "public" },
-          sensitive_variables: ["Client_key2"],
-        },
+        connector_config: { variables: { arbitrary: value } },
       },
     });
-    expect(req.body).toEqual({
-      connector_config: {
-        variables: { Client_key2: "<redacted>", tenant: "public" },
-        sensitive_variables: ["Client_key2"],
-      },
-    });
+    expect(req.body).toEqual({ connector_config: { variables: { arbitrary: "<redacted>" } } });
+    expect(JSON.stringify(req)).not.toContain("private-");
   });
 
-  it.each([null, "arbitrary", ["arbitrary", "arbitrary"], [42], ["variables.arbitrary"]])(
-    "hides variables for invalid sensitive-variable metadata %j",
-    (sensitive_variables) => {
-      const req = preview({
-        method: "PUT",
-        url: "https://x/catalogs/id",
-        body: JSON.stringify({
-          connector_config: { variables: { arbitrary: "private-option" }, sensitive_variables },
-        }),
-      });
-      expect(JSON.stringify(req)).not.toContain("private-option");
+  it.each([null, false, ["private-option"], "private-option"])(
+    "hides malformed Catalog variable maps %j",
+    (variables) => {
+      expect(
+        preview({
+          method: "POST",
+          url: "https://x/catalogs",
+          body: {
+            connector_config: { variables },
+          },
+        }).body,
+      ).toEqual({ connector_config: { variables: "<redacted>" } });
     },
   );
 
-  it("keeps database options and Resource computed variables independent of Catalog declarations", () => {
+  it("keeps Resource computed variables and unrelated business objects independent of Catalog wrappers", () => {
     const resourceVariables = {
       where_clause: { type: "string", serialize: "sql", value: "{{ __filter_condition }}" },
+      literal: { type: "object", value: { optional: null, values: [null, false] } },
+    };
+    const businessVariables = {
+      arbitrary: { value: "business-data", sensitive: true },
+      optional: { value: null },
     };
     const req = preview({
       method: "POST",
       url: "https://x/catalogs",
       body: {
         connector_config: {
-          variables: { arbitrary: "private-variable", tenant: "public" },
-          sensitive_variables: ["arbitrary"],
+          variables: {
+            arbitrary: { value: "private-variable", sensitive: true },
+            tenant: { value: "public" },
+          },
           options: { arbitrary: "database-option", password: "database-password" },
         },
         api_definition: { variables: resourceVariables },
+        result: { variables: businessVariables },
       },
     });
     expect(req.body).toEqual({
       connector_config: {
-        variables: { arbitrary: "<redacted>", tenant: "public" },
-        sensitive_variables: ["arbitrary"],
+        variables: {
+          arbitrary: { value: "<redacted>", sensitive: true },
+          tenant: { value: "public" },
+        },
         options: { arbitrary: "database-option", password: "<redacted>" },
       },
       api_definition: { variables: resourceVariables },
+      result: { variables: businessVariables },
     });
-    expect(JSON.stringify(req)).not.toContain("private-variable");
-    expect(JSON.stringify(req)).not.toContain("database-password");
+  });
+
+  it("still redacts credential-shaped fields inside public wrapped JSON values", () => {
+    const req = preview({
+      method: "POST",
+      url: "https://x/catalogs",
+      body: {
+        connector_config: {
+          variables: {
+            tenant: {
+              value: {
+                password: "private-password",
+                items: [{ token: "private-token", enabled: false }],
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(req.body).toEqual({
+      connector_config: {
+        variables: {
+          tenant: {
+            value: { password: "<redacted>", items: [{ token: "<redacted>", enabled: false }] },
+          },
+        },
+      },
+    });
+  });
+
+  it("previews Catalog wrapper protection without sending a request", async () => {
+    enableDryRun();
+    const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("must not send"));
+    try {
+      await expect(
+        tlsFetch(false, "https://x/catalogs", {
+          method: "POST",
+          body: JSON.stringify({
+            connector_config: {
+              variables: { arbitrary: { value: "private-option", sensitive: true } },
+            },
+          }),
+        }),
+      ).rejects.toMatchObject({
+        name: "DryRunSignal",
+        request: {
+          body: {
+            connector_config: {
+              variables: { arbitrary: { value: "<redacted>", sensitive: true } },
+            },
+          },
+        },
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      fetch.mockRestore();
+    }
   });
 
   it("redacts the header that identifies the caller", () => {

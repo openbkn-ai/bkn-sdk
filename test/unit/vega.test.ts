@@ -803,18 +803,22 @@ describe("runSql", () => {
 });
 
 describe("createCatalog", () => {
-  it("preserves Catalog variables, sensitive names and the independent login request", async () => {
+  it("preserves Catalog variable wrappers and the independent login request", async () => {
     const config = {
       base_url: "https://api.example.com",
       options: { timeout_seconds: 30, max_response_mib: 10 },
       variables: {
-        token: "example-token",
-        api_key: "example-key",
-        app_id: "app",
-        arbitrary: "protected-input",
-        lcid: "2052",
+        token: { value: "example-token", sensitive: true },
+        api_key: { value: "example-key", sensitive: true },
+        app_id: { value: "app" },
+        arbitrary: { value: "protected-input", sensitive: true },
+        lcid: { value: "2052", sensitive: false },
+        enabled: { value: false },
+        literal_null: { value: "null" },
+        empty: { value: "" },
+        zero: { value: 0 },
+        nested: { value: { region: "example", values: [0, false, null] } },
       },
-      sensitive_variables: ["token", "api_key", "arbitrary"],
       login_request: {
         request: {
           method: "POST",
