@@ -27,6 +27,7 @@ import type {
   ResourcePropertyUpdate,
   UpdateResourceOptions,
 } from "../../src/index.js";
+import { resources } from "../../src/resources/resources.js";
 import type { RequestContext } from "../../src/types.js";
 import { HttpError, InputError } from "../../src/utils/errors.js";
 import { verifiedContext } from "../setup/verified-context.js";
@@ -652,6 +653,64 @@ describe("updateResource", () => {
 });
 
 describe("queryResource", () => {
+  it.each([
+    "like",
+    "not_like",
+    "regex",
+    "prefix",
+    "not_prefix",
+    "match",
+    "match_phrase",
+    "multi_match",
+  ])("forwards an empty %s query and propagates Vega's rejection", async (operation) => {
+    const filterCondition = {
+      field: "title",
+      operation,
+      value: "",
+      value_from: "const",
+      ...(operation === "multi_match" ? { fields: ["title"] } : {}),
+    };
+    const body = JSON.stringify({
+      error_code: "VegaBackend.Resource.InvalidParameter",
+      error_details: `condition [${operation}] query value must not be empty`,
+    });
+    const fetchMock = vi.fn(async () => new Response(body, { status: 400 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const error = await resources(ctx)
+      .query("r-1", { filterCondition })
+      .catch((error: unknown) => error);
+
+    expect(error).toBeInstanceOf(HttpError);
+    expect(error).toMatchObject({ status: 400, body });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(firstCall(fetchMock as typeof fetch)[1].body as string)).toMatchObject({
+      filter_condition: filterCondition,
+    });
+  });
+
+  it.each([
+    { operation: "like", value: "   " },
+    { operation: "like", value: "%" },
+    { operation: "regex", value: ".*" },
+    { operation: "==", value: "" },
+    { operation: "!=", value: "" },
+    { operation: "in", value: [""] },
+    { operation: "not_in", value: [""] },
+    { operation: "contain", value: [""] },
+    { operation: "not_contain", value: [""] },
+  ])("preserves an explicit $operation value without trimming or rewriting", async (condition) => {
+    const fetchMock = mockFetch({ entries: [], total_count: 0 });
+    const filterCondition = { field: "title", ...condition };
+    await expect(resources(ctx).query("r-1", { filterCondition })).resolves.toMatchObject({
+      entries: [],
+      total_count: 0,
+    });
+    expect(JSON.parse(firstCall(fetchMock)[1].body as string)).toMatchObject({
+      filter_condition: filterCondition,
+    });
+  });
+
   it.each(["like", "not_like"])("preserves SQL LIKE patterns for %s", async (operation) => {
     for (const value of ["abc", "%abc%", "a_b", "a\\%\\_b", "a\\\\b", "abc\\"]) {
       const f = mockFetch({ entries: [] });
