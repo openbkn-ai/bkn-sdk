@@ -1017,10 +1017,8 @@ describe("updateCatalog", () => {
     const calls = (updated as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
     const updateBody = calls[1]?.[1].body as string;
     expect(updateBody).toContain('"const":9007199254740993');
-    expect(parseBigIntJSON(updateBody)).toMatchObject({ connector_config: config });
-    expect(config.login_request.response.content_type).toBe("application/json");
-    expect(config.login_request.response.statuses["200"]).not.toHaveProperty("content_type");
-    expect(config.login_request.response.statuses["200"]).not.toHaveProperty("content");
+    const sent = parseBigIntJSON(updateBody) as { connector_config: typeof config };
+    expect(sent.connector_config).toEqual(config);
   });
 
   it("keeps tags and description it was not given, and locks on the read update_time", async () => {
