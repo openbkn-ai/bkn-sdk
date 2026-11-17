@@ -33,6 +33,7 @@ import {
 import { vega } from "../../src/resources/vega.js";
 import type { RequestContext } from "../../src/types.js";
 import { HttpError } from "../../src/utils/errors.js";
+import { parseBigIntJSON } from "../../src/utils/json-bigint.js";
 import { verifiedContext } from "../setup/verified-context.js";
 
 const ctx = verifiedContext<RequestContext>({
@@ -830,9 +831,13 @@ describe("createCatalog", () => {
           },
         },
         response: {
-          "200": {
-            description: "Login response",
-            content: { "application/json": { schema: { type: "object" } } },
+          content_type: "application/json",
+          statuses: {
+            "200": {
+              description: "Login response",
+              schema: { type: "object" },
+            },
+            "400": { description: "Login rejected", schema: false, headers: {} },
           },
         },
         success_rule: { http_status: [200] },
@@ -841,6 +846,14 @@ describe("createCatalog", () => {
     const f = mockFetch({ id: "api" });
     await createCatalog(ctx, { name: "API", connectorType: "http", connectorConfig: config });
     expect(JSON.parse(firstCall(f)[1].body as string).connector_config).toEqual(config);
+    const response = JSON.parse(firstCall(f)[1].body as string).connector_config.login_request
+      .response;
+    expect(response.content_type).toBe("application/json");
+    expect(response).not.toHaveProperty("headers");
+    for (const status of Object.values(response.statuses)) {
+      expect(status).not.toHaveProperty("content_type");
+      expect(status).not.toHaveProperty("content");
+    }
   });
 
   it("POSTs connector fields to /catalogs", async () => {
@@ -928,6 +941,88 @@ const currentCatalog = {
 };
 
 describe("updateCatalog", () => {
+  it.each([true, false])(
+    "passes through a login response wrapper with boolean status schema %s",
+    async (schema) => {
+      const config = {
+        base_url: "https://api.example.com",
+        login_request: {
+          request: { method: "POST", path: "/login" },
+          response: {
+            content_type: "application/json",
+            statuses: {
+              "200": {
+                description: "Login response",
+                schema,
+                headers: {},
+              },
+            },
+          },
+          success_rule: { http_status: [200] },
+        },
+      };
+      const f = mockCatalogReadThenWrite({
+        ...currentCatalog,
+        connector_type: "http",
+        category: "api",
+        connector_config: config,
+      });
+      const client = vega(ctx);
+      expect(firstCatalog(await client.getCatalog("c-9")).connector_config).toEqual(config);
+      await client.updateCatalog("c-9", { connectorConfig: config });
+      const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+      expect(calls.map(([, init]) => init.method ?? "GET")).toEqual(["GET", "GET", "PUT"]);
+      const sent = JSON.parse(calls[2]?.[1].body as string).connector_config;
+      expect(sent).toEqual(config);
+      expect(sent.login_request.response.content_type).toBe("application/json");
+      expect(sent.login_request.response.statuses["200"]).not.toHaveProperty("content_type");
+      expect(sent.login_request.response.statuses["200"]).not.toHaveProperty("content");
+    },
+  );
+
+  it("keeps precise integers and Draft 2020-12 status schemas in response wrapper writes", async () => {
+    const config = {
+      base_url: "https://api.example.com",
+      login_request: {
+        request: { method: "POST", path: "/login" },
+        response: {
+          content_type: "application/json",
+          statuses: {
+            "200": {
+              description: "Login response",
+              schema: {
+                type: "object",
+                $defs: { identity: { type: "integer", const: 9007199254740993n } },
+                properties: { id: { $ref: "#/$defs/identity" } },
+                additionalProperties: false,
+              },
+            },
+          },
+        },
+        success_rule: { http_status: [200] },
+      },
+    };
+    const created = mockFetch({ id: "api" });
+    await vega(ctx).createCatalog({ name: "API", connectorType: "http", connectorConfig: config });
+    const createBody = firstCall(created)[1].body as string;
+    expect(createBody).toContain('"const":9007199254740993');
+    expect(parseBigIntJSON(createBody)).toMatchObject({ connector_config: config });
+
+    const updated = mockCatalogReadThenWrite({
+      ...currentCatalog,
+      connector_type: "http",
+      category: "api",
+    });
+    await vega(ctx).updateCatalog("c-9", { connectorConfig: config });
+    const calls = (updated as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+    const updateBody = calls[1]?.[1].body as string;
+    expect(updateBody).toContain('"const":9007199254740993');
+    expect(parseBigIntJSON(updateBody)).toMatchObject({ connector_config: config });
+    expect(config.login_request.response.content_type).toBe("application/json");
+    expect(config.login_request.response.statuses["200"]).not.toHaveProperty("content_type");
+    expect(config.login_request.response.statuses["200"]).not.toHaveProperty("content");
+  });
+
   it("keeps tags and description it was not given, and locks on the read update_time", async () => {
     const f = mockCatalogReadThenWrite(currentCatalog);
     await updateCatalog(ctx, "c-9", { name: "renamed" });
