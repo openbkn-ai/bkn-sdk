@@ -1686,6 +1686,49 @@ describe("vega catalog create", () => {
 });
 
 describe("vega resource query", () => {
+  it.each([
+    "like",
+    "not_like",
+    "regex",
+    "prefix",
+    "not_prefix",
+    "match",
+    "match_phrase",
+    "multi_match",
+  ])("preserves an empty %s filter and reports the backend validation error", async (operation) => {
+    const filterCondition = {
+      field: "title",
+      operation,
+      value: "",
+      value_from: "const",
+      ...(operation === "multi_match" ? { fields: ["title"] } : {}),
+    };
+    const body = JSON.stringify({
+      error_code: "VegaBackend.Resource.InvalidParameter",
+      error_details: `condition [${operation}] query value must not be empty`,
+    });
+    const fetchMock = vi.fn(
+      async (_url: string, _init?: RequestInit) => new Response(body, { status: 400 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    suppressOutput();
+
+    const error = await cli()
+      .parseAsync(
+        [...cliBase, "resource", "query", "r-1", "--filter", JSON.stringify(filterCondition)],
+        { from: "user" },
+      )
+      .catch((error: unknown) => error);
+
+    expect(error).toBeInstanceOf(HttpError);
+    expect(error).toMatchObject({ status: 400, body });
+    expect(toExitCode(error)).not.toBe(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+      filter_condition: filterCondition,
+    });
+  });
+
   it.each(["like", "not_like"])(
     "preserves SQL LIKE patterns passed through CLI %s",
     async (operation) => {
