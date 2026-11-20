@@ -152,8 +152,8 @@ describe("vega uses the vega-backend base path", () => {
     expect(u.searchParams.has("order")).toBe(false);
   });
 
-  it.each([false, undefined])(
-    "gets typed connector details with discovery support %s",
+  it.each([true, false, undefined, null])(
+    "lists and gets typed connectors with discovery support %s",
     async (supportDiscover) => {
       const detail = {
         type: "mysql",
@@ -167,6 +167,12 @@ describe("vega uses the vega-backend base path", () => {
         operations: null,
         field_config: { host: { name: "Host", type: "string", required: true } },
       };
+      const expectedSupportDiscover = supportDiscover ?? undefined;
+      mockFetch({ entries: [detail], total_count: 1 });
+      const { entries } = await listConnectorTypes(ctx);
+      expect(entries).toHaveLength(1);
+      expect(entries[0]?.support_discover).toBe(expectedSupportDiscover);
+
       const f = mockFetch(detail);
 
       const result = await getConnectorType(ctx, "my/sql");
@@ -175,7 +181,7 @@ describe("vega uses the vega-backend base path", () => {
         tags: undefined,
         operations: undefined,
       });
-      expect(result.support_discover).toBe(supportDiscover);
+      expect(result.support_discover).toBe(expectedSupportDiscover);
       expect(new URL(firstCall(f)[0]).pathname).toBe(
         "/api/vega-backend/v1/connector-types/my%2Fsql",
       );

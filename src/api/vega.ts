@@ -99,7 +99,7 @@ export const ConnectorTypeSummary = z
     enabled: z.boolean(),
     available: z.boolean(),
     // Absent when the server does not report this connector's static capability.
-    support_discover: z.boolean().optional(),
+    support_discover: nullAsAbsent(z.boolean()),
     operations: nullAsAbsent(z.array(z.string())),
   })
   .passthrough();
