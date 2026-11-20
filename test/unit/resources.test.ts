@@ -72,7 +72,9 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("ResourceLocalStatus", () => {
   it("is exported from the SDK entry point", () => {
-    expectTypeOf<ResourceLocalStatus>().toEqualTypeOf<"unavailable" | "available" | "stale">();
+    expectTypeOf<ResourceLocalStatus>().toEqualTypeOf<
+      "unavailable" | "available" | "readonly" | "stale"
+    >();
     expectTypeOf<ResourceIndexConfig["default_keyword_ignore_above"]>().toEqualTypeOf<
       number | undefined
     >();
@@ -187,6 +189,19 @@ describe("listResources", () => {
 
     mockFetch({ entries: [resourceFixture({ local_status: "unknown" })], total_count: 1 });
     await expect(listResources(ctx)).rejects.toThrow();
+  });
+
+  it("preserves a read-only local index in resource list and detail responses", async () => {
+    const resource = resourceFixture({ local_status: "readonly", index_name: "published" });
+    mockFetch({ entries: [resource], total_count: 1 });
+    await expect(listResources(ctx)).resolves.toMatchObject({
+      entries: [{ local_status: "readonly", index_name: "published" }],
+    });
+
+    mockFetch({ entries: [resource] });
+    await expect(getResource(ctx, "r-1")).resolves.toMatchObject({
+      entries: [{ local_status: "readonly", index_name: "published" }],
+    });
   });
 
   it("reads a resource from a deploy that reports no local status", async () => {
