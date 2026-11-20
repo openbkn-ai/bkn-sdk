@@ -11,7 +11,7 @@
 | `register <dir> [--source custom\|internal] [--category <c>] [--extend-info <json>]` | Zip a local skill dir → multipart register. SKILL.md must have frontmatter (name/description). `--source` defaults to `custom`, matching the backend's own default (`default:"custom" validate:"oneof=custom internal"`), so the registered result is unchanged from omitting it. |
 | `download <id> [out.zip] [--draft]` / `install <id> [dir]` | Save archive / download + unzip. |
 | `update-metadata <id> --body <json>` / `update-package <id> <dir>` | Replace metadata / replace package (zip). Metadata is a full overwrite: `name`, `description`, `category` are required; `source` is `custom`\|`internal`; `extend_info` is an object. The CLI refuses anything else before sending. |
-| `republish <id> --version <v>` / `publish-history <id> --version <v>` | `republish` copies a historical version back into the **draft** and publishes nothing; `publish-history` publishes that version directly. |
+| `republish <id> --skill-version <v>` / `publish-history <id> --skill-version <v>` | `republish` copies a historical version back into the **draft** and publishes nothing; `publish-history` publishes that version directly. `<v>` is a `version` from `history`. |
 
 ## `--draft` — which version you read
 

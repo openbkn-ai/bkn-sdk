@@ -366,17 +366,22 @@ export function skillCommand(): Command {
     .description(
       "Copy a historical version back into the draft (publishes nothing; see publish-history)",
     )
-    .requiredOption("--version <v>", "historical version to restore into the draft")
+    // Not `--version`: the root `-V, --version` is recognised after a command too, and
+    // would print the SDK version and exit before this command ran.
+    .requiredOption("--skill-version <v>", "historical version to restore into the draft")
     .action(async (skillId: string, opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).skills.republish(skillId, opts.version), outputOptions(cmd));
+      printJson(
+        await clientFrom(cmd).skills.republish(skillId, opts.skillVersion),
+        outputOptions(cmd),
+      );
     });
   cmd
     .command("publish-history <skill-id>")
     .description("Publish a historical skill version directly")
-    .requiredOption("--version <v>", "version to publish")
+    .requiredOption("--skill-version <v>", "historical version to publish")
     .action(async (skillId: string, opts, cmd: Command) => {
       printJson(
-        await clientFrom(cmd).skills.publishHistory(skillId, opts.version),
+        await clientFrom(cmd).skills.publishHistory(skillId, opts.skillVersion),
         outputOptions(cmd),
       );
     });
