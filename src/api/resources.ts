@@ -110,7 +110,7 @@ export type ResourceCategory = z.infer<typeof ResourceCategory>;
 export const ResourceStatus = z.enum(["active", "deprecated", "stale"]);
 export type ResourceStatus = z.infer<typeof ResourceStatus>;
 
-export const ResourceLocalStatus = z.enum(["unavailable", "available", "stale"]);
+export const ResourceLocalStatus = z.enum(["unavailable", "available", "readonly", "stale"]);
 export type ResourceLocalStatus = z.infer<typeof ResourceLocalStatus>;
 
 export interface ResourceLike {
