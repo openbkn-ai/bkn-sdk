@@ -3,6 +3,8 @@ import {
   type Catalog,
   type CatalogDeletionImpact,
   type CatalogSummary,
+  type ConnectorType,
+  type ConnectorTypeSummary,
   CreateBuildTaskRequest,
   type RawQueryRequest,
   type SqlRawQueryRequest,
@@ -112,6 +114,7 @@ describe("vega uses the vega-backend base path", () => {
           category: "table",
           enabled: true,
           available: true,
+          support_discover: true,
           tags: null,
           operations: null,
         },
@@ -131,7 +134,7 @@ describe("vega uses the vega-backend base path", () => {
         offset: 20,
       }),
     ).resolves.toMatchObject({
-      entries: [{ type: "mysql", tags: undefined, operations: undefined }],
+      entries: [{ type: "mysql", support_discover: true, tags: undefined, operations: undefined }],
       total_count: 1,
     });
     const u = new URL(firstCall(f)[0]);
@@ -149,26 +152,53 @@ describe("vega uses the vega-backend base path", () => {
     expect(u.searchParams.has("order")).toBe(false);
   });
 
-  it("gets typed connector details", async () => {
+  it.each([false, undefined])(
+    "gets typed connector details with discovery support %s",
+    async (supportDiscover) => {
+      const detail = {
+        type: "mysql",
+        name: "MySQL",
+        mode: "local",
+        category: "table",
+        enabled: true,
+        available: true,
+        support_discover: supportDiscover,
+        tags: null,
+        operations: null,
+        field_config: { host: { name: "Host", type: "string", required: true } },
+      };
+      const f = mockFetch(detail);
+
+      const result = await getConnectorType(ctx, "my/sql");
+      expect(result).toMatchObject({
+        type: "mysql",
+        tags: undefined,
+        operations: undefined,
+      });
+      expect(result.support_discover).toBe(supportDiscover);
+      expect(new URL(firstCall(f)[0]).pathname).toBe(
+        "/api/vega-backend/v1/connector-types/my%2Fsql",
+      );
+    },
+  );
+
+  it("validates discovery support on list and detail responses", async () => {
     const detail = {
-      type: "mysql",
-      name: "MySQL",
+      type: "http",
+      name: "HTTP",
       mode: "local",
-      category: "table",
+      category: "api",
       enabled: true,
       available: true,
-      tags: null,
-      operations: null,
-      field_config: { host: { name: "Host", type: "string", required: true } },
+      support_discover: "false",
     };
-    const f = mockFetch(detail);
+    expectTypeOf<ConnectorTypeSummary["support_discover"]>().toEqualTypeOf<boolean | undefined>();
+    expectTypeOf<ConnectorType["support_discover"]>().toEqualTypeOf<boolean | undefined>();
 
-    await expect(getConnectorType(ctx, "my/sql")).resolves.toMatchObject({
-      type: "mysql",
-      tags: undefined,
-      operations: undefined,
-    });
-    expect(new URL(firstCall(f)[0]).pathname).toBe("/api/vega-backend/v1/connector-types/my%2Fsql");
+    mockFetch({ entries: [detail], total_count: 1 });
+    await expect(listConnectorTypes(ctx)).rejects.toThrow(/support_discover/);
+    mockFetch(detail);
+    await expect(getConnectorType(ctx, "http")).rejects.toThrow(/support_discover/);
   });
 
   it("gets catalog connector stats and local-index capabilities", async () => {

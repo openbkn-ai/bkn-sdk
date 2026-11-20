@@ -98,6 +98,8 @@ export const ConnectorTypeSummary = z
     endpoint: z.string().optional(),
     enabled: z.boolean(),
     available: z.boolean(),
+    // Absent when the server does not report this connector's static capability.
+    support_discover: z.boolean().optional(),
     operations: nullAsAbsent(z.array(z.string())),
   })
   .passthrough();
