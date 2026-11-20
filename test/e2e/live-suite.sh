@@ -78,7 +78,7 @@ if [ -n "${BKN_SKILL_KEY:-}" ]; then
   chk "skill content" skill content "$BKN_SKILL_KEY"
   chk "skill history" skill history "$BKN_SKILL_KEY"
   # `publish-history` is not the history: it publishes a past version, and takes
-  # a required `--version`. A write has no place in this file.
+  # a required `--skill-version`. A write has no place in this file.
 else
   echo "SKIP  skill get/names/files/content/history (set BKN_SKILL_KEY)"
 fi
