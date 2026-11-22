@@ -38,6 +38,7 @@ interface DescribedArgument {
  */
 const ID_SOURCES: Record<string, string> = {
   "kn-id": "openbkn bkn list",
+  "run-id": "openbkn eval list-runs <kn-id>",
   "catalog-id": "openbkn vega catalog list",
   "resource-id": "openbkn vega catalog resources <catalog-id>",
   "ot-id": 'openbkn context search-schema <kn-id> "<q>"',

@@ -34,7 +34,7 @@ const SERVICE_PROBES: Array<{ service: string; path: string }> = [
 
 /** Which service answers a command, by the path its group sits on. */
 const COMMAND_SERVICE: Array<[RegExp, string]> = [
-  [/^bkn\b/, "bkn-backend"],
+  [/^(bkn|eval)\b/, "bkn-backend"],
   [/^vega\b/, "vega-backend"],
   [/^resource\b/, "vega-backend"],
   [/^context\b/, "agent-retrieval"],
