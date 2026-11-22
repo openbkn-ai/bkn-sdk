@@ -331,6 +331,29 @@ export async function listResources(
   return ListResourcesResponse.parse(result);
 }
 
+function parseResourceDetailsWithPreciseDefinitions(text: string): unknown {
+  type ResourceDetails = { entries?: Record<string, unknown>[] };
+  // Fixed fields must retain their wire number types for Resource validation.
+  const details = parseBigIntJSON(text) as ResourceDetails | null;
+  if (!Array.isArray(details?.entries)) return details;
+
+  const precise = parsePreciseJSON(text) as Required<ResourceDetails>;
+  const fields = [
+    "schema_definition",
+    "api_definition",
+    "logical_view_definition",
+    "source_metadata",
+  ];
+  for (const [index, entry] of details.entries.entries()) {
+    if (entry === null || typeof entry !== "object") continue;
+    const exactEntry = precise.entries[index]!;
+    for (const field of fields) {
+      if (Object.hasOwn(exactEntry, field)) entry[field] = exactEntry[field];
+    }
+  }
+  return details;
+}
+
 export async function getResource(
   ctx: RequestContext,
   id: string | string[],
@@ -338,7 +361,9 @@ export async function getResource(
 ): Promise<BatchResourcesResponse> {
   const ids = Array.isArray(id) ? id : [id];
   const result = await request<unknown>(ctx, `${BASE}/${ids.map(encodeURIComponent).join(",")}`, {
-    responseParser: opts.preciseNumbers ? parsePreciseJSON : parseBigIntJSON,
+    responseParser: opts.preciseNumbers
+      ? parseResourceDetailsWithPreciseDefinitions
+      : parseBigIntJSON,
     query: {
       ignore_missing: opts.ignoreMissing === undefined ? undefined : String(opts.ignoreMissing),
     },

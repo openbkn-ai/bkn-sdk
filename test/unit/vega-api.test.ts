@@ -224,6 +224,53 @@ describe("API consumers", () => {
     expect(typeof disabledVariables.integer?.value).toBe("number");
   });
 
+  it.each(["dataset", "logical_view"])(
+    "keeps fixed Resource numbers compatible and copies exact definitions on a %s update",
+    async (category) => {
+      const saved = {
+        ...current,
+        category,
+        api_definition: undefined,
+        column_count: new Decimal("2e1"),
+        index_config: { default_keyword_ignore_above: new Decimal("256.0") },
+        schema_definition: [
+          {
+            name: "amount",
+            type: "decimal",
+            filterable: true,
+            attributes: { sample: new Decimal("1234567890123456.78") },
+          },
+        ],
+        ...(category === "logical_view"
+          ? {
+              logical_type: "derived",
+              logical_view_definition: {
+                source_resource_id: "source",
+                filter_condition: {
+                  field: "amount",
+                  operation: "eq",
+                  value: new Decimal("9007199254740993.125"),
+                },
+              },
+            }
+          : {}),
+      };
+      const fetchMock = vi.fn(
+        async (_url: unknown, init?: RequestInit) =>
+          new Response(init?.method === "PUT" ? "{}" : stringifyBigIntJSON({ entries: [saved] })),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      await updateResource(ctx, "r1", { name: "renamed" });
+
+      expect(fetchMock.mock.calls.map(([, init]) => init?.method ?? "GET")).toEqual(["GET", "PUT"]);
+      const wire = String(fetchMock.mock.calls[1]?.[1]?.body);
+      expect(wire).toContain('"default_keyword_ignore_above":256}');
+      expect(wire).toContain('"sample":1234567890123456.78');
+      if (category === "logical_view") expect(wire).toContain('"value":9007199254740993.125');
+    },
+  );
+
   it.each(["table"])("omits unchanged schema on a metadata-only %s update", async (category) => {
     const saved = {
       ...current,

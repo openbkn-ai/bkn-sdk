@@ -7,6 +7,7 @@ import { skipVersionCheck } from "./api/version-check.js";
 import { buildProgram } from "./cli-program.js";
 import { DryRunSignal, enableDryRun } from "./utils/dry-run.js";
 import { formatError, toExitCode } from "./utils/errors.js";
+import { stringifyBigIntJSON } from "./utils/json-bigint.js";
 
 /**
  * Run one CLI invocation without forcing the process to exit.
@@ -27,7 +28,7 @@ export async function runCli(argv = process.argv): Promise<void> {
     await program.parseAsync(argv);
   } catch (err) {
     if (err instanceof DryRunSignal) {
-      process.stdout.write(`${JSON.stringify(err.request, null, 2)}\n`);
+      process.stdout.write(`${stringifyBigIntJSON(err.request, 2)}\n`);
       return;
     }
     console.error(formatError(err));
