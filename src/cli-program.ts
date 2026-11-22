@@ -15,6 +15,7 @@ import { callCommand } from "./commands/call.js";
 import { configCommand } from "./commands/config.js";
 import { contextCommand } from "./commands/context.js";
 import { describeCommand } from "./commands/describe.js";
+import { evalCommand } from "./commands/eval.js";
 import { sandboxCommand } from "./commands/function.js";
 import { mcpCommand } from "./commands/mcp.js";
 import { modelCommand } from "./commands/model.js";
@@ -72,6 +73,7 @@ export function buildProgram(): Command {
   program.addCommand(configCommand());
   program.addCommand(appkeyCommand());
   program.addCommand(bknCommand());
+  program.addCommand(evalCommand());
   program.addCommand(vegaCommand());
   program.addCommand(resourceCommand());
   program.addCommand(contextCommand());

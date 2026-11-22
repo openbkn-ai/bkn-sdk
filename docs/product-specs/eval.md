@@ -6,6 +6,23 @@ Trace's `evalSetBuild` prepares trace fixtures and is a separate feature.
 
 ## Management
 
+Use `openbkn eval --help` for the CLI workflow. For example, list a page of
+candidate resources and inspect the active rules:
+
+```bash
+openbkn --json eval resources <kn-id> --kind objectType --limit 15
+openbkn --json eval rules <kn-id>
+openbkn --json eval preview-rules <kn-id> --body-file selection.json
+```
+
+The body commands accept `--body` or `--body-file` with the exact backend JSON.
+Use resource IDs and kinds in `resources` for the preview. Review the match
+and use explicit rule targets for `save-rules`; use the returned case IDs as
+`members` for `create-suite`. Pass the resulting Suite ID and version in
+`scope` to `preview-run`. Review blocked cases before calling `start-run`
+with the same scope, a target and an idempotency key. Use `get-run` and
+`run-cases` to inspect status and outcomes.
+
 Use `client.evals.forNetwork(knId).request(operation, input, options)` with an
 operation from `EVAL_OPERATIONS`. Pass exact backend JSON field names in `body`,
 route identifiers in `path` and filters in `query`. All identifiers are encoded.
