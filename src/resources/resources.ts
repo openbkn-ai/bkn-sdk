@@ -30,7 +30,8 @@ import type { RequestContext } from "../types.js";
 export function resources(ctx: RequestContext) {
   return {
     list: (opts?: ListResourcesOptions) => listResources(ctx, opts),
-    get: (id: string | string[], opts?: { ignoreMissing?: boolean }) => getResource(ctx, id, opts),
+    get: (id: string | string[], opts?: { ignoreMissing?: boolean; preciseNumbers?: boolean }) =>
+      getResource(ctx, id, opts),
     create: (req: CreateResourceRequest) => createResource(ctx, req),
     delete: (id: string | string[], opts?: Parameters<typeof deleteResource>[2]) =>
       deleteResource(ctx, id, opts),

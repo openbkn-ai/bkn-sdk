@@ -159,3 +159,7 @@ Update this table as each signal changes (e.g. live-parity count as commands are
   The local branch passed lint, build, and 1458 unit tests (one optional live
   test skipped). The shared deployment returned 401 after its stored login
   expired; real new-model execution remains an integration acceptance item.
+
+- `vega-api.test.ts` and `vega-api-command.test.ts` cover typed read-only API Resource creation/replacement, transient save-time validation, omitted/null/boolean variable sensitivity, unknown schema metadata, complete definition and exact-number round trips, explicit unpaged/single-page queries, Catalog precision opt-in/default-number compatibility and CLI mappings. `dry-run.test.ts` covers Resource sensitive-variable protection and exact decimal/BIGINT previews. Existing default fractional-number results stay compatible; live API and knowledge-network acceptance remains separate.
+- `vega-command.test.ts` checks that legacy index configuration flags still send an integer JSON token for integral values entered with a decimal point, on both creation and update.
+- HTTP Catalog CLI regression tests cover lossless configuration updates using the saved connector type and integer serialization of connection options and login status codes.

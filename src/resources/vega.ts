@@ -35,6 +35,7 @@ import {
   type BuildTask,
   type CatalogConnectionTestRequest,
   type CatalogHealthCheckScheduleRequest,
+  type CatalogUpdateInput,
   type CatalogWriteOptions,
   type CreateBuildTaskRequest,
   type CreateCatalogRequest,
@@ -44,7 +45,6 @@ import {
   type ListCatalogsOptions,
   type ListConnectorTypesOptions,
   type RawQueryRequest,
-  type UpdateCatalogRequest,
   catalogConnectorTypeStats,
   catalogHealthStatus,
   createBuildTask,
@@ -83,10 +83,11 @@ const TERMINAL_STATES = new Set(["completed", "failed", "stopped", "cancelled"])
 export function vega(ctx: RequestContext) {
   return {
     catalogs: (opts?: ListCatalogsOptions) => listCatalogs(ctx, opts),
-    getCatalog: (id: string | string[]) => getCatalog(ctx, id),
+    getCatalog: (id: string | string[], opts?: { preciseNumbers?: boolean }) =>
+      getCatalog(ctx, id, opts),
     createCatalog: (req: CreateCatalogRequest, opts?: CatalogWriteOptions) =>
       createCatalog(ctx, req, opts),
-    updateCatalog: (id: string, req: UpdateCatalogRequest, opts?: CatalogWriteOptions) =>
+    updateCatalog: (id: string, req: CatalogUpdateInput, opts?: CatalogWriteOptions) =>
       updateCatalog(ctx, id, req, opts),
     enableCatalog: (id: string) => enableCatalog(ctx, id),
     disableCatalog: (id: string) => disableCatalog(ctx, id),

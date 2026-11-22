@@ -8,7 +8,13 @@ import { z } from "zod";
  */
 import { DEFAULT_LIST_LIMIT, type RequestContext } from "../types.js";
 import { InputError } from "../utils/errors.js";
-import { parseBigIntJSON } from "../utils/json-bigint.js";
+import { parseBigIntJSON, parsePreciseJSON } from "../utils/json-bigint.js";
+import {
+  type APIDefinition,
+  APIInvocationPaging,
+  APIValidation,
+  type APIValidationInput,
+} from "./api-definition.js";
 import { request } from "./http.js";
 
 const BASE = "/api/vega-backend/v1/resources";
@@ -129,6 +135,8 @@ export interface ResourceLike {
   index_config?: ResourceIndexConfig;
   logical_view_definition?: unknown;
   logical_type?: string;
+  api_effect_type?: string;
+  api_definition?: APIDefinition;
   update_time?: number;
 }
 
@@ -234,6 +242,12 @@ export const Resource = z
     column_count: z.number().optional(),
     row_count: z.union([z.number(), z.bigint()]).optional(),
     estimated_row_count: nullAsAbsent(z.union([z.number(), z.bigint()])),
+    api_effect_type: z.string().optional(),
+    api_definition: z
+      .custom<APIDefinition>(
+        (value) => typeof value === "object" && value !== null && !Array.isArray(value),
+      )
+      .optional(),
     logical_type: z.string().optional(),
     logical_view_definition: z.unknown().optional(),
     creator: ResourceAccountInfo,
@@ -254,6 +268,7 @@ export const ResourceSummary = Resource.omit({
   index_config: true,
   estimated_row_count: true,
   logical_view_definition: true,
+  api_definition: true,
 });
 export type ResourceSummary = z.infer<typeof ResourceSummary>;
 
@@ -319,11 +334,11 @@ export async function listResources(
 export async function getResource(
   ctx: RequestContext,
   id: string | string[],
-  opts: { ignoreMissing?: boolean } = {},
+  opts: { ignoreMissing?: boolean; preciseNumbers?: boolean } = {},
 ): Promise<BatchResourcesResponse> {
   const ids = Array.isArray(id) ? id : [id];
   const result = await request<unknown>(ctx, `${BASE}/${ids.map(encodeURIComponent).join(",")}`, {
-    responseParser: parseBigIntJSON,
+    responseParser: opts.preciseNumbers ? parsePreciseJSON : parseBigIntJSON,
     query: {
       ignore_missing: opts.ignoreMissing === undefined ? undefined : String(opts.ignoreMissing),
     },
@@ -348,6 +363,18 @@ interface CreateResourceBase {
 
 export type CreateResourceRequest =
   | (CreateResourceBase & {
+      category: "api";
+      apiEffectType: "read";
+      apiDefinition: APIDefinition;
+      schemaDefinition: ResourceProperty[];
+      validation?: APIValidationInput;
+      schema?: never;
+      sourceIdentifier?: never;
+      sourceMetadata?: never;
+      logicalViewDefinition?: never;
+      logicalType?: never;
+    })
+  | (CreateResourceBase & {
       category: "dataset";
       schema?: string;
       sourceIdentifier?: string;
@@ -370,6 +397,32 @@ export async function createResource(
   ctx: RequestContext,
   req: CreateResourceRequest,
 ): Promise<ResourceRef> {
+  if (
+    "validation" in req &&
+    req.validation !== undefined &&
+    !APIValidation.safeParse(req.validation).success
+  )
+    throw new InputError("validation accepts only filter_condition and single-page paging");
+  if (req.category === "api") {
+    if (
+      req.apiEffectType !== "read" ||
+      !req.apiDefinition ||
+      typeof req.apiDefinition !== "object" ||
+      Array.isArray(req.apiDefinition)
+    ) {
+      throw new InputError("API resources require apiEffectType read and apiDefinition");
+    }
+    if (!Array.isArray(req.schemaDefinition) || req.schemaDefinition.length === 0) {
+      throw new InputError("API resources require a non-empty schemaDefinition");
+    }
+    if (
+      req.sourceIdentifier !== undefined ||
+      req.sourceMetadata !== undefined ||
+      req.schema !== undefined
+    ) {
+      throw new InputError("API source identity is server-owned");
+    }
+  }
   if (req.category === "logical_view") {
     if (req.logicalType !== "derived") {
       throw new InputError("logicalType must be derived for logical_view resources");
@@ -434,6 +487,13 @@ export async function createResource(
       ? { logical_view_definition: req.logicalViewDefinition }
       : {}),
     ...(req.logicalType !== undefined ? { logical_type: req.logicalType } : {}),
+    ...(req.category === "api"
+      ? {
+          api_effect_type: req.apiEffectType,
+          api_definition: req.apiDefinition,
+          ...(req.validation !== undefined ? { validation: req.validation } : {}),
+        }
+      : {}),
   });
   return ResourceRef.parse(result);
 }
@@ -445,6 +505,9 @@ export interface UpdateResourceOptions {
   schemaDefinition?: ResourcePropertyUpdate[];
   indexConfig?: ResourceIndexConfig;
   logicalViewDefinition?: unknown;
+  apiDefinition?: APIDefinition;
+  /** Temporary save-time test input; never persisted. */
+  validation?: APIValidationInput;
   /** Optimistic-lock version from an earlier Resource `update_time`. */
   expectedUpdateTime?: number;
 }
@@ -472,6 +535,8 @@ export async function updateResource(
   id: string,
   patch: UpdateResourceOptions,
 ): Promise<unknown> {
+  if (patch.validation !== undefined && !APIValidation.safeParse(patch.validation).success)
+    throw new InputError("validation accepts only filter_condition and single-page paging");
   if (patch.schemaDefinition !== undefined) {
     if (
       !Array.isArray(patch.schemaDefinition) ||
@@ -480,7 +545,13 @@ export async function updateResource(
       throw new InputError("schemaDefinition field filterable must be an explicit boolean");
     }
   }
-  const current = firstResource(await getResource(ctx, id));
+  const current = firstResource(await getResource(ctx, id, { preciseNumbers: true }));
+  if (
+    current.category !== "api" &&
+    (patch.apiDefinition !== undefined || patch.validation !== undefined)
+  ) {
+    throw new InputError("apiDefinition and validation are only valid for API resources");
+  }
   return updateResourceRaw(ctx, id, resourceUpdateBody(id, current, patch));
 }
 
@@ -518,6 +589,13 @@ function resourceUpdateBody(
     index_config: patch.indexConfig === undefined ? current.index_config : patch.indexConfig,
     logical_view_definition: patch.logicalViewDefinition ?? current.logical_view_definition,
     ...(current.category === "logical_view" ? { logical_type: current.logical_type } : {}),
+    ...(current.category === "api"
+      ? {
+          api_effect_type: current.api_effect_type,
+          ...(patch.apiDefinition !== undefined ? { api_definition: patch.apiDefinition } : {}),
+          ...(patch.validation !== undefined ? { validation: patch.validation } : {}),
+        }
+      : {}),
   };
   const expectedUpdateTime = patch.expectedUpdateTime ?? current.update_time;
   if (expectedUpdateTime !== undefined) {
@@ -608,6 +686,10 @@ export async function findResource(
 }
 
 export interface QueryResourceOptions {
+  /** Explicit single-page input; null omits paging entirely. Overrides legacy paging defaults. */
+  paging?: APIValidationInput["paging"] | null;
+  /** Decode fractional/exponent tokens as Decimal without changing legacy number results by default. */
+  preciseNumbers?: boolean;
   limit?: number;
   offset?: number;
   needTotal?: boolean;
@@ -675,6 +757,32 @@ export function queryResource(
   id: string,
   opts: QueryResourceOptions = {},
 ): Promise<QueryResourceResponse> {
+  if (
+    opts.paging !== undefined &&
+    [opts.limit, opts.offset, opts.pagingMode, opts.keepAliveSec, opts.cursor].some(
+      (value) => value !== undefined,
+    )
+  ) {
+    throw new InputError(
+      "paging cannot be combined with limit, offset, pagingMode, keepAliveSec, or cursor",
+    );
+  }
+  if (
+    opts.paging !== undefined &&
+    opts.paging !== null &&
+    (typeof opts.paging !== "object" || Array.isArray(opts.paging))
+  ) {
+    throw new InputError("paging must be an object or null");
+  }
+  if (
+    opts.paging !== undefined &&
+    opts.paging !== null &&
+    !APIInvocationPaging.safeParse(opts.paging).success
+  ) {
+    throw new InputError(
+      "explicit paging requires single mode and nonnegative safe-integer offset and limit",
+    );
+  }
   const body = opts.cursor
     ? {
         paging: { cursor: opts.cursor },
@@ -682,12 +790,16 @@ export function queryResource(
       }
     : {
         ...(opts.filterCondition !== undefined ? { filter_condition: opts.filterCondition } : {}),
-        paging: {
-          mode: opts.pagingMode ?? "single",
-          limit: opts.limit ?? 50,
-          offset: opts.offset ?? 0,
-          ...(opts.keepAliveSec !== undefined ? { keep_alive_sec: opts.keepAliveSec } : {}),
-        },
+        ...(opts.paging === null
+          ? {}
+          : {
+              paging: opts.paging ?? {
+                mode: opts.pagingMode ?? "single",
+                limit: opts.limit ?? 50,
+                offset: opts.offset ?? 0,
+                ...(opts.keepAliveSec !== undefined ? { keep_alive_sec: opts.keepAliveSec } : {}),
+              },
+            }),
         ...(opts.sort !== undefined ? { sort: opts.sort } : {}),
         ...(opts.outputFields !== undefined ? { output_fields: opts.outputFields } : {}),
         ...(opts.binaryMode !== undefined ? { binary_mode: opts.binaryMode } : {}),
@@ -724,7 +836,7 @@ export function queryResource(
     method: "POST",
     headers: { "X-HTTP-Method-Override": "GET" },
     body,
-    responseParser: parseBigIntJSON,
+    responseParser: opts.preciseNumbers ? parsePreciseJSON : parseBigIntJSON,
   });
 }
 
