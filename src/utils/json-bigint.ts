@@ -34,6 +34,40 @@ function assertNativeJSONSupport(): void {
 
 assertNativeJSONSupport();
 
+/** An exact JSON decimal. Construct from source text, never an already rounded number. */
+export class Decimal {
+  readonly #text: string;
+
+  constructor(text: string) {
+    if (typeof text !== "string" || !/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(text)) {
+      throw new TypeError("Decimal requires a valid JSON number string");
+    }
+    this.#text = text;
+    Object.freeze(this);
+  }
+
+  toString(): string {
+    return this.#text;
+  }
+
+  toJSON(): unknown {
+    return rawJSON(this.#text);
+  }
+
+  valueOf(): never {
+    throw new TypeError("Decimal cannot be implicitly converted to a floating-point number");
+  }
+}
+
+/** Opt-in exact JSON decoding: fractional/exponent tokens become Decimal, unsafe integers bigint. */
+export function parsePreciseJSON(text: string): unknown {
+  return parseWithSource(text, (_key, value, context) => {
+    if (typeof value !== "number") return value;
+    if (!UNSAFE_INTEGER.test(context.source)) return new Decimal(context.source);
+    return Number.isSafeInteger(value) ? value : BigInt(context.source);
+  });
+}
+
 /** Parses JSON integers outside the safe range as native bigint values. */
 export function parseBigIntJSON(text: string): unknown {
   return parseWithSource(text, (_key, value, context) => {

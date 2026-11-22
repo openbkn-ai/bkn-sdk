@@ -3,6 +3,7 @@
 
 /** `openbkn vega …` — Catalog reads + index BuildTask. */
 import { Command } from "commander";
+import type { APIDefinition } from "../api/api-definition.js";
 import {
   ResourceCategory,
   type ResourceIndexConfig,
@@ -39,7 +40,7 @@ import { buildTaskState, isBuildTaskUnsuccessful } from "../resources/vega.js";
 import { DEFAULT_LIST_LIMIT, DEFAULT_QUERY_LIMIT } from "../types.js";
 import { buildProgressReporter } from "../utils/build-progress.js";
 import { InputError, WaitTimeoutError } from "../utils/errors.js";
-import { parseBigIntJSON } from "../utils/json-bigint.js";
+import { parseBigIntJSON, parsePreciseJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, csv, oneOf, outputOptions } from "./_shared.js";
 import {
@@ -125,23 +126,51 @@ const bool = (value: string): boolean => {
   throw new InputError("boolean value must be true or false");
 };
 
-const parseJsonObject = (value: string, flag: string): Record<string, unknown> => {
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const parseJsonObject = (
+  value: string,
+  flag: string,
+  parse = parseBigIntJSON,
+): Record<string, unknown> => {
   let parsed: unknown;
   try {
-    parsed = parseBigIntJSON(value);
+    parsed = parse(value);
   } catch {
     throw new InputError(`${flag} must be valid JSON`);
   }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+  if (!isRecord(parsed)) {
     throw new InputError(`${flag} must be a JSON object`);
   }
-  return parsed as Record<string, unknown>;
+  return parsed;
 };
+
+function prepareConnectorConfig(value: string) {
+  const config = parseJsonObject(value, "--connector-config");
+  return (connectorType: string) => {
+    if (connectorType !== "http") return config;
+
+    const precise = parseJsonObject(value, "--connector-config", parsePreciseJSON);
+    // The connector's options and HTTP status codes require integer JSON tokens.
+    if (Object.hasOwn(config, "options")) precise.options = config.options;
+    const login = config.login_request;
+    const preciseLogin = precise.login_request;
+    if (isRecord(login) && isRecord(preciseLogin)) {
+      const rule = login.success_rule;
+      const preciseRule = preciseLogin.success_rule;
+      if (isRecord(rule) && isRecord(preciseRule) && Object.hasOwn(rule, "http_status")) {
+        preciseRule.http_status = rule.http_status;
+      }
+    }
+    return precise;
+  };
+}
 
 const parseJsonArray = (value: string, flag: string): Record<string, unknown>[] => {
   let parsed: unknown;
   try {
-    parsed = parseBigIntJSON(value);
+    parsed = parsePreciseJSON(value);
   } catch {
     throw new InputError(`${flag} must be valid JSON`);
   }
@@ -412,8 +441,12 @@ export function vegaCommand(): Command {
   catalog
     .command("get <id>")
     .description("Get a catalog by id")
-    .action(async (id: string, _opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).vega.getCatalog(id), outputOptions(cmd));
+    .option("--precise-numbers", "retain exact decimal configuration numbers")
+    .action(async (id: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).vega.getCatalog(id, { preciseNumbers: opts.preciseNumbers === true }),
+        outputOptions(cmd),
+      );
     });
   catalog
     .command("stats")
@@ -477,7 +510,7 @@ export function vegaCommand(): Command {
       const connectorConfig =
         opts.connectorConfig === undefined
           ? undefined
-          : parseJsonObject(opts.connectorConfig, "--connector-config");
+          : prepareConnectorConfig(opts.connectorConfig)(opts.connectorType);
       printJson(
         await clientFrom(cmd).vega.createCatalog(
           {
@@ -529,7 +562,7 @@ export function vegaCommand(): Command {
       ].some((value) => value !== undefined);
       if (!hasPatch) throw new InputError("provide at least one catalog field to update");
       const connectorConfig = opts.connectorConfig
-        ? parseJsonObject(opts.connectorConfig, "--connector-config")
+        ? prepareConnectorConfig(opts.connectorConfig)
         : undefined;
       printJson(
         await clientFrom(cmd).vega.updateCatalog(
@@ -590,7 +623,7 @@ export function vegaCommand(): Command {
       printJson(
         await clientFrom(cmd).vega.testCatalogConnectionConfig({
           connectorType: opts.connectorType,
-          connectorConfig: parseJsonObject(opts.connectorConfig, "--connector-config"),
+          connectorConfig: prepareConnectorConfig(opts.connectorConfig)(opts.connectorType),
         }),
         outputOptions(cmd),
       );
@@ -1055,16 +1088,27 @@ export function vegaCommand(): Command {
   resource
     .command("get <id>")
     .description("Get a resource")
-    .action(async (id: string, _opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).resource.get(id), outputOptions(cmd));
+    .option("--precise-numbers", "retain exact decimal schema and definition numbers")
+    .action(async (id: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).resource.get(id, { preciseNumbers: opts.preciseNumbers === true }),
+        outputOptions(cmd),
+      );
     });
   resource
     .command("create")
-    .description("Create a dataset or logical-view resource")
+    .description("Create a dataset, logical-view, or read-only API resource")
     .requiredOption("--catalog-id <id>", "catalog id")
     .requiredOption("--name <s>", "resource name")
-    .requiredOption("--category <category>", "resource category: dataset | logical_view")
+    .requiredOption("--category <category>", "resource category: dataset | logical_view | api")
     .option("--logical-type <type>", "logical view type: derived")
+    .option("--api-definition <json>", "complete API HTTP operation definition")
+    .option(
+      "--api-effect-type <type>",
+      "API operation effect: read",
+      oneOf("--api-effect-type", ["read"] as const),
+    )
+    .option("--validation <json>", "temporary save-time filter_condition and paging")
     .option("--id <id>", "explicit resource id")
     .option("--tags <t1,t2>", "comma-separated tags")
     .option("--description <s>", "description")
@@ -1072,13 +1116,17 @@ export function vegaCommand(): Command {
     .option("--index-config <json>", "index_config JSON object")
     .option("--logical-view-definition <json>", "derived logical_view_definition JSON object")
     .action(async (opts, cmd: Command) => {
-      if (opts.category !== "dataset" && opts.category !== "logical_view") {
-        throw new InputError("--category must be dataset or logical_view");
+      if (
+        opts.category !== "dataset" &&
+        opts.category !== "logical_view" &&
+        opts.category !== "api"
+      ) {
+        throw new InputError("--category must be dataset, logical_view, or api");
       }
       if (opts.category === "logical_view" && opts.logicalType !== "derived") {
         throw new InputError("--logical-type derived is required for logical_view");
       }
-      if (opts.category === "dataset" && opts.logicalType !== undefined) {
+      if (opts.category !== "logical_view" && opts.logicalType !== undefined) {
         throw new InputError("--logical-type is only valid for logical_view");
       }
       const schemaDefinition =
@@ -1114,6 +1162,15 @@ export function vegaCommand(): Command {
       } else if (logicalViewDefinition !== undefined) {
         throw new InputError("--logical-view-definition is only valid for logical_view");
       }
+      if (
+        opts.category !== "api" &&
+        (opts.apiDefinition !== undefined ||
+          opts.apiEffectType !== undefined ||
+          opts.validation !== undefined)
+      )
+        throw new InputError("API options require --category api");
+      if (opts.category === "api" && opts.apiDefinition === undefined)
+        throw new InputError("--api-definition is required for API resources");
       const common = {
         id: opts.id,
         catalogId: opts.catalogId,
@@ -1131,29 +1188,52 @@ export function vegaCommand(): Command {
       };
       printJson(
         await clientFrom(cmd).resource.create(
-          opts.category === "logical_view"
+          opts.category === "api"
             ? {
                 ...common,
-                category: "logical_view",
-                logicalType: "derived",
-                schemaDefinition: schemaDefinition as (ResourceProperty & {
-                  original_name: string;
-                  type: string;
-                })[],
-                logicalViewDefinition: logicalViewDefinition as { source_resource_id: string },
+                category: "api",
+                apiEffectType: "read",
+                apiDefinition: parseJsonObject(
+                  opts.apiDefinition,
+                  "--api-definition",
+                  parsePreciseJSON,
+                ) as unknown as APIDefinition,
+                schemaDefinition: schemaDefinition ?? [],
+                ...(opts.validation !== undefined
+                  ? {
+                      validation: parseJsonObject(
+                        opts.validation,
+                        "--validation",
+                        parsePreciseJSON,
+                      ),
+                    }
+                  : {}),
               }
-            : {
-                ...common,
-                category: "dataset",
-                ...(schemaDefinition !== undefined ? { schemaDefinition } : {}),
-              },
+            : opts.category === "logical_view"
+              ? {
+                  ...common,
+                  category: "logical_view",
+                  logicalType: "derived",
+                  schemaDefinition: schemaDefinition as (ResourceProperty & {
+                    original_name: string;
+                    type: string;
+                  })[],
+                  logicalViewDefinition: logicalViewDefinition as { source_resource_id: string },
+                }
+              : {
+                  ...common,
+                  category: "dataset",
+                  ...(schemaDefinition !== undefined ? { schemaDefinition } : {}),
+                },
         ),
         outputOptions(cmd),
       );
     });
   resource
     .command("update <id>")
-    .description("Update resource metadata, schema, features, or index configuration")
+    .description("Update resource metadata, schema, features, or API definition")
+    .option("--api-definition <json>", "replacement API operation definition")
+    .option("--validation <json>", "temporary save-time filter_condition and paging")
     .option("--name <s>", "resource name")
     .option("--tags <t1,t2>", "comma-separated tags")
     .option("--description <s>", "description")
@@ -1175,6 +1255,8 @@ export function vegaCommand(): Command {
         opts.schemaDefinition,
         opts.indexConfig,
         opts.logicalViewDefinition,
+        opts.apiDefinition,
+        opts.validation,
       ].some((value) => value !== undefined);
       if (!hasPatch) throw new InputError("provide at least one resource field to update");
       printJson(
@@ -1202,6 +1284,18 @@ export function vegaCommand(): Command {
                   "--logical-view-definition",
                 ),
               }
+            : {}),
+          ...(opts.apiDefinition !== undefined
+            ? {
+                apiDefinition: parseJsonObject(
+                  opts.apiDefinition,
+                  "--api-definition",
+                  parsePreciseJSON,
+                ) as unknown as APIDefinition,
+              }
+            : {}),
+          ...(opts.validation !== undefined
+            ? { validation: parseJsonObject(opts.validation, "--validation", parsePreciseJSON) }
             : {}),
           expectedUpdateTime: opts.expectedUpdateTime,
         }),
@@ -1469,6 +1563,20 @@ export function vegaCommand(): Command {
     READ: ["index-capabilities"],
     RUN: ["sql"],
   });
+
+  guide(
+    resource,
+    `API RESOURCES
+  Create with --category api --api-definition <json> --schema-definition <json>.
+  API operations are read-only and require a compatible Professional backend.
+  Create and definition/schema edits perform a real upstream validation call before save;
+  --validation supplies temporary filter_condition/paging and is never stored.
+  Query using --paging null for an unpaged resource, or --paging '{}' to use resource
+  defaults. Use --precise-numbers for lossless decimal filter input and response output.
+  Destinations and credentials belong to saved Catalog/Resource definitions.
+  Metadata-only updates omit schema and API definitions; submitted definitions replace them.
+  `,
+  );
 
   groupChildren(resource, {
     READ: ["list", "get", "document-get"],

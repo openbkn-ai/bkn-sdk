@@ -9,7 +9,7 @@
 import { z } from "zod";
 import { DEFAULT_LIST_LIMIT, type RequestContext } from "../types.js";
 import { HttpError, InputError } from "../utils/errors.js";
-import { parseBigIntJSON } from "../utils/json-bigint.js";
+import { parseBigIntJSON, parsePreciseJSON } from "../utils/json-bigint.js";
 import { request } from "./http.js";
 import {
   ListResourcesResponse,
@@ -578,11 +578,13 @@ export async function listCatalogs(
 export async function getCatalog(
   ctx: RequestContext,
   id: string | string[],
+  opts: { preciseNumbers?: boolean } = {},
 ): Promise<BatchCatalogsResponse> {
   const ids = Array.isArray(id) ? id : [id];
   const result = await request<unknown>(
     ctx,
     `${VEGA_BASE}/catalogs/${ids.map(encodeURIComponent).join(",")}`,
+    { responseParser: opts.preciseNumbers ? parsePreciseJSON : undefined },
   );
   return BatchCatalogsResponse.parse(result);
 }
@@ -631,6 +633,13 @@ export interface UpdateCatalogRequest {
   /** Optimistic-lock version; defaults to the `update_time` read just before the PUT. */
   expectedUpdateTime?: number;
 }
+
+/** A config parsed by the caller can depend on the connector type resolved by the update. */
+export type CatalogUpdateInput = Omit<UpdateCatalogRequest, "connectorConfig"> & {
+  connectorConfig?:
+    | UpdateCatalogRequest["connectorConfig"]
+    | ((connectorType: string) => Record<string, unknown>);
+};
 
 /** Create a Vega catalog (data source). Returns the created catalog (with its id). */
 export async function createCatalog(
@@ -685,7 +694,7 @@ export async function createCatalog(
 export async function updateCatalog(
   ctx: RequestContext,
   id: string,
-  req: UpdateCatalogRequest,
+  req: CatalogUpdateInput,
   opts: CatalogWriteOptions = {},
 ): Promise<unknown> {
   const current = firstCatalog(await getCatalog(ctx, id));
@@ -698,6 +707,10 @@ export async function updateCatalog(
   const tags = req.tags ?? current.tags;
   const description = req.description ?? current.description;
   const connectorType = req.connectorType ?? current.connector_type;
+  const connectorConfig =
+    typeof req.connectorConfig === "function"
+      ? req.connectorConfig(connectorType)
+      : req.connectorConfig;
   return request(ctx, `${VEGA_BASE}/catalogs/${encodeURIComponent(id)}`, {
     method: "PUT",
     query: {
@@ -709,7 +722,7 @@ export async function updateCatalog(
       // A logical catalog carries an empty connector type; keep it as read.
       connector_type: connectorType,
       enabled: req.enabled ?? current.enabled,
-      ...(req.connectorConfig !== undefined ? { connector_config: req.connectorConfig } : {}),
+      ...(connectorConfig !== undefined ? { connector_config: connectorConfig } : {}),
       ...(tags !== undefined ? { tags } : {}),
       ...(description !== undefined ? { description } : {}),
       expected_update_time: expectedUpdateTime,

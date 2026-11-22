@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { tlsFetch } from "../../src/api/tls.js";
 import { DryRunSignal, enableDryRun, previewRequest } from "../../src/utils/dry-run.js";
+import { Decimal, stringifyBigIntJSON } from "../../src/utils/json-bigint.js";
 
 function preview(input: Parameters<typeof previewRequest>[0]) {
   enableDryRun();
@@ -14,6 +15,19 @@ function preview(input: Parameters<typeof previewRequest>[0]) {
 }
 
 describe("--dry-run preview", () => {
+  it("keeps exact decimal and bigint literals while hiding Resource secrets", () => {
+    const req = preview({
+      method: "POST",
+      url: "https://x/resources",
+      body: '{"api_definition":{"variables":{"secret":{"value":"example-private","sensitive":true},"public":{"value":1234567890123456.78,"sensitive":false}}},"validation":{"filter_condition":{"value":9007199254740993}}}',
+    });
+    const wire = stringifyBigIntJSON(req);
+    expect(wire).not.toContain("example-private");
+    expect(wire).toContain("1234567890123456.78");
+    expect(wire).toContain("9007199254740993");
+    const body = req.body as { api_definition: { variables: { public: { value: unknown } } } };
+    expect(body.api_definition.variables.public.value).toBeInstanceOf(Decimal);
+  });
   it("redacts sensitive wrapper values independently of names without changing metadata or input", () => {
     const config = {
       options: { timeout_seconds: 30, max_response_mib: 10 },
@@ -176,10 +190,10 @@ describe("--dry-run preview", () => {
     },
   );
 
-  it("keeps Resource computed variables and unrelated business objects independent of Catalog wrappers", () => {
+  it("protects Resource variable wrappers while leaving unrelated business objects independent", () => {
     const resourceVariables = {
-      where_clause: { type: "string", serialize: "sql", value: "{{ __filter_condition }}" },
-      literal: { type: "object", value: { optional: null, values: [null, false] } },
+      public: { value: { optional: null, values: [null, false] }, sensitive: false },
+      private: { value: "private-resource-value", sensitive: true },
     };
     const businessVariables = {
       arbitrary: { value: "business-data", sensitive: true },
@@ -208,9 +222,16 @@ describe("--dry-run preview", () => {
         },
         options: { arbitrary: "database-option", password: "<redacted>" },
       },
-      api_definition: { variables: resourceVariables },
+      api_definition: {
+        variables: {
+          public: resourceVariables.public,
+          private: { value: "<redacted>", sensitive: true },
+        },
+      },
       result: { variables: businessVariables },
     });
+    expect(JSON.stringify(req)).not.toContain("private-resource-value");
+    expect(resourceVariables.private.value).toBe("private-resource-value");
   });
 
   it("still redacts credential-shaped fields inside public wrapped JSON values", () => {

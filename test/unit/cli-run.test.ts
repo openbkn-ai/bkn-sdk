@@ -4,19 +4,8 @@ import pkg from "../../package.json" with { type: "json" };
 import { runCli } from "../../src/cli-run.js";
 import { writeVersionCheckCache } from "../../src/config/store.js";
 
-const ARGS = [
-  "node",
-  "openbkn",
-  "--base-url",
-  "https://demo.example.com",
-  "--token",
-  "t",
-  "--json",
-  "vega",
-  "resource",
-  "build",
-  "r-1",
-];
+const BASE = ["node", "openbkn", "--base-url", "https://demo.example.com", "--token", "t"];
+const ARGS = [...BASE, "--json", "vega", "resource", "build", "r-1"];
 
 beforeEach(() => {
   writeVersionCheckCache("https://demo.example.com", {
@@ -103,5 +92,38 @@ describe("runCli", () => {
 
     expect(pathsOf(fetch)).not.toContain("/api/bkn-backend/v1/health");
     expect(pathsOf(fetch)).not.toHaveLength(0);
+  });
+
+  it("prints exact bigint filters in a CLI dry run without sending HTTP requests", async () => {
+    // Dry-run mode is process-wide, so use a fresh module graph.
+    vi.resetModules();
+    const { runCli: freshRunCli } = await import("../../src/cli-run.js");
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const output = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    await expect(
+      freshRunCli([
+        ...BASE,
+        "--dry-run",
+        "vega",
+        "resource",
+        "query",
+        "r-1",
+        "--filter",
+        '{"field":"id","operation":"==","value":9007199254740993}',
+      ]),
+    ).resolves.toBeUndefined();
+
+    expect(output).toHaveBeenCalledOnce();
+    const preview = String(output.mock.calls[0]?.[0]);
+    expect(preview).toContain('"value": 9007199254740993');
+    expect(JSON.parse(preview)).toMatchObject({
+      dryRun: true,
+      url: "https://demo.example.com/api/vega-backend/v1/resources/r-1/data",
+      headers: { authorization: "<redacted>" },
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(process.exitCode).toBeUndefined();
   });
 });

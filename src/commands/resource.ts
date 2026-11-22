@@ -12,7 +12,7 @@ import {
 import { group, groupChildren } from "../help/grouped-help.js";
 import { DEFAULT_LIST_LIMIT, DEFAULT_QUERY_LIMIT } from "../types.js";
 import { InputError } from "../utils/errors.js";
-import { parseBigIntJSON } from "../utils/json-bigint.js";
+import { parseBigIntJSON, parsePreciseJSON } from "../utils/json-bigint.js";
 import { printJson } from "../utils/output.js";
 import { clientFrom, csv, oneOf, outputOptions } from "./_shared.js";
 
@@ -112,6 +112,11 @@ export function addResourceQueryOptions(cmd: Command) {
     .option("--keep-alive-sec <s>", "cursor keep-alive in seconds (60–3600)", keepAliveSec)
     .option("--cursor <cursor>", "opaque cursor returned by the previous page")
     .option("--need-total", "include total count")
+    .option(
+      "--paging <json>",
+      "explicit single-page input; null omits paging, {} uses resource defaults",
+    )
+    .option("--precise-numbers", "decode and return exact decimal JSON numbers")
     .option("--filter <json>", "Vega filter_condition JSON object")
     .option("--sort <field:dir,...>", "sort fields, e.g. create_time:desc,id:asc")
     .option("--output-fields <f1,f2>", "comma-separated fields to return")
@@ -123,10 +128,10 @@ export function addResourceQueryOptions(cmd: Command) {
     .option("--ignore-local-index", "read a table's source even when a local index is available");
 }
 
-function parseFilter(raw: string): Record<string, unknown> {
+function parseFilter(raw: string, precise = false): Record<string, unknown> {
   let parsed: unknown;
   try {
-    parsed = parseBigIntJSON(raw);
+    parsed = (precise ? parsePreciseJSON : parseBigIntJSON)(raw);
   } catch {
     throw new InputError("--filter must be valid JSON");
   }
@@ -154,6 +159,39 @@ export function resourceQueryOptionsFrom(
   opts: Record<string, unknown>,
   defaultLimit: number,
 ): QueryResourceOptions {
+  if (opts.paging !== undefined) {
+    if (
+      [opts.limit, opts.offset, opts.pagingMode, opts.keepAliveSec, opts.cursor].some(
+        (value) => value !== undefined,
+      )
+    ) {
+      throw new InputError("--paging cannot be combined with legacy paging flags");
+    }
+    let paging: unknown;
+    try {
+      paging = parseBigIntJSON(opts.paging as string);
+    } catch {
+      throw new InputError("--paging must be valid JSON");
+    }
+    if (paging !== null && (typeof paging !== "object" || Array.isArray(paging)))
+      throw new InputError("--paging must be an object or null");
+    return {
+      paging: paging as QueryResourceOptions["paging"],
+      preciseNumbers: opts.preciseNumbers === true,
+      ...(opts.needTotal ? { needTotal: true } : {}),
+      ...(opts.filter !== undefined
+        ? { filterCondition: parseFilter(opts.filter as string, opts.preciseNumbers === true) }
+        : {}),
+      ...(opts.sort !== undefined ? { sort: parseSort(opts.sort as string) } : {}),
+      ...(opts.outputFields !== undefined
+        ? { outputFields: csv(opts.outputFields as string) ?? [] }
+        : {}),
+      ...(opts.binaryMode !== undefined
+        ? { binaryMode: opts.binaryMode as QueryResourceOptions["binaryMode"] }
+        : {}),
+      ...(opts.ignoreLocalIndex ? { ignoreLocalIndex: true } : {}),
+    };
+  }
   if (opts.cursor) {
     // A continuation carries only the cursor; anything else would be dropped.
     const initialOnly = [
@@ -174,16 +212,20 @@ export function resourceQueryOptionsFrom(
     }
     return {
       cursor: opts.cursor as string,
+      preciseNumbers: opts.preciseNumbers === true,
       ...(opts.needTotal ? { needTotal: true } : {}),
     };
   }
   return {
+    preciseNumbers: opts.preciseNumbers === true,
     limit: (opts.limit as number | undefined) ?? defaultLimit,
     offset: (opts.offset as number | undefined) ?? 0,
     pagingMode: opts.pagingMode as QueryResourceOptions["pagingMode"],
     keepAliveSec: opts.keepAliveSec as number | undefined,
     needTotal: opts.needTotal ? true : undefined,
-    ...(opts.filter !== undefined ? { filterCondition: parseFilter(opts.filter as string) } : {}),
+    ...(opts.filter !== undefined
+      ? { filterCondition: parseFilter(opts.filter as string, opts.preciseNumbers === true) }
+      : {}),
     ...(opts.sort !== undefined ? { sort: parseSort(opts.sort as string) } : {}),
     ...(opts.outputFields !== undefined
       ? { outputFields: csv(opts.outputFields as string) ?? [] }
@@ -227,8 +269,12 @@ export function resourceCommand(): Command {
   cmd
     .command("get <id>")
     .description("Get resource details")
-    .action(async (id: string, _opts, cmd: Command) => {
-      printJson(await clientFrom(cmd).resource.get(id), outputOptions(cmd));
+    .option("--precise-numbers", "retain exact decimal schema and definition numbers")
+    .action(async (id: string, opts, cmd: Command) => {
+      printJson(
+        await clientFrom(cmd).resource.get(id, { preciseNumbers: opts.preciseNumbers === true }),
+        outputOptions(cmd),
+      );
     });
 
   for (const action of ["enable", "disable"] as const) {

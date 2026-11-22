@@ -38,7 +38,7 @@ function mockFetch(body: unknown = {}): ReturnType<typeof vi.fn> {
 const cliBase = ["--base-url", "https://demo.example.com", "--token", "t", "vega"];
 
 /** GET answers with one catalog; any write answers `{}`. */
-function mockCatalogReadThenWrite(): ReturnType<typeof vi.fn> {
+function mockCatalogReadThenWrite(connectorType = "mysql"): ReturnType<typeof vi.fn> {
   const fetchMock = vi.fn(async (_url: string, init?: RequestInit) =>
     (init?.method ?? "GET") === "GET"
       ? new Response(
@@ -49,7 +49,7 @@ function mockCatalogReadThenWrite(): ReturnType<typeof vi.fn> {
                 name: "orders",
                 type: "physical",
                 enabled: true,
-                connector_type: "mysql",
+                connector_type: connectorType,
                 tags: ["prod"],
                 description: "orders db",
                 update_time: 1720000000999,
@@ -560,12 +560,14 @@ describe("vega resource writes", () => {
         "--schema-definition",
         '[{"name":"title","type":"text"}]',
         "--index-config",
-        '{"default_keyword_ignore_above":512}',
+        '{"default_keyword_ignore_above":512.0}',
       ],
       { from: "user" },
     );
 
-    const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
+    const rawBody = fetchMock.mock.calls[0]?.[1]?.body as string;
+    expect(rawBody).toContain('"index_config":{"default_keyword_ignore_above":512}');
+    const body = JSON.parse(rawBody);
     expect(body).toMatchObject({
       catalog_id: "c-1",
       name: "documents",
@@ -608,13 +610,15 @@ describe("vega resource writes", () => {
         "update",
         "r-1",
         "--index-config",
-        '{"default_keyword_ignore_above":256}',
+        '{"default_keyword_ignore_above":256.0}',
       ],
       { from: "user" },
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    const body = JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string);
+    const rawBody = fetchMock.mock.calls[1]?.[1]?.body as string;
+    expect(rawBody).toContain('"index_config":{"default_keyword_ignore_above":256}');
+    const body = JSON.parse(rawBody);
     expect(body.index_config).toEqual({ default_keyword_ignore_above: 256 });
     expect(body.expected_update_time).toBe(2);
   });
@@ -873,6 +877,32 @@ describe("vega optimistic updates", () => {
       cli().parseAsync([...cliBase, "catalog", "update", "c-1"], { from: "user" }),
     ).rejects.toThrow(/at least one catalog field/);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("uses the saved HTTP connector type for a lossless config update", async () => {
+    const fetchMock = mockCatalogReadThenWrite("http");
+    suppressOutput();
+    await cli().parseAsync(
+      [
+        ...cliBase,
+        "catalog",
+        "update",
+        "c-1",
+        "--connector-config",
+        '{"base_url":"https://example.com","variables":{"rate":{"value":0.1234567890123456789}},"login_request":{"request":{"method":"POST","path":"/login","body":{"value":{"amount":1234567890123456.78}}},"response":{"content_type":"application/json","statuses":{"200":{"description":"Success","schema":true}}},"success_rule":{"http_status":[200.0]}}}',
+      ],
+      { from: "user" },
+    );
+
+    expect(fetchMock.mock.calls.map(([, init]) => init?.method ?? "GET")).toEqual(["GET", "PUT"]);
+    const rawBody = fetchMock.mock.calls[1]?.[1]?.body as string;
+    expect(rawBody).toContain('"value":0.1234567890123456789');
+    expect(rawBody).toContain('"amount":1234567890123456.78');
+    expect(rawBody).toContain('"http_status":[200]');
+    expect(JSON.parse(rawBody)).toMatchObject({
+      connector_type: "http",
+      expected_update_time: 1720000000999,
+    });
   });
 
   it("forwards the health-check schedule update version", async () => {
@@ -1656,6 +1686,38 @@ describe("vega flag validation against the contract enums", () => {
 });
 
 describe("vega catalog create", () => {
+  it.each([
+    ["mysql", '{"port":3306.0}', ['"port":3306}']],
+    [
+      "http",
+      '{"base_url":"https://example.com","variables":{"rate":{"value":0.1234567890123456789}},"options":{"timeout_seconds":7.0,"max_response_mib":1e1}}',
+      ['"value":0.1234567890123456789}', '"options":{"timeout_seconds":7,"max_response_mib":10}'],
+    ],
+  ])(
+    "serializes %s connector configuration with the expected number precision",
+    async (type, config, expected) => {
+      const fetchMock = mockFetch({ id: "c-1" });
+      suppressOutput();
+      await cli().parseAsync(
+        [
+          ...cliBase,
+          "catalog",
+          "create",
+          "--name",
+          "demo",
+          "--connector-type",
+          type,
+          "--connector-config",
+          config,
+        ],
+        { from: "user" },
+      );
+      for (const fragment of expected) {
+        expect(fetchMock.mock.calls[0]?.[1]?.body).toContain(fragment);
+      }
+    },
+  );
+
   it("creates a built-in catalog without connector fields and sends enabled", async () => {
     const fetchMock = mockFetch({ id: "c-1" });
     suppressOutput();

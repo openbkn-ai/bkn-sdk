@@ -34,7 +34,12 @@ export {
 // that left a knowledge network behind. Documented as part of what they throw,
 // so it has to be nameable from the package, not just inside it.
 export type { PartialKnMarked } from "./resources/bkn-create.js";
-export { parseBigIntJSON, stringifyBigIntJSON } from "./utils/json-bigint.js";
+export {
+  Decimal,
+  parseBigIntJSON,
+  parsePreciseJSON,
+  stringifyBigIntJSON,
+} from "./utils/json-bigint.js";
 // A long-lived embedder opens managed interactions the same way the CLI does,
 // and needs the same way to hand them back.
 export { releaseLifecycleSessions } from "./api/lifecycle.js";
@@ -336,3 +341,20 @@ export type {
   EvalQuery,
   EvalRequestOptions,
 } from "./api/evals.js";
+
+export type {
+  APICatalogConfig,
+  APIDefinition,
+  APICondition,
+  APIValidationInput,
+  APIPagingRule,
+  APIJSONValue,
+  CatalogVariable,
+  ExactNumber,
+  HTTPConstructionNode,
+  HTTPQueryParameter,
+  HTTPRequestDefinition,
+  HTTPResponseDefinition,
+  HTTPOperationDefinition,
+  JSONSchema,
+} from "./api/api-definition.js";

@@ -13,6 +13,8 @@
  * never turns it on.
  */
 
+import { Decimal, parsePreciseJSON } from "./json-bigint.js";
+
 let enabled = false;
 let suppressed = 0;
 
@@ -123,6 +125,7 @@ function redactCatalogVariables(variables: unknown): unknown {
  * pastes into a terminal, an issue, or a log.
  */
 function redactBody(body: unknown, catalogConfig = false): unknown {
+  if (body instanceof Decimal) return body;
   if (Array.isArray(body)) return body.map((value) => redactBody(value));
   if (!body || typeof body !== "object") return body;
   const source = body as Record<string, unknown>;
@@ -130,7 +133,7 @@ function redactBody(body: unknown, catalogConfig = false): unknown {
   for (const [k, v] of Object.entries(source)) {
     if (k === "variables" && catalogConfig) {
       out[k] = redactCatalogVariables(v);
-    } else if (k === "connector_config") {
+    } else if (k === "connector_config" || k === "api_definition") {
       out[k] = v === null ? null : isRecord(v) ? redactBody(v, true) : "<redacted>";
     } else {
       out[k] = SECRET_FIELD.test(k) ? "<redacted>" : redactBody(v);
@@ -153,7 +156,7 @@ export function previewRequest(input: {
   let body = input.body;
   if (typeof body === "string") {
     try {
-      body = JSON.parse(body);
+      body = parsePreciseJSON(body);
     } catch {
       // A multipart or plain-text body stays as it is.
     }
