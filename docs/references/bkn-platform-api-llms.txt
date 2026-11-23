@@ -25,13 +25,19 @@ Index build — BuildTask (current/target model)
 - Create: POST /build-tasks   body = CreateBuildTaskRequest
     resource_id      (required)  which resource
     mode             (required)  "batch" (streaming is temporarily unsupported)
-    execute_type     (optional)  "incremental" | "full"
+    execute_type     (optional)  "incremental" | "full" | "keys"
+    keys             (keys only) array of complete resource primary-key objects
+- Incremental requires a valid resource baseline established by a full build
+  with the current incremental fields.
 - Index configuration: PUT /resources/{id} updates two Resource fields:
   index_config (primary_key_fields; incremental_fields; default_embedding_model;
   default_fulltext_analyzer) and schema_definition (per-property vector feature
   config.embedding_model as a small-model ID; fulltext feature config.analyzer).
   The BuildTask snapshots this Resource configuration when created.
 - Status/progress: GET /build-tasks/{id}  → status + synced_count
+  Key task details also return the stored, deduplicated keys. Ordinary task
+  details and task list entries omit keys. The SDK preserves unsafe integer
+  keys as bigint; CLI JSON prints the exact integer literals.
 - Config persists on the Resource; BuildTask retains the creation-time snapshot.
 - Resource property.feature_type ∈ {keyword, fulltext, vector} declares searchability (schema layer).
 - Resource.index_name is filled back by the build task after the index is built.

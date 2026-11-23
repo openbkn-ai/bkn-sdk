@@ -223,6 +223,8 @@ export type { SkillChild, SkillDirChild, SkillFileChild } from "./utils/skill-tr
 export type {
   BuildMode,
   BuildTask,
+  BuildTaskExecuteType,
+  BuildTaskKeys,
   BuildTaskSort,
   BuildTaskStatus,
   BuildTaskSummary,

@@ -26,6 +26,7 @@ import {
   BuildMode,
   type BuildTask,
   BuildTaskExecuteType,
+  BuildTaskKeys,
   BuildTaskSort,
   BuildTaskStatus,
   type CatalogHealthCheckScheduleConfig,
@@ -182,6 +183,19 @@ const parseJsonArray = (value: string, flag: string): Record<string, unknown>[] 
   }
   return parsed as Record<string, unknown>[];
 };
+
+function parseBuildTaskKeys(value?: string): BuildTaskKeys {
+  if (value === undefined) {
+    throw new InputError("--keys is required for --execute-type keys");
+  }
+  const parsed = BuildTaskKeys.safeParse(parseJsonArray(value, "--keys"));
+  if (!parsed.success) {
+    throw new InputError(
+      "--keys must be a non-empty array of primary-key objects with string or integer values",
+    );
+  }
+  return parsed.data;
+}
 
 function parseResourceProperties(value: string, update: true): ResourcePropertyUpdate[];
 function parseResourceProperties(value: string): ResourceProperty[];
@@ -1432,7 +1446,8 @@ export function vegaCommand(): Command {
   resource
     .command("build <resource-id>")
     .description("Create a batch BuildTask from the resource's saved index configuration")
-    .option("--execute-type <type>", "batch execution type: incremental | full")
+    .option("--execute-type <type>", "batch execution type: incremental | full | keys")
+    .option("--keys <json>", "array of complete primary-key objects; required for keys builds")
     .option(
       "--wait",
       "wait for the build to end, with progress on stderr; exits non-zero unless it completes",
@@ -1445,11 +1460,15 @@ export function vegaCommand(): Command {
     )
     .action(async (resourceId: string, _opts, cmd: Command) => {
       const o = cmd.optsWithGlobals();
-      const req = {
-        resource_id: resourceId,
-        mode: "batch" as const,
-        execute_type: buildTaskExecuteType(o.executeType),
-      };
+      const executeType = buildTaskExecuteType(o.executeType);
+      const base = { resource_id: resourceId, mode: "batch" as const };
+      const req =
+        executeType === "keys"
+          ? { ...base, execute_type: executeType, keys: parseBuildTaskKeys(o.keys) }
+          : { ...base, execute_type: executeType };
+      if (executeType !== "keys" && o.keys !== undefined) {
+        throw new InputError("--keys requires --execute-type keys");
+      }
       if (!o.wait) {
         printJson(await clientFrom(cmd).vega.build(req), outputOptions(cmd));
         return;
@@ -1659,6 +1678,9 @@ BUILDING AN INDEX
   before configuring fulltext features; it changes no configuration and starts no build.
   resource update <resource-id> saves schema_definition and index_config. Then resource build
   <resource-id> creates a BuildTask; build-task get / list follow it.
+  Incremental builds need a baseline from a completed full build with the current incremental fields.
+  To reconcile individual records against the source, use resource build <resource-id>
+  --execute-type keys --keys '[{"id":1}]'. It needs a published writable index.
   --wait (on resource build, or build-task get for an existing task) shows progress on stderr
   and exits non-zero unless the task completes. --timeout 0 waits without a limit.`,
   );

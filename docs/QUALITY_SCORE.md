@@ -114,6 +114,9 @@ Update this table as each signal changes (e.g. live-parity count as commands are
 
 - `test/unit/vega.test.ts` and `vega-command.test.ts` verify SQL and DSL requests using only `query_format`, initial paging and opaque cursor continuation. SQL uses the shared MySQL SELECT subset; the resource Catalog selects its output dialect. The removed dialect CLI option is rejected before HTTP.
 
+- `test/unit/vega.test.ts` and `vega-command.test.ts` verify that key-scoped builds preserve primary-key field names such as `__proto__` and exact integer values in SDK and CLI submissions and SDK task details.
+  `test/unit/dry-run.test.ts` verifies the same fields and integer precision in the request preview, including credential redaction and zero network calls.
+
 - `test/unit/vega.test.ts` checks Catalog deletion `will_delete` task-record totals,
   empty catalogs, and rejection of cancellation-only responses.
 

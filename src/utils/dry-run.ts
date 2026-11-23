@@ -129,17 +129,20 @@ function redactBody(body: unknown, catalogConfig = false): unknown {
   if (Array.isArray(body)) return body.map((value) => redactBody(value));
   if (!body || typeof body !== "object") return body;
   const source = body as Record<string, unknown>;
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(source)) {
-    if (k === "variables" && catalogConfig) {
-      out[k] = redactCatalogVariables(v);
-    } else if (k === "connector_config" || k === "api_definition") {
-      out[k] = v === null ? null : isRecord(v) ? redactBody(v, true) : "<redacted>";
-    } else {
-      out[k] = SECRET_FIELD.test(k) ? "<redacted>" : redactBody(v);
-    }
-  }
-  return out;
+  return Object.fromEntries(
+    Object.entries(source).map(([key, value]) => {
+      if (key === "variables" && catalogConfig) {
+        return [key, redactCatalogVariables(value)];
+      }
+      if (key === "connector_config" || key === "api_definition") {
+        return [
+          key,
+          value === null ? null : isRecord(value) ? redactBody(value, true) : "<redacted>",
+        ];
+      }
+      return [key, SECRET_FIELD.test(key) ? "<redacted>" : redactBody(value)];
+    }),
+  );
 }
 
 /**

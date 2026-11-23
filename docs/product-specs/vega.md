@@ -48,19 +48,30 @@ snapshots the already-saved configuration.
 | ----- | -------- | -------- | ------- |
 | `resource_id` | ✅ | `<resource-id>` (positional) | Which resource to build |
 | `mode` | ✅ | fixed to `batch` | Build mode; streaming is not currently supported |
-| `execute_type` | — | `--execute-type incremental\|full` | Batch execution type; defaults to `full` |
+| `execute_type` | — | `--execute-type incremental\|full\|keys` | Batch execution type; defaults to `full` |
+| `keys` | Required for `keys` | `--keys '<json>'` | Nonempty array of objects matching the resource's complete `primary_key_fields`; only for `execute_type=keys` |
+
+A `keys` build reconciles selected rows with the source in the published,
+writable index without advancing scan cursors. It requires a backend that
+supports `execute_type=keys`. Vega validates key names and values against
+the resource schema. For integer primary keys outside JavaScript's safe
+range, use `bigint` in the SDK. The CLI preserves large integer literals
+when parsing `--keys`. To use `incremental`, first finish a full build with the
+current incremental fields so the resource has a valid baseline. An empty
+baseline is rejected with `VegaBackend.BuildTask.IncrementalBaselineUnavailable`.
 
 CLI:
 
 - `openbkn vega resource update <resource-id> --schema-definition '<json>' --index-config '<json>'` — replace Resource schema/features and index configuration through the canonical Resource update API. Keyword defaults use `index_config.default_keyword_ignore_above` (1–8191, default 256).
 - `openbkn vega resource build <resource-id> [--execute-type incremental|full] [--wait] [--timeout <s>]` — create a batch BuildTask without changing Resource configuration. BuildTask accepts table Resources only.
-- `openbkn vega build-task get <task-id> [--wait] [--timeout <s>]` — progress: `status` + `synced_count`; a document is counted only after all required index processing, including vectorization, succeeds.
+- `openbkn vega resource build <resource-id> --execute-type keys --keys '[{"tenant_id":"warehouse","order_id":42}]'` — reconcile specific keys with the source. Add `--wait` to wait for the task.
+- `openbkn vega build-task get <task-id> [--wait] [--timeout <s>]` — read task progress and, for a key task, the stored `keys`. With `--json`, large integer keys print as exact JSON number literals. A document is counted only after all required index processing, including vectorization, succeeds.
 - `--wait` on either build or get reports progress on stderr and exits non-zero when the task fails, stops, or the wait times out. `--timeout 0` waits without a polling deadline; status requests retain their HTTP timeout. A timed-out task keeps running on the server.
 - `openbkn vega build-task list --status pending,running` — filter by one or
   more statuses; the SDK sends repeated `status` query parameters. Use
   `--sort create_time|start_time|finish_time|last_progress_time` and
   `--direction asc|desc` for ordering.
-- `openbkn vega build-task start <task-id> [--reset]` — `--reset` restarts only a full task; incremental tasks reject it. `build-task stop|delete` manage the remaining lifecycle.
+- `openbkn vega build-task start <task-id> [--reset]` — `--reset` is only for full tasks. Restarting a key task re-reads the same requested keys from the source. `build-task stop|delete` manage the remaining lifecycle.
 
 **Field searchability is separate** — declared on the resource property schema via
 `feature_type` (`keyword` | `fulltext` | `vector`). The Resource configuration
@@ -68,7 +79,7 @@ determines what is indexed; the BuildTask uses its snapshot.
 
 ## SDK touchpoints
 
-- `resources/vega.ts` over `api/vega.ts`. BuildTask create/status map to `POST /build-tasks` and `GET /build-tasks/{id}`. The create response contains only `id`; obtain task state and its persisted `execute_type` through the status endpoint.
+- `resources/vega.ts` over `api/vega.ts`. BuildTask create/status map to `POST /build-tasks` and `GET /build-tasks/{id}`. The create response contains only `id`. Status returns task state, its persisted `execute_type`, and the stored, deduplicated `keys` for a key task. The SDK reads integer keys as `number` within the safe range and `bigint` outside it. Other task types and older backends can omit `keys`. The task list does not return `keys`.
 - `vega.testCatalogConnectionConfig(request)` calls `POST /catalogs/test-connection`; it never persists a Catalog or health state.
 - `vega.testCatalogConnection(id)` calls the persisted-Catalog endpoint. Both connection-test methods return `{ success, message? }`; `success: false` is a completed probe, not an HTTP failure.
 - `vega.createCatalog(request, { allowUnhealthy })` accepts an optional `healthCheckSchedule`, always sends `enabled`, and for `builtIn: true` (`built_in`) omits `connector_type`/`connector_config` (rejecting them client-side). `vega.updateCatalog(id, patch, { allowUnhealthy })` reads the Catalog, overlays the patch, and issues the backend's full PUT with the path ID injected; `expectedUpdateTime` defaults to the read `update_time`. `connector_config` is sent only when the patch carries it.
@@ -108,7 +119,7 @@ determines what is indexed; the BuildTask uses its snapshot.
 - Pending or running discovery/semantic tasks cannot be deleted. Batch task deletion is transactional and supports `ignoreMissing`; dataset document deletion by ID is best-effort instead.
 - ResourceData write/delete/single-document operations apply only to `category=dataset`. Delete-by-filter requires a non-empty selector or Vega filter condition; the CLI requires exactly one of `--filter` and `--selector`.
 - Custom health-check Cron expressions must not run more frequently than hourly; the backend remains the authority for validating the expression.
-- Build is **not** freely re-runnable — it kicks a task and returns a `task-id`; never auto-retry (the transport resends only when the connection was never established — [RELIABILITY](../RELIABILITY.md#retries)), surface the id through `build-task get`.
+- Each build submission can create a separate task. Repeating a `keys` build reconciles the selected keys again. The transport retries writes only when the connection was never made; inspect task state through `build-task get`. See [RELIABILITY](../RELIABILITY.md#retries).
 - BuildTask statuses are `pending`, `running`, `stopping`, `stopped`,
   `completed`, `failed`, and `cancelled`. Start accepts only `stopped` or
   `failed`; stop accepts only `pending` or `running`. Waits end on `completed`,

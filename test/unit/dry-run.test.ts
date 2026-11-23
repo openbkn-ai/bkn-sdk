@@ -291,6 +291,31 @@ describe("--dry-run preview", () => {
     }
   });
 
+  it("previews complete Vega primary keys with exact integers and redacted credentials", async () => {
+    enableDryRun();
+    const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("must not send"));
+    try {
+      const request = await tlsFetch(false, "https://x/api/vega-backend/v1/build-tasks", {
+        method: "POST",
+        headers: { authorization: "Bearer example-token" },
+        body: '{"resource_id":"r-1","mode":"batch","execute_type":"keys","keys":[{"tenant_id":"north","__proto__":18446744073709551615,"password":"example-private"}]}',
+      }).catch((error: unknown) => {
+        if (!(error instanceof DryRunSignal)) throw error;
+        return error.request;
+      });
+      const wire = stringifyBigIntJSON(request);
+      expect(wire).toContain(
+        '"keys":[{"tenant_id":"north","__proto__":18446744073709551615,"password":"<redacted>"}]',
+      );
+      expect(wire).toContain('"authorization":"<redacted>"');
+      expect(wire).not.toContain("example-token");
+      expect(wire).not.toContain("example-private");
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      fetch.mockRestore();
+    }
+  });
+
   it("redacts the header that identifies the caller", () => {
     const req = preview({
       method: "GET",
