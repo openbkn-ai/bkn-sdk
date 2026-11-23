@@ -22,7 +22,7 @@ const VEGA_BASE = "/api/vega-backend/v1";
 export const BuildMode = z.enum(["batch", "streaming"]);
 export type BuildMode = z.infer<typeof BuildMode>;
 
-export const BuildTaskExecuteType = z.enum(["incremental", "full"]);
+export const BuildTaskExecuteType = z.enum(["incremental", "full", "keys"]);
 export type BuildTaskExecuteType = z.infer<typeof BuildTaskExecuteType>;
 
 export const BuildTaskStatus = z.enum([
@@ -306,12 +306,45 @@ export type DeleteCatalogResult<T extends DeleteCatalogOptions | undefined> = T 
       ? undefined
       : CatalogDeletionImpact | undefined;
 
-/** POST /build-tasks body. Streaming builds are not currently supported. */
-export const CreateBuildTaskRequest = z.object({
+const BuildTaskRequestBase = z.object({
   resource_id: z.string().min(1),
   mode: z.literal("batch"),
-  execute_type: BuildTaskExecuteType.optional(),
 });
+
+// Vega checks each key against the resource's configured primary-key fields.
+// Numbers outside JavaScript's safe integer range must be passed as bigint.
+const BuildTaskKey = z
+  .preprocess(
+    (key) =>
+      z.getParsedType(key) === z.ZodParsedType.object
+        ? Object.entries(key as Record<string, unknown>)
+        : undefined,
+    z
+      .array(
+        z.tuple([
+          z.string().min(1),
+          z.union([z.string().min(1), z.number().int().safe(), z.bigint()]),
+        ]),
+      )
+      .min(1, "primary key must not be empty"),
+  )
+  // Preserve names such as "__proto__" as own data properties.
+  .transform((entries) => Object.fromEntries(entries));
+
+export const BuildTaskKeys = z.array(BuildTaskKey).min(1);
+export type BuildTaskKeys = z.infer<typeof BuildTaskKeys>;
+
+/** POST /build-tasks body. Streaming builds are not currently supported. */
+export const CreateBuildTaskRequest = z.union([
+  BuildTaskRequestBase.extend({
+    execute_type: BuildTaskExecuteType.exclude(["keys"]).optional(),
+    keys: z.never().optional(),
+  }),
+  BuildTaskRequestBase.extend({
+    execute_type: z.literal("keys"),
+    keys: BuildTaskKeys,
+  }),
+]);
 export type CreateBuildTaskRequest = z.infer<typeof CreateBuildTaskRequest>;
 
 // Lenient: create vs status responses carry different subsets (the create
@@ -328,6 +361,7 @@ export const BuildTask = z
     mode: z.string().optional(),
     status: z.string().optional(),
     execute_type: z.string().optional(),
+    keys: BuildTaskKeys.optional(),
     index_name: z.string().optional(),
     total_count: z.number().optional(),
     synced_count: z.number().optional(),
@@ -394,12 +428,7 @@ export async function createBuildTask(
   ctx: RequestContext,
   req: CreateBuildTaskRequest,
 ): Promise<BuildTask> {
-  const p = CreateBuildTaskRequest.parse(req);
-  const body = {
-    resource_id: p.resource_id,
-    mode: p.mode,
-    ...(p.execute_type ? { execute_type: p.execute_type } : {}),
-  };
+  const body = CreateBuildTaskRequest.parse(req);
   const res = await request<unknown>(ctx, `${VEGA_BASE}/build-tasks`, { method: "POST", body });
   return BuildTask.parse(res);
 }
@@ -447,9 +476,24 @@ export async function listBuildTasks(
   return ListBuildTasksResponse.parse(res);
 }
 
-/** Fetch a BuildTask's progress/state. */
+function parseBuildTaskDetail(text: string): unknown {
+  const task = JSON.parse(text) as Record<string, unknown> | null;
+  if (task !== null && typeof task === "object" && Object.hasOwn(task, "keys")) {
+    // Preserve the existing numeric representation for task metadata.
+    task.keys = (parseBigIntJSON(text) as Record<string, unknown>).keys;
+  }
+  return task;
+}
+
+/** Fetch a BuildTask's progress/state, including saved keys for a key task. */
 export async function getBuildTask(ctx: RequestContext, taskId: string): Promise<BuildTask> {
-  const res = await request<unknown>(ctx, `${VEGA_BASE}/build-tasks/${encodeURIComponent(taskId)}`);
+  const res = await request<unknown>(
+    ctx,
+    `${VEGA_BASE}/build-tasks/${encodeURIComponent(taskId)}`,
+    {
+      responseParser: parseBuildTaskDetail,
+    },
+  );
   return BuildTask.parse(res);
 }
 

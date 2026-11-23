@@ -415,6 +415,69 @@ describe("createBuildTask", () => {
     expect(body).toEqual({ resource_id: "r-1", mode: "batch", execute_type: "full" });
   });
 
+  it("sends complete key objects with exact integer literals", async () => {
+    const f = mockFetch({ id: "t-1" });
+    await expect(
+      vega(ctx).build({
+        resource_id: "r-1",
+        mode: "batch",
+        execute_type: "keys",
+        keys: [{ tenant_id: "warehouse", order_id: 18446744073709551615n }],
+      }),
+    ).resolves.toEqual({ id: "t-1" });
+    const requestBody = firstCall(f)[1].body as string;
+    expect(parseBigIntJSON(requestBody)).toEqual({
+      resource_id: "r-1",
+      mode: "batch",
+      execute_type: "keys",
+      keys: [{ tenant_id: "warehouse", order_id: 18446744073709551615n }],
+    });
+    expect(requestBody).toContain('"order_id":18446744073709551615');
+  });
+
+  it.each([
+    { fields: [["__proto__", 42]], wire: '{"__proto__":42}' },
+    {
+      fields: [
+        ["tenant_id", "warehouse"],
+        ["__proto__", 18446744073709551615n],
+        ["constructor", 7],
+      ],
+      wire: '{"tenant_id":"warehouse","__proto__":18446744073709551615,"constructor":7}',
+    },
+  ] as const)(
+    "keeps all primary-key field names in the request: $wire",
+    async ({ fields, wire }) => {
+      const f = mockFetch({ id: "t-1" });
+      await vega(ctx).build({
+        resource_id: "r-1",
+        mode: "batch",
+        execute_type: "keys",
+        keys: [Object.fromEntries(fields)],
+      });
+      expect(firstCall(f)[1].body).toContain(`"keys":[${wire}]`);
+    },
+  );
+
+  it.each([
+    { execute_type: "keys" },
+    { execute_type: "keys", keys: [] },
+    { execute_type: "keys", keys: [{}] },
+    { execute_type: "keys", keys: [[["id", 1]]] },
+    { execute_type: "keys", keys: [{ id: 1.5 }] },
+    { execute_type: "keys", keys: [{ id: Number.MAX_SAFE_INTEGER + 1 }] },
+    { execute_type: "keys", keys: [{ id: true }] },
+    { execute_type: "keys", keys: [{ id: null }] },
+    { execute_type: "full", keys: [{ id: 1 }] },
+    { keys: [{ id: 1 }] },
+  ])("rejects an invalid key build before sending it: %j", async (options) => {
+    const f = mockFetch({ id: "t-1" });
+    await expect(
+      createBuildTask(ctx, { resource_id: "r-1", mode: "batch", ...options } as never),
+    ).rejects.toThrow();
+    expect(f).not.toHaveBeenCalled();
+  });
+
   it("rejects streaming tasks before making a request", async () => {
     const f = mockFetch({ id: "t-1" });
     await expect(
@@ -628,6 +691,35 @@ describe("createBuildTask", () => {
     });
     expectTypeOf(task.index_name).toEqualTypeOf<string | undefined>();
     expectTypeOf(task.failure_detail).toEqualTypeOf<string | undefined>();
+    expect(task.keys).toBeUndefined();
+  });
+
+  it("keeps precise primary keys in status responses without changing counter and time types", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            '{"id":"t-1","status":"completed","execute_type":"keys","keys":[{"tenant_id":"warehouse","__proto__":42},{"tenant_id":"warehouse","__proto__":18446744073709551615}],"total_count":2,"synced_count":2,"create_time":1720000000999,"last_progress_time":9007199254740993}',
+          ),
+      ),
+    );
+    const task = await vega(ctx).buildStatus("t-1");
+    expect(task.keys?.map(Object.entries)).toEqual([
+      [
+        ["tenant_id", "warehouse"],
+        ["__proto__", 42],
+      ],
+      [
+        ["tenant_id", "warehouse"],
+        ["__proto__", 18446744073709551615n],
+      ],
+    ]);
+    expectTypeOf(task.keys).toEqualTypeOf<Record<string, string | number | bigint>[] | undefined>();
+    expect(task.total_count).toBe(2);
+    expect(task.synced_count).toBe(2);
+    expect(task.create_time).toBe(1720000000999);
+    expect(typeof task.last_progress_time).toBe("number");
   });
 
   it("starts, stops, and deletes build tasks", async () => {

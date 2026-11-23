@@ -5,6 +5,7 @@ import pkg from "../../package.json" with { type: "json" };
 import { vegaCommand } from "../../src/commands/vega.js";
 import { writeVersionCheckCache } from "../../src/config/store.js";
 import { HttpError, InputError, toExitCode } from "../../src/utils/errors.js";
+import { parseBigIntJSON } from "../../src/utils/json-bigint.js";
 
 function cli(): Command {
   const root = new Command("openbkn")
@@ -1300,6 +1301,61 @@ describe("vega resource build", () => {
     });
   });
 
+  it("reconciles keys without dropping field names or rounding large integer literals", async () => {
+    const fetchMock = mockFetch({ id: "task-1" });
+    suppressOutput();
+
+    await cli().parseAsync(
+      [
+        "--base-url",
+        "https://demo.example.com",
+        "--token",
+        "t",
+        "vega",
+        "resource",
+        "build",
+        "r-1",
+        "--execute-type",
+        "keys",
+        "--keys",
+        '[{"tenant_id":"warehouse","__proto__":18446744073709551615}]',
+      ],
+      { from: "user" },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toBe(
+      '{"resource_id":"r-1","mode":"batch","execute_type":"keys","keys":[{"tenant_id":"warehouse","__proto__":18446744073709551615}]}',
+    );
+  });
+
+  it.each([
+    [["--execute-type", "keys"], "--keys is required"],
+    [["--keys", '[{"id":1}]'], "--keys requires --execute-type keys"],
+    [["--execute-type", "keys", "--keys", "[]"], "--keys must be a non-empty array"],
+  ])("rejects invalid key options %j before creating a task", async (flags, error) => {
+    const fetchMock = mockFetch({ id: "task-1" });
+    suppressOutput();
+
+    await expect(
+      cli().parseAsync(
+        [
+          "--base-url",
+          "https://demo.example.com",
+          "--token",
+          "t",
+          "vega",
+          "resource",
+          "build",
+          "r-1",
+          ...flags,
+        ],
+        { from: "user" },
+      ),
+    ).rejects.toThrow(error);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it.each(["1.5", "abc", "-1"])(
     "rejects invalid timeout %s before creating a task",
     async (timeout) => {
@@ -1361,6 +1417,32 @@ describe("vega resource build", () => {
       { from: "user" },
     );
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("vega build-task get", () => {
+  it("prints detailed primary keys as exact JSON integer literals", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          '{"id":"task-1","status":"completed","execute_type":"keys","keys":[{"tenant_id":"warehouse","order_id":18446744073709551615}]}',
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const output = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    await cli()
+      .option("--json")
+      .parseAsync([...cliBase, "build-task", "get", "task-1", "--json"], { from: "user" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const json = output.mock.calls.map(([value]) => String(value)).join("");
+    expect(parseBigIntJSON(json)).toEqual({
+      id: "task-1",
+      status: "completed",
+      execute_type: "keys",
+      keys: [{ tenant_id: "warehouse", order_id: 18446744073709551615n }],
+    });
   });
 });
 
