@@ -4,6 +4,7 @@ import {
   type ResourceSummary,
   createResource,
   createResourceDocument,
+  createResourceRaw,
   deleteResource,
   deleteResourceDocuments,
   deleteResourceDocumentsByFilter,
@@ -314,6 +315,21 @@ describe("listResources", () => {
 });
 
 describe("updateResource", () => {
+  it.each(["active", "deprecated", "stale", "__unsupported__"])(
+    "omits the server-managed lifecycle status %s from metadata updates",
+    async (status) => {
+      const f = mockFetch({ entries: [resourceFixture({ status })] });
+
+      await updateResource(ctx, "r-1", { name: "renamed" });
+
+      const calls = (f as unknown as { mock: { calls: CallArgs[] } }).mock.calls;
+      expect(calls).toHaveLength(2);
+      const body = JSON.parse(calls[1]?.[1].body as string);
+      expect(body).toMatchObject({ name: "renamed", enabled: true, expected_update_time: 2 });
+      expect(body).not.toHaveProperty("status");
+    },
+  );
+
   it.each(["create", "update"] as const)(
     "delegates %s filterability support to the backend and preserves its rejection",
     async (operation) => {
@@ -824,6 +840,49 @@ describe("queryResource", () => {
 });
 
 describe("typed Resource and document APIs", () => {
+  it.each(["active", "deprecated", "stale", "__unsupported__", "", null, undefined, false, 1])(
+    "ignores the extra lifecycle status %s when creating a Resource",
+    async (status) => {
+      const fetchMock = mockFetch({ id: "r-1" });
+
+      await expect(
+        createResource(ctx, {
+          catalogId: "c-1",
+          name: "orders",
+          category: "dataset",
+          status,
+        } as unknown as CreateResourceRequest),
+      ).resolves.toEqual({ id: "r-1" });
+      expect(JSON.parse(firstCall(fetchMock)[1].body as string)).toEqual({
+        catalog_id: "c-1",
+        name: "orders",
+        category: "dataset",
+      });
+    },
+  );
+
+  it("creates a Resource without exposing or sending lifecycle status", async () => {
+    expectTypeOf<
+      "status" extends keyof CreateResourceRequest ? true : false
+    >().toEqualTypeOf<false>();
+    const fetchMock = mockFetch({ id: "r-1" });
+
+    await expect(
+      createResource(ctx, { catalogId: "c-1", name: "orders", category: "dataset" }),
+    ).resolves.toEqual({ id: "r-1" });
+
+    expect(JSON.parse(firstCall(fetchMock)[1].body as string)).not.toHaveProperty("status");
+  });
+
+  it("leaves raw Resource creation bodies authoritative on the backend", async () => {
+    const fetchMock = mockFetch({ id: "r-1" });
+    const body = { catalog_id: "c-1", name: "orders", category: "dataset", status: "stale" };
+
+    await createResourceRaw(ctx, body);
+
+    expect(JSON.parse(firstCall(fetchMock)[1].body as string)).toEqual(body);
+  });
+
   it("rejects incomplete or server-owned logical view input before sending a request", async () => {
     const fetchMock = mockFetch({ id: "view-1" });
     const valid: CreateResourceRequest = {
