@@ -382,7 +382,6 @@ interface CreateResourceBase {
   id?: string;
   tags?: string[];
   description?: string;
-  status?: ResourceStatus;
   indexConfig?: ResourceIndexConfig;
 }
 
@@ -502,7 +501,6 @@ export async function createResource(
     category: req.category,
     ...(req.tags !== undefined ? { tags: req.tags } : {}),
     ...(req.description !== undefined ? { description: req.description } : {}),
-    ...(req.status !== undefined ? { status: req.status } : {}),
     ...(req.schema !== undefined ? { schema: req.schema } : {}),
     ...(req.sourceIdentifier !== undefined ? { source_identifier: req.sourceIdentifier } : {}),
     ...(req.sourceMetadata !== undefined ? { source_metadata: req.sourceMetadata } : {}),

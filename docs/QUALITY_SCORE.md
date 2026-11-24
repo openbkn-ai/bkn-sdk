@@ -34,6 +34,8 @@ Update this table as each signal changes (e.g. live-parity count as commands are
 
 ## CLI reliability regression coverage
 
+- `test/unit/resources.test.ts` checks typed creation exposes no lifecycle status parameter and ignores extra status properties without sending them, including `active`, `null`, `undefined`, and unsupported values. Metadata updates omit server-managed status even for unknown read values, and raw creation preserves the caller's body. Compile-time assertions keep the creation type aligned with Foundry #3374, whose public creation and update requests ignore unknown fields: new Resources start active, while metadata updates preserve lifecycle status.
+
 - `test/unit/resources.test.ts` and `vega-command.test.ts` cover Resource `filterable` response validation and create/update round trips, preservation of explicit `false` through explicit Schema edits and required-Schema vector-feature cleanup, and required boolean flags on submitted update Schemas. Unrelated Table and other optional-Schema updates omit the Schema even when it contains an unsupported enabled field; Dataset and LogicalView preserve complete read Schemas but reject incomplete older responses with an actionable `InputError` before PUT. Explicit complete Schemas remain usable over older read responses. Defaults stay authoritative in Vega; the SDK does not derive them.
 
 - `test/unit/resources.test.ts` and `test/unit/vega-command.test.ts` cover the
