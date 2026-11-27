@@ -145,6 +145,13 @@ export function contextCommand(): Command {
     )
     .option("--args-file <path>", "read tool arguments as JSON from a file (or - for stdin)")
     .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
+    .addHelpText(
+      "after",
+      `
+The retired search_after is ignored. To migrate, restart from the first page and
+set paging_mode: "cursor" in --args on every request. Pass the previous response's cursor
+back as cursor and keep the same query, including any starting offset.`,
+    )
     .action(async (knId: string, opts, cmd: Command) => {
       if (opts.schema) return printToolSchema(cmd, knId, "query_object_instance");
       const args = jsonArgs(opts);

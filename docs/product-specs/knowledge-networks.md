@@ -89,7 +89,9 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
   defaults to one page. For continuation, set `paging_mode: "cursor"` on every
   request, including the first, and pass back the previous response's opaque
   `cursor`. Keep the original query and starting `offset`. The wrapper ignores
-  the retired `search_after` field. An explicit `kn_id` must match the network being queried.
+  the retired `search_after` field. To migrate a script that uses it, restart
+  from the first page with explicit cursor mode. An explicit `kn_id` must match
+  the network being queried.
   Each sort item requires `field` and an
   `asc` or `desc` direction. A composite condition uses `sub_conditions`; vector
   search uses `condition.operation=knn`. `properties` must be an array of nonblank field

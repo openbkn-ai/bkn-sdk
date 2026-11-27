@@ -23,7 +23,7 @@ bkn_osdk.call_tool(ctx, kn_id, "get_object_types", {"ids": ["…"], ...})
 
 这不是 TypeScript SDK 的移植。那边把十一个后端命名空间包成 HTTP 调用，对 Python 调用方来说，这些 `bkn_osdk.call("/api/…")` 都能做。真正无法用裸调用替代的是本体之上的生成类 —— 这才是值得再写一个语言版本的理由。
 
-**目标平台版本 0.1.5。** 负载逐字透传，而 0.1.4 线送的形状不一样：它把 `get_kn_detail`、`list_resources`、`list_skills`、`get_object_types`、`list_knowledge_networks` 套在 `result` 键下，并提供 0.1.5 已下线的 `semantic-search` 路由。连老部署不是不行，但脱壳和换路由是调用方自己的事。
+**平台兼容性。** 请使用支持显式对象游标分页和可选总数的配套服务版本。`iterate()` 在续页游标缺失时结束，旧服务有可能在仍有数据时省略续页游标。`v0.1.5` 的 REST 对象查询会省略零命中时的 `total_count`，因此 `count()` 收到这种响应会抛出 `BknError`。 [Foundry #3373](https://github.com/openbkn-ai/bkn-foundry/issues/3373)
 
 ## 安装
 
