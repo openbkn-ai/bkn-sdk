@@ -148,6 +148,46 @@ describe("Object Metrics V1", () => {
     expect(new URL(String(trial?.[0])).searchParams.get("branch")).toBe("dev");
   });
 
+  it("keeps the cursor on an empty participant page for published and trial reads", async () => {
+    const result = {
+      participants: [],
+      next_cursor: "opaque-next-page",
+      evaluated_at: 1_761_264_000_000,
+      status: "ok",
+    };
+    const fetch = server(result);
+    const client = createClient({ baseUrl: BASE, token: "t" });
+    const body = {
+      query: { group_by: [{ object_type_id: "orders", property_name: "channel" }] },
+      bucket_key: "bucket-1",
+      page_size: 20,
+    };
+    const trialBody = { ...body, definition: { id: "m-1" } };
+
+    const published = await client.kn.objectMetricDrillThrough("kn-1", "m-1", body, { version: 3 });
+    const trial = await client.kn.objectMetricTrialDrillThrough("kn-1", trialBody);
+    expect(published).toEqual(result);
+    expect(trial).toEqual(result);
+
+    await client.kn.objectMetricDrillThrough(
+      "kn-1",
+      "m-1",
+      { ...body, cursor: published.next_cursor },
+      { version: 3 },
+    );
+    await client.kn.objectMetricTrialDrillThrough("kn-1", {
+      ...trialBody,
+      cursor: trial.next_cursor,
+    });
+
+    expect(calls(fetch).map(([, request]) => JSON.parse(String(request?.body)))).toEqual([
+      body,
+      trialBody,
+      { ...body, cursor: "opaque-next-page" },
+      { ...trialBody, cursor: "opaque-next-page" },
+    ]);
+  });
+
   it("rejects malformed query and drill-through envelopes", async () => {
     const client = createClient({ baseUrl: BASE, token: "t" });
     server({ status: "ok" });

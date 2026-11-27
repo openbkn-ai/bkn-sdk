@@ -499,14 +499,14 @@ export function bknCommand(): Command {
     .addHelpText(
       "after",
       `
-The first page sends {limit, condition?, sort?, need_total?, properties?}. How the next
-page is asked for depends on the deploy: one that includes foundry #1623 answers with
-paging.next_cursor (null on the last page) — resend the query with "cursor" set to it.
-An older deploy answers without paging — resend the query with "offset" instead.
+Object queries default to "paging_mode": "single" and return one page.
+Use "paging_mode": "cursor" on the first request and every continuation.
+Keep the query unchanged and set "cursor" to the previous paging.next_cursor.
+Restart from the first page if pagination began with the old implicit mode.
 
   openbkn bkn object-type query <kn-id> <ot-id> --body '{"limit": 20}'
-  openbkn bkn object-type query <kn-id> <ot-id> --body '{"limit": 20, "cursor": "<next_cursor>"}'
-  openbkn bkn object-type query <kn-id> <ot-id> --body '{"limit": 20, "offset": 20}'   # older deploys`,
+  openbkn bkn object-type query <kn-id> <ot-id> --body '{"limit": 20, "paging_mode": "cursor"}'
+  openbkn bkn object-type query <kn-id> <ot-id> --body '{"limit": 20, "paging_mode": "cursor", "cursor": "<next_cursor>"}'`,
     )
     .action(async (knId: string, otId: string, opts, cmd: Command) => {
       const excludeSystemProperties = systemProperties(opts.excludeSystemProperties);

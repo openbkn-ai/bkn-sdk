@@ -11,6 +11,7 @@ behalf — the query/body split, the turn, the arguments it refuses to invent.
 
 from __future__ import annotations
 
+import inspect
 import json
 from collections.abc import Iterator
 from pathlib import Path
@@ -45,6 +46,11 @@ def test_regenerating_reproduces_the_committed_module() -> None:
     assert generate_kn_module(CONTRACT) == (ROOT / "bkn_osdk" / "kn.py").read_text(encoding="utf-8")
 
 
+@pytest.mark.parametrize("name", ["query_object_instance", "explore_subgraph"])
+def test_query_contract_exposes_sorting_metadata(name: str) -> None:
+    assert {"is_sorted", "warnings"} <= set(operation(name)["returns"])
+
+
 def test_every_route_in_the_contract_is_exported() -> None:
     expected = {op["operation"].replace("-", "_") for op in CONTRACT["operations"]}
 
@@ -69,8 +75,6 @@ def test_the_compatibility_shell_is_not_generated() -> None:
 def test_the_lifecycle_context_is_never_a_parameter() -> None:
     """A caller building a `bkn_context` by hand is a caller who can get it
     wrong; the runtime attaches it from the turn in scope."""
-    import inspect
-
     for name in kn.__all__:
         parameters = inspect.signature(getattr(kn, name)).parameters
         assert "bkn_context" not in parameters, name
@@ -78,16 +82,12 @@ def test_the_lifecycle_context_is_never_a_parameter() -> None:
 
 def test_every_function_takes_the_network_first() -> None:
     """Even where the route does not send one: the turn belongs to a network."""
-    import inspect
-
     for name in kn.__all__:
         first = next(iter(inspect.signature(getattr(kn, name)).parameters))
         assert first == "kn_id", name
 
 
 def test_required_arguments_and_legacy_object_type_ids_are_positional() -> None:
-    import inspect
-
     for listing in (kn.get_object_types, kn.get_relation_types):
         signature = inspect.signature(listing)
         kinds = {name: p.kind for name, p in signature.parameters.items()}
@@ -112,8 +112,6 @@ def test_an_argument_the_spec_does_not_publish_is_not_invented() -> None:
     """`query_instance_subgraph` takes `limit` as an MCP tool and does not
     declare it on this route. The wrapper follows the contract rather than
     guessing that the two surfaces match."""
-    import inspect
-
     assert "limit" not in inspect.signature(kn.query_instance_subgraph).parameters
 
 
@@ -127,6 +125,7 @@ class Deploy:
         self.paths: list[str] = []
         self.queries: list[dict[str, str]] = []
         self.bodies: list[dict[str, Any]] = []
+        self.responses: dict[str, dict[str, Any]] = {}
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
@@ -157,7 +156,7 @@ class Deploy:
         self.paths.append(path)
         self.queries.append(dict(request.url.params))
         self.bodies.append(json.loads(request.read()))
-        return httpx.Response(200, json={"datas": []})
+        return httpx.Response(200, json=self.responses.get(path, {"datas": []}))
 
 
 @pytest.fixture
@@ -185,20 +184,104 @@ def test_the_query_string_and_the_body_go_where_the_spec_says(deploy: Deploy) ->
     assert "kn_id" not in deploy.bodies[0]
 
 
-@pytest.mark.parametrize("cursor", [None, "opaque-next-page"])
-def test_object_instance_cursor_is_sent_only_in_the_body(
-    deploy: Deploy, cursor: str | None
-) -> None:
-    kn.query_object_instance(KN, "order", cursor=cursor, context=CONTEXT)
+def test_object_instance_cursor_mode_is_sent_only_in_the_body(deploy: Deploy) -> None:
+    kn.query_object_instance(KN, "order", context=CONTEXT)
+    kn.query_object_instance(KN, "order", paging_mode="cursor", offset=20, limit=2, context=CONTEXT)
+    kn.query_object_instance(
+        KN,
+        "order",
+        paging_mode="cursor",
+        cursor="opaque-next-page",
+        offset=20,
+        limit=2,
+        context=CONTEXT,
+    )
 
-    body = deploy.bodies[0]
-    if cursor is None:
-        assert "cursor" not in body
-    else:
-        assert body["cursor"] == cursor
-    assert "cursor" not in deploy.queries[0]
-    assert "search_after" not in body
-    assert "search_after" not in deploy.queries[0]
+    first, start, continuation = deploy.bodies
+    assert "paging_mode" not in first
+    assert "cursor" not in first
+    assert start["paging_mode"] == "cursor"
+    assert start["offset"] == 20
+    assert "cursor" not in start
+    assert continuation == {**start, "cursor": "opaque-next-page"}
+    for query in deploy.queries:
+        assert set(query) == {"kn_id", "ot_id"}
+
+
+def test_explore_subgraph_reads_independent_pages_by_start_offset(deploy: Deploy) -> None:
+    kn.explore_subgraph(KN, "order", "forward", 2, limit=3, offset=12, context=CONTEXT)
+    kn.explore_subgraph(KN, "order", "forward", 2, limit=3, offset=15, context=CONTEXT)
+
+    first, second = deploy.bodies
+    assert set(deploy.paths) == {"/api/agent-retrieval/v1/kn/explore_subgraph"}
+    assert first["offset"] == 12
+    assert first["limit"] == 3
+    assert second == {**first, "offset": 15}
+    assert {"cursor", "paging_mode", "search_after"}.isdisjoint(
+        inspect.signature(kn.explore_subgraph).parameters
+    )
+    assert {"cursor", "search_after"}.isdisjoint(operation("explore_subgraph")["returns"])
+
+
+def test_relation_subgraph_forwards_each_paths_start_offset(deploy: Deploy) -> None:
+    source = {
+        "id": "order",
+        "limit": 2,
+        "offset": 10,
+        "sort": [{"field": "id", "direction": "asc"}],
+    }
+    target = {"id": "user", "limit": 3}
+    relation_path = {
+        "object_types": [source, target],
+        "relation_types": [{"relation_type_id": "order_user"}],
+    }
+    next_page = {
+        **relation_path,
+        "object_types": [{**source, "offset": 12}, target],
+    }
+    second_path = {
+        "object_types": [{**source, "id": "shipment", "offset": 20}, target],
+        "relation_types": [{"relation_type_id": "shipment_user"}],
+    }
+    kn.query_instance_subgraph(KN, [relation_path, second_path], context=CONTEXT)
+    kn.query_instance_subgraph(KN, [next_page, second_path], context=CONTEXT)
+
+    assert [body["relation_type_paths"] for body in deploy.bodies] == [
+        [relation_path, second_path],
+        [next_page, second_path],
+    ]
+    assert "paging_mode" not in inspect.signature(kn.query_instance_subgraph).parameters
+
+
+def test_subgraphs_keep_the_start_page_sorting_metadata(deploy: Deploy) -> None:
+    sort = [{"field": "id", "direction": "asc"}]
+    warnings = ["API Resource does not support sorting; sort was ignored"]
+    unsorted = {"is_sorted": False, "warnings": warnings}
+    deploy.responses["/api/agent-retrieval/v1/kn/explore_subgraph"] = unsorted
+    deploy.responses["/api/agent-retrieval/v1/kn/query_instance_subgraph"] = {
+        "entries": [{"is_sorted": True}, unsorted]
+    }
+
+    exploration = kn.explore_subgraph(KN, "shipment", "forward", 1, sort=sort, context=CONTEXT)
+    result = kn.query_instance_subgraph(
+        KN,
+        [
+            {
+                "object_types": [{"id": object_type, "sort": sort}, {"id": "user"}],
+                "relation_types": [{"relation_type_id": f"{object_type}_user"}],
+            }
+            for object_type in ("order", "shipment")
+        ],
+        context=CONTEXT,
+    )
+
+    assert exploration["is_sorted"] is False
+    assert exploration["warnings"] == warnings
+    sorted_entry, unsorted_entry = result["entries"]
+    assert sorted_entry["is_sorted"] is True
+    assert "warnings" not in sorted_entry
+    assert unsorted_entry["is_sorted"] is False
+    assert unsorted_entry["warnings"] == warnings
 
 
 def test_a_call_carries_a_turn_without_being_asked(deploy: Deploy) -> None:

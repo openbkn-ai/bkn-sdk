@@ -249,20 +249,28 @@ Order.where((Order.total_amount > Decimal("10000")) & Order.paid_at.exists()).or
     Order.total_amount.desc()
 ).select(Order.order_no, Order.total_amount).take(20)
 
-for order in Order.iterate(page_size=500):  # cursor paging, or limit/offset on older deploys
+for order in Order.iterate(page_size=500):
     ...
 
-page = Order.objects().page(limit=100)
-next_page = Order.objects().page(limit=100, cursor=page.next_cursor)  # None on the last page
+query = Order.objects()
+page = query.page(limit=100, paging_mode="cursor")
+if page.next_cursor is not None:
+    next_page = query.page(limit=100, cursor=page.next_cursor)
 ```
 
-The current ontology-query contract pages by an opaque cursor: the response's
-`paging.next_cursor` is sent back as `cursor` with the same query, and is `null`
-on the last page. Deploys built before that change (0.1.5 releases in the field)
-return no `paging` block but honour `offset`, so `iterate()` follows the cursor
-where the first response carries one and otherwise falls back to `limit`/`offset`,
-stopping on a short page. `page(offset=...)` still sends `offset`; passing both
-`offset` and `cursor` raises.
+`page()` defaults to a single page. Use `paging_mode="cursor"` to start manual
+pagination, then pass the previous `Page.next_cursor` and keep the same query,
+limit and offset. The SDK sends cursor mode on every continuation. `iterate()`
+uses cursor mode from the first request and keeps reading until the cursor is
+absent, even if a page returns fewer rows than requested.
+
+`Page.is_sorted` reports whether the server applied sorting and defaults to
+`False` when the status is missing. `Page.warnings` carries the server's
+warnings in order, with an empty list when none are reported.
+
+`Page.total` is the total when available, including `0` for confirmed zero
+matches. It is `None` when the server omits `total_count`. `count()` requests
+the total and raises `BknError` if the server does not provide it.
 
 `~` negates a filter where the platform can express it: comparison operators
 invert into each other, `in`/`like`/`exist` have paired negatives, and `and`/`or`
@@ -287,13 +295,14 @@ against a live deploy:
   not). The value is sent verbatim; a wrong guess returns zero rows, not an
   error, so try both against your own object type.
 - `match` is in the operator enum but a Postgres-backed object type answers 500.
-- `limit` is 1–10000, and `total_count` is omitted entirely when nothing matched.
+- `limit` is 1–10000.
 
 ## Aggregate
 
 There is no `sum()` or `group_by()` over an object set, because there is no
 endpoint for one: an instance query takes a condition, a sort, a limit, a cursor (or
-offset) and a property selection, and `need_total` returns a row count. Pulling every row back
+offset) and a property selection, and `need_total` requests a row count where
+available. Pulling every row back
 to aggregate client-side would be a lie dressed as an API.
 
 The platform's aggregation surface is published, versioned **Object Metrics V1**.
@@ -508,11 +517,22 @@ resource was queried. It replaces `Page.search_from_index`; the old
 `ignoring_store_cache` option is removed. Upgrade with the matching Foundry #844
 server change and restart cursors created before the upgrade.
 
-The generated `kn.query_object_instance(...)` also replaces `search_after` with
-`cursor`: pass the previous response's opaque `cursor` string unchanged for the
-next page. On the first page, omit `cursor` or pass `cursor=None`. Remove any
-`search_after` argument, including `search_after=None`; that keyword is no longer
-accepted. `cursor` and `offset` are mutually exclusive.
+The generated `kn.query_object_instance(...)` defaults to a single page. To
+paginate, pass `paging_mode="cursor"` on the first request and every continuation.
+Pass the previous response's opaque `cursor` unchanged and retain the original
+query, including any starting offset. Restart from the first page if pagination
+began with the old implicit mode.
+
+`kn.explore_subgraph(...)` and `kn.query_instance_subgraph(...)` each read one
+page of starting objects before expanding the subgraph. For exploration, set
+`offset` and `limit` on the request. For relation paths, set `offset` and `limit`
+on each path's `object_types[0]` to select its starting page independently.
+
+`is_sorted` and optional `warnings` describe the current batch of starting
+objects. Read them at the top level for exploration or in each `entries[i]`
+for relation paths. API Resources and sources without a reported sorting status
+return `is_sorted: false`. An API Resource with a nonempty `sort` reports that
+it ignored the requested sort in `warnings`.
 
 ## Upgrades
 

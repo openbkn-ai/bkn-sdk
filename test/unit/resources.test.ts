@@ -765,19 +765,28 @@ describe("queryResource", () => {
       filter_condition: filter,
     });
   });
-  it("preserves an unsafe BIGINT response value as native bigint", async () => {
+  it("preserves a false sorting status alongside native bigint values", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(
         async () =>
-          new Response('{"entries":[{"id_card":110101199001152345,"safe_id":42}]}', {
-            status: 200,
-          }),
+          new Response(
+            '{"entries":[{"id_card":110101199001152345,"safe_id":42}],"is_sorted":false}',
+            { status: 200 },
+          ),
       ),
     );
 
     await expect(queryResource(ctx, "r-1")).resolves.toEqual({
       entries: [{ id_card: 110101199001152345n, safe_id: 42 }],
+      is_sorted: false,
+    });
+  });
+
+  it.each([{}, { is_sorted: true }])("handles sorting metadata %j", async (metadata) => {
+    mockFetch({ entries: [], ...metadata });
+    await expect(queryResource(ctx, "r-1")).resolves.toMatchObject({
+      is_sorted: metadata.is_sorted ?? false,
     });
   });
 

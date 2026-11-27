@@ -33,7 +33,8 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
 - `openbkn bkn query <id> ...` — query object types / instances (default limit 50).
 - `openbkn bkn push <dir>` / `openbkn bkn pull <id>` — upload/download a BKN package; optional encoding detection (`--no-detect-encoding`, `--source-encoding`). `push` passes `--import-mode normal|overwrite|ignore`, `--strict-mode` / `--no-strict-mode` and `--binding-policy preserve|detach` to the import. When omitted, the archive endpoint preserves its historical `overwrite` + non-strict behavior; use `--strict-mode` to require complete definitions and dependency validation. `overwrite` updates an existing concept with the same id; reusing an existing name with a different id remains a conflict in `overwrite` and `ignore` modes. Import mode controls the knowledge-network model; declared capabilities are resolved and mounted independently after model processing, even when `ignore` leaves an existing model unchanged.
 - Legacy schema creates (`object-type`/`relation-type`/`action-type create`) send `X-HTTP-Method-Override: POST` with an `{entries:[…]}` body; Object Metrics V1 send a single definition without an override header. Ontology-query reads tunnelled over POST (`object-type query`, `action-type query`, `subgraph`) send `X-HTTP-Method-Override: GET`.
-- `object-type query` pages by cursor (`paging.next_cursor` → body `cursor`) on deploys that include foundry #1623; older deploys return no `paging` and page with body `offset`; `action-log list` pages by `--search-after`. `concept-group list` and `action-schedule list` return every row unless `--limit` is given (the backend's own default of 10 would truncate silently).
+- `object-type query` defaults to one page (`paging_mode: "single"`). To paginate, send `paging_mode: "cursor"` on the first request and every continuation. Keep the query unchanged and pass the previous `paging.next_cursor` in the body as `cursor`. Restart from the first page if pagination began with the old implicit mode.
+- `action-log list` pages by `--search-after`. `concept-group list` and `action-schedule list` return every row unless `--limit` is given (the backend's own default of 10 would truncate silently).
 - Comma-joined ids in list-valued paths (`object-type`/`relation-type`/`action-type get`, `object-type`/`relation-type delete`, `concept-group remove-members`, `action-schedule delete`) are encoded one by one with the commas kept literal; an empty list is refused before any request. Object Metrics V1 get/delete take one ID and an explicit version when required.
 - An object type's `### Data Properties` table may include an optional `Mask Rule`
   column containing one compact JSON object. The supported discriminated rules
@@ -84,10 +85,12 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
   unknown top-level argument keys, extra `filters[]` / `sort[]` keys, and
   misspelled nested condition keys before opening an MCP session. Each filter
   requires `field`, `op`, and `value`; `condition` and `filters` cannot be combined
-  because the backend ignores `filters` when `condition` is present. `cursor`
-  and `offset` are mutually exclusive (`search_after`, the REST name for the
-  cursor, is accepted and passed through), and an explicit `kn_id` must match the
-  network being queried. Each sort item requires `field` and an
+  because the backend ignores `filters` when `condition` is present. The query
+  defaults to one page. For continuation, set `paging_mode: "cursor"` on every
+  request, including the first, and pass back the previous response's opaque
+  `cursor`. Keep the original query and starting `offset`. The wrapper ignores
+  the retired `search_after` field. An explicit `kn_id` must match the network being queried.
+  Each sort item requires `field` and an
   `asc` or `desc` direction. A composite condition uses `sub_conditions`; vector
   search uses `condition.operation=knn`. `properties` must be an array of nonblank field
   names. When a nonempty `properties` list is supplied, the dedicated wrapper
@@ -98,6 +101,15 @@ Work with Business Knowledge Networks: list/inspect networks, query their schema
   this read; `--dry-run` previews the MCP tool arguments before any schema read
   or session handshake and sends no request. The generic `context tool-call` remains
   a raw MCP path.
+- `context explore-subgraph` and `context query-instance-subgraph` read a single
+  page of starting objects per request. For exploration, pass `offset` in `--args`
+  and set the page size with `--limit`. For relation paths, select each starting
+  page with the corresponding `object_types[0].offset` and `object_types[0].limit`.
+  `is_sorted` and optional `warnings` describe the current batch of starting
+  objects. They appear at the top level for exploration and in each `entries[i]`
+  for relation paths. `is_sorted` is `false` for API Resources or when the source
+  omits its sorting status. An API Resource with a nonempty `sort` reports a
+  warning that it ignored the requested sort.
 
 ## Index building (via Catalog BuildTask — no KN-level build)
 

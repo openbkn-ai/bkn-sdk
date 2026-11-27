@@ -14,7 +14,7 @@ const QUERY_KEYS = new Set([
   "filters",
   "limit",
   "sort",
-  // MCP and REST both use an opaque cursor; legacy search_after is rejected.
+  "paging_mode",
   "cursor",
   "offset",
   "properties",
@@ -105,18 +105,15 @@ function checkSort(value: unknown): void {
   });
 }
 
-/** Reject argument mistakes that the MCP tool can otherwise silently ignore. */
+/** Validate the arguments sent to MCP, omitting the retired search_after field. */
 export function validateQueryObjectInstanceArgs(
-  args: Record<string, unknown>,
+  input: Record<string, unknown>,
   knId?: string,
-): void {
-  if (!object(args)) throw new InputError("query-object-instance --args must be a JSON object");
+): Record<string, unknown> {
+  if (!object(input)) throw new InputError("query-object-instance --args must be a JSON object");
+  const args = { ...input };
+  delete args.search_after;
   for (const key of Object.keys(args)) {
-    if (key === "search_after") {
-      throw new InputError(
-        "query-object-instance search_after is no longer supported; use cursor with the previous response's opaque cursor string",
-      );
-    }
     if (key === "knn") {
       throw new InputError(
         "Unknown query_object_instance argument knn; put vector search in condition.operation=knn",
@@ -139,8 +136,18 @@ export function validateQueryObjectInstanceArgs(
       "query-object-instance condition and filters cannot be combined; the platform ignores filters when condition is present",
     );
   }
-  if (args.cursor !== undefined && args.offset !== undefined) {
-    throw new InputError("query-object-instance cursor and offset cannot be combined");
+  if (
+    args.paging_mode !== undefined &&
+    args.paging_mode !== "single" &&
+    args.paging_mode !== "cursor"
+  ) {
+    throw new InputError("query-object-instance paging_mode must be single or cursor");
+  }
+  if (args.cursor !== undefined && typeof args.cursor !== "string") {
+    throw new InputError("query-object-instance cursor must be a string");
+  }
+  if (args.cursor && args.paging_mode !== "cursor") {
+    throw new InputError('query-object-instance cursor requires paging_mode: "cursor"');
   }
   if (args.condition !== undefined) checkCondition(args.condition, "condition");
   if (args.filters !== undefined) checkFilters(args.filters);
@@ -154,6 +161,7 @@ export function validateQueryObjectInstanceArgs(
       "query-object-instance properties must be an array of field names; use context object-types to find valid names",
     );
   }
+  return args;
 }
 
 /** Check requested fields against one object type returned by the BKN schema GET. */

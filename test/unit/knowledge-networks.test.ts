@@ -34,10 +34,10 @@ const ctx = verifiedContext<RequestContext>({
 
 type CallArgs = [string, RequestInit];
 
-function mockFetch(): typeof fetch {
+function mockFetch(body: unknown = { ok: true }): typeof fetch {
   const fn = vi.fn(
     async (_url: string | URL, _init?: RequestInit) =>
-      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+      new Response(JSON.stringify(body), { status: 200 }),
   );
   vi.stubGlobal("fetch", fn);
   return fn as unknown as typeof fetch;
@@ -157,14 +157,19 @@ describe("reads tunnelled over POST", () => {
     expect(header(init, "X-HTTP-Method-Override")).toBe("GET");
   });
 
-  it("object-type instance query sends the GET override", async () => {
-    const f = mockFetch();
-    await queryObjectTypeInstances(ctx, "kn-1", "ot-1", { limit: 1 });
+  it("object-type instance query forwards explicit paging and preserves sorting status", async () => {
+    const f = mockFetch({ datas: [], is_sorted: false });
+    const query = { limit: 1, paging_mode: "cursor" };
+    await expect(queryObjectTypeInstances(ctx, "kn-1", "ot-1", query)).resolves.toEqual({
+      datas: [],
+      is_sorted: false,
+    });
     const [url, init] = firstCall(f);
     expect(new URL(url).pathname).toBe(
       "/api/ontology-query/v1/knowledge-networks/kn-1/object-types/ot-1",
     );
     expect(header(init, "X-HTTP-Method-Override")).toBe("GET");
+    expect(JSON.parse(init.body as string)).toEqual(query);
   });
 
   it("preserves object-query integer boundaries in responses", async () => {

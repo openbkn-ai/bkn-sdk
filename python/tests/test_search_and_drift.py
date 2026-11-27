@@ -70,8 +70,12 @@ class Sent:
                 },
             )
         if not request.url.path.endswith("/mcp"):
-            self.bodies.append(json.loads(request.read()))
-            return httpx.Response(200, json={"datas": []})
+            body = json.loads(request.read())
+            self.bodies.append(body)
+            response: dict[str, Any] = {"datas": []}
+            if body.get("need_total"):
+                response["total_count"] = 0
+            return httpx.Response(200, json=response)
 
         body = json.loads(request.read())
         if body["method"] != "tools/call":

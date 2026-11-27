@@ -269,7 +269,9 @@ def test_need_total_is_sent_only_for_count(replay: Replay) -> None:
     orders().count()
 
     assert "need_total" not in replay.sent[0]
+    assert "paging_mode" not in replay.sent[0]
     assert replay.sent[1]["need_total"] is True
+    assert "paging_mode" not in replay.sent[1]
 
 
 def test_offset_is_omitted_when_it_is_zero(replay: Replay) -> None:
@@ -290,16 +292,18 @@ def test_a_cursor_is_sent_back_with_the_same_query(replay: Replay) -> None:
     )
     base = orders().where(Order.channel_id == 1)
 
-    first = base.page(limit=1)
-    base.page(limit=1, cursor=first.next_cursor)
+    first = base.page(limit=1, offset=2, paging_mode="cursor")
+    base.page(limit=1, offset=2, cursor=first.next_cursor)
 
+    assert replay.sent[0]["paging_mode"] == "cursor"
+    assert replay.sent[0]["offset"] == 2
     assert "cursor" not in replay.sent[0]
     assert replay.sent[1] == {**replay.sent[0], "cursor": "c-2"}
 
 
-def test_cursor_and_offset_together_are_refused() -> None:
-    with pytest.raises(InputError, match="not both"):
-        orders().page(limit=1, offset=1, cursor="c")
+def test_a_cursor_cannot_continue_in_single_page_mode() -> None:
+    with pytest.raises(InputError, match="paging_mode"):
+        orders().page(limit=1, paging_mode="single", cursor="c")
 
 
 @pytest.mark.parametrize("limit", [0, -1, MAX_LIMIT + 1])
@@ -336,10 +340,16 @@ def test_count_reads_the_total_from_the_envelope(replay: Replay) -> None:
 
 
 def test_a_count_with_no_matches_reads_as_zero(replay: Replay) -> None:
-    """The platform omits `total_count` entirely when nothing matched."""
-    replay.queue("no_match")
+    replay.queue_response({"datas": [], "total_count": 0})
 
     assert orders().where(Order.order_status == "no_such_status").count() == 0
+
+
+def test_count_raises_when_the_total_is_missing(replay: Replay) -> None:
+    replay.queue("no_match")
+
+    with pytest.raises(BknError, match="did not return a total count"):
+        orders().where(Order.order_status == "no_such_status").count()
 
 
 def test_an_empty_result_is_an_empty_list(replay: Replay) -> None:
@@ -380,6 +390,30 @@ def test_the_actual_query_source_is_read(replay: Replay, source: str) -> None:
     assert orders().page(limit=2).query_source == source
 
 
+@pytest.mark.parametrize(
+    ("metadata", "is_sorted", "warnings"),
+    [
+        ({"is_sorted": True}, True, []),
+        (
+            {"is_sorted": False, "warnings": ["sort was ignored", "source order"]},
+            False,
+            ["sort was ignored", "source order"],
+        ),
+        ({}, False, []),
+        ({"is_sorted": "true", "warnings": "invalid"}, False, []),
+    ],
+)
+def test_object_page_preserves_sorting_metadata(
+    replay: Replay, metadata: dict[str, Any], is_sorted: bool, warnings: list[str]
+) -> None:
+    replay.queue_response({"datas": [], **metadata})
+
+    page = orders().order_by(Order.order_id.desc()).page(limit=2)
+
+    assert page.is_sorted is is_sorted
+    assert page.warnings == warnings
+
+
 def test_paging_follows_the_cursor_until_it_is_null(replay: Replay) -> None:
     replay.queue_response(
         {"datas": [{"order_id": 1}, {"order_id": 2}], "paging": {"next_cursor": "c-2"}},
@@ -393,30 +427,18 @@ def test_paging_follows_the_cursor_until_it_is_null(replay: Replay) -> None:
 
     assert [row.order_id for row in rows] == [1, 2, 3, 4, 5]
     assert [body.get("cursor") for body in replay.sent] == [None, "c-2", "c-3"]
+    assert [body["paging_mode"] for body in replay.sent] == ["cursor"] * 3
     assert all("offset" not in body for body in replay.sent)
     assert len(replay.sent) == 3
 
 
-def test_without_paging_the_walk_falls_back_to_offset(replay: Replay) -> None:
-    """A pre-cursor deploy answers with no `paging` and no `cursor` but honours
-    `offset` — recorded that way on a live 0.1.5 platform."""
-    replay.queue("unfiltered_page", "offset_paging", "no_match")
+def test_a_full_page_with_no_cursor_ends_the_walk(replay: Replay) -> None:
+    replay.queue_response({"datas": [{"order_id": 1}, {"order_id": 2}]})
 
     rows = list(orders().iterate(page_size=2))
 
-    assert len(rows) == 4
-    assert [body.get("offset") for body in replay.sent] == [None, 2, 4]
-    assert all("cursor" not in body for body in replay.sent)
-
-
-def test_the_offset_fallback_stops_on_the_first_short_page(replay: Replay) -> None:
-    """A page shorter than asked for means the end — no extra round trip to prove it."""
-    replay.queue("in_operator")
-
-    rows = list(orders().iterate(page_size=5))
-
-    assert len(rows) == 3
-    assert len(replay.sent) == 1
+    assert [row.order_id for row in rows] == [1, 2]
+    assert replay.sent == [{"limit": 2, "paging_mode": "cursor"}]
 
 
 def test_a_compatibility_cursor_alone_selects_cursor_paging(replay: Replay) -> None:

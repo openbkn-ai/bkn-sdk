@@ -30,8 +30,7 @@ afterEach(() => {
 describe("query_object_instance argument validation", () => {
   it.each([
     [{ ot_id: "ot-1", knn: { field: "embedding" } }, "condition.operation=knn"],
-    [{ ot_id: "ot-1", sort_by: "created_at" }, "sort_by"],
-    [{ ot_id: "ot-1", search_after: ["id-9"] }, "use cursor"],
+    [{ ot_id: "ot-1", sort_by: "created_at", search_after: ["id-9"] }, "sort_by"],
     [
       { ot_id: "ot-1", condition: { operation: "and", conditions: [] } },
       "condition.sub_conditions",
@@ -44,7 +43,12 @@ describe("query_object_instance argument validation", () => {
       },
       "the platform ignores filters",
     ],
-    [{ ot_id: "ot-1", cursor: "next-page", offset: 30 }, "cursor and offset cannot be combined"],
+    [{ ot_id: "ot-1", paging_mode: "offset" }, "paging_mode must be single or cursor"],
+    [{ ot_id: "ot-1", cursor: "next-page" }, 'cursor requires paging_mode: "cursor"'],
+    [
+      { ot_id: "ot-1", paging_mode: "single", cursor: "next-page" },
+      'cursor requires paging_mode: "cursor"',
+    ],
     [{ ot_id: "ot-1", kn_id: "another-kn" }, "kn_id must match"],
     [
       {
@@ -73,15 +77,16 @@ describe("query_object_instance argument validation", () => {
   });
 
   it.each([
-    { ot_id: "ot-1", cursor: "next-page" },
+    { ot_id: "ot-1", paging_mode: "cursor" },
+    { ot_id: "ot-1", paging_mode: "cursor", cursor: "next-page", offset: 30 },
     { ot_id: "ot-1", offset: 30 },
-  ])("accepts cursor or offset paging: %j", (args) => {
+    { ot_id: "ot-1", paging_mode: "single", offset: 30 },
+  ])("accepts single pages and explicit cursor paging: %j", (args) => {
     expect(() => validateQueryObjectInstanceArgs(args, "kn-1")).not.toThrow();
   });
 
   it.each([
     ['{"ot_id":"ot-1","knn":{"field":"embedding"}}', "condition.operation=knn"],
-    ['{"ot_id":"ot-1","search_after":["id-9"]}', "use cursor"],
     [
       '{"ot_id":"ot-1","condition":{"operation":"and","conditions":[]}}',
       "condition.sub_conditions",
@@ -90,7 +95,7 @@ describe("query_object_instance argument validation", () => {
       '{"ot_id":"ot-1","condition":{"field":"status","operation":"==","value_from":"const","value":"open"},"filters":[{"field":"region","op":"==","value":"CN"}]}',
       "the platform ignores filters",
     ],
-    ['{"ot_id":"ot-1","cursor":"next-page","offset":30}', "cursor and offset cannot be combined"],
+    ['{"ot_id":"ot-1","cursor":"next-page"}', 'cursor requires paging_mode: "cursor"'],
     ['{"ot_id":"ot-1","kn_id":"another-kn"}', "kn_id must match"],
     [
       '{"ot_id":"ot-1","filters":[{"field":"name","op":"==","value":"pod","negate":true}]}',

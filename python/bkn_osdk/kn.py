@@ -235,17 +235,16 @@ def explore_subgraph(
     limit: int | None = None,
     sort: list[Any] | None = None,
     offset: int | None = None,
-    search_after: list[Any] | None = None,
     context: Context | None = None,
 ) -> Any:
     """从起点探索关联子图.
 
     不需要预先知道拓扑：给起点对象类、方向与最大跳数，引擎沿概念定义的关系散开，
-    返回命中的对象与它们之间的路径。 **分页与排序只切起点**：`limit` / `sort` / `offset` /
-    `search_after` 全部作用于
-    **起点对象类**的实例集合，不是路径条数、也不是返回对象总数。`limit: 10` 的含义 是「从至多
-    10 个起点出发」，每个起点散出多少条路径由拓扑决定。 **`path_length` 必填，取
-    1-3**，缺失或越界都在 Context Loader 侧返回 400。 下界必须拦在这里：`path_length` 为 0
+    返回命中的对象与它们之间的路径。 **分页与排序作用于起点**：`limit: 10` 表示从至多 10
+    个起点出发。每个起点散出 多少条路径由拓扑决定。每次请求独立读取一页起点，翻页时调整
+    `offset`。 Context Loader 会尝试获取起点总数。取得总数时返回
+    `total_count`，已确认零命中时返回 `0`。 **`path_length` 必填，取 1-3**，缺失或越界都在
+    Context Loader 侧返回 400。 下界必须拦在这里：`path_length` 为 0
     时下游不报错，只返回空子图，会被读成 「什么都没连上」。路径数随跳数快速增长，先从 1-2
     起步，不够再加。 **`condition`
     只过滤起点**，不约束路径上的其他对象类。要约束中间节点就说明 路径其实是已知的，改用
@@ -271,11 +270,10 @@ def explore_subgraph(
         limit: **起点对象类**的实例数量上限，不是路径条数上限。
         sort: **起点对象类**的排序，按数组顺序依次比较。与 `limit` 配合决定「从哪些
             起点出发」，不影响路径本身的顺序。元素不可为 `null`。 元素字段: direction, field。
-        offset: 起点对象类的偏移翻页。与 `search_after` 互斥。
-        search_after: 起点对象类的游标翻页。与 `offset` 互斥。
+        offset: 本次读取跳过的起点实例数。
 
-    Returns the platform's own payload: current_path_number, isolated_objects, objects,
-    overall_ms, relation_paths, search_after, total_count.
+    Returns the platform's own payload: current_path_number, is_sorted, isolated_objects,
+    objects, overall_ms, relation_paths, total_count, warnings.
     """
     return _send(
         "/api/agent-retrieval/v1/kn/explore_subgraph",
@@ -295,7 +293,6 @@ def explore_subgraph(
             "limit": limit,
             "sort": sort,
             "offset": offset,
-            "search_after": search_after,
         },
         context,
     )
@@ -872,14 +869,17 @@ def query_instance_subgraph(
     起）、哪个关系类、路径要求的起止节点与实际填写或关系类定义的起止节点，例如
     `OntologyQuery.KnowledgeNetwork.InvalidParameter.TypePath: 第 2 条边 rel_order_user
     与路径节点不一致：路径要求 user → order，当前填写 order → user。…`。
+    每次请求为每条路径独立读取一页起点，再沿该路径展开。翻页时设置对应路径的
+    `object_types[0].offset`（跳过的起点数）和 `object_types[0].limit`（起点上限）。
     **取主键**：子图对象的主键在 `_instance_identity` 里，与 `query_object_instance`
     同名同义。要把子图结果喂给 [action.yaml](action.yaml) 或
     [logic-property.yaml](logic-property.yaml) 时， 从这里取键值对，不要自己拼。
 
     Args:
         relation_type_paths: 关系路径集合。多条路径同时查询，各自返回独立子图。 元素字段: limit,
-            object_types{condition, id, limit, sort}, relation_types{direction,
-            relation_type_id, source_object_type_id, target_object_type_id}。
+            object_types{condition, id, limit, offset, sort},
+            relation_types{direction, relation_type_id, source_object_type_id,
+            target_object_type_id}。
 
     Returns the platform's own payload: entries.
     """
@@ -958,6 +958,7 @@ def query_object_instance(
     limit: int | None = None,
     properties: list[Any] | None = None,
     sort: list[Any] | None = None,
+    paging_mode: str | None = None,
     cursor: str | None = None,
     offset: int | None = None,
     context: Context | None = None,
@@ -985,11 +986,9 @@ def query_object_instance(
     不传时的默认序**不保证语义**——既不是「最新」也不是「最相关」，因此 「最近的 N
     条」「金额最高的 N 个」必须显式传 `sort`，不能靠 `limit` 截默认序。 `field`
     是否属于该对象类由 ontology-query 校验，非法字段或非法 `direction` 返回 400 并透传原因。
-    **总数**：响应的 `total_count` 为满足过滤条件的实例总数，不受 `limit` 限制，
-    无需请求方开启。判断「一共多少条」读它即可，不必翻页累加。三态要分清： - 有值且大于
-    0：真实总数。 - 值为 `0`：真实零命中（字段存在）。 -
-    **字段缺失**：本次没有计算总数，不能推断为 0。用 `cursor` 翻页时
-    第二页起即如此（下游在游标非空时强制关闭总数计算）。要总数就回到不带 `cursor` 的首次查询。
+    **总数**：Context Loader 会尝试获取满足过滤条件的实例总数，不受 `limit` 限制。
+    取得总数时返回 `total_count`，已确认零命中时返回 `0`。
+    首次查询和续页都可能省略该字段，表示本次查询未取得总数。
 
     Args:
         condition: 过滤条件。逻辑算子（`and` / `or`）用 `sub_conditions` 组合子条件； 叶子条件用
@@ -1001,12 +1000,12 @@ def query_object_instance(
         properties: 指定返回的属性字段；不传返回全部属性。
         sort: 排序字段，按数组顺序依次比较。不传时默认序不保证语义，需要「最新 / 最大 / 最小的前 N
             条」时必须显式指定。 元素字段: direction, field。
-        cursor: 游标翻页：上一页响应返回的 `cursor` 原样回传，不透明字符串。首次查询留空。 与
-            `offset` 互斥。
-        offset: 偏移翻页：适用于资源（vega 表源）路径，可跳页。与 `cursor` 互斥。
+        paging_mode: 省略时默认 single，只查询一页。使用游标时首屏和续页均指定 cursor。
+        cursor: 续页时原样回传上一页的不透明游标，并指定 paging_mode=cursor。首屏留空。
+        offset: 首屏读取的起始行偏移。游标续页时沿用首屏的值。
 
-    Returns the platform's own payload: cursor, datas, effective_permissions, query_source,
-    row_filter_applied, total_count.
+    Returns the platform's own payload: cursor, datas, effective_permissions, is_sorted,
+    query_source, row_filter_applied, total_count, warnings.
     """
     return _send(
         "/api/agent-retrieval/v1/kn/query_object_instance",
@@ -1023,6 +1022,7 @@ def query_object_instance(
             "limit": limit,
             "properties": properties,
             "sort": sort,
+            "paging_mode": paging_mode,
             "cursor": cursor,
             "offset": offset,
         },

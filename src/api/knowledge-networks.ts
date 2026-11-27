@@ -347,9 +347,13 @@ export interface ObjectQueryOptions extends InstanceReadOptions {
 
 /**
  * Query instances of an object type (ontology-query). Body is a JSON query passthrough:
- * `{limit, condition?, sort?, need_total?, properties?}`. Paging depends on the deploy:
- * with foundry #1623 the response carries `paging.next_cursor`, sent back as `cursor`
- * for the next page; older deploys return no `paging` and page with body `offset`.
+ * `{limit, condition?, sort?, need_total?, properties?, paging_mode?, cursor?}`.
+ * `need_total: true` requests a total. The response includes `total_count`
+ * when available, including 0 for confirmed zero matches.
+ * The server defaults to `paging_mode: "single"` for one page. To paginate, use
+ * `paging_mode: "cursor"` on the first request and every continuation. Keep the
+ * query unchanged and send `paging.next_cursor` back as `cursor`. Restart
+ * pagination from the first page if it began with the old implicit mode.
  */
 export function queryObjectTypeInstances(
   ctx: RequestContext,

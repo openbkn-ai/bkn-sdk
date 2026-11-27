@@ -19,11 +19,11 @@ from __future__ import annotations
 
 import operator
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time
 from decimal import Decimal
 from functools import reduce
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
 from urllib.parse import quote
 
 from .config import Context, resolve_context
@@ -253,19 +253,20 @@ class Page(Generic[OT]):
     """One page of results, plus what the envelope said about it."""
 
     rows: list[OT]
-    #: `total_count`, present only when `need_total` was asked for — and absent
-    #: even then when nothing matched, so `count()` reads `None` as zero.
+    #: `total_count` when available. `None` means the response omitted the total.
     total: int | None = None
     #: Actual Vega query channel: "local_index" or "source"; absent if no resource was queried.
     query_source: str | None = None
     #: Present on a traced read: the evidence-chain entry for the operation.
     receipt: dict[str, Any] | None = None
-    #: The opaque cursor for the page after this one — `paging.next_cursor` on
-    #: the REST read, or its compatibility twin `cursor`. `None` means this is
-    #: the last page. Pass it back as `page(cursor=...)`. Always `None` on a
-    #: traced read: the MCP tool does not return REST's cursor, and this runtime
-    #: pages it by `offset`.
+    #: The opaque next-page cursor: `paging.next_cursor` in ontology-query or
+    #: `cursor` in the MCP tool. Pass it back as `page(cursor=...)`; `None`
+    #: means there is no continuation.
     next_cursor: str | None = None
+    #: Whether the server applied sorting to this page. Unreported status is False.
+    is_sorted: bool = False
+    #: Warnings in the order returned by the server.
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -349,39 +350,21 @@ class ObjectSet(Generic[OT]):
     def count(self) -> int:
         """Rows matching the filter.
 
-        Only the REST path can answer this, and only via `need_total` — the MCP
-        tool accepts the key and returns no total under any argument. The
-        smallest legal `limit` is 1, so one row comes back and is discarded.
+        Requests a total via REST and raises BknError when the resource does not
+        provide one. The page limit is 1 and any returned row is discarded.
         """
-        return self.page(limit=MIN_LIMIT, need_total=True).total or 0
+        total = self.page(limit=MIN_LIMIT, need_total=True).total
+        if total is None:
+            raise BknError("The resource did not return a total count for this query.")
+        return total
 
     def iterate(self, page_size: int = DEFAULT_PAGE_SIZE) -> Iterator[OT]:
-        """Every match, paged the way the deploy answering pages.
-
-        The current ontology-query contract takes a first query, then `{cursor}`
-        turns of the same query, and answers `paging.next_cursor` — `null` on the
-        last page. Where the first response carries `paging` (or the compatibility
-        `cursor`), the walk follows that cursor until it is null: a short page is
-        then not proof of the end, nor a full one proof of more.
-
-        Deploys built before cursor paging (0.1.5 releases in the field) answer
-        with neither field but honour `offset`, and the traced MCP tool documents
-        `offset` too. There the walk falls back to `limit`/`offset`, advancing by
-        the page length and stopping on the first short page.
-        """
+        """Every match, following cursor pages from the first request."""
         context = self.context or resolve_context()
         pinned = replace(self, context=context)
 
-        page, cursor_paged = pinned._fetch(limit=page_size)
+        page = pinned.page(limit=page_size, paging_mode="cursor")
         yield from page.rows
-
-        if not cursor_paged:
-            offset = len(page.rows)
-            while len(page.rows) == page_size:
-                page, _ = pinned._fetch(limit=page_size, offset=offset)
-                yield from page.rows
-                offset += len(page.rows)
-            return
 
         cursor: str | None = None
         while page.next_cursor is not None:
@@ -391,7 +374,7 @@ class ObjectSet(Generic[OT]):
                     "never advance. Stopping rather than looping."
                 )
             cursor = page.next_cursor
-            page, _ = pinned._fetch(limit=page_size, cursor=cursor)
+            page = pinned.page(limit=page_size, cursor=cursor)
             yield from page.rows
 
     def get(self, *values: Any, **named: Any) -> OT | None:
@@ -421,40 +404,29 @@ class ObjectSet(Generic[OT]):
         limit: int = DEFAULT_TAKE,
         offset: int = 0,
         need_total: bool = False,
+        paging_mode: Literal["single", "cursor"] | None = None,
         cursor: str | None = None,
     ) -> Page[OT]:
-        """One page.
+        """One page; the default request uses the server's single-page mode.
 
-        The first page takes no `cursor`; each later one takes the previous
-        page's `next_cursor`, with the same filter, ordering and limit.
-
-        `offset` is still sent as before: deploys that predate cursor paging
-        honour it, as does the traced MCP tool. The current contract pages by
-        `cursor` instead, so prefer `next_cursor` where a deploy returns one.
-        Passing both raises.
-        """
-        return self._fetch(limit=limit, offset=offset, need_total=need_total, cursor=cursor)[0]
-
-    def _fetch(
-        self,
-        *,
-        limit: int,
-        offset: int = 0,
-        need_total: bool = False,
-        cursor: str | None = None,
-    ) -> tuple[Page[OT], bool]:
-        """The page, and whether the response speaks cursor paging (`paging` or `cursor`).
-
-        The single place a request body is assembled.
+        Start a walk with `paging_mode="cursor"`. Continue with `cursor` set
+        to the previous page's `next_cursor` and keep the same query, limit and
+        offset. Supplying a cursor selects the server's cursor mode.
         """
         if not MIN_LIMIT <= limit <= MAX_LIMIT:
             raise InputError(f"limit must be between {MIN_LIMIT} and {MAX_LIMIT}, got {limit}.")
         if offset < 0:
             raise InputError(f"offset must not be negative, got {offset}.")
-        if offset and cursor is not None:
-            raise InputError("Pass `cursor` or `offset`, not both.")
+        if paging_mode not in (None, "single", "cursor"):
+            raise InputError("paging_mode must be single or cursor.")
+        if cursor is not None:
+            if paging_mode == "single":
+                raise InputError('A cursor requires paging_mode="cursor".')
+            paging_mode = "cursor"
 
         body: dict[str, Any] = {"limit": limit}
+        if paging_mode is not None:
+            body["paging_mode"] = paging_mode
         if cursor is not None:
             body["cursor"] = cursor
         if self.filter is not None:
@@ -471,10 +443,7 @@ class ObjectSet(Generic[OT]):
         context = self.context or resolve_context()
         if offset:
             body["offset"] = offset
-        sent = self._send(body, context)
-        response = sent[0]
-        paged = isinstance(response, dict) and ("paging" in response or "cursor" in response)
-        return self._decode(sent, context), paged
+        return self._decode(self._send(body, context), context)
 
     # ---- internals ----
 
@@ -575,9 +544,7 @@ class ObjectSet(Generic[OT]):
         rows = payload.get("datas") or []
         for index, row in enumerate(rows):
             if not isinstance(row, dict):
-                # Dropping it would shorten the page, and `iterate` reads a short
-                # page as the last one — so one malformed row would silently
-                # truncate the whole walk. Better to say which row it was.
+                # A malformed row invalidates the entire page.
                 raise BknError(
                     f"Row {index} of this page is a {type(row).__name__}, not an object: "
                     f"{str(row)[:80]}. The platform's response does not match the read "
@@ -590,12 +557,17 @@ class ObjectSet(Generic[OT]):
             instance.__receipt__ = receipt
             instance.__context__ = context
         total = payload.get("total_count")
+        warnings = payload.get("warnings")
         return Page(
             rows=instances,
             total=total if isinstance(total, int) else None,
             query_source=payload.get("query_source"),
             receipt=receipt,
             next_cursor=_next_cursor(payload),
+            is_sorted=payload.get("is_sorted") is True,
+            warnings=warnings
+            if isinstance(warnings, list) and all(isinstance(warning, str) for warning in warnings)
+            else [],
         )
 
     def _primary_key_filter(self, *values: Any, **named: Any) -> Filter:
@@ -646,11 +618,7 @@ def branch_param(branch: str) -> str | None:
 
 
 def _next_cursor(payload: dict[str, Any]) -> str | None:
-    """`paging.next_cursor`, falling back to the compatibility `cursor` field.
-
-    The contract makes `paging.next_cursor` authoritative — `null` at the end —
-    and `cursor` its deprecated copy, read only where `paging` is missing.
-    """
+    """Read the cursor from the ontology-query or Context Loader response."""
     paging = payload.get("paging")
     if isinstance(paging, dict) and "next_cursor" in paging:
         cursor = paging.get("next_cursor")
