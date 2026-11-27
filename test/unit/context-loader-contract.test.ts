@@ -9,7 +9,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // `response_format: "json"` (the MCP schemas default to toon) and `kn_id` in the
 // body (run_cypher / search_capabilities require it there, not only as a header).
 import pkg from "../../package.json" with { type: "json" };
-import { callTool, searchCapabilities, searchSchema } from "../../src/api/context-loader.js";
+import {
+  callTool,
+  queryObjectInstance,
+  searchCapabilities,
+  searchSchema,
+} from "../../src/api/context-loader.js";
 import { lifecycleHint } from "../../src/api/http.js";
 import { resetLifecycleCaches } from "../../src/api/lifecycle.js";
 import { buildProgram } from "../../src/cli-program.js";
@@ -214,6 +219,131 @@ describe("context CLI flags reach the contract", () => {
     expect(calls.map((c) => c.arguments.schema_brief)).toEqual([true, false, undefined]);
   });
 
+  it("reads independent explore-subgraph pages by starting offset", async () => {
+    const response = {
+      relation_paths: [],
+      is_sorted: false,
+      warnings: ["API Resource does not support sorting; sort was ignored"],
+    };
+    const calls = mockDeploy(JSON.stringify(response));
+    const ctx = freshCtx();
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const query = {
+      sort: [{ field: "id", direction: "asc" }],
+    };
+    const argv = [
+      "context",
+      "explore-subgraph",
+      "kn-1",
+      "ot-1",
+      "--hops",
+      "2",
+      "--limit",
+      "5",
+      "--direction",
+      "forward",
+      "--json",
+    ];
+
+    try {
+      await cli(ctx, ...argv, "--args", JSON.stringify({ ...query, offset: 20 }));
+      expect(JSON.parse(String(write.mock.calls[0]?.[0]))).toEqual(response);
+      await cli(ctx, ...argv, "--args", JSON.stringify({ ...query, offset: 25 }));
+    } finally {
+      write.mockRestore();
+    }
+
+    expect(calls[0]).toEqual({
+      name: "explore_subgraph",
+      arguments: {
+        kn_id: "kn-1",
+        response_format: "json",
+        source_object_type_id: "ot-1",
+        direction: "forward",
+        path_length: 2,
+        limit: 5,
+        offset: 20,
+        ...query,
+      },
+    });
+    expect(calls[1]).toEqual({
+      name: "explore_subgraph",
+      arguments: { ...calls[0]?.arguments, offset: 25 },
+    });
+  });
+
+  it("forwards each relation path's starting offset independently", async () => {
+    const response = {
+      entries: [
+        { is_sorted: true },
+        {
+          is_sorted: false,
+          warnings: ["API Resource does not support sorting; sort was ignored"],
+        },
+      ],
+    };
+    const calls = mockDeploy(JSON.stringify(response));
+    const ctx = freshCtx();
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const source = { id: "order", limit: 2, offset: 10, sort: [{ field: "id", direction: "asc" }] };
+    const target = { id: "user", limit: 3 };
+    const path = {
+      object_types: [source, target],
+      relation_types: [{ relation_type_id: "order_user" }],
+    };
+    const nextPage = {
+      ...path,
+      object_types: [{ ...source, offset: 12 }, target],
+    };
+    const secondPath = {
+      object_types: [{ ...source, id: "shipment", offset: 20 }, target],
+      relation_types: [{ relation_type_id: "shipment_user" }],
+    };
+    const argv = ["context", "query-instance-subgraph", "kn-1", "--json", "--args"];
+
+    try {
+      await cli(ctx, ...argv, JSON.stringify({ relation_type_paths: [path, secondPath] }));
+      expect(JSON.parse(String(write.mock.calls[0]?.[0]))).toEqual(response);
+      await cli(ctx, ...argv, JSON.stringify({ relation_type_paths: [nextPage, secondPath] }));
+    } finally {
+      write.mockRestore();
+    }
+
+    expect(calls).toEqual(
+      [path, nextPage].map((relationPath) => ({
+        name: "query_instance_subgraph",
+        arguments: {
+          kn_id: "kn-1",
+          response_format: "json",
+          relation_type_paths: [relationPath, secondPath],
+        },
+      })),
+    );
+  });
+
+  it("ignores search_after in the named object query command", async () => {
+    const calls = mockDeploy("{}");
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      await cli(
+        freshCtx(),
+        "context",
+        "query-object-instance",
+        "kn-1",
+        "--args",
+        '{"ot_id":"ot-1","offset":20,"search_after":[1,"legacy"]}',
+      );
+    } finally {
+      write.mockRestore();
+    }
+    expect(calls).toEqual([
+      {
+        name: "query_object_instance",
+        arguments: { kn_id: "kn-1", response_format: "json", ot_id: "ot-1", offset: 20 },
+      },
+    ]);
+  });
+
   it("refuses a --detail-level that is neither summary nor full before any request", async () => {
     mockDeploy("{}");
     await expect(
@@ -245,13 +375,20 @@ describe("lifecycle hint reads ErrorCompact bodies", () => {
 });
 
 describe("query_object_instance validation composes with the contract defaults", () => {
-  it("validates the caller's arguments, then sends kn_id and response_format=json", async () => {
+  it("drops search_after and keeps SDK defaults without mutating caller arguments", async () => {
     const calls = mockDeploy(JSON.stringify({ datas: [], total_count: 0 }));
-    await context(freshCtx()).queryObjectInstance("kn-1", { ot_id: "ot-1", limit: 5 });
-    expect(calls[0]).toEqual({
+    const ctx = freshCtx();
+    const args = { ot_id: "ot-1", limit: 5, search_after: null };
+
+    await queryObjectInstance(ctx, "kn-1", args);
+    await context(ctx).queryObjectInstance("kn-1", args);
+
+    const expected = {
       name: "query_object_instance",
       arguments: { kn_id: "kn-1", response_format: "json", ot_id: "ot-1", limit: 5 },
-    });
+    };
+    expect(calls).toEqual([expected, expected]);
+    expect(args.search_after).toBeNull();
   });
 
   it("accepts kn_id and response_format as caller root keys and keeps their values", async () => {
@@ -262,6 +399,17 @@ describe("query_object_instance validation composes with the contract defaults",
       response_format: "json",
     });
     expect(calls[0]?.arguments).toEqual({ kn_id: "kn-1", response_format: "json", ot_id: "ot-1" });
+  });
+
+  it.each([
+    { datas: [], is_sorted: true },
+    { datas: [], is_sorted: false, warnings: ["sort was ignored", "source order"] },
+  ])("passes through object query sorting metadata: %j", async (result) => {
+    mockDeploy(JSON.stringify(result));
+
+    await expect(
+      context(freshCtx()).queryObjectInstance("kn-1", { ot_id: "ot-1" }),
+    ).resolves.toEqual(result);
   });
 
   it("still refuses a caller kn_id naming another network before any request", async () => {

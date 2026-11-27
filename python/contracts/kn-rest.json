@@ -154,7 +154,7 @@
       "method": "POST",
       "operation": "explore_subgraph",
       "summary": "从起点探索关联子图",
-      "description": "不需要预先知道拓扑：给起点对象类、方向与最大跳数，引擎沿概念定义的关系散开， 返回命中的对象与它们之间的路径。 **分页与排序只切起点**：`limit` / `sort` / `offset` / `search_after` 全部作用于 **起点对象类**的实例集合，不是路径条数、也不是返回对象总数。`limit: 10` 的含义 是「从至多 10 个起点出发」，每个起点散出多少条路径由拓扑决定。 **`path_length` 必填，取 1-3**，缺失或越界都在 Context Loader 侧返回 400。 下界必须拦在这里：`path_length` 为 0 时下游不报错，只返回空子图，会被读成 「什么都没连上」。路径数随跳数快速增长，先从 1-2 起步，不够再加。 **`condition` 只过滤起点**，不约束路径上的其他对象类。要约束中间节点就说明 路径其实是已知的，改用 `query_instance_subgraph` 逐节点加条件。 **`isolated_objects` 是有效结论不是失败**：它明确回答了「这些起点在给定方向与 跳数内没有关联」。不要因为它有值就重试或改问法。 **取主键**：与 `query_instance_subgraph` 一致，对象主键在 `_instance_identity` 里，可直接喂给 [action.yaml](action.yaml) 或 [logic-property.yaml](logic-property.yaml)。",
+      "description": "不需要预先知道拓扑：给起点对象类、方向与最大跳数，引擎沿概念定义的关系散开， 返回命中的对象与它们之间的路径。 **分页与排序作用于起点**：`limit: 10` 表示从至多 10 个起点出发。每个起点散出 多少条路径由拓扑决定。每次请求独立读取一页起点，翻页时调整 `offset`。 Context Loader 会尝试获取起点总数。取得总数时返回 `total_count`，已确认零命中时返回 `0`。 **`path_length` 必填，取 1-3**，缺失或越界都在 Context Loader 侧返回 400。 下界必须拦在这里：`path_length` 为 0 时下游不报错，只返回空子图，会被读成 「什么都没连上」。路径数随跳数快速增长，先从 1-2 起步，不够再加。 **`condition` 只过滤起点**，不约束路径上的其他对象类。要约束中间节点就说明 路径其实是已知的，改用 `query_instance_subgraph` 逐节点加条件。 **`isolated_objects` 是有效结论不是失败**：它明确回答了「这些起点在给定方向与 跳数内没有关联」。不要因为它有值就重试或改问法。 **取主键**：与 `query_instance_subgraph` 一致，对象主键在 `_instance_identity` 里，可直接喂给 [action.yaml](action.yaml) 或 [logic-property.yaml](logic-property.yaml)。",
       "query": [
         {
           "name": "kn_id",
@@ -241,24 +241,19 @@
           "name": "offset",
           "type": "integer",
           "required": false,
-          "description": "起点对象类的偏移翻页。与 `search_after` 互斥。"
-        },
-        {
-          "name": "search_after",
-          "type": "array",
-          "required": false,
-          "description": "起点对象类的游标翻页。与 `offset` 互斥。"
+          "description": "本次读取跳过的起点实例数。"
         }
       ],
       "declares_context": false,
       "returns": [
         "current_path_number",
+        "is_sorted",
         "isolated_objects",
         "objects",
         "overall_ms",
         "relation_paths",
-        "search_after",
-        "total_count"
+        "total_count",
+        "warnings"
       ],
       "source": "instance-subgraph.yaml"
     },
@@ -913,7 +908,7 @@
       "method": "POST",
       "operation": "query_instance_subgraph",
       "summary": "按关系路径查询对象子图",
-      "description": "`relation_type_paths` 可以放多条路径，每条独立查询、独立返回一个子图， 顺序与请求一致。 **路径按实际走过的顺序写**： - `object_types` 按节点出现顺序排列；n 跳路径长度为 n+1。即使某个节点没有 过滤条件，也必须占位保留其 `id`，否则顺序错位。 - `relation_types` 按边出现顺序排列，长度为 n；第 i 条边连接 `object_types[i]` 与 `object_types[i+1]`，每条边只需给 `relation_type_id`。 - 路径可以逆着关系类定义走。正向还是反向由服务端对照关系类定义判断：相邻 节点依次为关系类的起点、终点即正向，依次为终点、起点即反向；两者都不是则 返回 400。 - `source_object_type_id` / `target_object_type_id` 可省略，表示**本次遍历** 从哪个节点走到哪个节点（即 `object_types[i].id` / `object_types[i+1].id`）， 不是关系类定义的起终点：反向遍历时两者与关系类定义相反。填写时必须与 相邻节点一致。 - `direction`（`forward` / `backward`）可省略。只有关系类的起点和终点是同一 个对象类（自引用）时，相邻节点区分不出方向，默认正向；要反向走须写 `backward`。 路径不合法时返回 400，`details` 为下游错误码加说明，指出第几条边（从 1 起）、哪个关系类、路径要求的起止节点与实际填写或关系类定义的起止节点，例如 `OntologyQuery.KnowledgeNetwork.InvalidParameter.TypePath: 第 2 条边 rel_order_user 与路径节点不一致：路径要求 user → order，当前填写 order → user。…`。 **取主键**：子图对象的主键在 `_instance_identity` 里，与 `query_object_instance` 同名同义。要把子图结果喂给 [action.yaml](action.yaml) 或 [logic-property.yaml](logic-property.yaml) 时， 从这里取键值对，不要自己拼。",
+      "description": "`relation_type_paths` 可以放多条路径，每条独立查询、独立返回一个子图， 顺序与请求一致。 **路径按实际走过的顺序写**： - `object_types` 按节点出现顺序排列；n 跳路径长度为 n+1。即使某个节点没有 过滤条件，也必须占位保留其 `id`，否则顺序错位。 - `relation_types` 按边出现顺序排列，长度为 n；第 i 条边连接 `object_types[i]` 与 `object_types[i+1]`，每条边只需给 `relation_type_id`。 - 路径可以逆着关系类定义走。正向还是反向由服务端对照关系类定义判断：相邻 节点依次为关系类的起点、终点即正向，依次为终点、起点即反向；两者都不是则 返回 400。 - `source_object_type_id` / `target_object_type_id` 可省略，表示**本次遍历** 从哪个节点走到哪个节点（即 `object_types[i].id` / `object_types[i+1].id`）， 不是关系类定义的起终点：反向遍历时两者与关系类定义相反。填写时必须与 相邻节点一致。 - `direction`（`forward` / `backward`）可省略。只有关系类的起点和终点是同一 个对象类（自引用）时，相邻节点区分不出方向，默认正向；要反向走须写 `backward`。 路径不合法时返回 400，`details` 为下游错误码加说明，指出第几条边（从 1 起）、哪个关系类、路径要求的起止节点与实际填写或关系类定义的起止节点，例如 `OntologyQuery.KnowledgeNetwork.InvalidParameter.TypePath: 第 2 条边 rel_order_user 与路径节点不一致：路径要求 user → order，当前填写 order → user。…`。 每次请求为每条路径独立读取一页起点，再沿该路径展开。翻页时设置对应路径的 `object_types[0].offset`（跳过的起点数）和 `object_types[0].limit`（起点上限）。 **取主键**：子图对象的主键在 `_instance_identity` 里，与 `query_object_instance` 同名同义。要把子图结果喂给 [action.yaml](action.yaml) 或 [logic-property.yaml](logic-property.yaml) 时， 从这里取键值对，不要自己拼。",
       "query": [
         {
           "name": "kn_id",
@@ -944,7 +939,7 @@
           "type": "array",
           "item_fields": [
             "limit",
-            "object_types{condition, id, limit, sort}",
+            "object_types{condition, id, limit, offset, sort}",
             "relation_types{direction, relation_type_id, source_object_type_id, target_object_type_id}"
           ],
           "required": true,
@@ -1031,7 +1026,7 @@
       "method": "POST",
       "operation": "query_object_instance",
       "summary": "查询对象实例",
-      "description": "按单个对象类查询实例。`kn_id` / `ot_id` 走 **query 参数**，过滤与分页走请求体。 **条件两种写法**： - `filters`：扁平简写，多个条件按 AND 组合，`value_from` 自动取 `const`。 覆盖「字段 op 值 [AND ...]」这类绝大多数场景。 - `condition`：完整嵌套结构，需要 OR / 多层嵌套时用。 两者同传时 `condition` 优先，`filters` 被忽略。 **算子白名单以对象类为准**：可用算子看 `get_object_types` 返回的 `condition_operations`，不要照抄本文档的枚举全集。对绑定 Vega 资源的对象类， 这份清单由 BKN 按资源上**真实建成的索引**派生：字段建了全文索引才出现 `match` / `multi_match`，建了向量索引且 embedding 模型可解析才出现 `knn`。 没建索引的字段只保留按属性类型推导的比较算子。 **文本检索选哪个**：`match` 走全文索引，按分析器分词后词法命中；`knn` 走向量 索引，能召回字面不重合的表述（换个说法、跨语言）。两者是独立算子，没有隐式 融合；要同时用就放进 `or` 的 `sub_conditions`。`knn` 另需 `limit_key: k` 与 `limit_value: <近邻数>`。 条件里用了字段不支持的算子时，ontology-query 返回 400 并原样透传错误详情 （如 `OntologyQuery.InvalidParameter.Condition`）。 **`_score` 的取舍**：纯结构化过滤在底层落成常量打分查询，每条命中分数相同， 没有相关度语义，因此响应里的 `_score` 会被剥掉，避免调用方误以为结果按相关度 排序。只有查询里含 `knn` 或 `match` 这类真正打分的算子时才保留 `_score`。 **排序**：`sort` 可选，多字段按数组顺序依次比较（前一个相等才看后一个）。 不传时的默认序**不保证语义**——既不是「最新」也不是「最相关」，因此 「最近的 N 条」「金额最高的 N 个」必须显式传 `sort`，不能靠 `limit` 截默认序。 `field` 是否属于该对象类由 ontology-query 校验，非法字段或非法 `direction` 返回 400 并透传原因。 **总数**：响应的 `total_count` 为满足过滤条件的实例总数，不受 `limit` 限制， 无需请求方开启。判断「一共多少条」读它即可，不必翻页累加。三态要分清： - 有值且大于 0：真实总数。 - 值为 `0`：真实零命中（字段存在）。 - **字段缺失**：本次没有计算总数，不能推断为 0。用 `cursor` 翻页时 第二页起即如此（下游在游标非空时强制关闭总数计算）。要总数就回到不带 `cursor` 的首次查询。",
+      "description": "按单个对象类查询实例。`kn_id` / `ot_id` 走 **query 参数**，过滤与分页走请求体。 **条件两种写法**： - `filters`：扁平简写，多个条件按 AND 组合，`value_from` 自动取 `const`。 覆盖「字段 op 值 [AND ...]」这类绝大多数场景。 - `condition`：完整嵌套结构，需要 OR / 多层嵌套时用。 两者同传时 `condition` 优先，`filters` 被忽略。 **算子白名单以对象类为准**：可用算子看 `get_object_types` 返回的 `condition_operations`，不要照抄本文档的枚举全集。对绑定 Vega 资源的对象类， 这份清单由 BKN 按资源上**真实建成的索引**派生：字段建了全文索引才出现 `match` / `multi_match`，建了向量索引且 embedding 模型可解析才出现 `knn`。 没建索引的字段只保留按属性类型推导的比较算子。 **文本检索选哪个**：`match` 走全文索引，按分析器分词后词法命中；`knn` 走向量 索引，能召回字面不重合的表述（换个说法、跨语言）。两者是独立算子，没有隐式 融合；要同时用就放进 `or` 的 `sub_conditions`。`knn` 另需 `limit_key: k` 与 `limit_value: <近邻数>`。 条件里用了字段不支持的算子时，ontology-query 返回 400 并原样透传错误详情 （如 `OntologyQuery.InvalidParameter.Condition`）。 **`_score` 的取舍**：纯结构化过滤在底层落成常量打分查询，每条命中分数相同， 没有相关度语义，因此响应里的 `_score` 会被剥掉，避免调用方误以为结果按相关度 排序。只有查询里含 `knn` 或 `match` 这类真正打分的算子时才保留 `_score`。 **排序**：`sort` 可选，多字段按数组顺序依次比较（前一个相等才看后一个）。 不传时的默认序**不保证语义**——既不是「最新」也不是「最相关」，因此 「最近的 N 条」「金额最高的 N 个」必须显式传 `sort`，不能靠 `limit` 截默认序。 `field` 是否属于该对象类由 ontology-query 校验，非法字段或非法 `direction` 返回 400 并透传原因。 **总数**：Context Loader 会尝试获取满足过滤条件的实例总数，不受 `limit` 限制。 取得总数时返回 `total_count`，已确认零命中时返回 `0`。 首次查询和续页都可能省略该字段，表示本次查询未取得总数。",
       "query": [
         {
           "name": "kn_id",
@@ -1103,16 +1098,26 @@
           "description": "排序字段，按数组顺序依次比较。不传时默认序不保证语义，需要「最新 / 最大 / 最小的前 N 条」时必须显式指定。"
         },
         {
+          "name": "paging_mode",
+          "type": "string",
+          "required": false,
+          "description": "省略时默认 single，只查询一页。使用游标时首屏和续页均指定 cursor。",
+          "enum": [
+            "single",
+            "cursor"
+          ]
+        },
+        {
           "name": "cursor",
           "type": "string",
           "required": false,
-          "description": "游标翻页：上一页响应返回的 `cursor` 原样回传，不透明字符串。首次查询留空。 与 `offset` 互斥。"
+          "description": "续页时原样回传上一页的不透明游标，并指定 paging_mode=cursor。首屏留空。"
         },
         {
           "name": "offset",
           "type": "integer",
           "required": false,
-          "description": "偏移翻页：适用于资源（vega 表源）路径，可跳页。与 `cursor` 互斥。"
+          "description": "首屏读取的起始行偏移。游标续页时沿用首屏的值。"
         }
       ],
       "declares_context": true,
@@ -1120,9 +1125,11 @@
         "cursor",
         "datas",
         "effective_permissions",
+        "is_sorted",
         "query_source",
         "row_filter_applied",
-        "total_count"
+        "total_count",
+        "warnings"
       ],
       "source": "object-instance.yaml"
     },

@@ -50,7 +50,7 @@ it("previews the direct MCP query arguments without reading schema or opening an
   expect(fetch).not.toHaveBeenCalled();
 });
 
-it("previews caller-chosen kn_id and response_format over the defaults", async () => {
+it("previews the unchanged continuation arguments and caller-chosen response format", async () => {
   vi.stubGlobal("fetch", vi.fn());
   enableDryRun();
 
@@ -59,11 +59,31 @@ it("previews caller-chosen kn_id and response_format over the defaults", async (
     token: "secret-token",
     insecure: false,
   })
-    .queryObjectInstance("kn-1", { ot_id: "ot-1", kn_id: "kn-1", response_format: "toon" })
+    .queryObjectInstance("kn-1", {
+      ot_id: "ot-1",
+      kn_id: "kn-1",
+      response_format: "toon",
+      paging_mode: "cursor",
+      cursor: "opaque-next-page",
+      offset: 20,
+      search_after: "ignored",
+    })
     .catch((caught: unknown) => caught);
 
   expect(error).toBeInstanceOf(DryRunSignal);
-  expect((error as DryRunSignal).request.body).toMatchObject({
-    params: { arguments: { kn_id: "kn-1", response_format: "toon", ot_id: "ot-1" } },
+  expect((error as DryRunSignal).request.body).toEqual({
+    jsonrpc: "2.0",
+    method: "tools/call",
+    params: {
+      name: "query_object_instance",
+      arguments: {
+        kn_id: "kn-1",
+        response_format: "toon",
+        ot_id: "ot-1",
+        paging_mode: "cursor",
+        cursor: "opaque-next-page",
+        offset: 20,
+      },
+    },
   });
 });

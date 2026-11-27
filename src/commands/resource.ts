@@ -111,7 +111,7 @@ export function addResourceQueryOptions(cmd: Command) {
     )
     .option("--keep-alive-sec <s>", "cursor keep-alive in seconds (60–3600)", keepAliveSec)
     .option("--cursor <cursor>", "opaque cursor returned by the previous page")
-    .option("--need-total", "include total count")
+    .option("--need-total", "request the total count when available")
     .option(
       "--paging <json>",
       "explicit single-page input; null omits paging, {} uses resource defaults",

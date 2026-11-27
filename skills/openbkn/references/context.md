@@ -261,8 +261,9 @@ openbkn context query-object-instance <kn> --args '{
   ]},
   "limit": 5
 }'
-# Page with the previous response's opaque `cursor` or `offset`, never both.
-# Both MCP and REST use `cursor`; legacy `search_after` is rejected.
+# One page by default. To paginate, set "paging_mode": "cursor" on every request.
+# For the next page, pass the previous response's cursor and keep the original
+# query, limit and offset.
 
 # query-instance-subgraph: n-hop path = n+1 object_types and n relation_types, in path order.
 # Every object type needs `condition` and `limit`; `operation: "and"` with no
@@ -280,6 +281,8 @@ openbkn context query-instance-subgraph <kn> --args '{
     ]
   }]
 }'
+# Each path reads one page of starting objects. Set object_types[0].offset
+# and object_types[0].limit on each path to select its page.
 ```
 
 ### Cypher across object types — `run-cypher`
@@ -323,12 +326,19 @@ openbkn context run-cypher <kn> \
 # --hops 1-3, --direction forward|backward|bidirectional (default bidirectional).
 # --limit counts instances of the STARTING type, not paths or total objects.
 openbkn context explore-subgraph <kn> <ot-id> --hops 2 --direction bidirectional --limit 5
+# Each request reads one page. To read the next five starting objects, retain
+# the original query and add --args '{"offset":5}'.
 
 # query-metric: read a modelled metric through its own definition.
 # --args: analysis_dimensions, time, condition, having, order_by, limit, fill_null.
 openbkn context query-metric <kn> <metric-id> --args '{"time":{"instant":true}}'
 
 ```
+
+Read `is_sorted` and optional `warnings` for the current starting-object batch.
+Exploration returns them at the top level. Relation path queries return them in
+each `entries[i]`. API Resources report `is_sorted: false` and warn when they
+ignore a requested sort.
 
 Every command that takes `--args <json>` also accepts `--args-file <path>`
 (or `-` for stdin).

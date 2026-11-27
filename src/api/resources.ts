@@ -713,8 +713,10 @@ export interface QueryResourceOptions {
   paging?: APIValidationInput["paging"] | null;
   /** Decode fractional/exponent tokens as Decimal without changing legacy number results by default. */
   preciseNumbers?: boolean;
+  /** Pass 0 to use the server's cursor page size on servers that support this default. */
   limit?: number;
   offset?: number;
+  /** Ask Vega to retrieve the total count when available. */
   needTotal?: boolean;
   pagingMode?: "single" | "cursor";
   keepAliveSec?: number;
@@ -766,9 +768,16 @@ export interface ResourceDataPaging {
 export interface QueryResourceResponse {
   /** Actual execution accuracy, independently of the requested allowance. */
   is_approximate?: boolean;
+  /**
+   * For non-API resources, true when Vega received a non-empty `sort` list.
+   * Cursor continuations inherit this flag from the initial request.
+   * API resources always report false. Missing values from older Vega servers default to false.
+   */
+  is_sorted: boolean;
   /** Which data path answered: the table's local index, or its source. */
   query_source?: "local_index" | "source" | (string & {});
   entries: ResourceDocument[];
+  /** Total count when available. A confirmed empty result returns 0. */
   total_count?: number;
   paging?: ResourceDataPaging;
   warnings?: string[];
@@ -860,6 +869,9 @@ export function queryResource(
     headers: { "X-HTTP-Method-Override": "GET" },
     body,
     responseParser: opts.preciseNumbers ? parsePreciseJSON : parseBigIntJSON,
+  }).then((result) => {
+    if (result && typeof result === "object") result.is_sorted ??= false;
+    return result;
   });
 }
 

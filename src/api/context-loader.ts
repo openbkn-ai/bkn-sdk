@@ -838,8 +838,8 @@ export function queryObjectInstance(
   knId: string,
   args: Record<string, unknown>,
 ): Promise<unknown> {
-  validateQueryObjectInstanceArgs(args, knId);
-  return callTool(ctx, knId, "query_object_instance", args);
+  const query = validateQueryObjectInstanceArgs(args, knId);
+  return callTool(ctx, knId, "query_object_instance", query);
 }
 
 /** Capability kinds a knowledge network can mount. `function` covers API tools too; split those

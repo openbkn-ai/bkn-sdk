@@ -466,6 +466,28 @@ def test_the_traced_tool_is_asked_for_json(deploy: Deploy) -> None:
     assert tool_calls(deploy, "query_object_instance")[0]["response_format"] == "json"
 
 
+def test_a_traced_query_keeps_sorting_metadata_and_the_receipt(deploy: Deploy) -> None:
+    warnings = ["sort was ignored", "source order"]
+    original = deploy._respond
+
+    def respond(name: str) -> httpx.Response:
+        if name != "query_object_instance":
+            return original(name)
+        return deploy._rpc(
+            {"datas": [ROW], "is_sorted": False, "warnings": warnings}, receipt=RECEIPT
+        )
+
+    deploy._respond = respond  # type: ignore[method-assign]
+
+    with session(traced=True):
+        page = Tournaments.objects().page(limit=1)
+
+    assert page.is_sorted is False
+    assert page.warnings == warnings
+    assert page.receipt == RECEIPT
+    assert deploy.rest_bodies == []
+
+
 def test_a_traced_read_may_still_page_by_offset(deploy: Deploy) -> None:
     """The MCP tool documents `offset`, as REST deploys before cursor paging honour it."""
     with session(traced=True):
@@ -475,10 +497,8 @@ def test_a_traced_read_may_still_page_by_offset(deploy: Deploy) -> None:
     assert deploy.rest_bodies == []
 
 
-def test_a_traced_iterate_pages_the_tool_by_offset(deploy: Deploy) -> None:
-    """The stub answers one row per call, so a one-row page never looks like the end —
-    two rows then an empty page stop the walk."""
-    answers = iter([[ROW], [ROW], []])
+def test_a_traced_iterate_stops_on_a_full_page_without_a_cursor(deploy: Deploy) -> None:
+    answers = iter([[ROW], []])
     original = deploy._respond
 
     def respond(name: str) -> httpx.Response:
@@ -491,12 +511,11 @@ def test_a_traced_iterate_pages_the_tool_by_offset(deploy: Deploy) -> None:
     with session(traced=True):
         rows = list(Tournaments.objects().iterate(page_size=1))
 
-    assert len(rows) == 2
-    assert [call.get("offset") for call in tool_calls(deploy, "query_object_instance")] == [
-        None,
-        1,
-        2,
-    ]
+    assert len(rows) == 1
+    calls = tool_calls(deploy, "query_object_instance")
+    assert len(calls) == 1
+    assert calls[0]["paging_mode"] == "cursor"
+    assert "offset" not in calls[0]
 
 
 def test_a_traced_cursor_continues_through_the_tool(deploy: Deploy) -> None:
@@ -506,6 +525,7 @@ def test_a_traced_cursor_continues_through_the_tool(deploy: Deploy) -> None:
 
     arguments = tool_calls(deploy, "query_object_instance")[0]
     assert arguments["cursor"] == "c-2"
+    assert arguments["paging_mode"] == "cursor"
     assert arguments["response_format"] == "json"
     assert deploy.rest_bodies == []
 
@@ -1147,6 +1167,7 @@ def test_traced_iterate_follows_tool_cursor_and_preserves_receipts(deploy: Deplo
     assert len(calls) == 2
     assert "cursor" not in calls[0]
     assert calls[1]["cursor"] == "c-2"
+    assert calls[0]["paging_mode"] == calls[1]["paging_mode"] == "cursor"
     assert calls[0]["limit"] == calls[1]["limit"] == 1
     assert calls[0]["bkn_context"] == calls[1]["bkn_context"]
     assert all(row.__receipt__ == RECEIPT for row in rows)

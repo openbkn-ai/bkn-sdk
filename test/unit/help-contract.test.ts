@@ -74,6 +74,22 @@ describe("command tree", () => {
     expect(help).toContain("requires --json or --compact");
   });
 
+  it("explains how to migrate object pagination from search_after", () => {
+    const context = buildProgram().commands.find((command) => command.name() === "context");
+    const query = context?.commands.find((command) => command.name() === "query-object-instance");
+    let help = "";
+    query
+      ?.configureOutput({
+        writeOut: (text) => {
+          help += text;
+        },
+      })
+      .outputHelp();
+    expect(help).toContain("search_after is ignored");
+    expect(help).toContain('paging_mode: "cursor"');
+    expect(help).toContain("previous response's cursor");
+  });
+
   it("describes semantic result application as a write with a resolvable task id", () => {
     const apply = describeCommandTree(buildProgram(), {
       path: ["vega", "semantic-task", "apply"],

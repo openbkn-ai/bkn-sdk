@@ -137,7 +137,7 @@ export function contextCommand(): Command {
   cmd
     .command("query-object-instance <kn-id>")
     .description(
-      'Query one object type\'s instances — `--args \'{"ot_id":"<id>","limit":10}\'` → {datas, total_count}',
+      'Query one object type\'s instances — `--args \'{"ot_id":"<id>","limit":10}\'` → {datas, total_count?}',
     )
     .option(
       "--args <json>",
@@ -145,6 +145,13 @@ export function contextCommand(): Command {
     )
     .option("--args-file <path>", "read tool arguments as JSON from a file (or - for stdin)")
     .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
+    .addHelpText(
+      "after",
+      `
+The retired search_after is ignored. To migrate, restart from the first page and
+set paging_mode: "cursor" in --args on every request. Pass the previous response's cursor
+back as cursor and keep the same query, including any starting offset.`,
+    )
     .action(async (knId: string, opts, cmd: Command) => {
       if (opts.schema) return printToolSchema(cmd, knId, "query_object_instance");
       const args = jsonArgs(opts);
@@ -348,10 +355,7 @@ session through \`openbkn bkn cypher\`.`,
     .option("--limit <n>", "instances of the STARTING type, not paths or total objects", (v) =>
       Number.parseInt(v, 10),
     )
-    .option(
-      "--args <json>",
-      "extra tool arguments merged in (condition, sort, offset …; - for stdin)",
-    )
+    .option("--args <json>", "extra tool arguments (condition, sort, offset, or - for stdin)")
     .option("--args-file <path>", "read extra tool arguments as JSON from a file (or - for stdin)")
     .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
     .addHelpText(
@@ -359,7 +363,10 @@ session through \`openbkn bkn cypher\`.`,
       `
 Use this when the topology is the question — "what does this supplier touch?" —
 and \`query-instance-subgraph\` when you already know which relations to walk.
-Paths multiply with each hop, so start at 1 or 2.`,
+Paths multiply with each hop, so start at 1 or 2.
+
+Each request reads one page of starting objects. Use offset in --args to skip
+starting objects and --limit to cap the number of starting objects read.`,
     )
     .action(async (knId: string, objectTypeId: string, opts, cmd: Command) => {
       if (opts.schema) return printToolSchema(cmd, knId, "explore_subgraph");
@@ -516,6 +523,12 @@ rewriting it as a Cypher aggregation produces a number the platform will not agr
     )
     .option("--args-file <path>", "read tool arguments as JSON from a file (or - for stdin)")
     .option("--schema", "print this tool's argument schema from the deploy instead of calling it")
+    .addHelpText(
+      "after",
+      `
+Each request reads one page of starting objects per path. Set a path's
+object_types[0].offset and object_types[0].limit to select its page.`,
+    )
     .action(async (knId: string, opts, cmd: Command) => {
       if (opts.schema) return printToolSchema(cmd, knId, "query_instance_subgraph");
       printJson(
@@ -607,9 +620,10 @@ QUERY ARGUMENTS
   query-object-instance rejects unknown argument keys before calling the platform. Combine
   conditions with condition.sub_conditions, not condition.conditions; vector search belongs in
   condition.operation=knn, not a top-level knn argument. Do not combine condition and filters:
-  the platform ignores filters when condition is present. Page with an opaque cursor or
-  offset, never both; the legacy search_after argument is rejected. Any kn_id in --args
-  must match <kn-id>. For properties and condition.field,
+  the platform ignores filters when condition is present. Object queries default to one page.
+  To paginate, set paging_mode to cursor on the first query and each continuation. Keep the
+  query unchanged, including any offset, and pass back the previous response's cursor.
+  Any kn_id in --args must match <kn-id>. For properties and condition.field,
   run object-types <kn-id> <ot-id> first to see the valid field names. Specifying properties
   also reads the object-type schema once and rejects unknown names before the query. --schema shows the
   argument shape advertised by this deploy. Every --args option also accepts --args-file <path>,

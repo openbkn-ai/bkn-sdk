@@ -168,12 +168,18 @@ export interface ObjectMetricData {
 export interface ObjectMetricDrillThroughRequest {
   query: ObjectMetricQuery;
   bucket_key: string;
+  /**
+   * Maximum participants per page (1–100). Resources may return short pages.
+   * Filtering can leave a page empty.
+   */
   page_size?: number;
+  /** Opaque next_cursor from the previous page. Keep query, bucket_key and page_size unchanged. */
   cursor?: string;
 }
 
 export interface ObjectMetricDrillThrough {
   participants: Array<{ instance_identity: Record<string, unknown>; role: string }>;
+  /** Continue whenever present, even when participants is empty. */
   next_cursor?: string;
   bucket_value?: unknown;
   evaluated_at: number;

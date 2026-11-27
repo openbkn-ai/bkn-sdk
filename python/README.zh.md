@@ -23,7 +23,7 @@ bkn_osdk.call_tool(ctx, kn_id, "get_object_types", {"ids": ["…"], ...})
 
 这不是 TypeScript SDK 的移植。那边把十一个后端命名空间包成 HTTP 调用，对 Python 调用方来说，这些 `bkn_osdk.call("/api/…")` 都能做。真正无法用裸调用替代的是本体之上的生成类 —— 这才是值得再写一个语言版本的理由。
 
-**目标平台版本 0.1.5。** 负载逐字透传，而 0.1.4 线送的形状不一样：它把 `get_kn_detail`、`list_resources`、`list_skills`、`get_object_types`、`list_knowledge_networks` 套在 `result` 键下，并提供 0.1.5 已下线的 `semantic-search` 路由。连老部署不是不行，但脱壳和换路由是调用方自己的事。
+**平台兼容性。** 请使用支持显式对象游标分页和可选总数的配套服务版本。`iterate()` 在续页游标缺失时结束，旧服务有可能在仍有数据时省略续页游标。`v0.1.5` 的 REST 对象查询会省略零命中时的 `total_count`，因此 `count()` 收到这种响应会抛出 `BknError`。 [Foundry #3373](https://github.com/openbkn-ai/bkn-foundry/issues/3373)
 
 ## 安装
 
@@ -175,14 +175,18 @@ Order.where((Order.total_amount > Decimal("10000")) & Order.paid_at.exists()).or
     Order.total_amount.desc()
 ).select(Order.order_no, Order.total_amount).take(20)
 
-for order in Order.iterate(page_size=500):  # 游标翻页；旧部署回退到 limit/offset
+for order in Order.iterate(page_size=500):
     ...
 
-page = Order.objects().page(limit=100)
-next_page = Order.objects().page(limit=100, cursor=page.next_cursor)  # 末页为 None
+query = Order.objects()
+page = query.page(limit=100, paging_mode="cursor")
+if page.next_cursor is not None:
+    next_page = query.page(limit=100, cursor=page.next_cursor)
 ```
 
-当前 ontology-query 契约使用不透明游标翻页：把响应里的 `paging.next_cursor` 作为 `cursor` 连同同一查询回传，末页为 `null`。在此之前构建的部署（现网的 0.1.5）不返回 `paging`，但支持 `offset`，所以 `iterate()` 在首个响应带游标时沿游标翻页，否则回退到 `limit`/`offset`，遇到短页即停止。`page(offset=...)` 仍照常发送 `offset`；同时传 `offset` 和 `cursor` 会报错。
+`page()` 默认读取一页。手动分页时，首屏指定 `paging_mode="cursor"`，续页带回上一页的 `Page.next_cursor` 并沿用原查询、limit 和 offset。SDK 在续页时自动发送 cursor 模式。`iterate()` 从首屏使用 cursor 模式，短页仍可续读，以游标为空作为结束条件。
+
+`Page.is_sorted` 表示服务端是否应用了排序，未报告时为 `False`。`Page.warnings` 按原顺序保留服务端提示，未报告时为空列表。
 
 `~` 在平台表达得了的地方对条件取反：比较运算符互相反转，`in` / `like` / `exist` 各有配对的否定式，`and` / `or` 按德摩根律取反。`match` 和 `knn` 在算子枚举里没有对立面，所以对它们用 `~` 会直接报错，而不是现编一个。
 
@@ -194,11 +198,15 @@ next_page = Order.objects().page(limit=100, cursor=page.next_cursor)  # 末页�
 
 - `like` 的语义属于**背后的数据资源**，实测两个部署的行为不同：Postgres 支撑的对象类把值当普通子串（`like("2026")` 命中，`like("2026%")` 不中），Vega catalog 支撑的当 SQL 模式（`like("%FIFA%")` 命中，`like("FIFA")` 不中）。值是逐字发出去的，猜错返回零行而不是报错，所以拿你自己的对象类两种都试一下。
 - `match` 在算子枚举里，但 Postgres 支撑的对象类会 500。
-- `limit` 取值 1–10000，且**零命中时 `total_count` 整个字段不出现**。
+- `limit` 取值 1–10000。
+
+`Page.total` 为本次取得的总数，确认零命中时为 `0`。服务端省略
+`total_count` 时，`Page.total` 为 `None`。`count()` 会请求总数，未取得时抛出
+`BknError`。
 
 ## 聚合
 
-对象集上没有 `sum()` 或 `group_by()`，因为平台没有对应的端点：实例查询接受条件、排序、limit、cursor（或 offset）和属性选择，`need_total` 给行数。把所有行拉回本地再聚合，是把谎言包装成 API。
+对象集上没有 `sum()` 或 `group_by()`，因为平台没有对应的端点：实例查询接受条件、排序、limit、cursor（或 offset）和属性选择，`need_total` 用于尝试获取行数。把所有行拉回本地再聚合，是把谎言包装成 API。
 
 平台的聚合面是已发布、带版本的**对象指标 V1**。生成类固定引用已发布版本，只开放定义允许的运行时选择：
 
@@ -243,7 +251,7 @@ with bkn_osdk.session(traced=True):
     page.rows[0].__receipt__  # 同一份回执，挂在它所解释的每一行上
 ```
 
-`order_by` 以 `sort` 发给工具。工具不接受 `need_total`、REST 的 cursor 和 REST 查询参数（`options(...)`），需要其中任一个的查询**即使在 traced 作用域里也走 REST** —— 带着该作用域的 turn，所以照样被记录，只是拿不到随包回执。不带 traced 的读全程走 REST，更快，不带回执。
+`order_by` 以 `sort` 发给工具，游标续页沿用 MCP 并保留回执。需要 `need_total` 或 REST 查询参数（`options(...)`）时，在 traced 作用域里也走 REST，随请求携带该作用域的 turn。不带 traced 的读使用 REST。
 
 **哪些调用需要 turn，取决于"面"，不取决于工具。** 能力面 —— MCP 工具和它们在 `/kn/` 下的 REST 孪生 —— 拒绝没有上下文的调用：catalog 里除两个生命周期工具外，每个都把 `bkn_context` 标成 required。所以 `search`、`search_instances` 以及任何直接的 `call_tool` 第一次就带上 turn：作用域里有就用它的，没有就开一个短命的。`ontology-query` 下的实例、子图读路由，以及未跟踪的指标读，接受裸请求且不会凭空造 turn。已经有 turn 的指标读会明确走 Context Loader 托管工具；不会再把 `bkn_context` 加进严格的 ontology-query 请求体后重试。
 
@@ -322,6 +330,12 @@ kn.query_object_instance(KN_ID, "order", limit=10, response_format="json")
 包装知道三件裸调用不知道的事：**哪些参数走 query 而不是 body**（`query_object_instance` 和两条 subgraph 路由都是拆开的，把 `kn_id` 塞进 body 会得到 `Public.NotFound`「对象不存在」，看着像对象类不存在）；哪些参数必填；以及这一面每条路由都要 turn，所以 `bkn_context` 由运行时挂上、不出现在签名里。`kn_id` 是每个函数的第一个参数 —— 即使路由自己不发它，turn 也属于某个知识网络。
 
 契约冻在 `contracts/kn-rest.json`，由 `scripts/capture_kn_contract.py` 重新抓取；`bkn_osdk/kn.py` 提交进仓库，重新生成会改动它的话测试就红。没有 REST 孪生的工具、以及路由接受但没公布的参数，仍然走 `call_tool`。
+
+生成的 `kn.query_object_instance(...)` 默认读取单页。首屏和续页都要传 `paging_mode="cursor"` 才会翻页。续页原样带回上一页响应的 `cursor`，保留原查询参数及起始 offset。此前省略模式的分页应从首屏重新开始。
+
+`kn.explore_subgraph(...)` 和 `kn.query_instance_subgraph(...)` 都先读取一页起点，再展开子图。探索子图时在请求上设置 `offset` 和 `limit`。按关系路径查询时，在每条路径的 `object_types[0]` 上分别设置 `offset` 和 `limit`，独立选择起点页。
+
+`is_sorted` 和可选的 `warnings` 只描述当前批次的起点对象。探索子图时从响应顶层读取，按关系路径查询时从各自的 `entries[i]` 读取。API Resource 或来源未报告排序状态时，`is_sorted` 为 `false`。对 API Resource 请求非空 `sort` 时，`warnings` 会说明排序已被忽略。
 
 `search` 和 `search_instances` 就是同一件事手写的版本。[`examples/platform/`](examples/platform) 把整个面跑了一遍。
 

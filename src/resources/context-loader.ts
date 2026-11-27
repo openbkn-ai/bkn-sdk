@@ -42,8 +42,8 @@ export function context(ctx: RequestContext) {
     searchSchema: (knId: string, query: string, opts?: SearchSchemaOptions) =>
       searchSchema(ctx, knId, query, opts),
     queryObjectInstance: async (knId: string, args: Record<string, unknown>) => {
-      validateQueryObjectInstanceArgs(args, knId);
-      const properties = args.properties as string[] | undefined;
+      const query = validateQueryObjectInstanceArgs(args, knId);
+      const properties = query.properties as string[] | undefined;
       if (isDryRun()) {
         previewRequest({
           method: "POST",
@@ -59,16 +59,17 @@ export function context(ctx: RequestContext) {
             params: {
               name: "query_object_instance",
               // What the real call sends: caller arguments over the contract defaults.
-              arguments: withContractDefaults(knId, "query_object_instance", args),
+              arguments: withContractDefaults(knId, "query_object_instance", query),
             },
           },
         });
       }
       if (properties?.length) {
-        const schema = await getSchemaItem(ctx, knId, "object-types", args.ot_id as string);
-        validateRequestedProperties(args.ot_id as string, properties, schema);
+        const objectTypeId = query.ot_id as string;
+        const schema = await getSchemaItem(ctx, knId, "object-types", objectTypeId);
+        validateRequestedProperties(objectTypeId, properties, schema);
       }
-      return queryObjectInstance(ctx, knId, args);
+      return queryObjectInstance(ctx, knId, query);
     },
     searchCapabilities: (knId: string, opts?: Parameters<typeof searchCapabilities>[2]) =>
       searchCapabilities(ctx, knId, opts),

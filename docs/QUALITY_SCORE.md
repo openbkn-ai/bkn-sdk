@@ -34,6 +34,8 @@ Update this table as each signal changes (e.g. live-parity count as commands are
 
 ## CLI reliability regression coverage
 
+- `python/tests/test_query.py` verifies that `count()` returns a confirmed zero and raises `BknError` when the query omits its total.
+
 - `test/unit/resources.test.ts` checks typed creation exposes no lifecycle status parameter and ignores extra status properties without sending them, including `active`, `null`, `undefined`, and unsupported values. Metadata updates omit server-managed status even for unknown read values, and raw creation preserves the caller's body. Compile-time assertions keep the creation type aligned with Foundry #3374, whose public creation and update requests ignore unknown fields: new Resources start active, while metadata updates preserve lifecycle status.
 
 - `test/unit/resources.test.ts` and `vega-command.test.ts` cover Resource `filterable` response validation and create/update round trips, preservation of explicit `false` through explicit Schema edits and required-Schema vector-feature cleanup, and required boolean flags on submitted update Schemas. Unrelated Table and other optional-Schema updates omit the Schema even when it contains an unsupported enabled field; Dataset and LogicalView preserve complete read Schemas but reject incomplete older responses with an actionable `InputError` before PUT. Explicit complete Schemas remain usable over older read responses. Defaults stay authoritative in Vega; the SDK does not derive them.
@@ -79,14 +81,20 @@ Update this table as each signal changes (e.g. live-parity count as commands are
   upload. Three existing BKN directories were checked for new false positives.
 - `test/unit/query-object-instance.test.ts` checks the real CLI and SDK wrapper
   reject unknown argument names, malformed nested conditions, extra filter or
-  sort keys, combined `condition`/`filters`, `cursor`/`offset`, and mismatched
-  `kn_id` before any request. Legacy `search_after` is rejected with cursor migration
-  guidance at both the SDK and CLI entry points, without sending requests. It verifies
-  that a nonempty `properties` list triggers one schema GET and missing or
+  sort keys, combined `condition`/`filters`, cursor tokens without cursor mode,
+  and mismatched `kn_id` before any request. The SDK and CLI omit the retired
+  `search_after` field from outgoing queries. The tests also verify that a
+  nonempty `properties` list triggers one schema GET and that missing or
   invisible fields stop the MCP query. `test/unit/auth-command.test.ts` checks
   that the env-shadow warning does not print URL credentials. The 401 hint in
   `test/unit/http.test.ts` also strips URL userinfo and query tokens before
   suggesting a new login.
+
+- `test/unit/context-loader-contract.test.ts` and `python/tests/test_kn_rest.py`
+  cover independent single-page subgraph requests, using the top-level offset for
+  exploration and separate starting offsets for relation paths.
+  They verify that subgraph JSON preserves `is_sorted: false` and source warnings,
+  with independent sorting metadata for each relation path.
   `test/unit/query-object-instance-dry-run.test.ts` checks that the query preview
   sends nothing, including schema reads and MCP handshakes.
 
