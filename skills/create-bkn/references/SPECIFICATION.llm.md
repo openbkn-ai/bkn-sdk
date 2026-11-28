@@ -326,14 +326,13 @@ RETURN s.lead_time_days
 |------|--------------|------|-------------|
 ````
 
-- **Meta**：`Type` 为 `cypher`。`tool` 来源已取消，写了会被平台拒绝；`metric` 来源见下方说明。
+- **Meta**：`Type` 为 `cypher`。逻辑属性只有 `cypher` 这一种来源；`tool`、`metric` 都不能写，会被平台拒绝。
 - **Source**：只写一列 `Source Type`，值为 `cypher`。
 - **Statement**：粗体标签 `**Statement**` 后跟且只跟一个 ` ```cypher ` 围栏代码块，块内是只读 Cypher 语句（不能有写子句）。
   - 从当前对象实例出发：用主键参数定位它，如 `MATCH (s:supplier {supplier_id: $supplier_id})`；复合主键每个主键一个参数。参数在 **Parameters** 里声明，`ValueFrom` 为 `property`（取当前实例的属性）、`input`（调用时传入）或 `const`，在语句里写作 `$<name>`。
   - 返回一列标量，至多一行：0 行得到 null，多于一行报错。需要聚合就在 Cypher 里聚合（`count`、`sum` 等）。
 - **Parameters**：同行动类的 `Parameter Binding`。
 - 不要写没有 `####` 的扁平表。
-- `metric` 来源（`Type` 为 `metric`，`Source ID` 是指标 ID）依赖对象指标，指标属于专业版（Professional）能力；社区版请用 `cypher`。
 
 ## 关系类（relation_types/*.bkn）
 
