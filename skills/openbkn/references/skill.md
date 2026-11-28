@@ -1,5 +1,7 @@
 # skill — registry / market / lifecycle
 
+> **Professional edition**: from 0.2.2 the Skill registry is part of Execution Factory. On a Community platform these commands report that the feature requires Professional.
+
 | Command | Notes |
 |---------|-------|
 | `list` / `market` / `get <id>` / `market-get <id>` | Browse registry + market. Filters: `--name` `--category` `--create-user` `--sort-by create_time\|update_time\|name` `--sort-order asc\|desc` `--limit n`（1–100，默认 30） `--page n` `--all`; `list` also takes `--status unpublish\|published\|offline\|editing` (the market is published-only, so it has none). |

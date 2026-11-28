@@ -6,9 +6,9 @@ import type { RequestContext } from "../types.js";
  * Skill registry/market client (agent-operator-integration). Read + delete.
  * Passed through as parsed JSON.
  */
-import { HttpError } from "../utils/errors.js";
 import { parseBigIntJSON, stringifyBigIntJSON } from "../utils/json-bigint.js";
 import { authFetch } from "./auth-fetch.js";
+import { httpErrorFor } from "./edition.js";
 import { buildHeaders } from "./headers.js";
 import { request } from "./http.js";
 import { sandboxBudgetMs } from "./sandbox-budget.js";
@@ -39,7 +39,7 @@ export async function registerSkillZip(
     }),
   );
   const text = await res.text();
-  if (!res.ok) throw new HttpError(res.status, res.statusText, text);
+  if (!res.ok) throw await httpErrorFor(ctx, res.url || ctx.baseUrl, res, text);
   return text ? parseBigIntJSON(text) : undefined;
 }
 
@@ -65,7 +65,7 @@ export async function updateSkillPackageZip(
     }),
   );
   const text = await res.text();
-  if (!res.ok) throw new HttpError(res.status, res.statusText, text);
+  if (!res.ok) throw await httpErrorFor(ctx, res.url || ctx.baseUrl, res, text);
   return text ? parseBigIntJSON(text) : undefined;
 }
 
@@ -96,7 +96,7 @@ export async function downloadSkill(
       headers: buildHeaders(ctx),
     }),
   );
-  if (!res.ok) throw new HttpError(res.status, res.statusText, await res.text());
+  if (!res.ok) throw await httpErrorFor(ctx, res.url || ctx.baseUrl, res, await res.text());
   return new Uint8Array(await res.arrayBuffer());
 }
 

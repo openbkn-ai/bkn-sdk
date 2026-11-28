@@ -1,5 +1,7 @@
 # toolbox / api / tool — 工具箱与持久能力
 
+> **专业版（Professional）**：从 0.2.2 起执行工厂属于专业版。社区版平台上这些命令报 “… require the Professional edition”。
+
 | Command | Notes |
 |---------|-------|
 | `toolbox list [--name] [--status unpublish\|published\|offline] [--category] [--metadata-type openapi\|function] [--create-user] [--release-user] [--sort-by create_time\|update_time\|name] [--sort-order asc\|desc] [--limit n] [--page n] [--all]` | List toolboxes. 分页是 `--page`（从 1 起）+ `--limit`（即 `page_size`，1–100）；CLI 不给 `--limit` 时发 30，SDK `toolboxes.list()` 不传 `pageSize` 时服务端默认 10；服务端没有 offset。`--keyword` 仍作为 `--name` 的别名可用。 |

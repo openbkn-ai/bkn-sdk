@@ -1,5 +1,7 @@
 # mcp — 已注册 MCP Server 的只读发现
 
+> **专业版（Professional）**：从 0.2.2 起 MCP Server 登记属于执行工厂，是专业版能力。社区版平台上这些命令报 “… require the Professional edition”。
+
 这组命令查看 execution factory 中登记的 MCP Server；它与 `context` 的知识网络检索 MCP 不同。
 
 | Command | Notes |

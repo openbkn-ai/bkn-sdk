@@ -12,6 +12,7 @@ import { baseUrlForDisplay } from "../utils/base-url.js";
 import { isDryRun } from "../utils/dry-run.js";
 import { HttpError, NonJsonResponseError } from "../utils/errors.js";
 import { stringifyBigIntJSON } from "../utils/json-bigint.js";
+import { explainProfessional404 } from "./edition.js";
 import { buildHeaders } from "./headers.js";
 import { tlsFetch } from "./tls.js";
 import { ensureCompatible } from "./version-check.js";
@@ -103,12 +104,16 @@ export async function request<T = unknown>(
       // with an HTML 401 — so join them rather than letting either win.
       const gateway = gatewayHint(url, res.status, contentType, text);
       const hints = [gateway, hintFor(ctx, res.status, text, renewal)].filter(Boolean);
-      throw new HttpError(
-        res.status,
-        res.statusText,
-        text,
-        hints.join(" ") || undefined,
-        gateway !== undefined,
+      throw await explainProfessional404(
+        ctx,
+        url,
+        new HttpError(
+          res.status,
+          res.statusText,
+          text,
+          hints.join(" ") || undefined,
+          gateway !== undefined,
+        ),
       );
     }
     if (!text) return undefined as T;

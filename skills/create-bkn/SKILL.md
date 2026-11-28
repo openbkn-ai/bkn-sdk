@@ -66,7 +66,7 @@ Do not hand-write a `CHECKSUM`, and delete it when you copy the example and chan
 6. **Create `value_types/*.bkn`** (3.0 only) — one per code table (enum), fixed format (pattern / length) or bounded number (range / unit) that properties share
 7. **Create `object_types/*.bkn`** — one file per object, `{id}.bkn`; for 3.0 declare semantic, required, aliases and constraints
 8. **Create `relation_types/*.bkn`** — one file per relation; for 3.0 declare reverse name, cardinality, constraints; mark helper relations `secondary` and link fallback paths with `fallback_for`
-9. **Create `action_types/*.bkn`** — one file per action, one tool per action; `### Operation Config` says whether it acts on an object (`object`), links or unlinks two objects (`relation`) or just calls a tool (`tool`)
+9. **Create `action_types/*.bkn`** (Professional edition only, from 0.2.2; skip on Community) — one file per action, one tool per action; `### Operation Config` says whether it acts on an object (`object`), links or unlinks two objects (`relation`) or just calls a tool (`tool`)
 10. **Create `concept_groups/*.bkn`** — optional
 11. **Add root `SKILL.md` in the BKN directory** — same folder as `network.bkn` (this is **not** the create-bkn skill file); agent-facing guide for that network (see [Delivered BKN: root SKILL.md](#delivered-bkn-root-skillmd))
 12. **Review (MUST)** — cross-check [Validation checklist](#validation-checklist) and [Business rules placement](#business-rules-placement); fix IDs, cross-refs, headings
@@ -80,7 +80,9 @@ Requires the `openbkn` CLI from `@openbkn/bkn-sdk` (`npm install -g @openbkn/bkn
 - **Platform auth** — Don't pre-check with `openbkn auth status`; run `openbkn bkn push` directly (`validate` is offline and needs no login). Only when it fails with 401 / not authorized, run `openbkn auth login <platform-url>` and retry.
 - **BKN validation** — If workflow step 13 (`openbkn bkn validate <dir>`) **already succeeded** for this directory, **do not** repeat validate before `push` unless you changed `.bkn` files. If you have **not** validated yet, run `validate` before `push`.
 - **3.0 rules** — a 0.2.1+ platform checks the 3.0 rules on push and names the file, section and field of each problem. Fix the file and push again. A 2.x package is read with the 2.x rules on every platform.
-- **Tools** — every toolbox or MCP tool an action or logic property references must exist on the target platform, or push fails listing the missing tools. To import the model without them, push with `--binding-policy detach` and bind the tools on the platform afterwards.
+- **Professional edition** — from 0.2.2 action types, object metrics, event classes and capability mounts (`capabilities:`) are Professional features. A Community platform does not include them; `openbkn` commands that touch them then say the feature requires Professional.
+- **Logic properties** — a logic property is one read-only Cypher statement (`Type` and `Source Type` = `cypher`, a `**Statement**` label and one fenced `cypher` block that starts from the current instance by primary key and returns one scalar column, at most one row). The `tool` source is retired in every edition.
+- **Tools** — every toolbox or MCP tool an action references must exist on the target platform, or push fails listing the missing tools. To import the model without them, push with `--binding-policy detach` and bind the tools on the platform afterwards.
 
 ```bash
 openbkn bkn push <dir> [--branch main] [--binding-policy detach]

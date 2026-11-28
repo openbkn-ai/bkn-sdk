@@ -22,6 +22,7 @@ export type {
   RoundMaskRule,
 } from "./types.js";
 export * as oauth from "./resources/oauth.js";
+export { EditionRequiredError } from "./api/edition.js";
 export { DEFAULT_LIST_LIMIT, DEFAULT_QUERY_LIMIT } from "./types.js";
 export {
   HttpError,
