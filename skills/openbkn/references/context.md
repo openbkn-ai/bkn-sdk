@@ -329,7 +329,7 @@ openbkn context explore-subgraph <kn> <ot-id> --hops 2 --direction bidirectional
 # Each request reads one page. To read the next five starting objects, retain
 # the original query and add --args '{"offset":5}'.
 
-# query-metric: read a modelled metric through its own definition.
+# [Professional] query-metric: read a modelled metric through its own definition.
 # --args: analysis_dimensions, time, condition, having, order_by, limit, fill_null.
 openbkn context query-metric <kn> <metric-id> --args '{"time":{"instant":true}}'
 
@@ -345,6 +345,8 @@ Every command that takes `--args <json>` also accepts `--args-file <path>`
 
 ### Instance enrichment / actions — `--args <json>`
 
+> **Professional:** from 0.2.2 the Context Loader of a Community platform no longer serves `query_metric`, `drill_through_metric`, `execute_action`, `get_action_info`, `get_action_execution`, `list_action_executions`, `execute_tool`, the skill tools (`list_skills`, `get_skill_content`, `read_skill_file`, `execute_skill`), `run_code` and `run_shell`; `search_capabilities` finds nothing without mounts. `openbkn context info` shows what this platform serves; `tool-call` on a missing tool fails with tool-not-found. `get-logic-properties` stays in Community (Cypher-backed).
+
 ```bash
 # get-logic-properties: computed property values for given instances
 openbkn context get-logic-properties <kn> --args '{
@@ -353,7 +355,7 @@ openbkn context get-logic-properties <kn> --args '{
   "properties": ["status", "cpu"]
 }'
 
-# get-action-info: business meaning and execution schema; a target is optional
+# [Professional] get-action-info: business meaning and execution schema; a target is optional
 openbkn context get-action-info <kn> --args '{"at_id": "at-1"}'
 # Preview for a specific existing object instance when needed
 openbkn context get-action-info <kn> --args '{"at_id": "at-1", "_instance_identities": [{"id": "123"}]}'
@@ -370,7 +372,7 @@ openbkn context search-capabilities <kn> --types skill
 openbkn context search-capabilities <kn> --types function --metadata-types openapi
 ```
 
-Each hit carries `capability_type`, which decides what comes next: `function`
+(Professional.) Each hit carries `capability_type`, which decides what comes next: `function`
 and `mcp_tool` are called through `execute_tool` with the returned
 `input_schema`, `skill` is read with `get_skill_content`. `execute_skill` exists
 only when the deploy enables it (`EXECUTE_SKILL_ENABLED=true`, off by default —

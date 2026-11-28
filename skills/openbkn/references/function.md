@@ -1,5 +1,7 @@
 # sandbox / function — 临时代码与持久函数工具
 
+> **专业版（Professional）**：从 0.2.2 起执行工厂（含沙箱与函数）属于专业版。社区版平台上这些命令报 “… require the Professional edition”。
+
 一段 Python 代码在平台上有两个身份，命令名称区分它是否会被保存：
 
 | 身份 | 命令 | 是什么 |

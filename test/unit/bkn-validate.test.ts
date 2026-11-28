@@ -429,6 +429,46 @@ network | kn1
     ]);
   });
 
+  it("accepts a cypher logic property with a fenced Statement block", () => {
+    const dir = bkn({
+      "network.bkn": network,
+      "object_types/a.bkn": `${ot("a", "Alpha")}
+## ObjectType: Alpha
+
+### Logic Properties
+
+#### order_count
+
+**Meta**
+
+| Display Name | Type | Description |
+|--------------|------|-------------|
+| Order count | cypher | orders of this customer |
+
+**Source**
+
+| Source Type |
+|-------------|
+| cypher |
+
+**Statement**
+
+\`\`\`cypher
+MATCH (a:a {id: $id})-[:placed]->(o:order)
+RETURN count(o)
+\`\`\`
+
+**Parameters**
+
+| Name | Type | Source | Operation | ValueFrom | Value | Description |
+|------|------|--------|-----------|-----------|-------|-------------|
+| id | string | Query | | property | id | key |
+`,
+    });
+
+    expect(validateBknDirectory(dir).errors).toEqual([]);
+  });
+
   it("rejects a single-line first pipe block even when a later table looks complete", () => {
     const dir = bkn({
       "network.bkn": network,

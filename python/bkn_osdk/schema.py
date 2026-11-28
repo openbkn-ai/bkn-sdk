@@ -279,7 +279,7 @@ def _entries(payload: Any) -> list[Mapping[str, Any]]:
 def _object_type(entry: Mapping[str, Any]) -> ObjectTypeDef:
     """One object type, from its `data_properties` only.
 
-    `logic_properties` — tool-backed computed properties — are
+    `logic_properties` — computed properties (Cypher-backed) — are
     deliberately skipped: a live instance query returns none of them, so
     generating attributes for them would produce names that always raise.
     """

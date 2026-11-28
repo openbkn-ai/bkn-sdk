@@ -287,7 +287,7 @@ Incremental Key: {属性名}                # 可选，可留空，类型可作�
 
 ### Logic Properties
 
-每个逻辑属性一个 `####` 子项，子项下用独占一行的粗体标签分隔四张表：
+每个逻辑属性一个 `####` 子项，子项下用独占一行的粗体标签分隔各块（Meta、Source、Statement 为语句块，Parameters、Analysis Dimensions 为表）：
 
 ````markdown
 ### Logic Properties
@@ -298,13 +298,20 @@ Incremental Key: {属性名}                # 可选，可留空，类型可作�
 
 | Display Name | Type | Description |
 |--------------|------|-------------|
-| 交期天数 | tool | 按供应商计算交期 |
+| 交期天数 | cypher | 按供应商计算交期 |
 
 **Source**
 
-| Source Type | Source ID | Source Name | BoxID | ToolID | ResultPath |
-|-------------|-----------|-------------|-------|--------|------------|
-| tool | | | box_supply | tool_lead_time | $.days |
+| Source Type |
+|-------------|
+| cypher |
+
+**Statement**
+
+```cypher
+MATCH (s:supplier {supplier_id: $supplier_id})
+RETURN s.lead_time_days
+```
 
 **Parameters**
 
@@ -319,9 +326,12 @@ Incremental Key: {属性名}                # 可选，可留空，类型可作�
 |------|--------------|------|-------------|
 ````
 
-- **Meta**：`Type` 为 `metric` 或 `tool`。
-- **Source**：`metric` 写 3 列 `Source Type | Source ID | Source Name`，`Source ID` 是指标 ID；`tool` 写 6 列，`BoxID`、`ToolID` 必填，`Source ID` 留空。
-- **Parameters**：同行动类的 `Parameter Binding`；metric 参数的 `Source` 留空，`Operation` 写比较操作符。
+- **Meta**：`Type` 为 `cypher`。逻辑属性只有 `cypher` 这一种来源；`tool`、`metric` 都不能写，会被平台拒绝。
+- **Source**：只写一列 `Source Type`，值为 `cypher`。
+- **Statement**：粗体标签 `**Statement**` 后跟且只跟一个 ` ```cypher ` 围栏代码块，块内是只读 Cypher 语句（不能有写子句）。
+  - 从当前对象实例出发：用主键参数定位它，如 `MATCH (s:supplier {supplier_id: $supplier_id})`；复合主键每个主键一个参数。参数在 **Parameters** 里声明，`ValueFrom` 为 `property`（取当前实例的属性）、`input`（调用时传入）或 `const`，在语句里写作 `$<name>`。
+  - 返回一列标量，至多一行：0 行得到 null，多于一行报错。需要聚合就在 Cypher 里聚合（`count`、`sum` 等）。
+- **Parameters**：同行动类的 `Parameter Binding`。
 - 不要写没有 `####` 的扁平表。
 
 ## 关系类（relation_types/*.bkn）
@@ -427,6 +437,8 @@ verification: unconfirmed
 - 端点与某条 `primary` 相同、回答同一问题的 `secondary` 关系，要么写 `fallback_for`，要么在数据层合并，否则使用方可能把结果相加。
 
 ## 行动类（action_types/*.bkn）
+
+> 专业版（Professional）能力：从 OpenBKN 0.2.2 起行动类属于专业版。社区版平台不含行动类，推送含 `action_types/` 的包会被拒绝或忽略；只在目标平台是专业版及以上时才写。
 
 ````markdown
 ---
@@ -663,6 +675,8 @@ name: 检验
 - 对象类别名不得与其他对象类的 `name` 相同；行动类同理；属性别名不得与同一定义其他属性的 `Name`、`Display Name` 相同。
 
 ## 能力依赖（capabilities）
+
+> 专业版（Professional）能力：能力挂载（skill、function、mcp_tool）属于专业版，社区版不会绑定它们。
 
 `network.bkn` frontmatter 中声明网络挂载的能力；ID 跨环境不保留，名称用于跨环境匹配，两者都写：
 

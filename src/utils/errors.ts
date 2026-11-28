@@ -125,6 +125,9 @@ export function formatError(err: unknown): string {
     return `${err.message} Body: ${truncate(err.body.replace(/\s+/g, " ").trim(), 200)}`;
   }
   if (err instanceof HttpError) {
+    if (err.name === "EditionRequiredError") {
+      return `${err.message} The route is not part of the Community edition (HTTP 404); upgrade to use this command.`;
+    }
     const serverMsg = serverError(err.body);
     if (err.status === 401) {
       const next = err.hint ?? "Run `openbkn auth login` and retry.";
